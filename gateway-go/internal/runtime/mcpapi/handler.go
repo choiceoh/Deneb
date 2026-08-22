@@ -10,18 +10,26 @@
 // tool is a declarative mapping onto an existing miniapp.* method, dispatched
 // through the same registry and client-token auth as the native client.
 //
-//	POST /mcp   JSON-RPC 2.0 (server/discover · tools/list · tools/call,
-//	            plus initialize · ping for handshake-era clients)
+//	POST /mcp   JSON-RPC 2.0 (server/discover · tools/list · tools/call)
+//	  MCP-Protocol-Version: 2026-07-28     ← required; nothing older is served
 //	  X-Deneb-Client-Token: <secret>       ← same single-user bearer as miniapp
 //
-// Two protocol eras are served from one endpoint:
-//   - 2026-07-28 ("MCP 2.0") — stateless; no handshake, every request declares
-//     its version/capabilities in `_meta` and mirrors them into HTTP headers.
-//     See protocol2026.go for everything specific to it.
-//   - 2024-11-05 … 2025-06-18 — the `initialize` handshake era, kept working
-//     unchanged for clients that have not moved yet.
+// ONE protocol revision is served: 2026-07-28 ("MCP 2.0"). The `initialize`
+// handshake era was supported briefly (#4561) and then dropped — it existed
+// only for external clients, and carrying it meant a second shape for every
+// result. A client on an older revision gets a 400 naming what we speak.
 //
-// Deliberate minimalism (spec-conformant subset), shared by both eras:
+// Two request shapes are admitted without 2.0 metadata, both deliberate:
+//   - `server/discover`, so a client on any revision can find out what we
+//     speak — it would otherwise have no machine-readable way to;
+//   - notifications (no id), which are acknowledged with 202 and dropped. The
+//     revision states outright that "header requirements for notification
+//     POSTs are not defined by this revision", so gating them would be
+//     inventing a rule; nothing is dispatched either way.
+//
+// See protocol2026.go.
+//
+// Deliberate minimalism (spec-conformant subset):
 //   - stateless: no Mcp-Session-Id, every request self-contained — which is
 //     what 2026-07-28 made mandatory and this surface always did;
 //   - single JSON responses (no SSE stream; GET/DELETE → 405) — legal for
@@ -83,16 +91,10 @@ func New(cfg Config) *Handler {
 // maxMCPBodyBytes caps an MCP request body — tool arguments are tiny JSON.
 const maxMCPBodyBytes = 1 << 20 // 1 MiB
 
-// mcpProtocolVersions are the spec revisions this gateway accepts, newest
-// first. This is the list `server/discover` advertises; stateless requests are
-// checked against it, and initialize negotiates within the handshake era.
-var mcpProtocolVersions = []string{
-	protocolVersion2026,
-	handshakeProtocolVersion,
-	"2025-06-18",
-	"2025-03-26",
-	"2024-11-05",
-}
+// mcpProtocolVersions are the spec revisions this gateway accepts. One entry:
+// `server/discover` advertises it, and every rejection of an older client
+// carries it as the `supported` list so the client learns what to speak.
+var mcpProtocolVersions = []string{protocolVersion2026}
 
 // mcpToolDef declaratively maps one MCP tool onto a miniapp.* RPC method. The
 // tool's arguments object is passed through as the RPC params verbatim, so
@@ -255,51 +257,37 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Notifications (no id) are fire-and-forget: acknowledge and drop.
+	// Notifications (no id) are fire-and-forget: acknowledge and drop. This
+	// runs BEFORE the version gate on purpose — 2026-07-28 leaves header
+	// requirements for notification POSTs undefined, and a dropped message
+	// dispatches nothing, so there is nothing for a gate to protect.
 	if len(msg.ID) == 0 || string(msg.ID) == "null" {
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 
-	// Which spec revision is this request speaking? Stateless (2026-07-28)
-	// requests say so per-request; handshake-era ones resolve to "".
-	version, verr := resolveProtocolVersion(r, msg)
-	if verr != nil {
+	// server/discover is the one door left open to a client that has not
+	// declared 2.0 — including one that cannot. It returns compile-time
+	// constants only, so there is nothing to protect, and refusing it would
+	// leave an older client with no machine-readable way to learn what this
+	// endpoint speaks. A discover request that DOES carry version markers is
+	// validated like any other, so a half-formed 2.0 request still fails.
+	if msg.Method == "server/discover" && !declaresProtocol(r, msg) {
+		s.writeMCPResult(w, msg.ID, s.decorateResult(s.discoverResult()))
+		return
+	}
+	if verr := requireProtocolVersion(r, msg); verr != nil {
 		s.writeMCPErrorFrame(w, msg.ID, verr)
 		return
 	}
-	stateless := version == protocolVersion2026
-	if stateless {
-		if herr := validateMethodHeader(r, msg); herr != nil {
-			s.writeMCPErrorFrame(w, msg.ID, herr)
-			return
-		}
+	if herr := validateMethodHeader(r, msg); herr != nil {
+		s.writeMCPErrorFrame(w, msg.ID, herr)
+		return
 	}
 
 	switch msg.Method {
 	case "server/discover":
-		// The stateless era's version/capability probe. Answered in both eras
-		// and always in 2026-07-28 shape: the method exists only there, so a
-		// caller asking for it is asking as a 2.0 client.
-		s.writeMCPResult(w, msg.ID, s.decorateResult(s.discoverResult(), protocolVersion2026))
-	case "initialize":
-		if stateless {
-			s.writeMethodNotFound(w, msg.ID, msg.Method, stateless)
-			return
-		}
-		s.writeMCPResult(w, msg.ID, map[string]any{
-			"protocolVersion": negotiateMCPVersion(msg.Params),
-			"capabilities":    serverCapabilities(),
-			"serverInfo":      s.serverInfo(),
-			"instructions":    serverInstructions,
-		})
-	case "ping":
-		if stateless {
-			// Removed in 2026-07-28 — a POST that returns is liveness enough.
-			s.writeMethodNotFound(w, msg.ID, msg.Method, stateless)
-			return
-		}
-		s.writeMCPResult(w, msg.ID, map[string]any{})
+		s.writeMCPResult(w, msg.ID, s.decorateResult(s.discoverResult()))
 	case "tools/list":
 		// mcpTools is a package-level slice, so the order is deterministic —
 		// which is what lets a 2.0 client cache the catalog under ttlMs and
@@ -312,18 +300,19 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"inputSchema": t.Schema,
 			})
 		}
-		result := withListCacheHints(map[string]any{"tools": tools}, version)
-		s.writeMCPResult(w, msg.ID, s.decorateResult(result, version))
+		result := withListCacheHints(map[string]any{"tools": tools})
+		s.writeMCPResult(w, msg.ID, s.decorateResult(result))
 	case "tools/call":
-		s.handleMCPToolCall(w, r, identity, msg, version)
+		s.handleMCPToolCall(w, r, identity, msg)
 	default:
-		s.writeMethodNotFound(w, msg.ID, msg.Method, stateless)
+		// Covers initialize, ping and logging/setLevel, all removed in this
+		// revision, alongside genuinely unknown methods.
+		s.writeMethodNotFound(w, msg.ID, msg.Method)
 	}
 }
 
 // handleMCPToolCall bridges one MCP tool invocation onto its miniapp.* RPC.
-// version is the resolved spec revision ("" for handshake-era callers).
-func (s *Handler) handleMCPToolCall(w http.ResponseWriter, r *http.Request, identity *clientauth.Identity, msg mcpMessage, version string) {
+func (s *Handler) handleMCPToolCall(w http.ResponseWriter, r *http.Request, identity *clientauth.Identity, msg mcpMessage) {
 	var p struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments,omitempty"`
@@ -337,11 +326,9 @@ func (s *Handler) handleMCPToolCall(w http.ResponseWriter, r *http.Request, iden
 	// Header validation is transport-level: it runs before the tool lookup so
 	// a mismatched header never reaches dispatch, whether or not the name is
 	// one we serve.
-	if version == protocolVersion2026 {
-		if herr := validateNameHeader(r, p.Name); herr != nil {
-			s.writeMCPErrorFrame(w, msg.ID, herr)
-			return
-		}
+	if herr := validateNameHeader(r, p.Name); herr != nil {
+		s.writeMCPErrorFrame(w, msg.ID, herr)
+		return
 	}
 	var tool *ToolDefinition
 	for i := range mcpTools {
@@ -375,7 +362,7 @@ func (s *Handler) handleMCPToolCall(w http.ResponseWriter, r *http.Request, iden
 		s.writeMCPResult(w, msg.ID, s.decorateResult(map[string]any{
 			"content": []map[string]any{{"type": "text", "text": text}},
 			"isError": true,
-		}, version))
+		}))
 		return
 	}
 	text := "{}"
@@ -388,7 +375,7 @@ func (s *Handler) handleMCPToolCall(w http.ResponseWriter, r *http.Request, iden
 	}
 	s.writeMCPResult(w, msg.ID, s.decorateResult(map[string]any{
 		"content": []map[string]any{{"type": "text", "text": text}},
-	}, version))
+	}))
 }
 
 // InternalID derives a bounded, type-prefixed dispatch-frame id from a JSON-RPC id.
@@ -408,25 +395,6 @@ func InternalID(id rawJSON) string {
 		raw = string(r[:maxIDLen]) // rune-safe: string ids may be non-ASCII
 	}
 	return prefix + raw
-}
-
-// negotiateMCPVersion echoes the client's requested protocol version when this
-// gateway speaks it, else answers with the newest supported revision.
-func negotiateMCPVersion(params json.RawMessage) string {
-	var p struct {
-		ProtocolVersion string `json:"protocolVersion"`
-	}
-	if len(params) > 0 {
-		_ = json.Unmarshal(params, &p)
-	}
-	for _, v := range mcpProtocolVersions {
-		// 2026-07-28 has no initialize, so a handshake can never land on it —
-		// a client speaking initialize is in the handshake era by definition.
-		if v != protocolVersion2026 && p.ProtocolVersion == v {
-			return v
-		}
-	}
-	return handshakeProtocolVersion
 }
 
 func (s *Handler) writeMCPResult(w http.ResponseWriter, id json.RawMessage, result any) {
@@ -458,14 +426,13 @@ func (s *Handler) writeMCPErrorFrame(w http.ResponseWriter, id json.RawMessage, 
 
 // writeMethodNotFound answers an unimplemented method. 2026-07-28 pins the
 // HTTP status to 404 so a client can tell "this endpoint lacks that method"
-// from a legacy HTTP+SSE server's 404 for the endpoint itself; the handshake
-// era answered 200 and stays that way.
-func (s *Handler) writeMethodNotFound(w http.ResponseWriter, id json.RawMessage, method string, stateless bool) {
-	e := &mcpError{Code: -32601, Message: "method not found: " + method}
-	if stateless {
-		e.Status = http.StatusNotFound
-	}
-	s.writeMCPErrorFrame(w, id, e)
+// from a legacy HTTP+SSE server's 404 for the endpoint itself.
+func (s *Handler) writeMethodNotFound(w http.ResponseWriter, id json.RawMessage, method string) {
+	s.writeMCPErrorFrame(w, id, &mcpError{
+		Status:  http.StatusNotFound,
+		Code:    -32601,
+		Message: "method not found: " + method,
+	})
 }
 
 func (s *Handler) writeMCPFrame(w http.ResponseWriter, frame map[string]any) {

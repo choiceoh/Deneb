@@ -280,160 +280,13 @@ func TestInternalIDBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestNegotiateMCPVersionBoundaryMatrix(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name   string
-		params string
-		want   string
-	}{
-		{
-			name:   "absent",
-			params: "",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "null",
-			params: "null",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "empty object",
-			params: "{}",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "newest handshake revision",
-			params: "{\"protocolVersion\":\"2025-11-25\"}",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "prior handshake revision",
-			params: "{\"protocolVersion\":\"2025-06-18\"}",
-			want:   "2025-06-18",
-		},
-		{
-			name:   "middle",
-			params: "{\"protocolVersion\":\"2025-03-26\"}",
-			want:   "2025-03-26",
-		},
-		{
-			name:   "oldest",
-			params: "{\"protocolVersion\":\"2024-11-05\"}",
-			want:   "2024-11-05",
-		},
-		{
-			name:   "future",
-			params: "{\"protocolVersion\":\"2099-01-01\"}",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "old unknown",
-			params: "{\"protocolVersion\":\"2020-01-01\"}",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "empty version",
-			params: "{\"protocolVersion\":\"\"}",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "space version",
-			params: "{\"protocolVersion\":\" 2025-06-18 \"}",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "case changed",
-			params: "{\"protocolVersion\":\"2025-06-18A\"}",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "numeric version",
-			params: "{\"protocolVersion\":20250618}",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "boolean version",
-			params: "{\"protocolVersion\":true}",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "array version",
-			params: "{\"protocolVersion\":[]}",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "object version",
-			params: "{\"protocolVersion\":{}}",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "malformed open",
-			params: "{",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "malformed string",
-			params: "{\"protocolVersion\":",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "array params",
-			params: "[]",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "string params",
-			params: "\"2025-03-26\"",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "extra fields",
-			params: "{\"x\":1,\"protocolVersion\":\"2025-03-26\",\"y\":2}",
-			want:   "2025-03-26",
-		},
-		{
-			name:   "duplicate supported last",
-			params: "{\"protocolVersion\":\"bad\",\"protocolVersion\":\"2024-11-05\"}",
-			want:   "2024-11-05",
-		},
-		{
-			name:   "duplicate unsupported last",
-			params: "{\"protocolVersion\":\"2024-11-05\",\"protocolVersion\":\"bad\"}",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "unicode field",
-			params: "{\"프로토콜\":\"2025-03-26\"}",
-			want:   "2025-11-25",
-		},
-		{
-			name:   "leading whitespace",
-			params: "  {\"protocolVersion\":\"2024-11-05\"}",
-			want:   "2024-11-05",
-		},
-		{
-			name:   "trailing whitespace",
-			params: "{\"protocolVersion\":\"2025-03-26\"}  ",
-			want:   "2025-03-26",
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := negotiateMCPVersion(json.RawMessage(tc.params)); got != tc.want {
-				t.Fatalf("negotiateMCPVersion(%q) = %q, want %q", tc.params, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestMCPHandlerRequestBoundaryMatrix(t *testing.T) {
 	tests := []struct {
 		name       string
 		method     string
 		body       string
 		origin     string
+		hdr        map[string]string
 		mode       string
 		wantStatus int
 		wantBody   string
@@ -740,19 +593,19 @@ func TestMCPHandlerRequestBoundaryMatrix(t *testing.T) {
 			wantAllow:  "",
 		},
 		{
-			name:       "ping numeric id",
+			name:       "discover numeric id",
 			method:     "POST",
-			body:       "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}",
+			body:       "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"server/discover\"}",
 			origin:     "",
 			mode:       "ok",
 			wantStatus: 200,
-			wantBody:   "\"result\":{}",
+			wantBody:   "\"supportedVersions\"",
 			wantAllow:  "",
 		},
 		{
-			name:       "ping string id",
+			name:       "discover string id",
 			method:     "POST",
-			body:       "{\"jsonrpc\":\"2.0\",\"id\":\"abc\",\"method\":\"ping\"}",
+			body:       "{\"jsonrpc\":\"2.0\",\"id\":\"abc\",\"method\":\"server/discover\"}",
 			origin:     "",
 			mode:       "ok",
 			wantStatus: 200,
@@ -760,39 +613,9 @@ func TestMCPHandlerRequestBoundaryMatrix(t *testing.T) {
 			wantAllow:  "",
 		},
 		{
-			name:       "initialize newest",
+			name:       "discover reports this build",
 			method:     "POST",
-			body:       "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\"}}",
-			origin:     "",
-			mode:       "ok",
-			wantStatus: 200,
-			wantBody:   "\"protocolVersion\":\"2025-06-18\"",
-			wantAllow:  "",
-		},
-		{
-			name:       "initialize middle",
-			method:     "POST",
-			body:       "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\"}}",
-			origin:     "",
-			mode:       "ok",
-			wantStatus: 200,
-			wantBody:   "\"protocolVersion\":\"2025-03-26\"",
-			wantAllow:  "",
-		},
-		{
-			name:       "initialize fallback",
-			method:     "POST",
-			body:       "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"future\"}}",
-			origin:     "",
-			mode:       "ok",
-			wantStatus: 200,
-			wantBody:   "\"protocolVersion\":\"2025-11-25\"",
-			wantAllow:  "",
-		},
-		{
-			name:       "initialize version",
-			method:     "POST",
-			body:       "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"initialize\"}",
+			body:       "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"server/discover\"}",
 			origin:     "",
 			mode:       "ok",
 			wantStatus: 200,
@@ -800,40 +623,65 @@ func TestMCPHandlerRequestBoundaryMatrix(t *testing.T) {
 			wantAllow:  "",
 		},
 		{
-			name:       "tools list",
+			name:       "initialize is gone",
+			method:     "POST",
+			body:       "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\"}}",
+			origin:     "",
+			mode:       "ok",
+			wantStatus: 400,
+			wantBody:   "\"code\":-32020",
+			wantAllow:  "",
+		},
+		{
+			name:       "ping is gone",
+			method:     "POST",
+			body:       "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}",
+			origin:     "",
+			mode:       "ok",
+			wantStatus: 400,
+			wantBody:   "\"code\":-32020",
+			wantAllow:  "",
+		},
+		{
+			name:       "tools list without 2.0 metadata",
 			method:     "POST",
 			body:       "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/list\"}",
 			origin:     "",
 			mode:       "ok",
-			wantStatus: 200,
-			wantBody:   "\"wiki_search\"",
+			wantStatus: 400,
+			wantBody:   "\"code\":-32020",
 			wantAllow:  "",
 		},
 		{
 			name:       "unknown method",
 			method:     "POST",
-			body:       "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"resources/list\"}",
+			body:       "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"resources/list\",\"params\":{" + statelessMeta + "}}",
 			origin:     "",
+			hdr:        map[string]string{headerProtocolVersion: protocolVersion2026, headerMethod: "resources/list"},
 			mode:       "ok",
-			wantStatus: 200,
+			wantStatus: 404,
 			wantBody:   "method not found",
 			wantAllow:  "",
 		},
 		{
-			name:       "tool call missing params",
+			// The Mcp-Name mirror is checked before the tool lookup, so a call
+			// with no name fails at the header gate rather than as "unknown tool".
+			name:       "tool call without a name",
 			method:     "POST",
-			body:       "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\"}",
+			body:       "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{" + statelessMeta + "}}",
 			origin:     "",
+			hdr:        map[string]string{headerProtocolVersion: protocolVersion2026, headerMethod: "tools/call"},
 			mode:       "ok",
-			wantStatus: 200,
-			wantBody:   "unknown tool",
+			wantStatus: 400,
+			wantBody:   "\"code\":-32020",
 			wantAllow:  "",
 		},
 		{
 			name:       "tool call malformed params",
 			method:     "POST",
-			body:       "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":\"bad\"}",
+			body:       "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{" + statelessMeta + ",\"name\":123}}",
 			origin:     "",
+			hdr:        map[string]string{headerProtocolVersion: protocolVersion2026, headerMethod: "tools/call"},
 			mode:       "ok",
 			wantStatus: 200,
 			wantBody:   "invalid params",
@@ -842,28 +690,33 @@ func TestMCPHandlerRequestBoundaryMatrix(t *testing.T) {
 		{
 			name:       "tool call unknown",
 			method:     "POST",
-			body:       "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"delete_everything\"}}",
+			body:       "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{" + statelessMeta + ",\"name\":\"delete_everything\"}}",
 			origin:     "",
+			hdr:        map[string]string{headerProtocolVersion: protocolVersion2026, headerMethod: "tools/call", headerName: "delete_everything"},
 			mode:       "ok",
 			wantStatus: 200,
 			wantBody:   "unknown tool",
 			wantAllow:  "",
 		},
 		{
+			// Duplicate keys: encoding/json keeps the LAST, so the mirrored
+			// header must match that one for the request to be admitted.
 			name:       "duplicate method last",
 			method:     "POST",
-			body:       "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"bad\",\"method\":\"ping\"}",
+			body:       "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"bad\",\"method\":\"tools/list\",\"params\":{" + statelessMeta + "}}",
 			origin:     "",
+			hdr:        map[string]string{headerProtocolVersion: protocolVersion2026, headerMethod: "tools/list"},
 			mode:       "ok",
 			wantStatus: 200,
-			wantBody:   "\"result\":{}",
+			wantBody:   "\"wiki_search\"",
 			wantAllow:  "",
 		},
 		{
 			name:       "extra properties",
 			method:     "POST",
-			body:       "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"ping\",\"extra\":{\"a\":1}}",
+			body:       "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tools/list\",\"extra\":{\"a\":1},\"params\":{" + statelessMeta + "}}",
 			origin:     "",
+			hdr:        map[string]string{headerProtocolVersion: protocolVersion2026, headerMethod: "tools/list"},
 			mode:       "ok",
 			wantStatus: 200,
 			wantBody:   "\"id\":11",
@@ -892,6 +745,9 @@ func TestMCPHandlerRequestBoundaryMatrix(t *testing.T) {
 			req := httptest.NewRequest(tc.method, "/mcp", strings.NewReader(tc.body))
 			if tc.origin != "" {
 				req.Header.Set("Origin", tc.origin)
+			}
+			for k, v := range tc.hdr {
+				req.Header.Set(k, v)
 			}
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
@@ -994,11 +850,7 @@ func TestMCPConcurrentPureBoundaries(t *testing.T) {
 					errs <- fmt.Errorf("InternalID(%s) = %q", raw, got)
 					return
 				}
-				if got := negotiateMCPVersion(json.RawMessage(`{"protocolVersion":"2025-03-26"}`)); got != "2025-03-26" {
-					errs <- fmt.Errorf("negotiated %q", got)
-					return
-				}
-				if len(ProtocolVersions()) != 5 {
+				if len(ProtocolVersions()) != 1 {
 					errs <- fmt.Errorf("protocol catalog changed length")
 					return
 				}

@@ -16,7 +16,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func postMCP(t *testing.T, s *Server, token, body string) *httptest.ResponseRecorder {
+// postMCPRaw sends a body verbatim, with no protocol metadata. Transport-level
+// tests use it: a malformed envelope or a missing token is rejected before the
+// version gate ever runs, and a legacy-shaped request is the thing under test.
+func postMCPRaw(t *testing.T, s *Server, token, body string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/mcp", bytes.NewReader([]byte(body)))
 	if token != "" {
@@ -24,10 +27,47 @@ func postMCP(t *testing.T, s *Server, token, body string) *httptest.ResponseReco
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	rec := httptest.NewRecorder()
 	mcpHandler(s).ServeHTTP(rec, req)
 	return rec
 }
+
+// postMCP issues one CONFORMING 2026-07-28 request. The endpoint serves no
+// other revision, so the harness attaches the version markers and mirrored
+// headers that every request must carry — otherwise each test would restate
+// the same boilerplate.
+func postMCP(t *testing.T, s *Server, token, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	var msg map[string]any
+	if err := json.Unmarshal([]byte(body), &msg); err != nil {
+		t.Fatalf("test body is not JSON: %v", err)
+	}
+	method, _ := msg["method"].(string)
+	params, _ := msg["params"].(map[string]any)
+	if params == nil {
+		params = map[string]any{}
+	}
+	params["_meta"] = map[string]any{
+		"io.modelcontextprotocol/protocolVersion":    mcp2026,
+		"io.modelcontextprotocol/clientCapabilities": map[string]any{},
+	}
+	msg["params"] = params
+	encoded, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("re-encode test body: %v", err)
+	}
+	headers := map[string]string{"MCP-Protocol-Version": mcp2026, "Mcp-Method": method}
+	if name, _ := params["name"].(string); name != "" {
+		headers["Mcp-Name"] = name
+	}
+	return postMCPRaw(t, s, token, string(encoded), headers)
+}
+
+// mcp2026 is the only revision this endpoint serves.
+const mcp2026 = "2026-07-28"
 
 func mcpHandler(s *Server) *mcpapi.Handler {
 	return mcpapi.New(mcpapi.Config{
@@ -49,54 +89,73 @@ func decodeMCP(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	return out
 }
 
-func TestMCPInitializeReturnsNegotiatedVersionAndToolList(t *testing.T) {
+// The endpoint serves 2026-07-28 and nothing else. A handshake-era client is
+// turned away with a message naming what we speak, and `server/discover` stays
+// reachable without any 2.0 metadata so that client can discover it.
+func TestMCPServesOnlyTheStatelessRevision(t *testing.T) {
 	token := withClientToken(t)
 	s := newTestServer(t)
 
-	rec := postMCP(t, s, token,
-		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","clientInfo":{"name":"claude-code"}}}`)
+	// A bare probe — no headers, no `_meta` — still answers.
+	rec := postMCPRaw(t, s, token, `{"jsonrpc":"2.0","id":1,"method":"server/discover"}`, nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("initialize status = %d, body %s", rec.Code, rec.Body.String())
+		t.Fatalf("bare discover status = %d, body %s", rec.Code, rec.Body.String())
 	}
+	result, _ := decodeMCP(t, rec)["result"].(map[string]any)
+	versions, _ := result["supportedVersions"].([]any)
+	if len(versions) != 1 || versions[0] != mcp2026 {
+		t.Errorf("supportedVersions = %v, want exactly [%s]", result["supportedVersions"], mcp2026)
+	}
+
+	// The handshake itself is gone: initialize is just an unknown method now,
+	// but the version gate rejects the request before it gets that far.
+	rec = postMCPRaw(t, s, token,
+		`{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}`, nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("legacy initialize status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
+	}
+	errObj, _ := decodeMCP(t, rec)["error"].(map[string]any)
+	if errObj == nil || errObj["code"].(float64) != -32020 {
+		t.Fatalf("legacy initialize error = %v, want -32020", errObj)
+	}
+	if msg, _ := errObj["message"].(string); !strings.Contains(msg, mcp2026) {
+		t.Errorf("rejection %q should name the revision we speak", msg)
+	}
+
+	// A client that DOES declare a version we dropped gets the supported list
+	// back, which is what lets it renegotiate rather than guess.
+	rec = postMCPRaw(t, s, token,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2025-11-25"}}}`,
+		map[string]string{"MCP-Protocol-Version": "2025-11-25", "Mcp-Method": "tools/list"})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("dropped-revision status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
+	}
+	errObj, _ = decodeMCP(t, rec)["error"].(map[string]any)
+	if errObj == nil || errObj["code"].(float64) != -32022 {
+		t.Fatalf("dropped-revision error = %v, want -32022", errObj)
+	}
+	data, _ := errObj["data"].(map[string]any)
+	supported, _ := data["supported"].([]any)
+	if len(supported) != 1 || supported[0] != mcp2026 {
+		t.Errorf("supported = %v, want [%s]", data["supported"], mcp2026)
+	}
+
+	// And a conforming 2.0 request is served normally.
+	rec = postMCP(t, s, token, `{"jsonrpc":"2.0","id":4,"method":"tools/list"}`)
 	out := decodeMCP(t, rec)
-	result, _ := out["result"].(map[string]any)
-	if result == nil {
-		t.Fatalf("no result: %v", out)
-	}
-	if result["protocolVersion"] != "2025-03-26" {
-		t.Errorf("protocolVersion = %v, want echoed 2025-03-26", result["protocolVersion"])
-	}
-	info, _ := result["serverInfo"].(map[string]any)
-	if info == nil || info["name"] != "deneb" {
-		t.Errorf("serverInfo = %v", result["serverInfo"])
-	}
-	caps, _ := result["capabilities"].(map[string]any)
-	if caps == nil || caps["tools"] == nil {
-		t.Errorf("capabilities missing tools: %v", result["capabilities"])
-	}
-
-	// An unsupported requested version negotiates down to the newest revision
-	// that still speaks initialize — NOT to 2026-07-28, which removed the
-	// handshake the client just used.
-	rec = postMCP(t, s, token, `{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"protocolVersion":"2099-01-01"}}`)
-	out = decodeMCP(t, rec)
-	if got := out["result"].(map[string]any)["protocolVersion"]; got != "2025-11-25" {
-		t.Errorf("negotiated version = %v, want 2025-11-25", got)
-	}
-
-	rec = postMCP(t, s, token, `{"jsonrpc":"2.0","id":3,"method":"tools/list"}`)
-	out = decodeMCP(t, rec)
-	tools, _ := out["result"].(map[string]any)["tools"].([]any)
+	result, _ = out["result"].(map[string]any)
+	tools, _ := result["tools"].([]any)
 	if want := len(mcpapi.ToolDefinitions()); len(tools) != want {
 		t.Fatalf("tools = %d, want %d", len(tools), want)
 	}
-	first, _ := tools[0].(map[string]any)
-	if first["name"] != "wiki_search" {
+	if first, _ := tools[0].(map[string]any); first["name"] != "wiki_search" {
 		t.Errorf("first tool = %v", first["name"])
 	}
-	schema, _ := first["inputSchema"].(map[string]any)
-	if schema == nil || schema["type"] != "object" {
-		t.Errorf("wiki_search schema = %v", first["inputSchema"])
+	if result["resultType"] != "complete" {
+		t.Errorf("resultType = %v, want complete", result["resultType"])
+	}
+	if result["ttlMs"] == nil || result["cacheScope"] != "private" {
+		t.Errorf("missing cache hints: %v", result)
 	}
 }
 
@@ -171,21 +230,28 @@ func TestMCPTransportRejectsInvalidRequestsPerJSONRPCRules(t *testing.T) {
 	token := withClientToken(t)
 	s := newTestServer(t)
 
-	// Missing token → 401.
-	if rec := postMCP(t, s, "", `{"jsonrpc":"2.0","id":1,"method":"ping"}`); rec.Code != http.StatusUnauthorized {
+	// Missing token → 401, before anything else is looked at.
+	if rec := postMCPRaw(t, s, "", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("no-token status = %d", rec.Code)
 	}
-	// Notification (no id) → 202, no body.
-	if rec := postMCP(t, s, token, `{"jsonrpc":"2.0","method":"notifications/initialized"}`); rec.Code != http.StatusAccepted {
+	// Notification (no id) → 202, no body, and deliberately WITHOUT 2.0
+	// metadata: the revision says "header requirements for notification POSTs
+	// are not defined by this revision", so gating them would invent a rule.
+	// Nothing is dispatched, so nothing is exposed by accepting it.
+	if rec := postMCPRaw(t, s, token, `{"jsonrpc":"2.0","method":"notifications/initialized"}`, nil); rec.Code != http.StatusAccepted {
 		t.Errorf("notification status = %d", rec.Code)
 	}
-	// Batch → protocol error.
-	rec := postMCP(t, s, token, `[{"jsonrpc":"2.0","id":1,"method":"ping"}]`)
+	// Batch → protocol error, caught before the version gate.
+	rec := postMCPRaw(t, s, token, `[{"jsonrpc":"2.0","id":1,"method":"tools/list"}]`, nil)
 	if errObj, _ := decodeMCP(t, rec)["error"].(map[string]any); errObj == nil || errObj["code"].(float64) != -32600 {
 		t.Errorf("batch response = %s", rec.Body.String())
 	}
-	// Unknown method → -32601.
+	// Unknown method → -32601 AND 404: the revision pins the status so a client
+	// can tell a missing method from a legacy server missing the endpoint.
 	rec = postMCP(t, s, token, `{"jsonrpc":"2.0","id":1,"method":"resources/list"}`)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("unknown method status = %d, want 404", rec.Code)
+	}
 	if errObj, _ := decodeMCP(t, rec)["error"].(map[string]any); errObj == nil || errObj["code"].(float64) != -32601 {
 		t.Errorf("unknown method response = %s", rec.Body.String())
 	}
@@ -199,7 +265,7 @@ func TestMCPTransportRejectsInvalidRequestsPerJSONRPCRules(t *testing.T) {
 	}
 	// Browser Origin → 403 (DNS-rebinding hardening; no browser use-case).
 	origReq := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/mcp",
-		bytes.NewReader([]byte(`{"jsonrpc":"2.0","id":1,"method":"ping"}`)))
+		bytes.NewReader([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)))
 	origReq.Header.Set(clientauth.Header, token)
 	origReq.Header.Set("Origin", "https://evil.example")
 	origRec := httptest.NewRecorder()
@@ -207,10 +273,11 @@ func TestMCPTransportRejectsInvalidRequestsPerJSONRPCRules(t *testing.T) {
 	if origRec.Code != http.StatusForbidden {
 		t.Errorf("Origin status = %d", origRec.Code)
 	}
-	// ping round-trips.
+	// ping was removed in this revision — a POST that returns is liveness
+	// enough — so it is now an unknown method like any other.
 	rec = postMCP(t, s, token, `{"jsonrpc":"2.0","id":"p","method":"ping"}`)
-	if out := decodeMCP(t, rec); out["result"] == nil {
-		t.Errorf("ping response = %s", rec.Body.String())
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("ping status = %d, want 404 (body %s)", rec.Code, rec.Body.String())
 	}
 }
 
@@ -251,14 +318,14 @@ func TestMCP_RejectsMalformedEnvelopes(t *testing.T) {
 		name string
 		body string
 	}{
-		{"missing jsonrpc", `{"id":1,"method":"ping"}`},
-		{"wrong jsonrpc", `{"jsonrpc":"1.0","id":1,"method":"ping"}`},
-		{"object id", `{"jsonrpc":"2.0","id":{"a":1},"method":"ping"}`},
-		{"array id", `{"jsonrpc":"2.0","id":[1],"method":"ping"}`},
+		{"missing jsonrpc", `{"id":1,"method":"tools/list"}`},
+		{"wrong jsonrpc", `{"jsonrpc":"1.0","id":1,"method":"tools/list"}`},
+		{"object id", `{"jsonrpc":"2.0","id":{"a":1},"method":"tools/list"}`},
+		{"array id", `{"jsonrpc":"2.0","id":[1],"method":"tools/list"}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			out := decodeMCP(t, postMCP(t, s, token, tc.body))
+			out := decodeMCP(t, postMCPRaw(t, s, token, tc.body, nil))
 			errObj, _ := out["error"].(map[string]any)
 			if errObj == nil {
 				t.Fatalf("expected a JSON-RPC error, got: %v", out)
