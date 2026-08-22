@@ -1,14 +1,18 @@
 package mcpapi
 
-// MCP 2026-07-28 ("MCP 2.0") — the stateless revision.
+// MCP 2026-07-28 ("MCP 2.0") — the only revision this endpoint speaks.
 //
-// The handshake era (2024-11-05 … 2025-06-18) pinned a connection's protocol
+// The handshake era (2024-11-05 … 2025-11-25) pinned a connection's protocol
 // version once, in `initialize`. 2026-07-28 removes that handshake: every
 // request carries its own version, client identity, and capabilities in
 // `params._meta`, mirrored into HTTP headers so intermediaries can route
-// without parsing the body. This file holds everything specific to that
-// revision; handler.go stays the transport and keeps the older era working
-// byte-for-byte.
+// without parsing the body.
+//
+// This gateway served both eras briefly (#4561) and then dropped the older one
+// deliberately: the handshake path existed only for external clients, cost a
+// second code path through every result, and nothing we control needed it.
+// A client on an older revision now gets a 400 that names what we speak rather
+// than a silently degraded session.
 //
 // What this gateway implements from the revision:
 //   - `server/discover` (servers MUST implement it) — version/capability probe;
@@ -35,19 +39,6 @@ import (
 
 // protocolVersion2026 is the stateless revision — "MCP 2.0" in SDK numbering.
 const protocolVersion2026 = "2026-07-28"
-
-// handshakeProtocolVersion is the newest revision that still speaks
-// `initialize` — 2026-07-28's direct predecessor. A client using the handshake
-// is by definition in that era, so negotiation for an unknown requested
-// version answers with this rather than with the (handshake-less) newest
-// revision overall.
-//
-// Everything 2025-11-25 added over 2025-06-18 is optional for a server of this
-// shape (tasks were experimental and capability-gated, icons are an optional
-// field, and its authorization work is OAuth/OIDC discovery, which this
-// token-authed surface does not use), so a tools-only server speaks it
-// conformantly.
-const handshakeProtocolVersion = "2025-11-25"
 
 // Reserved `_meta` keys from the revision. The `io.modelcontextprotocol/`
 // prefix is reserved for the spec, so these names are stable.
@@ -109,16 +100,6 @@ type mcpError struct {
 	Data    any
 }
 
-// supportsProtocolVersion reports whether a requested revision is one we speak.
-func supportsProtocolVersion(version string) bool {
-	for _, v := range mcpProtocolVersions {
-		if v == version {
-			return true
-		}
-	}
-	return false
-}
-
 // requestMetaVersion pulls `params._meta["io.modelcontextprotocol/protocolVersion"]`
 // out of a request body. A malformed or absent `_meta` reads as "" — the
 // caller decides whether that is legal for the resolved era.
@@ -143,52 +124,64 @@ func requestMetaVersion(params json.RawMessage) string {
 	return version
 }
 
-// resolveProtocolVersion decides which revision a request speaks.
+// declaresProtocol reports whether a request carries any 2.0 version marker at
+// all. A request with none is not a half-formed 2.0 request — it is a client
+// from the handshake era, or one probing to find out what we are.
+func declaresProtocol(r *http.Request, msg mcpMessage) bool {
+	return strings.TrimSpace(r.Header.Get(headerProtocolVersion)) != "" ||
+		strings.TrimSpace(requestMetaVersion(msg.Params)) != ""
+}
+
+// requireProtocolVersion admits a request only if it declares 2026-07-28 in
+// BOTH carriers the revision requires — the `MCP-Protocol-Version` header and
+// `params._meta` — and they agree.
 //
-// A stateless request declares its version twice — in the
-// `MCP-Protocol-Version` header and in `params._meta` — and the two MUST
-// agree. A handshake-era request declares neither per-request (its version was
-// pinned by `initialize`), which resolves to "" and leaves the old path alone.
-func resolveProtocolVersion(r *http.Request, msg mcpMessage) (string, *mcpError) {
+// Every rejection names what we speak, one way or another: an unsupported
+// version gets the supported list in `data`, and a missing declaration gets a
+// message pointing at `server/discover`, which stays reachable without any of
+// this (see Handler.ServeHTTP).
+func requireProtocolVersion(r *http.Request, msg mcpMessage) *mcpError {
 	header := strings.TrimSpace(r.Header.Get(headerProtocolVersion))
 	meta := strings.TrimSpace(requestMetaVersion(msg.Params))
 
 	if header != "" && meta != "" && header != meta {
-		return "", headerMismatch(fmt.Sprintf(
+		return headerMismatch(fmt.Sprintf(
 			"%s header %q does not match body _meta %q", headerProtocolVersion, header, meta,
 		))
 	}
-	version := meta
-	if version == "" {
-		version = header
+	declared := meta
+	if declared == "" {
+		declared = header
 	}
-	if version == "" {
-		return "", nil // handshake era — initialize pinned the version
+	if declared != "" && declared != protocolVersion2026 {
+		return unsupportedProtocolVersion(declared)
 	}
-	if !supportsProtocolVersion(version) {
-		return "", &mcpError{
-			Status:  http.StatusBadRequest,
-			Code:    codeUnsupportedProtocolVersion,
-			Message: "unsupported MCP protocol version: " + version,
-			Data: map[string]any{
-				"requested": version,
-				"supported": ProtocolVersions(),
-			},
-		}
+	if header == "" {
+		return headerMismatch(fmt.Sprintf(
+			"missing required header: %s — this endpoint speaks only %s (call server/discover)",
+			headerProtocolVersion, protocolVersion2026,
+		))
 	}
-	// The stateless revision requires BOTH carriers; an older revision's
-	// version may legally arrive in the header alone.
-	if version == protocolVersion2026 {
-		if header == "" {
-			return "", headerMismatch("missing required header: " + headerProtocolVersion)
-		}
-		if meta == "" {
-			return "", headerMismatch(fmt.Sprintf(
-				"missing required request field: params._meta[%q]", metaProtocolVersion,
-			))
-		}
+	if meta == "" {
+		return headerMismatch(fmt.Sprintf(
+			"missing required request field: params._meta[%q]", metaProtocolVersion,
+		))
 	}
-	return version, nil
+	return nil
+}
+
+// unsupportedProtocolVersion tells a client on another revision exactly what
+// this endpoint speaks, so it can renegotiate instead of guessing.
+func unsupportedProtocolVersion(requested string) *mcpError {
+	return &mcpError{
+		Status:  http.StatusBadRequest,
+		Code:    codeUnsupportedProtocolVersion,
+		Message: "unsupported MCP protocol version: " + requested,
+		Data: map[string]any{
+			"requested": requested,
+			"supported": ProtocolVersions(),
+		},
+	}
 }
 
 // validateMethodHeader enforces the `Mcp-Method` mirror. Required on every
@@ -273,13 +266,8 @@ func (s *Handler) discoverResult() jsonObject {
 	}
 }
 
-// decorateResult adds the fields every stateless result must carry. A
-// handshake-era result is returned untouched: `resultType` did not exist
-// there, and older clients validate results against the older schema.
-func (s *Handler) decorateResult(result jsonObject, version string) jsonObject {
-	if version != protocolVersion2026 {
-		return result
-	}
+// decorateResult adds the fields every result must carry.
+func (s *Handler) decorateResult(result jsonObject) jsonObject {
 	result["resultType"] = resultTypeComplete
 	result["_meta"] = jsonObject{metaServerInfo: s.serverInfo()}
 	return result
@@ -288,10 +276,7 @@ func (s *Handler) decorateResult(result jsonObject, version string) jsonObject {
 // withListCacheHints adds the CacheableResult fields the revision requires on
 // list-shaped results, letting a client reuse the catalog across connections
 // instead of re-listing on every one.
-func withListCacheHints(result jsonObject, version string) jsonObject {
-	if version != protocolVersion2026 {
-		return result
-	}
+func withListCacheHints(result jsonObject) jsonObject {
 	result["ttlMs"] = listCacheTTLMs
 	result["cacheScope"] = listCacheScope
 	return result

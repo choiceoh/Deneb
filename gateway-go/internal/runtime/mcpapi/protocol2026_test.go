@@ -163,21 +163,24 @@ func TestStatelessToolsListCarriesCacheHintsAndResultType(t *testing.T) {
 	}
 }
 
-// A handshake-era client must see byte-identical results to before the
-// stateless revision landed: no resultType, no cache hints, no _meta.
-func TestHandshakeEraResultsStayUndecorated(t *testing.T) {
+// A request that declares no 2.0 metadata is a handshake-era client. It used
+// to be served the old way; now it is refused with a message naming what this
+// endpoint speaks, so the operator sees the cause instead of a silent
+// degradation.
+func TestHandshakeEraRequestIsRefusedWithAPointer(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodPost, "/mcp",
 		strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
-	req.Header.Set(headerProtocolVersion, handshakeProtocolVersion)
 	rec := httptest.NewRecorder()
 	configuredMCPHandler().ServeHTTP(rec, req)
 
-	result := resultOf(t, rec)
-	for _, field := range []string{"resultType", "ttlMs", "cacheScope", "_meta"} {
-		if _, present := result[field]; present {
-			t.Errorf("handshake-era result leaked %q: %v", field, result)
-		}
+	errObj := errorOf(t, rec, http.StatusBadRequest, codeHeaderMismatch)
+	msg, _ := errObj["message"].(string)
+	if !strings.Contains(msg, protocolVersion2026) {
+		t.Errorf("message = %q, want it to name %s", msg, protocolVersion2026)
+	}
+	if !strings.Contains(msg, "server/discover") {
+		t.Errorf("message = %q, want it to point at the probe that still answers", msg)
 	}
 }
 
@@ -340,36 +343,36 @@ func TestStatelessRemovedMethodsAnswer404(t *testing.T) {
 	}
 }
 
-// The same methods keep working for handshake-era clients — adopting 2.0 must
-// not break the clients still on 1.x.
-func TestHandshakeEraKeepsInitializeAndPing(t *testing.T) {
+// `server/discover` is the only method that answers without 2.0 metadata —
+// deliberately, since it is how a client on any revision learns what we speak.
+// Every other method is gated, including the ones this revision removed.
+func TestOnlyDiscoverAnswersWithoutProtocolMetadata(t *testing.T) {
 	t.Parallel()
-	for _, method := range []string{"initialize", "ping"} {
+	for _, method := range []string{"tools/list", "tools/call", "initialize", "ping", "resources/list"} {
 		t.Run(method, func(t *testing.T) {
 			t.Parallel()
 			req := httptest.NewRequest(http.MethodPost, "/mcp",
 				strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"`+method+`"}`))
 			rec := httptest.NewRecorder()
 			configuredMCPHandler().ServeHTTP(rec, req)
-
-			if rec.Code != http.StatusOK {
-				t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
-			}
-			if _, ok := decodeFrame(t, rec)["result"]; !ok {
-				t.Errorf("%s did not answer with a result: %s", method, rec.Body.String())
-			}
+			errorOf(t, rec, http.StatusBadRequest, codeHeaderMismatch)
 		})
 	}
 }
 
-func TestHandshakeEraUnknownMethodStillAnswers200(t *testing.T) {
+// A discover request that DOES carry version markers is validated like any
+// other — the bare-probe exemption is for requests with nothing to check, not
+// a hole that skips validation when there is.
+func TestDiscoverWithHalfFormedMetadataIsStillValidated(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodPost, "/mcp",
-		strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"resources/list"}`))
+		strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":`+
+			`{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}`))
+	// _meta declares 2.0 but the mirrored header is absent.
 	rec := httptest.NewRecorder()
 	configuredMCPHandler().ServeHTTP(rec, req)
 
-	errorOf(t, rec, http.StatusOK, -32601)
+	errorOf(t, rec, http.StatusBadRequest, codeHeaderMismatch)
 }
 
 func TestDecodeHeaderValueBoundaryMatrix(t *testing.T) {

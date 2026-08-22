@@ -14,7 +14,7 @@
 | `../domain/session/` | 세션 도메인 상태기계(`IDLE→RUNNING→DONE/FAILED/KILLED/TIMEOUT`), 전이 검증, 이벤트 pub/sub 버스. runtime보다 아래 계층이라 pipeline/platform도 역의존 없이 사용 |
 | `bootstrap/` | 기동 시퀀스 조립 |
 | `manifest/` | `/health`에 노출하는 실행 바이너리·스킬·도구·모델 구성의 비식별 SHA-256 지문 |
-| `mcpapi/` | `POST /mcp` — 데네브 기억을 읽기 전용 MCP 도구로 외부 AI에 노출. `mcpapi/handler.go`(전송·툴 allowlist), `protocol2026.go`(MCP 2.0=2026-07-28 stateless: `server/discover`·`_meta` 버전 협상·`Mcp-Method`/`Mcp-Name` 헤더 검증·`resultType`·캐시 힌트). 구버전 `initialize` 핸드셰이크 경로는 그대로 유지 | <!-- docref:ignore -->
+| `mcpapi/` | `POST /mcp` — 데네브 기억을 읽기 전용 MCP 도구로 외부 AI에 노출. **MCP 2.0(2026-07-28) 전용** — `initialize` 핸드셰이크 시대는 제거됐고 구버전 클라는 400(`-32020`/`-32022`)으로 거절된다. 유일한 예외가 `server/discover`로, 2.0 메타데이터 없이도 답해 클라가 뭘 말해야 하는지 알아낼 수 있다. `mcpapi/handler.go`(전송·툴 allowlist), `protocol2026.go`(버전 게이트·`Mcp-Method`/`Mcp-Name` 헤더 검증·`resultType`·캐시 힌트) | <!-- docref:ignore -->
 | `../../infra/process/` | exec 프로세스 추적 |
 | `../../core/observe/` | LogCapture ring + observe 평면([project_observe_plane]) |
 | `events/`·`insights/` | 이벤트 버스 / 인사이트 집계 |
