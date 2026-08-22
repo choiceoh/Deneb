@@ -160,9 +160,21 @@ def relevant_decisions(areas, path=DECISIONS):
     """
     if not areas:
         return []
+    # Line by line: one truncated row must not blank the whole surface. A
+    # single comprehension raises on the bad line and the handler returns [],
+    # so every valid decision would stay hidden until some later SessionEnd
+    # happened to rewrite the ledger. `recent_episodes` above already reads
+    # this way, and the miner's `load_existing` was fixed for the same reason.
+    rows = []
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            rows = [json.loads(ln) for ln in f if ln.strip()]
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    continue
     except Exception:
         return []
 

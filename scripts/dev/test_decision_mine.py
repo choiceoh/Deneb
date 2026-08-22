@@ -475,6 +475,17 @@ class DecisionSurfacingTests(unittest.TestCase):
         hits = surface.relevant_decisions({"gateway-go"}, path=self.path)
         self.assertLessEqual(len(hits), surface.DECISION_SLOTS)
 
+    def test_one_corrupt_row_does_not_blank_the_whole_surface(self) -> None:
+        # A single comprehension raised on the bad line and returned [], so
+        # every valid decision stayed hidden until some later SessionEnd
+        # happened to rewrite the ledger.
+        with open(self.path, "a", encoding="utf-8") as f:
+            f.write("{truncated\n")
+        hits = surface.relevant_decisions(
+            {"gateway-go", "gateway-go/internal/mcpapi"}, path=self.path
+        )
+        self.assertEqual(hits[0]["commit"], "deep")
+
     def test_a_missing_decision_log_is_not_an_error(self) -> None:
         self.assertEqual(
             surface.relevant_decisions({"gateway-go"}, path=self.path + ".absent"), []
