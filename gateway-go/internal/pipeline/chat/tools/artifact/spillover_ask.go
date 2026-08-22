@@ -75,6 +75,7 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID, content st
 	if len(chunks) == 0 {
 		return "", false
 	}
+	question = boundQuestion(question)
 
 	// Injection-bearing blobs must not be delegated. The tool-result fence
 	// (agent.fenceUntrustedToolOutput) scans what a tool RETURNS: paging
@@ -279,6 +280,25 @@ func isNoEvidenceAnswer(answer string) bool {
 // it a delegated answer is unfalsifiable from the root's seat.
 func spillAskVerifyHint(spillID string) string {
 	return fmt.Sprintf("\n\n_인용 확인: read_spillover(spill_id=%q, offset=<줄번호>)_", spillID)
+}
+
+// spillAskQuestionMaxChars bounds the question text. Everything else on this
+// path is budgeted — chunks at 12K, the phase at 150s — but the question rode
+// along unbounded into all four prompts AND into the returned header. A long
+// model-written question could push the helper past its context on every call
+// while the chunk cap looked respected, and inflate read_spillover's own result
+// past the 24K tool-output cap, so the model would get a fresh spill handle
+// where it asked for an answer.
+const spillAskQuestionMaxChars = 1500
+
+// boundQuestion clips an oversized question, saying so, so the delegate and the
+// reader both see that the ask was cut rather than silently reinterpreted.
+func boundQuestion(question string) string {
+	if len(question) <= spillAskQuestionMaxChars {
+		return question
+	}
+	notice := " …[질문이 너무 길어 잘렸습니다]"
+	return textutil.TruncateBytes(question, spillAskQuestionMaxChars-len(notice)) + notice
 }
 
 // spillAskChunk is one contiguous line window handed to the local model.

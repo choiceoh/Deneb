@@ -667,6 +667,45 @@ func TestSpillAskSerializesConcurrentDelegatedReads(t *testing.T) {
 	}
 }
 
+// Everything else on the delegated path is budgeted, but the question rode
+// along unbounded into all four prompts and into the returned header — enough
+// to blow the helper's context on every call, and to push read_spillover's own
+// result past the tool-output cap so the model gets a spill handle instead of
+// the answer it asked for.
+func TestSpillAskBoundsAnOversizedQuestion(t *testing.T) {
+	store, ctx, id := spillWithLines(t, 4000)
+	huge := strings.Repeat("왜 이렇게 되었는지 설명해줘 ", 4000)
+
+	var mu sync.Mutex
+	var longest int
+	measuring := func(_ context.Context, _, user string, _ int) (string, error) {
+		mu.Lock()
+		if len(user) > longest {
+			longest = len(user)
+		}
+		mu.Unlock()
+		return stubAnswer(user, "답"), nil
+	}
+	fn := ToolSpilloverRead(store, tooldeps.LocalAIFunc(measuring))
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": huge})
+
+	mu.Lock()
+	got := longest
+	mu.Unlock()
+	// One chunk plus a bounded question plus prompt scaffolding — nowhere near
+	// the megabyte the raw question would have added to every call.
+	if limit := spillAskChunkMaxChars + spillAskQuestionMaxChars + 512; got > limit {
+		t.Errorf("delegated prompt reached %d bytes (limit %d) — the question was not bounded", got, limit)
+	}
+	if len(out) > agent.DefaultMaxOutput {
+		t.Errorf("result is %d bytes — the echoed question pushed it past the tool-output cap", len(out))
+	}
+	if !strings.Contains(out, "질문이 너무 길어 잘렸습니다") {
+		t.Errorf("a clipped question must say so:\n%.300s", out)
+	}
+}
+
 // shrinkAskTimeouts makes the stall behaviour observable in milliseconds
 // instead of minutes, restoring the production values afterwards.
 func shrinkAskTimeouts(t *testing.T, call, phase time.Duration) {
