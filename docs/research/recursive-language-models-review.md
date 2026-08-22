@@ -30,18 +30,20 @@
 
 ## 2. Deneb 현황 대조 — 이미 대부분 갖고 있다
 
-| RLM 프리미티브 | Deneb 현재 | 위치 |
+> **이 표는 이 PR 이전의 기준선(baseline)이다.** §3–§4의 판정이 이 상태에서 출발하므로 그대로 둔다. 이 PR로 실제 바뀐 두 행에는 **[이 PR에서 해소]** 표시를 달았고, 변경 후 상태는 §4를 보라.
+
+| RLM 프리미티브 | Deneb 현재 (PR 이전) | 위치 |
 |---|---|---|
 | 컨텍스트를 창 밖 변수로 저장 | 있음 — 24K(툴별 `MaxOutput`) 초과 결과는 디스크로 spill, 창에는 head/tail 절반씩(기본 24K면 약 12K씩)과 `sp_*` 핸들을 담은 잘림 마커만 남는다 | 런타임 경로는 `capToolOutput`(`gateway-go/internal/pipeline/chat/tools.go:274`) → `TruncateHeadTail`(`gateway-go/internal/ai/agent/truncate.go:32`). `FormatPreview`/`SpillAndPreview`는 **런타임 호출자가 없는** 편의 래퍼다 |
 | 무손실 원본 보존 | 부분 — 원문은 **세션별 JSONL** 에 무손실 append 되고 요약은 DAG 노드로 *추가*되지만, 검색 인덱스는 SQLite FTS 가 아니라 **로드 시 재구축되는 인메모리 `textsearch.Index`** 이고 그 투영은 tool_result 를 2,000바이트로 자른다. 즉 **JSONL 은 무손실, 검색은 무손실이 아니다** — 원문 복원은 `LoadMessages` 경로뿐. 보존도 retention GC(`sweep.go`) 전까지다 | `gateway-go/internal/pipeline/polaris/store.go` |
 | 프로그래밍적 peek / grep / slice | 있음 — `read_spillover(spill_id, offset, limit, grep)`, 페이지당 400줄·20K자 바운드와 `[계속: offset=N]` 안내 | `gateway-go/internal/pipeline/chat/toolwire/schema/tool_schemas.json` |
-| 구조 메타 조회(목차) | 부분 — 대화 이력엔 있음(`polaris(action="describe")`: 총 메시지·커버리지·요약노드 목록). **spill 블롭의 잘림 마커는 생략 줄 수와 `sp_*` ID 만** 준다 | `gateway-go/internal/pipeline/chat/tools/recallops/polaris.go:92` vs `TruncateHeadTail` 의 마커 |
-| **깊이-1 재귀 서브콜** | 있음, 단 대화 이력 한정 — `expand(summary_id, question)` 이 원본 구간을 로드해 **로컬 LLM 에 위임**하고 *답변만* 루트로 반환 | `gateway-go/internal/pipeline/chat/tools/recallops/polaris.go:196` |
+| 구조 메타 조회(목차) **[이 PR에서 해소]** | 부분 — 대화 이력엔 있음(`polaris(action="describe")`: 총 메시지·커버리지·요약노드 목록). **spill 블롭의 잘림 마커는 생략 줄 수와 `sp_*` ID 만** 준다 | `gateway-go/internal/pipeline/chat/tools/recallops/polaris.go:92` vs `TruncateHeadTail` 의 마커 |
+| **깊이-1 재귀 서브콜** **[이 PR에서 해소]** | 있음, 단 대화 이력 한정 — `expand(summary_id, question)` 이 원본 구간을 로드해 **로컬 LLM 에 위임**하고 *답변만* 루트로 반환 | `gateway-go/internal/pipeline/chat/tools/recallops/polaris.go:196` |
 | 파티션 + 병렬 맵리듀스 | 있음, 단 **YouTube 자막 전용** — `splitTranscriptChunks`(≤4청크) + `summarizeTranscriptChunked` 가 청크별 팬아웃 후 교차 결론 패스를 돈다. 범용/온디맨드 인터페이스는 없다. `expand` 는 단일 노드·8000자 단일 청크이고, `research_panel` 은 "한 질문 → 여러 모델"이지 "여러 청크 → 한 모델"이 아님 | `gateway-go/internal/pipeline/chat/web/web_youtube.go:184` |
 | 루트가 원본을 아예 안 봄 | 없음 — 기본 경로는 여전히 append-only 히스토리 조립과 임계값 컴팩션 | `gateway-go/internal/pipeline/chat/run_prepare.go` → `gateway-go/internal/pipeline/compaction/` |
 | 비용·런타임 보장 | **Deneb 가 앞섬** — 인터랙티브 턴 백스톱 30분/소프트 20분(auto-resume 류 경로는 별도로 5분), variable prompt addition 예산, 컴팩션 튜너 | `gateway-go/internal/pipeline/chatport/runtime_contracts.go`, `gateway-go/internal/runtime/server/server_lifecycle.go:19`, `gateway-go/internal/pipeline/chat/promptbudget/`, `gateway-go/internal/pipeline/compactuner/` |
 
-**진단**: "context as a variable" 은 Deneb 에 이미 **두 계층으로** 구현돼 있다 — 툴 결과층(spillover)과 대화 이력층(Polaris). RLM 이 새로 주는 건 *개념*이 아니라 **그 두 계층의 비대칭을 메우는 구체적 형태**다. 대화 이력층은 `describe`(구조 메타)와 `expand(question)`(재귀 서브콜)을 갖췄는데, 툴 결과층은 `grep`/`offset`(탐색)만 있고 **재귀 서브콜도 구조 메타도 없다**. 정작 덩치가 큰 쪽은 툴 결과층이다 — YouTube 자막, `exec` 출력, 메일 아카이브 덤프.
+**진단** (기준선 기준): "context as a variable" 은 Deneb 에 이미 **두 계층으로** 구현돼 있다 — 툴 결과층(spillover)과 대화 이력층(Polaris). RLM 이 새로 주는 건 *개념*이 아니라 **그 두 계층의 비대칭을 메우는 구체적 형태**다. 대화 이력층은 `describe`(구조 메타)와 `expand(question)`(재귀 서브콜)을 갖췄는데, 툴 결과층은 `grep`/`offset`(탐색)만 있고 **재귀 서브콜도 구조 메타도 없다**. 정작 덩치가 큰 쪽은 툴 결과층이다 — YouTube 자막, `exec` 출력, 메일 아카이브 덤프.
 
 ---
 
