@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -45,34 +46,45 @@ func TestGateDoesNotTaintOnOperatorOwnedSpillRead(t *testing.T) {
 	}
 }
 
-// Nested provenance is attributed per invocation, not by the turn-wide flag.
-// A purely local code_action running in a turn where `web` already read must
-// not have its spill labelled external — that label is permanent, so it would
+// Nested provenance is attributed per invocation, not by the turn-wide flag and
+// not by a counter sampled around the call. A purely local code_action running
+// in a turn where `web` already ran — or running CONCURRENTLY with one — must
+// not have its spill labelled external: that label is permanent, so it would
 // taint (and block exec on) every later turn that reads the blob.
-func TestExternalOriginSeqDistinguishesOwnNestedRead(t *testing.T) {
+func TestOriginSinkAttributesNestedReadsPerInvocation(t *testing.T) {
 	tc := &toolport.TurnContext{}
 
-	// An unrelated external read earlier in the same turn.
+	// An unrelated external read elsewhere in the turn.
 	tc.MarkExternalOriginTouched()
 
-	// A code_action that reads nothing external: the sequence does not move.
-	before := tc.ExternalOriginSeq()
-	if tc.ExternalOriginSeq() != before {
-		t.Fatal("sequence moved with no read")
+	// This invocation's sink: nothing nested inside it read externally.
+	own := &toolport.OriginSink{}
+	if own.Touched() {
+		t.Fatal("a fresh sink must start clean")
 	}
-	if tc.ExternalOriginSeq() != before {
-		t.Error("purely local invocation would be labelled external")
-	}
-
-	// A code_action whose own nested read lands: the sequence moves.
-	beforeNested := tc.ExternalOriginSeq()
+	// A parallel sibling marking the TURN must not reach this invocation.
 	tc.MarkExternalOriginTouched()
-	if tc.ExternalOriginSeq() == beforeNested {
-		t.Error("nested external read did not move the sequence — provenance lost")
+	if own.Touched() {
+		t.Error("a concurrent external reader forged nested provenance — local output would be labelled external")
 	}
 
-	// The sticky flag alone cannot tell these two apart.
+	// A call nested inside this invocation marks the sink it was handed.
+	ctx := toolport.WithOriginSink(context.Background(), own)
+	toolport.OriginSinkFromContext(ctx).Mark()
+	if !own.Touched() {
+		t.Error("nested external read did not reach the invocation's sink — provenance lost")
+	}
+
+	// The sticky turn flag alone cannot tell those two apart.
 	if !tc.ExternalOriginTouched() {
-		t.Error("flag should still be set")
+		t.Error("turn flag should still be set")
+	}
+}
+
+// A top-level invocation has no parent sink; marking must not panic.
+func TestOriginSinkNilSafeAtTopLevel(t *testing.T) {
+	toolport.OriginSinkFromContext(context.Background()).Mark()
+	if toolport.OriginSinkFromContext(context.Background()).Touched() {
+		t.Error("absent sink must read as untouched")
 	}
 }

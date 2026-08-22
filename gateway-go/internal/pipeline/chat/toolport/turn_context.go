@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -23,8 +24,7 @@ type TurnContext struct {
 	// untrusted-tool gate reads this when code_action completes so nested
 	// mail/web reads taint the turn even though only the wrapper result is
 	// observed at the hook layer.
-	externalOrigin    bool
-	externalOriginSeq uint64
+	externalOrigin bool
 }
 
 // toolStat accumulates completion-time samples for a single tool name within a turn.
@@ -64,26 +64,53 @@ func (tc *TurnContext) MarkExternalOriginTouched() {
 	}
 	tc.mu.Lock()
 	tc.externalOrigin = true
-	tc.externalOriginSeq++
 	tc.mu.Unlock()
 }
 
-// ExternalOriginSeq returns a counter that increases on every external-origin
-// read in this turn.
+// OriginSink records that an external-origin read landed during ONE tool
+// invocation. The turn flag cannot answer that question: it is sticky and
+// turn-wide, so a purely local code_action looks external whenever anything
+// else in the turn read outside content.
 //
-// The boolean alone is turn-wide and sticky, so it cannot say WHICH call
-// sourced the content: a purely local code_action running in a turn where
-// `web` already ran would look external. Comparing this sequence across one
-// invocation answers "did an external read land during *this* call", which is
-// what per-spill provenance needs — precise in both directions, so neither
-// mislabels local output nor loses a genuine nested read.
-func (tc *TurnContext) ExternalOriginSeq() uint64 {
-	if tc == nil {
-		return 0
+// A before/after counter comparison around the invocation does not answer it
+// either — under parallel tool execution an unrelated external reader can
+// advance the counter inside that window, which mislabels the local call's
+// spill and needlessly blocks irreversible tools on every later read of it.
+// The sink is created per invocation and marked only by calls nested inside
+// that one, so provenance follows the call tree rather than wall-clock overlap.
+type OriginSink struct {
+	touched atomic.Bool
+}
+
+// Mark records an external-origin read. Nil-safe: a tool invoked outside the
+// registry has no sink.
+func (s *OriginSink) Mark() {
+	if s != nil {
+		s.touched.Store(true)
 	}
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	return tc.externalOriginSeq
+}
+
+// Touched reports whether a nested external-origin read landed.
+func (s *OriginSink) Touched() bool {
+	return s != nil && s.touched.Load()
+}
+
+type originSinkKey struct{}
+
+// WithOriginSink attaches the sink that calls nested inside this invocation
+// will mark.
+func WithOriginSink(ctx context.Context, s *OriginSink) context.Context {
+	return context.WithValue(ctx, originSinkKey{}, s)
+}
+
+// OriginSinkFromContext returns the sink belonging to the invocation that
+// dispatched this call, or nil at the top level.
+func OriginSinkFromContext(ctx context.Context) *OriginSink {
+	if ctx == nil {
+		return nil
+	}
+	s, _ := ctx.Value(originSinkKey{}).(*OriginSink)
+	return s
 }
 
 // ExternalOriginTouched reports whether an external-origin read landed in this
