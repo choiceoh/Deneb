@@ -97,18 +97,38 @@ const (
 func spilledOutline(content string, maxChars int) string {
 	persisted := persistedForm(content)
 
-	// The region the model cannot see, in PERSISTED coordinates. Approximate by
-	// construction — the preview it stands in for is raw — which is exactly why
-	// it only ranks entries instead of filtering them.
-	half := maxChars / 2
-	hidden := [2]int{0, 0}
-	if len(persisted) > maxChars {
-		head := textutil.TruncateBytes(persisted, half)
-		tail := textutil.TailBytes(persisted, half)
-		hidden[0] = strings.Count(head, "\n") + 1
-		hidden[1] = strings.Count(persisted[:len(persisted)-len(tail)], "\n") + 1
+	return outlineOf(persisted, hiddenLineRange(persisted, maxChars))
+}
+
+// hiddenLineRange returns the inclusive 1-based line span that a head/tail
+// preview of maxChars would NOT show, in the coordinates of text. A zero span
+// means nothing is hidden.
+//
+// Approximate by construction — the preview it stands in for is raw while these
+// numbers are persisted — which is why callers only rank on it, never filter.
+func hiddenLineRange(text string, maxChars int) [2]int {
+	if len(text) <= maxChars {
+		return [2]int{0, 0}
 	}
-	return outlineOf(persisted, hidden)
+	half := maxChars / 2
+	head := textutil.TruncateBytes(text, half)
+	prefix := text[:len(text)-len(textutil.TailBytes(text, half))]
+
+	// head covers N whole lines plus part of the next, so the first line it
+	// fails to show whole is N+1.
+	first := strings.Count(head, "\n") + 1
+	last := strings.Count(prefix, "\n") + 1
+	if strings.HasSuffix(prefix, "\n") {
+		// The tail begins exactly on a line boundary, so line last is the tail's
+		// FIRST line and fully visible. Counting it as hidden lets a visible
+		// heading outrank a genuinely dropped one under the slot cap — the very
+		// headings the whole-file scan exists to keep.
+		last--
+	}
+	if last < first {
+		return [2]int{0, 0}
+	}
+	return [2]int{first, last}
 }
 
 // outlineOf renders the section markers in text, each with its 1-based line

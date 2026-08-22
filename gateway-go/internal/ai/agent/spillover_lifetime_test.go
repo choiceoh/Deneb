@@ -522,6 +522,28 @@ func TestOutlineSurvivesRedactionShrinkingBelowBudget(t *testing.T) {
 	}
 }
 
+// When the preview's tail begins exactly on a line boundary, that first tail
+// line is fully visible and must not be ranked as hidden — otherwise a visible
+// heading can outrank a genuinely dropped one under the slot cap.
+func TestHiddenLineRangeExcludesTheFirstVisibleTailLine(t *testing.T) {
+	// 100 lines of exactly 10 bytes: with maxChars 400 the tail is the last 200
+	// bytes = lines 81–100, starting precisely at a boundary.
+	text := strings.Repeat("aaaaaaaaa\n", 100)
+
+	got := hiddenLineRange(text, 400)
+
+	if want := ([2]int{21, 80}); got != want {
+		t.Errorf("hiddenLineRange = %v, want %v (line 81 is the first visible tail line)", got, want)
+	}
+}
+
+// Nothing is hidden when the text fits the preview budget.
+func TestHiddenLineRangeEmptyWhenNothingDropped(t *testing.T) {
+	if got := hiddenLineRange("short\ntext\n", 4000); got != ([2]int{0, 0}) {
+		t.Errorf("hiddenLineRange = %v, want zero span", got)
+	}
+}
+
 // PEM markers assembled at runtime. Spelled out, they are a literal the repo's
 // detect-private-key gate rejects — correctly, since it cannot tell a fixture
 // from a leak. The concatenated value is byte-identical, so redaction still
