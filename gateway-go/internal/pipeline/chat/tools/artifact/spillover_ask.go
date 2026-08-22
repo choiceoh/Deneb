@@ -101,6 +101,24 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID, content st
 	phaseCtx, cancelPhase := context.WithTimeout(ctx, spillAskPhaseTimeout)
 	defer cancelPhase()
 
+	// One delegated read at a time. read_spillover is classified parallel-safe,
+	// so a single assistant turn can emit several question-bearing calls and the
+	// executor runs them concurrently — each then launching its own four map
+	// requests plus a reduce as critical local-hub work. The four-chunk bound is
+	// per invocation, so the turn's real fan-out would be however many calls the
+	// model happened to make.
+	//
+	// Serialize rather than widen: the local hub is one box, and a queued read
+	// that answers beats two that contend and time out. A call that spends its
+	// whole budget waiting falls back to paging, which is the honest
+	// degradation — the caller says so rather than returning page 1 as an answer.
+	select {
+	case spillAskSlots <- struct{}{}:
+		defer func() { <-spillAskSlots }()
+	case <-phaseCtx.Done():
+		return "", false
+	}
+
 	type partial struct {
 		firstLine, lastLine int
 		clippedLines        int
@@ -191,6 +209,9 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID, content st
 	}
 	return head.String() + strings.TrimSpace(reduced) + spillAskVerifyHint(spillID), true
 }
+
+// spillAskSlots admits one delegated read at a time; see spillAsk.
+var spillAskSlots = make(chan struct{}, 1)
 
 // citationRe matches the [L<number>] citations the delegate is told to emit.
 var citationRe = regexp.MustCompile(`\[L(\d+)\]`)

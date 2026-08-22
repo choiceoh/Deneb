@@ -605,6 +605,50 @@ func TestSpillAskBoundsTheWholePhase(t *testing.T) {
 	}
 }
 
+// read_spillover is parallel-safe, so one assistant turn can emit several
+// question-bearing calls and the executor runs them concurrently. Each would
+// launch its own four map requests plus a reduce against the single local hub,
+// making the advertised four-chunk bound per-invocation rather than per-turn.
+func TestSpillAskSerializesConcurrentDelegatedReads(t *testing.T) {
+	store, ctx, id := spillWithLines(t, 4000)
+
+	var mu sync.Mutex
+	inFlight, peak := 0, 0
+	counting := func(_ context.Context, _, user string, _ int) (string, error) {
+		mu.Lock()
+		inFlight++
+		if inFlight > peak {
+			peak = inFlight
+		}
+		mu.Unlock()
+		time.Sleep(5 * time.Millisecond) // long enough to overlap if unbounded
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		return stubAnswer(user, "답"), nil
+	}
+	fn := ToolSpilloverRead(store, tooldeps.LocalAIFunc(counting))
+
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			raw, _ := json.Marshal(map[string]any{"spill_id": id, "question": "무엇?"})
+			if _, err := fn(ctx, raw); err != nil {
+				t.Errorf("call: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if peak > 1 {
+		t.Errorf("%d delegated calls ran at once — the turn's fan-out is unbounded", peak)
+	}
+}
+
 // shrinkAskTimeouts makes the stall behaviour observable in milliseconds
 // instead of minutes, restoring the production values afterwards.
 func shrinkAskTimeouts(t *testing.T, call, phase time.Duration) {
