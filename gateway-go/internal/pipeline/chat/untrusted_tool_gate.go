@@ -239,18 +239,3 @@ func (r *ToolRegistry) spilledFromExternalOrigin(ctx context.Context, name strin
 	}
 	return r.spillStore.IsExternalOrigin(p.SpillID, toolport.SessionKeyFromContext(ctx))
 }
-
-// spilledContentIsExternal reports whether output being spilled by tool `name`
-// needs an EXPLICIT external-origin mark.
-//
-// Direct external readers need none: Store classifies them from the tool name,
-// so every writer gets that for free. Only code_action is left — it dials back
-// into the registry, so a nested web/mail read marks the turn context while the
-// spill lands under "code_action", which no name-based rule can catch.
-func (r *ToolRegistry) spilledContentIsExternal(ctx context.Context, name string) bool {
-	if name != "code_action" {
-		return false
-	}
-	tc := toolport.TurnContextFromContext(ctx)
-	return tc != nil && tc.ExternalOriginTouched()
-}

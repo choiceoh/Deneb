@@ -325,3 +325,27 @@ func TestSpilloverQuestionScanIsNotDefeatedByLineNumbering(t *testing.T) {
 		t.Errorf("injection was paraphrased past the fence:\n%s", out)
 	}
 }
+
+// A blob that is one enormous line is clipped before delegation. Its line
+// number is still "covered", so without saying so the coverage header would
+// present minified JSON or an encoded payload as fully searched.
+func TestSpilloverQuestionReportsClippedLines(t *testing.T) {
+	store := agent.NewSpilloverStore(t.TempDir())
+	huge := strings.Repeat("k", spillAskChunkMaxChars*3)
+	id, err := store.Store("client:test", "exec", huge+"\n")
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	ctx := toolport.WithSessionKey(context.Background(), "client:test")
+	rec := &askRecorder{reply: func(string) (string, error) { return "답 [L1]", nil }}
+	fn := ToolSpilloverRead(store, rec.fn())
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": "q"})
+
+	if !strings.Contains(out, "앞부분만 전달됨") {
+		t.Fatalf("clipped line presented as fully scanned:\n%s", out)
+	}
+	if !strings.Contains(out, "전체를 다 보지는 않았습니다") {
+		t.Errorf("partial coverage must be stated when a line was clipped:\n%s", out)
+	}
+}

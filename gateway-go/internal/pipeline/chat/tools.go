@@ -146,6 +146,13 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input rawJSON) 
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+	// Snapshot before execution so a nested external read can be attributed to
+	// THIS invocation. The turn-wide flag is sticky, so it alone would label a
+	// purely local code_action external whenever anything else in the turn had
+	// already read outside content.
+	turnCtx := TurnContextFromContext(ctx)
+	externalSeqBefore := turnCtx.ExternalOriginSeq()
+
 	output, err := def.Fn(ctx, input)
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return output, ctxErr
@@ -156,13 +163,16 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input rawJSON) 
 	if err != nil {
 		return output, err
 	}
+	// A nested external read during this call, detected by the sequence moving.
+	nestedExternal := name == "code_action" && turnCtx.ExternalOriginSeq() != externalSeqBefore
+
 	if readsExternalOrigin(name) || r.spilledFromExternalOrigin(ctx, name, input) {
-		if tc := TurnContextFromContext(ctx); tc != nil {
-			tc.MarkExternalOriginTouched()
+		if turnCtx != nil {
+			turnCtx.MarkExternalOriginTouched()
 		}
 	}
 
-	output = r.capToolOutput(ctx, def, name, output)
+	output = r.capToolOutput(ctx, def, name, output, nestedExternal)
 
 	// Invalidate caches when this tool may have modified the file system.
 	// Must run after execution and before the cache Set in finalizeToolOutput,
@@ -271,7 +281,7 @@ func cachedToolResult(ctx context.Context, rc *RunCache, cacheKey, name string, 
 // comprehension. Build errors and test failures are typically at the end of
 // output, while context (paths, invocations) is at the start. Keep both
 // visible.
-func (r *ToolRegistry) capToolOutput(ctx context.Context, def ToolDef, name, output string) string {
+func (r *ToolRegistry) capToolOutput(ctx context.Context, def ToolDef, name, output string, nestedExternal bool) string {
 	maxOutput := agent.DefaultMaxOutput
 	if def.MaxOutput > 0 {
 		maxOutput = def.MaxOutput
@@ -294,11 +304,11 @@ func (r *ToolRegistry) capToolOutput(ctx context.Context, def ToolDef, name, out
 	if r.spillStore != nil && ctx.Err() == nil {
 		sessionKey := toolport.SessionKeyFromContext(ctx)
 		spillID, _ = r.spillStore.Store(sessionKey, name, output)
-		// Record provenance with the spill so a later read can be judged on
-		// what the content IS, not on which tool happened to print it. A
-		// nested external read inside code_action marks the turn context but
-		// spills under the outer name, so the name alone would lose it.
-		if spillID != "" && r.spilledContentIsExternal(ctx, name) {
+		// Store already classifies spills by their producing tool's name.
+		// The explicit mark covers only what a name cannot: a code_action
+		// whose OWN nested read pulled outside content, attributed by the
+		// sequence check in Execute rather than the sticky turn flag.
+		if spillID != "" && nestedExternal {
 			r.spillStore.MarkExternalOrigin(spillID)
 		}
 	}

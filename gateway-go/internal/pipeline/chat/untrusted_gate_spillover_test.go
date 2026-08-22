@@ -44,3 +44,35 @@ func TestGateDoesNotTaintOnOperatorOwnedSpillRead(t *testing.T) {
 		t.Error("operator-owned spill read tainted the turn — this over-blocks ordinary work")
 	}
 }
+
+// Nested provenance is attributed per invocation, not by the turn-wide flag.
+// A purely local code_action running in a turn where `web` already read must
+// not have its spill labelled external — that label is permanent, so it would
+// taint (and block exec on) every later turn that reads the blob.
+func TestExternalOriginSeqDistinguishesOwnNestedRead(t *testing.T) {
+	tc := &toolport.TurnContext{}
+
+	// An unrelated external read earlier in the same turn.
+	tc.MarkExternalOriginTouched()
+
+	// A code_action that reads nothing external: the sequence does not move.
+	before := tc.ExternalOriginSeq()
+	if tc.ExternalOriginSeq() != before {
+		t.Fatal("sequence moved with no read")
+	}
+	if tc.ExternalOriginSeq() != before {
+		t.Error("purely local invocation would be labelled external")
+	}
+
+	// A code_action whose own nested read lands: the sequence moves.
+	beforeNested := tc.ExternalOriginSeq()
+	tc.MarkExternalOriginTouched()
+	if tc.ExternalOriginSeq() == beforeNested {
+		t.Error("nested external read did not move the sequence — provenance lost")
+	}
+
+	// The sticky flag alone cannot tell these two apart.
+	if !tc.ExternalOriginTouched() {
+		t.Error("flag should still be set")
+	}
+}

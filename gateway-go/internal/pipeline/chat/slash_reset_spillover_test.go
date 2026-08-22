@@ -65,7 +65,7 @@ func TestCancelledRunDoesNotSpill(t *testing.T) {
 	cancel()
 
 	out := reg.capToolOutput(ctx, ToolDef{Name: "exec"}, "exec",
-		strings.Repeat("x", agent.DefaultMaxOutput+1))
+		strings.Repeat("x", agent.DefaultMaxOutput+1), false)
 
 	if strings.Contains(out, "read_spillover(") {
 		t.Errorf("cancelled run produced a spill handle:\n%s", out[:200])

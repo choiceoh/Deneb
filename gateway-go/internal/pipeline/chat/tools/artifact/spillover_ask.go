@@ -79,6 +79,7 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lin
 
 	type partial struct {
 		firstLine, lastLine int
+		clippedLines        int
 		answer              string
 	}
 	var partials []partial
@@ -91,7 +92,10 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lin
 		if err != nil || strings.TrimSpace(answer) == "" {
 			continue // one chunk failing must not sink the whole read
 		}
-		partials = append(partials, partial{firstLine: c.firstLine, lastLine: c.lastLine, answer: strings.TrimSpace(answer)})
+		partials = append(partials, partial{
+			firstLine: c.firstLine, lastLine: c.lastLine,
+			clippedLines: c.clippedLines, answer: strings.TrimSpace(answer),
+		})
 	}
 	if len(partials) == 0 {
 		return "", false
@@ -102,14 +106,21 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lin
 	// only the chunks that actually ANSWERED — counting attempted chunks would
 	// claim a failed region was searched, which is the exact coverage-hiding
 	// defect this change fixes for polaris expand.
-	scanned := 0
+	scanned, clipped := 0, 0
 	for _, p := range partials {
 		scanned += p.lastLine - p.firstLine + 1
+		clipped += p.clippedLines
 	}
 	var head strings.Builder
 	fmt.Fprintf(&head, "## %s 위임 답변\n\n**질문:** %s\n", spillID, question)
 	fmt.Fprintf(&head, "**근거 범위:** 총 %d줄 중 %d줄 스캔(%d구간)", len(lines), scanned, len(partials))
-	if scanned < len(lines) {
+	// A clipped line is counted as scanned because its number was covered, but
+	// most of its bytes never reached the delegate — minified JSON or an
+	// encoded blob is one line and would otherwise read as "fully searched".
+	if clipped > 0 {
+		fmt.Fprintf(&head, " · 그중 %d줄은 너무 길어 앞부분만 전달됨", clipped)
+	}
+	if scanned < len(lines) || clipped > 0 {
 		fmt.Fprintf(&head, " — 전체를 다 보지는 않았습니다. 빠진 구간이 걸리면 grep=\"패턴\"으로 좁히세요")
 	}
 	head.WriteString("\n\n")
@@ -144,6 +155,7 @@ func spillAskVerifyHint(spillID string) string {
 type spillAskChunk struct {
 	firstLine, lastLine int // 1-based, inclusive
 	text                string
+	clippedLines        int // lines too long to send whole; only their head went
 }
 
 // spillAskChunks splits lines into at most spillAskMaxChunks windows bounded by
@@ -157,13 +169,17 @@ func spillAskChunks(lines []string) []spillAskChunk {
 	var chunks []spillAskChunk
 	var b strings.Builder
 	first := 1
+	clipped := 0
 
 	flush := func(last int) {
 		if b.Len() == 0 {
 			return
 		}
-		chunks = append(chunks, spillAskChunk{firstLine: first, lastLine: last, text: b.String()})
+		chunks = append(chunks, spillAskChunk{
+			firstLine: first, lastLine: last, text: b.String(), clippedLines: clipped,
+		})
 		b.Reset()
+		clipped = 0
 	}
 
 	for i, line := range lines {
@@ -173,6 +189,7 @@ func spillAskChunks(lines []string) []spillAskChunk {
 		if len(line) > spillAskChunkMaxChars {
 			line = textutil.TruncateBytes(line, spillAskChunkMaxChars-spillAskLongLineHeadroom) +
 				" …[줄 잘림 — 전체는 read_spillover(offset=" + fmt.Sprint(i+1) + ")]"
+			clipped++
 		}
 		entry := fmt.Sprintf("%d: %s\n", i+1, line)
 		if b.Len() > 0 && b.Len()+len(entry) > spillAskChunkMaxChars {
