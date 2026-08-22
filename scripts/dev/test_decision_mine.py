@@ -10,6 +10,7 @@ nothing.
 from __future__ import annotations
 
 import errno
+import io
 import json
 import os
 import subprocess
@@ -885,6 +886,37 @@ class EpisodeDedupTests(unittest.TestCase):
         self.assertEqual(len(paths), capture.MAX_EPISODES + 6, "all files must be cleared")
         self.assertEqual({r["session_id"] for r in rows}, {"A", "B"})
 
+    def test_the_recorded_ts_keeps_sub_second_precision(self) -> None:
+        # Whole seconds tied: a session ending twice in one second (resume,
+        # compaction) produced two rows with the same sort key, and the stable
+        # sort then kept whichever arrived last -- which under lock contention
+        # can be the OLDER state. Spool-drain ties fell to os.listdir() order.
+        #
+        # The clock is stubbed rather than raced. Timing two real runs relied
+        # on both landing in the same second, which several git subprocesses
+        # can easily straddle, and on the platform clock being fine enough to
+        # tell them apart.
+        recorded = []
+        real_append, real_mine = capture.append_episode, capture.mine_decisions
+        real_time = capture.time.time
+        capture.append_episode = lambda ep, **kw: recorded.append(ep)
+        capture.mine_decisions = lambda cwd: None
+        capture.time.time = lambda: 1234567890.75
+        real_stdin = sys.stdin
+        sys.stdin = io.StringIO(
+            json.dumps({"session_id": "s", "cwd": self.tmp.name, "transcript_path": ""})
+        )
+        try:
+            with self.assertRaises(SystemExit):
+                capture.main()
+        finally:
+            sys.stdin = real_stdin
+            capture.time.time = real_time
+            capture.append_episode, capture.mine_decisions = real_append, real_mine
+
+        self.assertEqual(len(recorded), 1)
+        self.assertEqual(recorded[0]["ts"], 1234567890.75)
+
     def test_the_drain_caps_by_ts_not_by_file_mtime(self) -> None:
         # Preselecting by mtime and parsing only those meant a backlog past
         # the cap could delete a newer episode unread -- a copy or a restore
@@ -1052,6 +1084,36 @@ class DecisionSurfacingTests(unittest.TestCase):
         last = max(i for i, ln in enumerate(lines) if ln.startswith(marker))
         gaps = [ln for ln in lines[first:last + 1] if not ln.startswith(marker)]
         self.assertEqual(gaps, [], "the block has an unmarked line in it")
+
+    def test_the_marked_block_is_bounded_including_the_marking(self) -> None:
+        # The per-field caps count RAW characters, and marking then adds a
+        # marker and an indent to every line -- so the same 600-char body
+        # costs wildly different amounts depending on how many lines the
+        # commit author split it into, and they choose. Measured before the
+        # clamp: two ordinary decisions render 1639 chars, two built from
+        # one-character lines render 4525, nearly twice the card's own cap,
+        # from inputs that both passed the per-field caps.
+        adversarial = {
+            "subject": "\n".join("x" for _ in range(surface.DECISION_SUBJECT_CHARS)),
+            "commit": "abc", "sha": "abc", "date": "2026-01-01",
+            "rationale": "\n".join("y" for _ in range(surface.DECISION_CHARS)),
+        }
+        ctx = surface.build_context(card="", eps=[], decisions=[adversarial, adversarial])
+        marker = surface.UNTRUSTED_PREFIX.rstrip()
+        lines = ctx.splitlines()
+        idx = [i for i, ln in enumerate(lines) if ln.startswith(marker)]
+        block = "\n".join(lines[idx[0]:idx[-1] + 1])
+        # No slack. The first version of this assertion allowed +80, which is
+        # how a clamp that appended its notice AFTER the cap survived review.
+        self.assertLessEqual(len(block), surface.DECISION_BLOCK_CHARS)
+        # Clamping must not open a hole in the marking it clamps.
+        self.assertEqual([ln for ln in lines[idx[0]:idx[-1] + 1] if not ln.startswith(marker)], [])
+
+    def test_clamping_leaves_an_ordinary_block_alone(self) -> None:
+        ordinary = {"subject": "feat(x): t", "commit": "abc", "sha": "abc",
+                    "date": "2026-01-01", "rationale": "why\nbecause"}
+        marked = surface.quote(surface.fmt_decision(ordinary))
+        self.assertEqual(surface.clamp_block(marked), marked)
 
     def test_the_whole_entry_is_bounded_not_just_the_rationale(self) -> None:
         # Git caps neither, so a commit with a huge subject could expand the
