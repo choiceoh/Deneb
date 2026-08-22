@@ -29,6 +29,15 @@ MAX_COMMITS = 20
 MAX_FILES_SAMPLE = 12
 FIRST_MSG_CAP = 240
 
+# One row per session, newest state wins. SessionEnd is not once-per-session:
+# it fires again on resume and after compaction, and an unconditional append
+# made the log mostly duplicates (10 rows, 4 distinct -- one session accounted
+# for 9 of them). Since the surfacing hook shows only the last few rows, a
+# single chatty session could evict every other session's memory. A later
+# episode for a session strictly supersedes its earlier one: same branch and
+# session, further along.
+MAX_EPISODES = 200
+
 
 def normalize_cwd(p):
     """MSYS/git-bash paths (/c/Users/...) -> Windows (C:/Users/...) so a native
@@ -94,6 +103,93 @@ def first_user_message(transcript_path):
     return ""
 
 
+def mine_decisions(cwd):
+    """Refresh the mined decision log from git, incrementally.
+
+    Runs here rather than at SessionStart because it is the same kind of work
+    this hook already does (local git, no network) and because SessionEnd has
+    no latency budget to protect. Cost is ~0.4s for a cold 400-commit build and
+    ~0.05s once the cursor is set.
+
+    Attached to a hook on purpose: the semantic memory layer this feeds
+    (``card.md``) was left to an agent's goodwill and stayed empty across every
+    session on record. A memory source nobody is obliged to write does not get
+    written, so this one refreshes itself.
+    """
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import decision_mine
+
+        decision_mine.mine(cwd=cwd)
+    except Exception:
+        # Same contract as the rest of this hook: memory never breaks a session.
+        pass
+
+
+def compact(rows):
+    """Keep the last row per session, in place; rows with no id are kept as-is.
+
+    Applied to the whole file rather than only the incoming session, so a log
+    that already accumulated duplicates heals on the next write instead of
+    carrying them forever -- a session that has ended for good never gets
+    another chance to replace its own rows.
+    """
+    last_index = {}
+    for i, row in enumerate(rows):
+        sid = row.get("session_id")
+        if sid:
+            last_index[sid] = i
+    out = []
+    for i, row in enumerate(rows):
+        sid = row.get("session_id")
+        if sid and last_index.get(sid) != i:
+            continue
+        out.append(row)
+    return out
+
+
+def append_episode(episode, path=EPISODES):
+    """Record the episode, replacing any earlier row for the same session.
+
+    Rewrite-and-replace rather than append, so a session that ends repeatedly
+    leaves one row instead of nine. The rewrite is atomic (temp + os.replace)
+    because the memory dir is shared across worktrees and two sessions can end
+    at once. If anything about the rewrite fails we fall back to a plain
+    append: a duplicate row is a much smaller loss than a dropped episode, and
+    the whole point of this hook is that it cannot fail loudly.
+    """
+    try:
+        os.makedirs(MEM_DIR, exist_ok=True)
+        rows = []
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    if not line.strip():
+                        continue
+                    try:
+                        rows.append(json.loads(line))
+                    except Exception:
+                        continue
+        except FileNotFoundError:
+            pass
+        rows.append(episode)
+        rows = compact(rows)[-MAX_EPISODES:]
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            for row in rows:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        os.replace(tmp, path)
+        return
+    except Exception:
+        pass
+
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(episode, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
@@ -131,13 +227,8 @@ def main():
         "dirty_files": dirty,
     }
 
-    try:
-        os.makedirs(MEM_DIR, exist_ok=True)
-        with open(EPISODES, "a", encoding="utf-8") as f:
-            f.write(json.dumps(episode, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
-
+    append_episode(episode)
+    mine_decisions(cwd)
     sys.exit(0)
 
 
