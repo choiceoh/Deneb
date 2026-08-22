@@ -15,6 +15,8 @@
 package chat
 
 import (
+	"context"
+	"encoding/json"
 	"log/slog"
 	"strings"
 	"sync/atomic"
@@ -208,4 +210,30 @@ func wireUntrustedToolGate(hc *agent.HookCompositor, params RunParams, prep prep
 	hc.OnToolResult(gate.observeToolResult)
 	hc.OnBeforeToolCall(gate.beforeToolCall)
 	return gate
+}
+
+// spilledFromExternalOrigin reports whether a read_spillover call is reaching
+// back into content that an external-origin tool produced.
+//
+// The spill outlives the run that created it (see server_spillover_lifecycle.go),
+// so a blob fetched by `web` on turn N is still readable on turn N+5 — carrying
+// the same attacker-authored text, but no longer inside the turn that `web`
+// tainted. Without this, the irreversible-tool gate would see a bare
+// `read_spillover` and stay disengaged, which is precisely the cross-turn
+// sleeper class readsExternalOrigin exists to stop. Taint follows the content,
+// not the tool name that happens to deliver it.
+//
+// Spills from operator-owned tools (exec, read, grep) do not taint — the same
+// narrowness readsExternalOrigin applies to live reads.
+func (r *ToolRegistry) spilledFromExternalOrigin(ctx context.Context, name string, input json.RawMessage) bool {
+	if name != "read_spillover" || r.spillStore == nil {
+		return false
+	}
+	var p struct {
+		SpillID string `json:"spill_id"`
+	}
+	if err := json.Unmarshal(input, &p); err != nil || p.SpillID == "" {
+		return false
+	}
+	return readsExternalOrigin(r.spillStore.OriginTool(p.SpillID, toolport.SessionKeyFromContext(ctx)))
 }

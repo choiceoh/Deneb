@@ -119,6 +119,10 @@ type SpilloverStore interface {
 	Load(spillID, sessionKey string) (string, error)
 	Store(sessionKey, toolName, content string) (string, error)
 	CleanSession(sessionKey string)
+	// OriginTool names the tool that produced a spill ("" if unknown), so the
+	// untrusted-origin gate can taint a later read the same way it tainted the
+	// original fetch.
+	OriginTool(spillID, sessionKey string) string
 }
 
 // LocalAIFunc delegates a bounded one-shot prompt to the local model, so a

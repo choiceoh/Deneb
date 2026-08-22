@@ -186,6 +186,22 @@ func (s *SpilloverStore) Load(spillID, sessionKey string) (string, error) {
 	return string(data), nil
 }
 
+// OriginTool returns the tool that produced a spill, or "" when the ID is
+// unknown or belongs to another session. The untrusted-origin gate uses it to
+// decide whether reading a spill should taint the turn: a spill created by
+// `web` or `mail_archive` carries the same attacker-authored text on turn N+5
+// as it did on turn N, and now that spills survive their producing run, that
+// later read has to taint exactly like the original fetch did.
+func (s *SpilloverStore) OriginTool(spillID, sessionKey string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entry, ok := s.index[spillID]
+	if !ok || entry.SessionKey != sessionKey {
+		return ""
+	}
+	return entry.ToolName
+}
+
 // FormatPreview builds the compact preview string inserted into the LLM context.
 //
 // The preview text flows back into the model context and subsequently into

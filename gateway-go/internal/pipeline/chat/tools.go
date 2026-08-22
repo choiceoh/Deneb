@@ -156,7 +156,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input rawJSON) 
 	if err != nil {
 		return output, err
 	}
-	if readsExternalOrigin(name) {
+	if readsExternalOrigin(name) || r.spilledFromExternalOrigin(ctx, name, input) {
 		if tc := TurnContextFromContext(ctx); tc != nil {
 			tc.MarkExternalOriginTouched()
 		}
