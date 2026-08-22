@@ -12,20 +12,23 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
-// TestShouldReleaseSpillover mirrors the checkpoint routing table — the two
-// decision functions must remain in sync, so we assert the same scenarios.
-func TestShouldReleaseSpilloverReturnsTrueForTerminalEvents(t *testing.T) {
+// Spillover release is scoped to the SESSION ending, not a run ending. It
+// deliberately no longer mirrors the checkpoint routing table: a terminal run
+// status is reached by every ordinary turn, and releasing there left the
+// read_spillover pointers that compaction keeps in history pointing at deleted
+// files from the very next turn.
+func TestShouldReleaseSpilloverOnlyOnSessionEnd(t *testing.T) {
 	cases := []struct {
 		name  string
 		event session.Event
 		want  bool
 	}{
 		{"delete always releases", session.Event{Kind: session.EventDeleted, Key: "k"}, true},
-		{"status → done releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusDone}, true},
-		{"status → failed releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusFailed}, true},
-		{"status → killed releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusKilled}, true},
-		{"status → timeout releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusTimeout}, true},
 		{"reset (empty status) releases", session.Event{Kind: session.EventStatusChanged, NewStatus: ""}, true},
+		{"status → done does NOT release (run ended, session lives)", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusDone}, false},
+		{"status → failed does NOT release", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusFailed}, false},
+		{"status → killed does NOT release", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusKilled}, false},
+		{"status → timeout does NOT release", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusTimeout}, false},
 		{"status → running does NOT release", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusRunning}, false},
 		{"create does NOT release", session.Event{Kind: session.EventCreated}, false},
 	}
@@ -38,11 +41,11 @@ func TestShouldReleaseSpilloverReturnsTrueForTerminalEvents(t *testing.T) {
 	}
 }
 
-// TestSpilloverLifecycle_RemovesOnTerminal drives a session from start → end
-// and asserts that the spill file belonging to that session is reclaimed. A
-// spill file from a different session must survive — this is the isolation
-// guarantee that makes the lifecycle hook safe to enable by default.
-func TestSpilloverLifecycleDeletesSpillOnTerminalPreservingOthers(t *testing.T) {
+// A finished RUN must not reclaim spills — the session lives on and history
+// still quotes read_spillover pointers at the model. Deletion of the session
+// must. A spill from a different session must survive either way: that
+// isolation is what makes the lifecycle hook safe to enable by default.
+func TestSpilloverLifecycleSurvivesRunEndAndReleasesOnSessionDelete(t *testing.T) {
 	dir := t.TempDir()
 	store := agent.NewSpilloverStore(dir)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -77,12 +80,21 @@ func TestSpilloverLifecycleDeletesSpillOnTerminalPreservingOthers(t *testing.T) 
 		t.Fatalf("seed keep spill: %v", err)
 	}
 
-	// Drive the doomed session through start → end.
+	// A completed run must NOT reclaim the spill: compaction keeps its
+	// read_spillover pointer in history and the next turn has to be able to
+	// follow it.
 	s.sessions.ApplyLifecycleEvent(doomedKey, session.LifecycleEvent{Phase: session.PhaseStart, Ts: 1})
 	s.sessions.ApplyLifecycleEvent(doomedKey, session.LifecycleEvent{Phase: session.PhaseEnd, Ts: 2})
 
+	if waitForSpillGone(store, doomedID, doomedKey, 500*time.Millisecond) {
+		t.Fatalf("spill %s was reclaimed when its run ended — the pointer in history now dangles", doomedID)
+	}
+
+	// Deleting the session is a real end, and must reclaim.
+	s.sessions.Delete(doomedKey)
+
 	if !waitForSpillGone(store, doomedID, doomedKey, 2*time.Second) {
-		t.Fatalf("doomed spill %s still exists after terminal transition", doomedID)
+		t.Fatalf("doomed spill %s still exists after session delete", doomedID)
 	}
 
 	// keep session must survive. Also verify no files with the doomed prefix

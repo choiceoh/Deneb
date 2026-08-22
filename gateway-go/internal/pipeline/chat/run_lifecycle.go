@@ -552,12 +552,16 @@ func finishRun(deps runDeps, params RunParams, phase session.LifecyclePhase, rea
 			Status:     status,
 		})
 	}
-	// Clean up spillover files for completed/failed sessions.
-	if deps.tools != nil {
-		if ss := deps.tools.SpilloverStore(); ss != nil {
-			ss.CleanSession(params.SessionKey)
-		}
-	}
+	// Spillover files are deliberately NOT released here. A run ending is not
+	// the session ending: compaction keeps the read_spillover pointer of an
+	// older tool result and tells the model the full output is still
+	// available (pipeline/compaction/restore.go), and that promise has to
+	// survive into the next turn. Deleting at run end made every such pointer
+	// dangle from the following turn onward.
+	//
+	// Reclaim now happens on real session end — /reset, delete, eviction
+	// (runtime/server/server_spillover_lifecycle.go) — with the TTL sweep
+	// collecting spills whose session is already gone (ai/agent/spillover.go).
 }
 
 // classifyRunFailureReason returns a Korean-language description of a run error
