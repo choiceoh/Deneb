@@ -50,6 +50,20 @@ const (
 	// sessionHashBytes is the number of SHA-256 bytes of the session key baked
 	// into a spill filename (8 hex chars) so nested keys stay distinguishable.
 	sessionHashBytes = 4
+
+	// Per-session retention bounds. A session's spills live as long as the
+	// session, and conversation rows are deliberately never evicted
+	// (domain/session/manager.go keeps them as the drawer's history), so
+	// "session is alive" is an unlimited lease for the busiest sessions — the
+	// TTL sweep skips them forever. These caps put a ceiling on that: a long
+	// conversation doing repeated large exec/read work cannot grow the spill
+	// directory without bound.
+	//
+	// Eviction is oldest-first, so the handles compaction most recently quoted
+	// survive. An evicted handle reports not-found and the model re-runs the
+	// tool — the same contract as a spill from an ended session.
+	maxSpillsPerSession     = 48
+	maxSpillBytesPerSession = 512 * 1024 * 1024
 )
 
 // spillEntry tracks a single spilled result on disk.
@@ -154,7 +168,14 @@ func (s *SpilloverStore) Store(sessionKey, toolName, content string) (string, er
 		// default without having to remember a follow-up call.
 		ExternalOrigin: IsExternalOriginTool(toolName),
 	}
+	evicted := s.enforceSessionQuotaLocked(sessionKey)
 	s.mu.Unlock()
+
+	for _, p := range evicted {
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			slog.Warn("spillover quota evict failed", "path", p, "err", err)
+		}
+	}
 
 	return spillID, nil
 }
@@ -481,6 +502,45 @@ func (s *SpilloverStore) sweepUnindexedFiles(now time.Time) {
 }
 
 // --- helpers ---
+
+// enforceSessionQuotaLocked drops this session's oldest spills until it is back
+// under the count and byte caps, returning the paths whose files the caller
+// must delete once the lock is released.
+//
+// Caller must hold s.mu. File removal is deliberately left to the caller: disk
+// I/O under the index lock would stall every concurrent Store and Load.
+func (s *SpilloverStore) enforceSessionQuotaLocked(sessionKey string) []string {
+	type aged struct {
+		id      string
+		entry   *spillEntry
+		created time.Time
+	}
+	var owned []aged
+	total := 0
+	for id, e := range s.index {
+		if e.SessionKey != sessionKey {
+			continue
+		}
+		owned = append(owned, aged{id: id, entry: e, created: e.CreatedAt})
+		total += e.OrigLen
+	}
+	if len(owned) <= maxSpillsPerSession && total <= maxSpillBytesPerSession {
+		return nil
+	}
+
+	sort.Slice(owned, func(i, j int) bool { return owned[i].created.Before(owned[j].created) })
+
+	var paths []string
+	for _, o := range owned {
+		if len(owned)-len(paths) <= maxSpillsPerSession && total <= maxSpillBytesPerSession {
+			break
+		}
+		paths = append(paths, o.entry.Path)
+		total -= o.entry.OrigLen
+		delete(s.index, o.id)
+	}
+	return paths
+}
 
 // sessionFilePrefix builds the filename prefix that identifies a spill's owning
 // session unambiguously: the sanitized key (readable) plus a short hash of the

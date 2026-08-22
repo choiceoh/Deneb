@@ -314,3 +314,67 @@ func TestRemoveSessionDistinguishesNumericChildSegment(t *testing.T) {
 		t.Errorf("numeric-segment child spill was swept by the parent: %v", err)
 	}
 }
+
+// Conversation rows are never evicted (domain/session/manager.go keeps them as
+// the drawer's history), so "session is alive" is an unlimited lease and the
+// TTL sweep can never reclaim their spills. A per-session cap is what keeps a
+// busy long-lived conversation from growing the spill directory without bound.
+func TestStoreEnforcesPerSessionSpillCap(t *testing.T) {
+	dir := t.TempDir()
+	store := NewSpilloverStore(dir)
+	store.SetSessionLiveness(func(string) bool { return true }) // never reclaimed by TTL
+
+	const key = "client:main"
+	var ids []string
+	for i := 0; i < maxSpillsPerSession+12; i++ {
+		id, err := store.Store(key, "exec", strings.Repeat("x", 1024))
+		if err != nil {
+			t.Fatalf("store %d: %v", i, err)
+		}
+		ids = append(ids, id)
+	}
+
+	live := 0
+	for _, id := range ids {
+		if _, err := store.Load(id, key); err == nil {
+			live++
+		}
+	}
+	if live > maxSpillsPerSession {
+		t.Errorf("session retains %d spills, over the %d cap", live, maxSpillsPerSession)
+	}
+
+	// Eviction is oldest-first: the newest handle — the one compaction most
+	// recently quoted — must still resolve.
+	if _, err := store.Load(ids[len(ids)-1], key); err != nil {
+		t.Errorf("newest spill was evicted: %v", err)
+	}
+
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("readdir: %v", err)
+	}
+	if len(files) > maxSpillsPerSession {
+		t.Errorf("%d files on disk, over the %d cap — evicted entries left their files behind", len(files), maxSpillsPerSession)
+	}
+}
+
+// A sibling session's spills must not be touched by another session's quota.
+func TestSessionQuotaIsPerSession(t *testing.T) {
+	store := NewSpilloverStore(t.TempDir())
+	store.SetSessionLiveness(func(string) bool { return true })
+
+	siblingID, err := store.Store("client:other", "exec", strings.Repeat("s", 1024))
+	if err != nil {
+		t.Fatalf("store sibling: %v", err)
+	}
+	for i := 0; i < maxSpillsPerSession+8; i++ {
+		if _, err := store.Store("client:main", "exec", strings.Repeat("x", 1024)); err != nil {
+			t.Fatalf("store %d: %v", i, err)
+		}
+	}
+
+	if _, err := store.Load(siblingID, "client:other"); err != nil {
+		t.Errorf("sibling session's spill evicted by another session's quota: %v", err)
+	}
+}
