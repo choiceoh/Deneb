@@ -195,6 +195,16 @@ jobs:
           working-directory: gateway-go
           # Prefer PR base / push before SHA over HEAD~1 (merge commits make HEAD~1 wrong).
           args: --new-from-rev=${{ github.event.pull_request.base.sha || github.event.before || 'HEAD~1' }}
+          # The action's default `verify: true` runs `golangci-lint config
+          # verify`, which downloads its JSON schema from golangci-lint.run at
+          # lint time. That fetch timed out three times in one afternoon and
+          # failed the whole Go lane each time -- a third-party website
+          # deciding whether this repo's PRs can be merged, for a check that
+          # never looks at the code. `run` itself needs no network (verified
+          # offline), so only the schema check moves; it now runs in
+          # nightly-drift.yml, where a network flake costs a retry instead of
+          # a red PR.
+          verify: false
 
       - name: Build gateway binary
         run: CGO_ENABLED=0 go build -o gateway ./cmd/gateway/
