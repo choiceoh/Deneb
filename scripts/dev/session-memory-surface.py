@@ -51,6 +51,13 @@ UNTRUSTED_CLOSE = "</untrusted_commit_history>"
 DECISION_SLOTS = 2
 DECISION_CHARS = 600
 
+# The subject needs its own cap. Git puts no length limit on a commit subject,
+# so capping only the rationale left the "bounded block" claim false: one
+# matching commit with a huge subject could expand every later session's
+# context without limit. Generous against real subjects (this repo's longest
+# is well under it) and still a ceiling.
+DECISION_SUBJECT_CHARS = 200
+
 # The semantic layer is compressed by the in-loop agent, not a remote model.
 # This nudge keeps that discipline alive: it is surfaced every session so the
 # agent updates the digest when a durable decision / lesson / self-correction
@@ -208,6 +215,8 @@ def fmt_decision(d):
     # reasoning that left `commit` interpolated raw while subject and rationale
     # were cleaned. Inside the fence there is no trusted field.
     subject = defang(d.get("subject", ""))
+    if len(subject) > DECISION_SUBJECT_CHARS:
+        subject = subject[:DECISION_SUBJECT_CHARS].rstrip() + " …"
     pr = d.get("pr")
     head = f"- **{subject}**"
     if pr and f"#{pr}" not in subject:

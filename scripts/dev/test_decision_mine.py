@@ -529,6 +529,18 @@ class DecisionSurfacingTests(unittest.TestCase):
         )
         self.assertNotIn(surface.UNTRUSTED_CLOSE, text)
 
+    def test_the_whole_entry_is_bounded_not_just_the_rationale(self) -> None:
+        # Git caps neither, so a commit with a huge subject could expand the
+        # always-injected block without limit while the rationale stayed inside
+        # its budget -- making the documented bound false.
+        text = surface.fmt_decision(
+            {"subject": "s" * 5000, "commit": "abc", "sha": "abc",
+             "date": "2026-01-01", "rationale": "r" * 5000}
+        )
+        self.assertLess(
+            len(text), surface.DECISION_SUBJECT_CHARS + surface.DECISION_CHARS + 400
+        )
+
     def test_a_truncated_rationale_points_at_the_full_commit(self) -> None:
         text = surface.fmt_decision(
             {"subject": "feat(x): thing", "commit": "abc", "sha": "abcdef",
