@@ -189,12 +189,9 @@ func isIrreversibleTool(name string, _ []byte) bool {
 // would over-block common turns. Recalled memory is covered separately: the gate
 // already seeds taint from prep.RecallMemory.
 func readsExternalOrigin(name string) bool {
-	switch name {
-	case "web", "browse", "browser", "research_panel", "watch", "mail_archive", "ocr":
-		return true
-	default:
-		return false
-	}
+	// One list, shared with the spillover store so a spill's stored provenance
+	// and a live read's taint can never disagree (agent.IsExternalOriginTool).
+	return agent.IsExternalOriginTool(name)
 }
 
 // wireUntrustedToolGate installs the untrusted-origin tool gate on the hook
@@ -244,17 +241,13 @@ func (r *ToolRegistry) spilledFromExternalOrigin(ctx context.Context, name strin
 }
 
 // spilledContentIsExternal reports whether output being spilled by tool `name`
-// holds externally sourced content.
+// needs an EXPLICIT external-origin mark.
 //
-// Direct external readers are classified by name. code_action is the indirect
-// case: it dials back into the registry, so a nested web/mail read marks the
-// turn context while the spill lands under "code_action" — without consulting
-// that flag here, a large attacker-authored dump printed through code_action
-// would be re-ingested later as operator-owned.
+// Direct external readers need none: Store classifies them from the tool name,
+// so every writer gets that for free. Only code_action is left — it dials back
+// into the registry, so a nested web/mail read marks the turn context while the
+// spill lands under "code_action", which no name-based rule can catch.
 func (r *ToolRegistry) spilledContentIsExternal(ctx context.Context, name string) bool {
-	if readsExternalOrigin(name) {
-		return true
-	}
 	if name != "code_action" {
 		return false
 	}

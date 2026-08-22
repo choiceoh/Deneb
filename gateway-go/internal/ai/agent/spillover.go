@@ -147,6 +147,10 @@ func (s *SpilloverStore) Store(sessionKey, toolName, content string) (string, er
 		ToolName:   toolName,
 		OrigLen:    len(persisted),
 		CreatedAt:  now,
+		// Classify here, not at the call sites: every writer (tool registry,
+		// the YouTube transcript path, anything added later) gets the safe
+		// default without having to remember a follow-up call.
+		ExternalOrigin: IsExternalOriginTool(toolName),
 	}
 	s.mu.Unlock()
 
@@ -192,10 +196,32 @@ func (s *SpilloverStore) Load(spillID, sessionKey string) (string, error) {
 	return string(data), nil
 }
 
+// IsExternalOriginTool reports whether a tool's PRIMARY job is fetching content
+// from outside the operator's trust boundary — a web page, an email body, an
+// attacker-craftable image — i.e. text an attacker could have authored.
+//
+// This is the single source of truth for that classification: Store consults it
+// so a spill is marked from its producing tool's name no matter which call site
+// wrote it, and the chat layer's untrusted-tool gate delegates to it for live
+// reads. Deliberately narrow — operator-owned reads (wiki, files, office docs,
+// calendar, contacts, phone, groupware) are excluded because tainting them
+// would over-block common turns.
+func IsExternalOriginTool(name string) bool {
+	switch name {
+	case "web", "browse", "browser", "research_panel", "watch", "mail_archive", "ocr":
+		return true
+	default:
+		return false
+	}
+}
+
 // MarkExternalOrigin records that a spill holds content sourced from outside
-// the operator's trust boundary. Called right after Store by the tool registry,
-// which is the only place that knows both the producing tool and whether a
-// nested external read happened during it.
+// the operator's trust boundary.
+//
+// Store already marks spills whose producing tool is externally classified, so
+// this is for the INDIRECT case only: code_action reads mail or web pages
+// through its bridge and spills them under its own name, which no name-based
+// rule can catch.
 func (s *SpilloverStore) MarkExternalOrigin(spillID string) {
 	s.mu.Lock()
 	if entry, ok := s.index[spillID]; ok {

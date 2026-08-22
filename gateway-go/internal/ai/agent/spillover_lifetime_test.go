@@ -232,3 +232,32 @@ func TestExternalOriginIsStoredNotDerivedFromToolName(t *testing.T) {
 		t.Error("unknown spill ID reported external")
 	}
 }
+
+// Provenance must be classified inside Store, not at each call site: the
+// YouTube transcript path calls Store directly as "web" and would otherwise
+// leave attacker-authored subtitles unmarked, holding the irreversible-tool
+// gate open on a later read.
+func TestStoreClassifiesExternalOriginByToolName(t *testing.T) {
+	store := NewSpilloverStore(t.TempDir())
+
+	for _, tc := range []struct {
+		tool string
+		want bool
+	}{
+		{"web", true},
+		{"mail_archive", true},
+		{"ocr", true},
+		{"browse", true},
+		{"exec", false},
+		{"read", false},
+		{"grep", false},
+	} {
+		id, err := store.Store("client:test", tc.tool, strings.Repeat("x", 100))
+		if err != nil {
+			t.Fatalf("store %s: %v", tc.tool, err)
+		}
+		if got := store.IsExternalOrigin(id, "client:test"); got != tc.want {
+			t.Errorf("spill from %q: IsExternalOrigin = %v, want %v", tc.tool, got, tc.want)
+		}
+	}
+}
