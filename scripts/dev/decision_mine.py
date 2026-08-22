@@ -85,6 +85,14 @@ _HTML_COMMENT = re.compile(r"^\s*<!--.*-->\s*$")
 _CONVENTIONAL = re.compile(r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]*)\))?(?P<bang>!?):\s")
 _PR_NUMBER = re.compile(r"\(#(\d+)\)\s*$")
 
+# Records are split on a control byte, and nothing stops a commit message from
+# containing that byte: a crafted body can forge a record boundary and put its
+# own text where the object name belongs. That name is then handed to `git
+# show`, where a value like `--output=<path>` is not a revision but an option
+# that WRITES the file it names. So an object name is accepted only if it looks
+# exactly like one -- 40 hex digits can never be an option.
+_OBJECT_NAME = re.compile(r"^[0-9a-f]{40}$")
+
 
 def git(*args, cwd=None):
     """Run git, returning stdout stripped, or '' on any failure."""
@@ -260,12 +268,17 @@ def commit_records(ref: str, limit: int, since: str | None, cwd=None):
         if len(parts) < 4:
             continue
         full, short, when, subject = parts[0].strip(), parts[1], parts[2], parts[3]
+        if not _OBJECT_NAME.match(full):
+            # Not a real record boundary -- a forged one, or the tail of a body
+            # that contained the separator. Either way there is nothing safe to
+            # look up here.
+            continue
         body_raw = parts[4] if len(parts) > 4 else ""
         body = clean_body(body_raw)
         prose = [ln for ln in body if ln]
         if len(prose) < MIN_BODY_LINES:
             continue
-        files = [ln for ln in git("show", "--name-only", "--format=", full, cwd=cwd).splitlines() if ln]
+        files = [ln for ln in git("show", "--name-only", "--format=", full, "--", cwd=cwd).splitlines() if ln]
         ctype, scope, breaking, pr = parse_subject(subject)
         yield {
             "commit": short,
@@ -285,17 +298,40 @@ def commit_records(ref: str, limit: int, since: str | None, cwd=None):
 
 
 def load_existing(path=DECISIONS):
+    """Read the ledger, skipping only the rows that fail to parse.
+
+    Per line, not as one comprehension. A single truncated row used to raise
+    and hand back an empty list, and since mine() rewrites the file from that
+    result -- usually with no fresh records, because the cursor is already
+    current -- one bad byte erased the whole decision history.
+
+    Returns (rows, readable). `readable` distinguishes "the file is not there"
+    from "the file is there and empty", which decides whether the cursor can
+    still be trusted.
+    """
+    rows = []
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return [json.loads(ln) for ln in f if ln.strip()]
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    continue
+        return rows, True
+    except FileNotFoundError:
+        return [], False
     except Exception:
-        return []
+        return rows, False
 
 
 def write_records(records, path=DECISIONS):
     """Newest-last, one JSON object per line, replaced atomically."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
+    # Unique per process: the shared memory dir means two writers can
+    # otherwise collide on one temp path.
+    tmp = f"{path}.{os.getpid()}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         for r in records:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
@@ -312,7 +348,7 @@ def read_cursor(path=CURSOR):
 
 def write_cursor(sha, path=CURSOR):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
+    tmp = f"{path}.{os.getpid()}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(sha + "\n")
     os.replace(tmp, path)
@@ -342,7 +378,15 @@ def mine(ref="origin/main", limit=DEFAULT_LIMIT, full=False, cwd=None,
     # but lost the cursor race would leave a newer cursor over an older
     # snapshot, and those commits would count as processed forever.
     with memory_lock("decisions", mem_dir=os.path.dirname(decisions_path)):
-        existing = [] if full else load_existing(decisions_path)
+        if full:
+            existing, readable = [], True
+        else:
+            existing, readable = load_existing(decisions_path)
+        # A cursor is only meaningful next to the ledger it was written for. If
+        # the ledger is gone or unreadable, honouring the cursor would mine
+        # nothing and then write that nothing back as the new history.
+        if not readable or (not existing and since):
+            since = None
         known = {r.get("sha") for r in existing}
         fresh = [
             r for r in commit_records(ref, limit, since, cwd=cwd)

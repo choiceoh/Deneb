@@ -100,6 +100,43 @@ class CleanBodyTests(unittest.TestCase):
         self.assertEqual(dm.clean_body(raw), ["Why we did it."])
 
 
+class LoadExistingTests(unittest.TestCase):
+    """The ledger reader's contract, pinned directly.
+
+    mine() now also re-walks when the ledger comes back empty, so an
+    end-to-end test recovers either way and would pass even with the reader
+    broken. The parsing rule is what these assert.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.tmp.name, "decisions.jsonl")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def write(self, text):
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_a_malformed_row_costs_only_itself(self) -> None:
+        self.write('{"sha":"a","pr":1}\n{truncated\n{"sha":"b","pr":2}\n')
+        rows, readable = dm.load_existing(self.path)
+        self.assertTrue(readable)
+        self.assertEqual([r["pr"] for r in rows], [1, 2])
+
+    def test_a_missing_ledger_reports_itself_as_unreadable(self) -> None:
+        # Distinct from "present and empty": only one of them means the cursor
+        # has a ledger to be a cursor for.
+        rows, readable = dm.load_existing(self.path + ".absent")
+        self.assertEqual(rows, [])
+        self.assertFalse(readable)
+
+    def test_an_empty_ledger_is_readable(self) -> None:
+        self.write("")
+        self.assertEqual(dm.load_existing(self.path), ([], True))
+
+
 class SubjectParsingTests(unittest.TestCase):
     def test_conventional_subject_yields_type_scope_breaking_and_pr(self) -> None:
         self.assertEqual(
@@ -141,7 +178,15 @@ class MineTests(unittest.TestCase):
         )
 
     def rows(self):
-        return [json.loads(ln) for ln in self.store.read_text(encoding="utf-8").splitlines() if ln]
+        out = []
+        for ln in self.store.read_text(encoding="utf-8").splitlines():
+            if not ln.strip():
+                continue
+            try:
+                out.append(json.loads(ln))
+            except json.JSONDecodeError:
+                continue
+        return out
 
     def test_thin_commit_bodies_are_not_mined(self) -> None:
         commit(self.root, "a.go", "fix(x): one-liner\n\nToo short to be a reason.")
@@ -199,6 +244,42 @@ class MineTests(unittest.TestCase):
         self.mine(limit=2)
         _, total = self.mine()
         self.assertEqual(total, 6)
+
+    def test_one_malformed_row_does_not_erase_the_history(self) -> None:
+        # load_existing used to parse the file in a single comprehension, so a
+        # truncated row raised, returned [], and mine() wrote that [] back --
+        # one bad byte erased every decision ever mined.
+        commit(self.root, "a/b/c.go", RICH)
+        self.mine()
+        with open(self.store, "a", encoding="utf-8") as f:
+            f.write("{truncated\n")
+        self.mine()
+        prs = [r["pr"] for r in self.rows()]
+        self.assertIn(42, prs)
+
+    def test_a_lost_ledger_is_rebuilt_instead_of_trusting_the_cursor(self) -> None:
+        # Cursor at HEAD + missing ledger means `since..HEAD` is empty, so the
+        # empty result would be written back as the new history.
+        commit(self.root, "a/b/c.go", RICH)
+        self.mine()
+        self.store.unlink()
+        _, total = self.mine()
+        self.assertEqual(total, 1)
+
+    def test_a_commit_body_cannot_smuggle_git_options(self) -> None:
+        # The record separator can appear inside a commit message, forging a
+        # boundary whose first field lands where the object name belongs. That
+        # name reaches `git show`, and `--output=<path>` there WRITES the file.
+        target = Path(self.tmp.name) / "PWNED"
+        hostile = (
+            "feat(x): innocent subject\n\n"
+            + "\n".join(f"reasoning line {i}" for i in range(8))
+            + f"\n\x02--output={target}\x01h\x01d\x01s\x01"
+            + "\n".join(f"payload line {i}" for i in range(8))
+        )
+        commit(self.root, "a/b/c.go", hostile)
+        self.mine()
+        self.assertFalse(target.exists(), "commit message wrote a file through git show")
 
     def test_full_rebuild_replaces_rather_than_appends(self) -> None:
         commit(self.root, "a/b/c.go", RICH)

@@ -210,7 +210,7 @@ def append_episode(episode, path=EPISODES):
                 pass
             rows.append(episode)
             rows = compact(rows)[-MAX_EPISODES:]
-            tmp = path + ".tmp"
+            tmp = f"{path}.{os.getpid()}.tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 for row in rows:
                     f.write(json.dumps(row, ensure_ascii=False) + "\n")
