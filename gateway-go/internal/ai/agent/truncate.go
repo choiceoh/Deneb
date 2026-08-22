@@ -45,15 +45,78 @@ func TruncateHeadTail(content string, maxChars int, spillID string) string {
 
 	var marker string
 	if spillID != "" {
+		// The discarded middle is unaddressable from head+tail alone: an
+		// outline of the section markers inside it, with their line numbers,
+		// is what lets the model aim read_spillover(offset=…) or a grep
+		// instead of paging blind. Only the dropped region is outlined —
+		// what survives in head/tail needs no pointer.
+		//
+		// The read_spillover("sp_…") substring below is parsed by a regex in
+		// pipeline/compaction/protected.go; keep its shape intact.
 		marker = fmt.Sprintf(
-			"\n\n... [%d lines truncated — use read_spillover(%q) for full content] ...\n\n",
-			truncatedLines, spillID,
+			"\n\n... [%d lines truncated — use read_spillover(%q) for full content] ...%s\n\n",
+			truncatedLines, spillID, middleOutline(content, middle, len(head)),
 		)
 	} else {
 		marker = fmt.Sprintf("\n\n... [%d lines truncated] ...\n\n", truncatedLines)
 	}
 
 	return head + marker + tail
+}
+
+// Outline bounds. The outline sits inside a truncation marker the model reads
+// every turn, so it must stay negligible next to the head/tail halves it
+// annotates.
+const (
+	outlineMinEntries    = 2 // one heading is noise, not a map
+	outlineMaxEntries    = 10
+	outlineEntryMaxChars = 70
+)
+
+// middleOutline renders the section markers found in the discarded middle,
+// each with its 1-based line number in the ORIGINAL content so it feeds
+// straight into read_spillover(offset=N). Returns "" when the middle has no
+// usable structure.
+func middleOutline(content, middle string, headLen int) string {
+	// Line number of the middle's first line within the whole content.
+	base := strings.Count(content[:headLen], "\n") + 1
+
+	var entries []string
+	for i, line := range strings.Split(middle, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !isOutlineHeading(trimmed) {
+			continue
+		}
+		if len(trimmed) > outlineEntryMaxChars {
+			trimmed = textutil.TruncateBytes(trimmed, outlineEntryMaxChars) + "…"
+		}
+		entries = append(entries, fmt.Sprintf("%d: %s", base+i, trimmed))
+		if len(entries) >= outlineMaxEntries {
+			entries = append(entries, "…")
+			break
+		}
+	}
+	if len(entries) < outlineMinEntries {
+		return ""
+	}
+	return "\n생략 구간 구조 (offset으로 열기): " + strings.Join(entries, " · ")
+}
+
+// isOutlineHeading recognizes the section markers that actually show up in
+// spilled tool output: markdown headings and the `=== x ===` / `--- x ---`
+// banners shell tooling prints.
+func isOutlineHeading(trimmed string) bool {
+	switch {
+	case trimmed == "":
+		return false
+	case strings.HasPrefix(trimmed, "#") && strings.Contains(trimmed, " "):
+		return true
+	case (strings.HasPrefix(trimmed, "===") && strings.HasSuffix(trimmed, "===")) ||
+		(strings.HasPrefix(trimmed, "---") && strings.HasSuffix(trimmed, "---")):
+		return len(strings.Trim(trimmed, "=- ")) > 0
+	default:
+		return false
+	}
 }
 
 // CompactPriorToolResults shrinks tool_result content blocks in messages from

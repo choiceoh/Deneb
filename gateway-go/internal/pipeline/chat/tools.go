@@ -146,6 +146,13 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input rawJSON) 
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+	// Snapshot before execution so a nested external read can be attributed to
+	// THIS invocation. The turn-wide flag is sticky, so it alone would label a
+	// purely local code_action external whenever anything else in the turn had
+	// already read outside content.
+	turnCtx := TurnContextFromContext(ctx)
+	externalSeqBefore := turnCtx.ExternalOriginSeq()
+
 	output, err := def.Fn(ctx, input)
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return output, ctxErr
@@ -156,13 +163,16 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input rawJSON) 
 	if err != nil {
 		return output, err
 	}
-	if readsExternalOrigin(name) {
-		if tc := TurnContextFromContext(ctx); tc != nil {
-			tc.MarkExternalOriginTouched()
+	// A nested external read during this call, detected by the sequence moving.
+	nestedExternal := name == "code_action" && turnCtx.ExternalOriginSeq() != externalSeqBefore
+
+	if readsExternalOrigin(name) || r.spilledFromExternalOrigin(ctx, name, input) {
+		if turnCtx != nil {
+			turnCtx.MarkExternalOriginTouched()
 		}
 	}
 
-	output = r.capToolOutput(ctx, def, name, output)
+	output = r.capToolOutput(ctx, def, name, output, nestedExternal)
 
 	// Invalidate caches when this tool may have modified the file system.
 	// Must run after execution and before the cache Set in finalizeToolOutput,
@@ -271,7 +281,7 @@ func cachedToolResult(ctx context.Context, rc *RunCache, cacheKey, name string, 
 // comprehension. Build errors and test failures are typically at the end of
 // output, while context (paths, invocations) is at the start. Keep both
 // visible.
-func (r *ToolRegistry) capToolOutput(ctx context.Context, def ToolDef, name, output string) string {
+func (r *ToolRegistry) capToolOutput(ctx context.Context, def ToolDef, name, output string, nestedExternal bool) string {
 	maxOutput := agent.DefaultMaxOutput
 	if def.MaxOutput > 0 {
 		maxOutput = def.MaxOutput
@@ -282,9 +292,26 @@ func (r *ToolRegistry) capToolOutput(ctx context.Context, def ToolDef, name, out
 	toolport.ToolExecStatsFromContext(ctx).RecordTruncated(name)
 	var spillID string
 	// Spill full content to disk so the LLM can retrieve it via read_spillover.
+	//
+	// This deliberately does NOT skip on a cancelled context. Doing so looked
+	// like a way to stop a /reset-cancelled run from leaving a spill behind,
+	// but cancellation here is not only /reset — a later abort, merge, or
+	// timeout reaches this point too, and every persisted tool_use keeps a
+	// corresponding result (ai/agent). Suppressing the spill would commit a
+	// truncated result carrying no handle, making the discarded middle
+	// unrecoverable while the session keeps running. A spill that outlives a
+	// reset is the cheaper failure: one unreferenced file, collected when the
+	// session ends (RemoveSession sweeps by session prefix).
 	if r.spillStore != nil {
 		sessionKey := toolport.SessionKeyFromContext(ctx)
 		spillID, _ = r.spillStore.Store(sessionKey, name, output)
+		// Store already classifies spills by their producing tool's name.
+		// The explicit mark covers only what a name cannot: a code_action
+		// whose OWN nested read pulled outside content, attributed by the
+		// sequence check in Execute rather than the sticky turn flag.
+		if spillID != "" && nestedExternal {
+			r.spillStore.MarkExternalOrigin(spillID)
+		}
 	}
 	return agent.TruncateHeadTail(output, maxOutput, spillID)
 }

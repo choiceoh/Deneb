@@ -9,6 +9,14 @@
 // read_spillover tool. MaxResultChars below is the larger "hard cap" used in
 // tests to size fixtures and document the upper bound; it does not trigger
 // spills directly.
+//
+// Lifetime: a spill lives as long as its session. Compaction clears older tool
+// results but keeps their read_spillover pointer, telling the model the full
+// output is "still available" (pipeline/compaction/restore.go) — so expiring a
+// spill while its session is still live turns that promise into a dangling
+// handle. The session-end hook (runtime/server/server_spillover_lifecycle.go)
+// is therefore the primary reclaim path, and the TTL sweep below is demoted to
+// an orphan collector: it only removes spills whose session is already gone.
 package agent
 
 import (
@@ -39,6 +47,9 @@ const (
 	hashInputLimit = 256
 	// hashIDBytes is the number of SHA-256 bytes used for the spill ID (8 hex chars).
 	hashIDBytes = 4
+	// sessionHashBytes is the number of SHA-256 bytes of the session key baked
+	// into a spill filename (8 hex chars) so nested keys stay distinguishable.
+	sessionHashBytes = 4
 )
 
 // spillEntry tracks a single spilled result on disk.
@@ -48,13 +59,30 @@ type spillEntry struct {
 	ToolName   string
 	OrigLen    int
 	CreatedAt  time.Time
+	// ExternalOrigin marks content that came from outside the operator's trust
+	// boundary. It is a separate bit rather than a lookup on ToolName because
+	// the producing tool is not always the sourcing tool: code_action reads mail
+	// or web pages through its bridge and spills them under its own name, so the
+	// name alone would call attacker-authored text operator-owned.
+	ExternalOrigin bool
 }
 
 // SpilloverStore manages disk-backed large tool results.
+//
+// Lock hierarchy (acquire in this order; never reverse):
+//
+//	SpilloverStore.mu
+//	SpilloverStore.livenessMu (independent — never held together with mu)
+//
+// sessionAlive is an injected callback into the session manager, so it is read
+// under livenessMu and invoked with mu released (concurrency.md §3).
 type SpilloverStore struct {
 	baseDir string
 	mu      sync.RWMutex
 	index   map[string]*spillEntry // spill_id → metadata
+
+	livenessMu   sync.RWMutex
+	sessionAlive func(sessionKey string) bool
 }
 
 // NewSpilloverStore creates a store rooted at baseDir (e.g. ~/.deneb/spillover).
@@ -64,6 +92,29 @@ func NewSpilloverStore(baseDir string) *SpilloverStore {
 		baseDir: baseDir,
 		index:   make(map[string]*spillEntry),
 	}
+}
+
+// SetSessionLiveness injects the predicate the TTL sweep uses to tell a live
+// session from a finished one. Without it the sweep falls back to pure age,
+// which is the pre-existing behaviour (and expires spills that compaction
+// stubs still point at). Wired once at composition time, before StartCleanup.
+func (s *SpilloverStore) SetSessionLiveness(alive func(sessionKey string) bool) {
+	s.livenessMu.Lock()
+	s.sessionAlive = alive
+	s.livenessMu.Unlock()
+}
+
+// isSessionAlive reports whether sessionKey still has a live session. It must
+// be called with s.mu released: the predicate reaches into the session manager
+// and taking an unrelated lock under s.mu would invert the hierarchy.
+func (s *SpilloverStore) isSessionAlive(sessionKey string) bool {
+	s.livenessMu.RLock()
+	alive := s.sessionAlive
+	s.livenessMu.RUnlock()
+	if alive == nil {
+		return false
+	}
+	return alive(sessionKey)
 }
 
 // Store writes content to disk and returns the spill ID.
@@ -82,9 +133,8 @@ func (s *SpilloverStore) Store(sessionKey, toolName, content string) (string, er
 	hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%d:%s", content[:min(hashInputLimit, len(content))], now.UnixNano(), sessionKey)))
 	spillID := fmt.Sprintf("sp_%x", hash[:hashIDBytes])
 
-	safeSess := sanitizeSessionKey(sessionKey)
 	safeTool := sanitizeToolName(toolName)
-	filename := fmt.Sprintf("%s_%d_%s_%s.txt", safeSess, now.UnixMilli(), safeTool, spillID)
+	filename := fmt.Sprintf("%s_%d_%s_%s.txt", sessionFilePrefix(sessionKey), now.UnixMilli(), safeTool, spillID)
 	path := filepath.Join(s.baseDir, filename)
 
 	persisted := redact.String(content)
@@ -99,6 +149,10 @@ func (s *SpilloverStore) Store(sessionKey, toolName, content string) (string, er
 		ToolName:   toolName,
 		OrigLen:    len(persisted),
 		CreatedAt:  now,
+		// Classify here, not at the call sites: every writer (tool registry,
+		// the YouTube transcript path, anything added later) gets the safe
+		// default without having to remember a follow-up call.
+		ExternalOrigin: IsExternalOriginTool(toolName),
 	}
 	s.mu.Unlock()
 
@@ -130,8 +184,8 @@ func (s *SpilloverStore) Load(spillID, sessionKey string) (string, error) {
 			return "", fmt.Errorf("spillover ID %q not found — use the exact sp_* ID from the [SpillOver: ID=…] marker; this session's live spill IDs: %s",
 				spillID, strings.Join(available, ", "))
 		}
-		return "", fmt.Errorf("spillover ID %q not found — no live spillovers for this session (they expire after %s and do not survive a gateway restart); re-run the tool that produced the large output",
-			spillID, SpilloverTTL)
+		return "", fmt.Errorf("spillover ID %q not found — no live spillovers for this session (they are released when the session ends and do not survive a gateway restart); re-run the tool that produced the large output",
+			spillID)
 	}
 	if entry.SessionKey != sessionKey {
 		return "", fmt.Errorf("spillover ID %q belongs to a different session", spillID)
@@ -142,6 +196,55 @@ func (s *SpilloverStore) Load(spillID, sessionKey string) (string, error) {
 		return "", fmt.Errorf("spillover read %q: %w", spillID, err)
 	}
 	return string(data), nil
+}
+
+// IsExternalOriginTool reports whether a tool's PRIMARY job is fetching content
+// from outside the operator's trust boundary — a web page, an email body, an
+// attacker-craftable image — i.e. text an attacker could have authored.
+//
+// This is the single source of truth for that classification: Store consults it
+// so a spill is marked from its producing tool's name no matter which call site
+// wrote it, and the chat layer's untrusted-tool gate delegates to it for live
+// reads. Deliberately narrow — operator-owned reads (wiki, files, office docs,
+// calendar, contacts, phone, groupware) are excluded because tainting them
+// would over-block common turns.
+func IsExternalOriginTool(name string) bool {
+	switch name {
+	case "web", "browse", "browser", "research_panel", "watch", "mail_archive", "ocr":
+		return true
+	default:
+		return false
+	}
+}
+
+// MarkExternalOrigin records that a spill holds content sourced from outside
+// the operator's trust boundary.
+//
+// Store already marks spills whose producing tool is externally classified, so
+// this is for the INDIRECT case only: code_action reads mail or web pages
+// through its bridge and spills them under its own name, which no name-based
+// rule can catch.
+func (s *SpilloverStore) MarkExternalOrigin(spillID string) {
+	s.mu.Lock()
+	if entry, ok := s.index[spillID]; ok {
+		entry.ExternalOrigin = true
+	}
+	s.mu.Unlock()
+}
+
+// IsExternalOrigin reports whether a spill holds externally sourced content.
+//
+// The untrusted-origin gate uses it to decide whether reading a spill should
+// taint the turn: a spill created by `web` or `mail_archive` carries the same
+// attacker-authored text on turn N+5 as it did on turn N, and now that spills
+// survive their producing run, that later read has to taint exactly like the
+// original fetch did. Unknown IDs and cross-session reads report false — those
+// reads fail anyway.
+func (s *SpilloverStore) IsExternalOrigin(spillID, sessionKey string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entry, ok := s.index[spillID]
+	return ok && entry.SessionKey == sessionKey && entry.ExternalOrigin
 }
 
 // FormatPreview builds the compact preview string inserted into the LLM context.
@@ -167,7 +270,8 @@ func FormatPreview(spillID, toolName, content string) string {
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "[SpillOver: ID=%s | %s | %d chars]\n", spillID, toolName, origLen)
+	fmt.Fprintf(&sb, "[SpillOver: ID=%s | %s | %d chars · %d lines]\n",
+		spillID, toolName, origLen, strings.Count(content, "\n")+1)
 	fmt.Fprintf(&sb, "--- Preview (first %d chars) ---\n", len(head))
 	sb.WriteString(head)
 	sb.WriteByte('\n')
@@ -228,13 +332,14 @@ func (s *SpilloverStore) RemoveSession(sessionKey string) error {
 	// 1. Drop in-memory entries and delete their files.
 	s.CleanSession(sessionKey)
 
-	// 2. Sweep filesystem for any orphan files with this session prefix.
-	//    Filenames follow the pattern: <safeSess>_<ts>_<tool>_<id>.txt so an
-	//    exact prefix match on "<safeSess>_" is a safe lower bound; we still
-	//    guard against accidentally deleting a different session whose key
-	//    happens to start with the same sanitized bytes by requiring the
-	//    trailing underscore.
-	prefix := sanitizeSessionKey(sessionKey) + "_"
+	// 2. Sweep filesystem for orphan files belonging to exactly this session.
+	//    The prefix carries a hash of the FULL key, so a parent key cannot
+	//    match its children: session keys nest ("client:main" is the parent of
+	//    the native per-conversation chats "client:main:<uuid>"), and a plain
+	//    sanitized-name prefix would let a parent's cleanup delete every live
+	//    child's spills while their index entries survived — leaving
+	//    read_spillover pointing at files that no longer exist.
+	prefix := sessionFilePrefix(sessionKey) + "_"
 	entries, err := os.ReadDir(s.baseDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -276,20 +381,119 @@ func (s *SpilloverStore) StartCleanup(ctx context.Context) {
 	})
 }
 
-// cleanExpired removes entries older than SpilloverTTL.
+// cleanExpired removes aged-out entries whose session is already gone.
+//
+// Age alone is not sufficient grounds to delete: compaction stubs older tool
+// results down to a read_spillover pointer and tells the model the full output
+// is still available, so a spill under a live session must outlive the TTL no
+// matter how long it sits untouched. Reclaiming a live session's spills is the
+// session-end hook's job (RemoveSession); this sweep only collects orphans —
+// spills whose session ended without that hook running (crash, restart).
+//
+// The liveness predicate runs with s.mu released (concurrency.md §3): it calls
+// into the session manager, and holding s.mu across it would nest an unrelated
+// lock under ours.
 func (s *SpilloverStore) cleanExpired() {
 	now := time.Now()
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
+	type aged struct {
+		id, sessionKey, path string
+	}
+	var candidates []aged
+	s.mu.RLock()
 	for id, entry := range s.index {
 		if now.Sub(entry.CreatedAt) > SpilloverTTL {
-			os.Remove(entry.Path)
-			delete(s.index, id)
+			candidates = append(candidates, aged{id: id, sessionKey: entry.SessionKey, path: entry.Path})
+		}
+	}
+	s.mu.RUnlock()
+
+	// Orphan files: the index lives only in memory, so every spill written by a
+	// previous process is invisible above. Now that a completed run no longer
+	// releases spills, those files would otherwise accumulate across restarts
+	// forever — the orphan collection this sweep advertises has to actually
+	// look at the disk.
+	s.sweepUnindexedFiles(now)
+
+	if len(candidates) == 0 {
+		return
+	}
+
+	// Evaluate liveness once per session, outside the lock.
+	live := make(map[string]bool, len(candidates))
+	for _, c := range candidates {
+		if _, seen := live[c.sessionKey]; !seen {
+			live[c.sessionKey] = s.isSessionAlive(c.sessionKey)
+		}
+	}
+
+	s.mu.Lock()
+	for _, c := range candidates {
+		if live[c.sessionKey] {
+			continue // session still running — its spill handles must stay valid
+		}
+		// Re-check: Store may have replaced the entry while the lock was down.
+		if entry, ok := s.index[c.id]; !ok || entry.Path != c.path {
+			continue
+		}
+		os.Remove(c.path)
+		delete(s.index, c.id)
+	}
+	s.mu.Unlock()
+}
+
+// sweepUnindexedFiles removes spill files on disk that no index entry claims and
+// that are older than the TTL.
+//
+// A file is unindexed only if this process did not write it (the index is
+// rebuilt empty on start), so its session cannot be live here. The age bound
+// still applies: it keeps the sweep from racing a file another writer is in the
+// middle of creating.
+func (s *SpilloverStore) sweepUnindexedFiles(now time.Time) {
+	entries, err := os.ReadDir(s.baseDir)
+	if err != nil {
+		return // not created yet, or unreadable — nothing to collect
+	}
+
+	s.mu.RLock()
+	known := make(map[string]struct{}, len(s.index))
+	for _, e := range s.index {
+		known[e.Path] = struct{}{}
+	}
+	s.mu.RUnlock()
+
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".txt") {
+			continue
+		}
+		path := filepath.Join(s.baseDir, e.Name())
+		if _, ok := known[path]; ok {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || now.Sub(info.ModTime()) <= SpilloverTTL {
+			continue
+		}
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			slog.Warn("spillover orphan sweep failed", "file", e.Name(), "err", err)
 		}
 	}
 }
 
 // --- helpers ---
+
+// sessionFilePrefix builds the filename prefix that identifies a spill's owning
+// session unambiguously: the sanitized key (readable) plus a short hash of the
+// FULL key (exact).
+//
+// The sanitized name alone is ambiguous because keys nest and ":" collapses to
+// "_": "client:main" and "client:main:<uuid>" both sanitize to names starting
+// "client_main_". The hash is taken over the untouched key, so no parent prefix
+// can match a child's files.
+func sessionFilePrefix(sessionKey string) string {
+	sum := sha256.Sum256([]byte(sessionKey))
+	return fmt.Sprintf("%s_%x", sanitizeSessionKey(sessionKey), sum[:sessionHashBytes])
+}
 
 // sanitizeSessionKey replaces characters unsafe for filenames.
 func sanitizeSessionKey(key string) string {

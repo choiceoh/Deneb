@@ -23,7 +23,8 @@ type TurnContext struct {
 	// untrusted-tool gate reads this when code_action completes so nested
 	// mail/web reads taint the turn even though only the wrapper result is
 	// observed at the hook layer.
-	externalOrigin bool
+	externalOrigin    bool
+	externalOriginSeq uint64
 }
 
 // toolStat accumulates completion-time samples for a single tool name within a turn.
@@ -63,7 +64,26 @@ func (tc *TurnContext) MarkExternalOriginTouched() {
 	}
 	tc.mu.Lock()
 	tc.externalOrigin = true
+	tc.externalOriginSeq++
 	tc.mu.Unlock()
+}
+
+// ExternalOriginSeq returns a counter that increases on every external-origin
+// read in this turn.
+//
+// The boolean alone is turn-wide and sticky, so it cannot say WHICH call
+// sourced the content: a purely local code_action running in a turn where
+// `web` already ran would look external. Comparing this sequence across one
+// invocation answers "did an external read land during *this* call", which is
+// what per-spill provenance needs — precise in both directions, so neither
+// mislabels local output nor loses a genuine nested read.
+func (tc *TurnContext) ExternalOriginSeq() uint64 {
+	if tc == nil {
+		return 0
+	}
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.externalOriginSeq
 }
 
 // ExternalOriginTouched reports whether an external-origin read landed in this

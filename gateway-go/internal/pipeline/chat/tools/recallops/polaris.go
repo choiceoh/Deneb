@@ -185,8 +185,10 @@ func toolPolarisExpand(store *polaris.Store, localAI LocalAIFunc) toolport.ToolF
 			return "해당 구간의 원본 메시지가 없습니다.", nil
 		}
 
-		// Serialize raw messages.
-		serialized := serializeExpandMessages(msgs, 8000)
+		// Serialize raw messages. Serialization is capped, so omitted counts
+		// the messages that did not fit — the caller must surface that rather
+		// than let a partial excerpt read as the whole range.
+		serialized, omitted := serializeExpandMessages(msgs, 8000)
 
 		// If question provided and local AI available, delegate to AI for a focused answer.
 		if p.Question != "" && localAI != nil {
@@ -195,8 +197,11 @@ func toolPolarisExpand(store *polaris.Store, localAI LocalAIFunc) toolport.ToolF
 				p.Question, target.MsgStart, target.MsgEnd, serialized)
 			answer, err := localAI(ctx, system, user, 2048)
 			if err == nil && answer != "" {
-				return fmt.Sprintf("## 요약 ID %d 답변\n\n**질문:** %s\n\n%s",
-					p.SummaryID, p.Question, answer), nil
+				// The delegate answered from a truncated excerpt: the root
+				// gets the answer only, so the truncation has to travel with
+				// it or the root will treat a partial reading as complete.
+				return fmt.Sprintf("## 요약 ID %d 답변\n\n**질문:** %s\n%s\n%s",
+					p.SummaryID, p.Question, expandCoverageNote(len(msgs), omitted), answer), nil
 			}
 			// Fall through to raw dump on AI failure.
 		}
@@ -206,6 +211,9 @@ func toolPolarisExpand(store *polaris.Store, localAI LocalAIFunc) toolport.ToolF
 			p.SummaryID, target.MsgStart, target.MsgEnd, len(msgs)))
 		if p.Question != "" {
 			sb.WriteString(fmt.Sprintf("**질문:** %s\n\n", p.Question))
+		}
+		if note := expandCoverageNote(len(msgs), omitted); note != "" {
+			sb.WriteString(strings.TrimPrefix(note, "\n") + "\n")
 		}
 		sb.WriteString(serialized)
 		return sb.String(), nil
@@ -240,18 +248,35 @@ func filterByTimeRange(nodes []polaris.SummaryNode, timeRange string, now time.T
 }
 
 // serializeExpandMessages converts ChatMessages to readable text, capped at maxChars.
-func serializeExpandMessages(msgs []toolport.ChatMessage, maxChars int) string {
+// serializeExpandMessages renders msgs up to maxChars and reports how many
+// messages did not fit. The omitted count is the remaining messages, not the
+// total — a caller that reports the total tells the model nothing about what
+// it is missing.
+func serializeExpandMessages(msgs []toolport.ChatMessage, maxChars int) (string, int) {
 	var sb strings.Builder
 	totalChars := 0
-	for _, m := range msgs {
+	for i, m := range msgs {
 		text := m.TextContent()
 		entry := fmt.Sprintf("[%s]: %s\n\n", m.Role, text)
 		if totalChars+len(entry) > maxChars {
-			sb.WriteString(fmt.Sprintf("... (나머지 %d건 생략)\n", len(msgs)))
-			break
+			omitted := len(msgs) - i
+			sb.WriteString(fmt.Sprintf("... (나머지 %d건 생략)\n", omitted))
+			return sb.String(), omitted
 		}
 		sb.WriteString(entry)
 		totalChars += len(entry)
 	}
-	return sb.String()
+	return sb.String(), 0
+}
+
+// expandCoverageNote states how much of the range the caller actually saw, or
+// "" when nothing was dropped. Truncation that only appears inside the
+// delegate's prompt never reaches the root model, which is how a partial
+// excerpt gets mistaken for the full range.
+func expandCoverageNote(total, omitted int) string {
+	if omitted <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("\n**근거 범위:** 메시지 %d건 중 %d건만 읽음 (%d건은 길이 제한으로 생략) — 생략분이 중요하면 polaris(action=\"search\")로 좁혀 찾으세요.\n",
+		total, total-omitted, omitted)
 }

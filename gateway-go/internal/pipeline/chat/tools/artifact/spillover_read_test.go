@@ -25,7 +25,7 @@ func spillFixture(t *testing.T, n int) (toolport.ToolFunc, context.Context, stri
 		t.Fatalf("store: %v", err)
 	}
 	ctx := toolport.WithSessionKey(context.Background(), "client:test")
-	return ToolSpilloverRead(store), ctx, id
+	return ToolSpilloverRead(store, nil), ctx, id
 }
 
 func callSpill(ctx context.Context, t *testing.T, fn toolport.ToolFunc, params map[string]any) string {
@@ -98,7 +98,7 @@ func TestSpilloverRead_CharBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
-	fn := ToolSpilloverRead(store)
+	fn := ToolSpilloverRead(store, nil)
 	ctx := toolport.WithSessionKey(context.Background(), "client:test")
 
 	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "limit": 100})
