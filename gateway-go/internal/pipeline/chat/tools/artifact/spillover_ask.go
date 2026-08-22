@@ -29,13 +29,29 @@ const (
 	spillAskChunkMaxChars = 12000
 	spillAskChunkTokens   = 512
 	spillAskReduceTokens  = 1024
+)
 
-	// spillAskCallTimeout bounds EACH delegated call, map and reduce alike. The tool inherits the
-	// interactive turn context, whose backstop is 30 minutes, and the local-AI
-	// hub path preserves the caller deadline instead of imposing its own — so
-	// without this a single stalled helper request would eat the whole user
-	// turn before the loop could try the next chunk or fall back to paging.
+// Timeouts are vars, not consts, purely so tests can shrink them: the
+// behaviour they encode (a stalled helper must reach the paging fallback
+// quickly) is otherwise only observable by waiting minutes. Nothing at runtime
+// writes them.
+var (
+	// spillAskCallTimeout bounds EACH delegated call, map and reduce alike. The
+	// tool inherits the interactive turn context, whose backstop is 30 minutes,
+	// and the local-AI hub path preserves the caller deadline instead of
+	// imposing its own — so without this a single stalled helper request would
+	// eat the whole user turn before the loop could try the next chunk or fall
+	// back to paging.
 	spillAskCallTimeout = 90 * time.Second
+
+	// spillAskPhaseTimeout bounds the delegated read AS A WHOLE. Per-call
+	// timeouts alone do not: the map stage is sequential, so four stalled
+	// chunks each burn their own 90s and the reduce adds a fifth — roughly
+	// seven and a half minutes before the caller reaches the paging fallback,
+	// inside one interactive turn on a phone. Every call derives from this
+	// budget, so repeated helper failures degrade to paging promptly and the
+	// partial answers already collected are still returned.
+	spillAskPhaseTimeout = 150 * time.Second
 )
 
 const spillAskSystemPrompt = "아래는 큰 도구 출력의 일부다. 질문에 이 발췌만 근거로 답하라. " +
@@ -75,6 +91,11 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lin
 		return "", false
 	}
 
+	// One budget for the whole phase; each call below derives from it, so the
+	// worst case is this deadline rather than the sum of the per-call ones.
+	phaseCtx, cancelPhase := context.WithTimeout(ctx, spillAskPhaseTimeout)
+	defer cancelPhase()
+
 	type partial struct {
 		firstLine, lastLine int
 		clippedLines        int
@@ -84,10 +105,17 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lin
 	for _, c := range chunks {
 		user := fmt.Sprintf("## 질문\n%s\n\n## 발췌 (%d–%d줄)\n%s",
 			question, c.firstLine, c.lastLine, c.text)
-		callCtx, cancel := context.WithTimeout(ctx, spillAskCallTimeout)
+		callCtx, cancel := context.WithTimeout(phaseCtx, spillAskCallTimeout)
 		answer, err := ask(callCtx, spillAskSystemPrompt, user, spillAskChunkTokens)
+		// Checked BEFORE cancel(), which would set Err() itself. The local-AI
+		// hub returns whatever text it accumulated with a nil error when the
+		// stream is cut mid-sentence, so a deadline that fired is the only
+		// signal that this answer is a fragment — and a fragment that happens
+		// to carry a citation would otherwise be presented as a grounded,
+		// complete answer.
+		timedOut := callCtx.Err() != nil
 		cancel()
-		if err != nil || strings.TrimSpace(answer) == "" {
+		if err != nil || timedOut || strings.TrimSpace(answer) == "" {
 			continue // one chunk failing must not sink the whole read
 		}
 		// The citation contract is only a prompt instruction, and a local model
@@ -139,13 +167,19 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lin
 	for _, p := range partials {
 		fmt.Fprintf(&merged, "### %d–%d줄\n%s\n\n", p.firstLine, p.lastLine, p.answer)
 	}
-	reduceCtx, cancelReduce := context.WithTimeout(ctx, spillAskCallTimeout)
+	ranges := make([][2]int, 0, len(partials))
+	for _, p := range partials {
+		ranges = append(ranges, [2]int{p.firstLine, p.lastLine})
+	}
+	reduceCtx, cancelReduce := context.WithTimeout(phaseCtx, spillAskCallTimeout)
 	reduced, err := ask(reduceCtx, spillAskReduceSystemPrompt,
 		fmt.Sprintf("## 질문\n%s\n\n## 부분 답변\n%s", question, merged.String()), spillAskReduceTokens)
+	reduceTimedOut := reduceCtx.Err() != nil
 	cancelReduce()
-	// A reduction that drops every citation is no longer verifiable either, so
-	// it is treated like a failed reduce and the cited partials are returned.
-	if err != nil || strings.TrimSpace(reduced) == "" || !hasAnyCitation(reduced) {
+	// A reduction that drops every citation — or invents one — is no longer
+	// verifiable, so it is treated like a failed reduce and the cited partials
+	// are returned instead.
+	if err != nil || reduceTimedOut || strings.TrimSpace(reduced) == "" || !citationsAllInRanges(reduced, ranges) {
 		// Reduce failed — the partials are still real evidence, so return them
 		// rather than dropping work the local model already did.
 		return head.String() + strings.TrimRight(merged.String(), "\n") + spillAskVerifyHint(spillID), true
@@ -169,9 +203,38 @@ func hasInRangeCitation(answer string, firstLine, lastLine int) bool {
 	return false
 }
 
-// hasAnyCitation reports whether the merged answer kept any citation at all.
-func hasAnyCitation(answer string) bool {
-	return citationRe.MatchString(answer)
+// citationsAllInRanges reports whether the merged answer carries at least one
+// citation and EVERY citation it carries falls inside a range the delegate
+// actually read.
+//
+// Requiring merely "a citation" let the reducer mint one: [L999999] matches the
+// syntax, so a fabricated pointer passed as verification while pointing at a
+// line no chunk was ever shown. The root's only check on a delegated answer is
+// re-opening a cited line, so a citation outside every successful chunk is
+// worse than none — it looks verifiable and is not. Falling back to the cited
+// partials keeps the real evidence.
+func citationsAllInRanges(answer string, ranges [][2]int) bool {
+	matches := citationRe.FindAllStringSubmatch(answer, -1)
+	if len(matches) == 0 {
+		return false
+	}
+	for _, m := range matches {
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			return false
+		}
+		inSome := false
+		for _, r := range ranges {
+			if n >= r[0] && n <= r[1] {
+				inSome = true
+				break
+			}
+		}
+		if !inSome {
+			return false
+		}
+	}
+	return true
 }
 
 // noEvidenceMaxChars bounds what can pass as the explicit no-evidence reply.

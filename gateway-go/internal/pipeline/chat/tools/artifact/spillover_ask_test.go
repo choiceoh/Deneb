@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
@@ -461,4 +462,120 @@ func TestSpilloverQuestionRejectsClaimsHidingBehindNoEvidence(t *testing.T) {
 	if strings.Contains(out, "설정값은 42이고") {
 		t.Fatalf("uncited claims passed by mentioning the no-evidence phrase:\n%s", out)
 	}
+}
+
+// The reducer can mint a citation that matches the syntax but points at a line
+// no chunk was ever shown ([L999999]). Accepting it hands the root an answer
+// that LOOKS verifiable and is not — the one check the root has is re-opening a
+// cited line. The cited partials are real evidence, so we fall back to them.
+func TestSpillAskRejectsReducedAnswerCitingUnreadLines(t *testing.T) {
+	store, ctx, id := spillWithLines(t, 4000) // enough for several chunks
+	rec := &askRecorder{reply: func(user string) (string, error) {
+		if strings.Contains(user, "부분 답변") {
+			return "합쳐진 답 [L999999]", nil // a line no chunk covered
+		}
+		return stubAnswer(user, "구간 답"), nil
+	}}
+	fn := ToolSpilloverRead(store, rec.fn())
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": "무엇?"})
+
+	if strings.Contains(out, "합쳐진 답") {
+		t.Errorf("reduced answer citing an unread line was returned:\n%s", out)
+	}
+	if !strings.Contains(out, "구간 답") {
+		t.Errorf("fallback must return the cited partials:\n%s", out)
+	}
+}
+
+// A reduced answer whose citations all land inside chunks that answered is the
+// normal path and must still be used — the guard above must not reject
+// everything.
+func TestSpillAskKeepsReducedAnswerWithInRangeCitations(t *testing.T) {
+	store, ctx, id := spillWithLines(t, 4000)
+	rec := &askRecorder{reply: func(user string) (string, error) {
+		if strings.Contains(user, "부분 답변") {
+			return "합쳐진 답 [L2]", nil
+		}
+		return stubAnswer(user, "구간 답"), nil
+	}}
+	fn := ToolSpilloverRead(store, rec.fn())
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": "무엇?"})
+
+	if !strings.Contains(out, "합쳐진 답") {
+		t.Errorf("in-range reduced answer was rejected:\n%s", out)
+	}
+}
+
+// The local-AI hub returns whatever text it accumulated with a NIL error when
+// the stream is cut mid-sentence, so a fragment carrying a citation would
+// otherwise be presented as a complete grounded answer. A fired deadline is the
+// only signal that the text is truncated.
+func TestSpillAskRejectsAnswerFromTimedOutCall(t *testing.T) {
+	shrinkAskTimeouts(t, 60*time.Millisecond, 400*time.Millisecond)
+
+	store, ctx, id := spillWithLines(t, 200)
+	rec := &askRecorder{reply: func(user string) (string, error) {
+		time.Sleep(120 * time.Millisecond) // outlives the per-call deadline
+		return stubAnswer(user, "잘린 조각"), nil
+	}}
+	fn := ToolSpilloverRead(store, rec.fn())
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": "무엇?"})
+
+	if strings.Contains(out, "잘린 조각") {
+		t.Errorf("truncated helper output was returned as a grounded answer:\n%s", out)
+	}
+	if !strings.Contains(out, "위임 실패") {
+		t.Errorf("expected the paging fallback notice:\n%.200s", out)
+	}
+}
+
+// Per-call timeouts alone let a consistently stalled helper burn one deadline
+// per chunk, sequentially, before the caller reaches paging. The phase budget
+// is what keeps a single read_spillover(question=) from occupying the turn.
+func TestSpillAskBoundsTheWholePhase(t *testing.T) {
+	const call, phase = 200 * time.Millisecond, 300 * time.Millisecond
+	shrinkAskTimeouts(t, call, phase)
+
+	store, ctx, id := spillWithLines(t, 4000) // several chunks, all stalling
+	args := map[string]any{"spill_id": id, "question": "무엇?"}
+
+	// The same call with an instant delegate measures everything that is NOT
+	// waiting on the helper — loading the blob, the promptguard scan over
+	// 60KB, chunking. Under -race that setup alone runs into the hundreds of
+	// milliseconds, so timing the raw call would drown the signal.
+	instant := ToolSpilloverRead(store, (&askRecorder{
+		reply: func(user string) (string, error) { return stubAnswer(user, "답"), nil },
+	}).fn())
+	start := time.Now()
+	callSpill(ctx, t, instant, args)
+	setup := time.Since(start)
+
+	// Honors its context, like the real hub: it hangs until the caller's
+	// deadline fires, so what bounds the loop is the deadline, not the stub.
+	stalled := func(callCtx context.Context, _, _ string, _ int) (string, error) {
+		<-callCtx.Done()
+		return "", callCtx.Err()
+	}
+	start = time.Now()
+	callSpill(ctx, t, ToolSpilloverRead(store, tooldeps.LocalAIFunc(stalled)), args)
+	delegated := time.Since(start) - setup
+
+	// Bound sits between the phase budget and what the per-call timeouts alone
+	// would cost: spillAskMaxChunks × call = 800ms, which is what this measured
+	// before the shared budget. Roughly 2× headroom on both sides.
+	if delegated > phase*2 {
+		t.Errorf("delegated stage took %v (setup %v) — the phase budget did not bound it", delegated, setup)
+	}
+}
+
+// shrinkAskTimeouts makes the stall behaviour observable in milliseconds
+// instead of minutes, restoring the production values afterwards.
+func shrinkAskTimeouts(t *testing.T, call, phase time.Duration) {
+	t.Helper()
+	origCall, origPhase := spillAskCallTimeout, spillAskPhaseTimeout
+	spillAskCallTimeout, spillAskPhaseTimeout = call, phase
+	t.Cleanup(func() { spillAskCallTimeout, spillAskPhaseTimeout = origCall, origPhase })
 }
