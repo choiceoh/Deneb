@@ -2,6 +2,7 @@ package agent
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -162,5 +163,72 @@ func TestTruncateHeadTailSkipsOutlineWithoutStructure(t *testing.T) {
 
 	if strings.Contains(out, "생략 구간 구조") {
 		t.Errorf("outline emitted for unstructured content:\n%s", out)
+	}
+}
+
+// The index lives only in memory, so spills written by a previous process are
+// invisible to the entry sweep. Now that a completed run no longer releases
+// spills, those files would accumulate across every restart unless the sweep
+// also looks at the disk.
+func TestCleanExpiredSweepsOrphanFilesFromDisk(t *testing.T) {
+	dir := t.TempDir()
+
+	// A file no index entry claims, aged past the TTL — i.e. left by a previous
+	// process.
+	orphan := filepath.Join(dir, "sess_gone_1234_exec_sp_deadbeef.txt")
+	if err := os.WriteFile(orphan, []byte("stale"), 0o644); err != nil {
+		t.Fatalf("seed orphan: %v", err)
+	}
+	old := time.Now().Add(-2 * SpilloverTTL)
+	if err := os.Chtimes(orphan, old, old); err != nil {
+		t.Fatalf("age orphan: %v", err)
+	}
+
+	// A fresh unindexed file must survive — it may be mid-write.
+	fresh := filepath.Join(dir, "sess_gone_9999_exec_sp_cafebabe.txt")
+	if err := os.WriteFile(fresh, []byte("new"), 0o644); err != nil {
+		t.Fatalf("seed fresh: %v", err)
+	}
+
+	store := NewSpilloverStore(dir)
+	store.SetSessionLiveness(func(string) bool { return true })
+
+	store.cleanExpired()
+
+	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
+		t.Errorf("aged orphan file survived the sweep: %v", err)
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Errorf("fresh unindexed file was swept: %v", err)
+	}
+}
+
+// Provenance is a stored bit, not a tool-name lookup: code_action spills mail
+// and web pages it read through its bridge under its own name, so the name
+// alone would call attacker-authored content operator-owned.
+func TestExternalOriginIsStoredNotDerivedFromToolName(t *testing.T) {
+	store := NewSpilloverStore(t.TempDir())
+
+	plain, err := store.Store("client:test", "code_action", strings.Repeat("a", 100))
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	tainted, err := store.Store("client:test", "code_action", strings.Repeat("b", 100))
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	store.MarkExternalOrigin(tainted)
+
+	if store.IsExternalOrigin(plain, "client:test") {
+		t.Error("unmarked spill reported external")
+	}
+	if !store.IsExternalOrigin(tainted, "client:test") {
+		t.Error("spill marked external did not report external — nested provenance lost")
+	}
+	if store.IsExternalOrigin(tainted, "client:other") {
+		t.Error("cross-session read reported external")
+	}
+	if store.IsExternalOrigin("sp_nope", "client:test") {
+		t.Error("unknown spill ID reported external")
 	}
 }

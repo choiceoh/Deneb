@@ -225,8 +225,11 @@ func wireUntrustedToolGate(hc *agent.HookCompositor, params RunParams, prep prep
 // sleeper class readsExternalOrigin exists to stop. Taint follows the content,
 // not the tool name that happens to deliver it.
 //
-// Spills from operator-owned tools (exec, read, grep) do not taint — the same
-// narrowness readsExternalOrigin applies to live reads.
+// The flag is set at spill time (capToolOutput), not derived from the tool
+// name: code_action reads mail or web pages through its bridge and spills them
+// under its own name, so a name lookup would call that content operator-owned.
+// Spills from genuinely operator-owned tools (exec, read, grep) do not taint —
+// the same narrowness readsExternalOrigin applies to live reads.
 func (r *ToolRegistry) spilledFromExternalOrigin(ctx context.Context, name string, input json.RawMessage) bool {
 	if name != "read_spillover" || r.spillStore == nil {
 		return false
@@ -237,5 +240,24 @@ func (r *ToolRegistry) spilledFromExternalOrigin(ctx context.Context, name strin
 	if err := json.Unmarshal(input, &p); err != nil || p.SpillID == "" {
 		return false
 	}
-	return readsExternalOrigin(r.spillStore.OriginTool(p.SpillID, toolport.SessionKeyFromContext(ctx)))
+	return r.spillStore.IsExternalOrigin(p.SpillID, toolport.SessionKeyFromContext(ctx))
+}
+
+// spilledContentIsExternal reports whether output being spilled by tool `name`
+// holds externally sourced content.
+//
+// Direct external readers are classified by name. code_action is the indirect
+// case: it dials back into the registry, so a nested web/mail read marks the
+// turn context while the spill lands under "code_action" — without consulting
+// that flag here, a large attacker-authored dump printed through code_action
+// would be re-ingested later as operator-owned.
+func (r *ToolRegistry) spilledContentIsExternal(ctx context.Context, name string) bool {
+	if readsExternalOrigin(name) {
+		return true
+	}
+	if name != "code_action" {
+		return false
+	}
+	tc := toolport.TurnContextFromContext(ctx)
+	return tc != nil && tc.ExternalOriginTouched()
 }

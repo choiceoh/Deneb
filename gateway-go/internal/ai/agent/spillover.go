@@ -56,6 +56,12 @@ type spillEntry struct {
 	ToolName   string
 	OrigLen    int
 	CreatedAt  time.Time
+	// ExternalOrigin marks content that came from outside the operator's trust
+	// boundary. It is a separate bit rather than a lookup on ToolName because
+	// the producing tool is not always the sourcing tool: code_action reads mail
+	// or web pages through its bridge and spills them under its own name, so the
+	// name alone would call attacker-authored text operator-owned.
+	ExternalOrigin bool
 }
 
 // SpilloverStore manages disk-backed large tool results.
@@ -186,20 +192,31 @@ func (s *SpilloverStore) Load(spillID, sessionKey string) (string, error) {
 	return string(data), nil
 }
 
-// OriginTool returns the tool that produced a spill, or "" when the ID is
-// unknown or belongs to another session. The untrusted-origin gate uses it to
-// decide whether reading a spill should taint the turn: a spill created by
-// `web` or `mail_archive` carries the same attacker-authored text on turn N+5
-// as it did on turn N, and now that spills survive their producing run, that
-// later read has to taint exactly like the original fetch did.
-func (s *SpilloverStore) OriginTool(spillID, sessionKey string) string {
+// MarkExternalOrigin records that a spill holds content sourced from outside
+// the operator's trust boundary. Called right after Store by the tool registry,
+// which is the only place that knows both the producing tool and whether a
+// nested external read happened during it.
+func (s *SpilloverStore) MarkExternalOrigin(spillID string) {
+	s.mu.Lock()
+	if entry, ok := s.index[spillID]; ok {
+		entry.ExternalOrigin = true
+	}
+	s.mu.Unlock()
+}
+
+// IsExternalOrigin reports whether a spill holds externally sourced content.
+//
+// The untrusted-origin gate uses it to decide whether reading a spill should
+// taint the turn: a spill created by `web` or `mail_archive` carries the same
+// attacker-authored text on turn N+5 as it did on turn N, and now that spills
+// survive their producing run, that later read has to taint exactly like the
+// original fetch did. Unknown IDs and cross-session reads report false — those
+// reads fail anyway.
+func (s *SpilloverStore) IsExternalOrigin(spillID, sessionKey string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	entry, ok := s.index[spillID]
-	if !ok || entry.SessionKey != sessionKey {
-		return ""
-	}
-	return entry.ToolName
+	return ok && entry.SessionKey == sessionKey && entry.ExternalOrigin
 }
 
 // FormatPreview builds the compact preview string inserted into the LLM context.
@@ -361,6 +378,14 @@ func (s *SpilloverStore) cleanExpired() {
 		}
 	}
 	s.mu.RUnlock()
+
+	// Orphan files: the index lives only in memory, so every spill written by a
+	// previous process is invisible above. Now that a completed run no longer
+	// releases spills, those files would otherwise accumulate across restarts
+	// forever — the orphan collection this sweep advertises has to actually
+	// look at the disk.
+	s.sweepUnindexedFiles(now)
+
 	if len(candidates) == 0 {
 		return
 	}
@@ -386,6 +411,44 @@ func (s *SpilloverStore) cleanExpired() {
 		delete(s.index, c.id)
 	}
 	s.mu.Unlock()
+}
+
+// sweepUnindexedFiles removes spill files on disk that no index entry claims and
+// that are older than the TTL.
+//
+// A file is unindexed only if this process did not write it (the index is
+// rebuilt empty on start), so its session cannot be live here. The age bound
+// still applies: it keeps the sweep from racing a file another writer is in the
+// middle of creating.
+func (s *SpilloverStore) sweepUnindexedFiles(now time.Time) {
+	entries, err := os.ReadDir(s.baseDir)
+	if err != nil {
+		return // not created yet, or unreadable — nothing to collect
+	}
+
+	s.mu.RLock()
+	known := make(map[string]struct{}, len(s.index))
+	for _, e := range s.index {
+		known[e.Path] = struct{}{}
+	}
+	s.mu.RUnlock()
+
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".txt") {
+			continue
+		}
+		path := filepath.Join(s.baseDir, e.Name())
+		if _, ok := known[path]; ok {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || now.Sub(info.ModTime()) <= SpilloverTTL {
+			continue
+		}
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			slog.Warn("spillover orphan sweep failed", "file", e.Name(), "err", err)
+		}
+	}
 }
 
 // --- helpers ---

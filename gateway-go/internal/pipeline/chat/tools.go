@@ -285,6 +285,13 @@ func (r *ToolRegistry) capToolOutput(ctx context.Context, def ToolDef, name, out
 	if r.spillStore != nil {
 		sessionKey := toolport.SessionKeyFromContext(ctx)
 		spillID, _ = r.spillStore.Store(sessionKey, name, output)
+		// Record provenance with the spill so a later read can be judged on
+		// what the content IS, not on which tool happened to print it. A
+		// nested external read inside code_action marks the turn context but
+		// spills under the outer name, so the name alone would lose it.
+		if spillID != "" && r.spilledContentIsExternal(ctx, name) {
+			r.spillStore.MarkExternalOrigin(spillID)
+		}
 	}
 	return agent.TruncateHeadTail(output, maxOutput, spillID)
 }
