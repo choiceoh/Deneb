@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -463,6 +464,99 @@ func TestStoreClampsSpillLargerThanTheSessionCeiling(t *testing.T) {
 	if !strings.Contains(got, "뒷부분이 잘렸습니다") {
 		t.Error("a clamped spill must say its tail is gone, or the model reads it as complete")
 	}
+}
+
+// The outline promises absolute offsets into the SPILL FILE, and Store persists
+// redact.String(content). Redaction is not line-count preserving — a PEM block
+// collapses to a single token — so numbers taken from the raw output point past
+// their heading in the file, silently and by more lines the more secrets the
+// output carried.
+func TestMiddleOutlineOffsetsMatchThePersistedFile(t *testing.T) {
+	var b strings.Builder
+	// A multi-line secret BEFORE the headings: this is what shifts everything
+	// after it once the file is written.
+	b.WriteString("-----BEGIN PRIVATE KEY-----\n")
+	for i := 0; i < 20; i++ {
+		b.WriteString(strings.Repeat("A", 60) + "\n")
+	}
+	b.WriteString("-----END PRIVATE KEY-----\n")
+	for i := 0; i < 100; i++ {
+		b.WriteString("head padding line\n")
+	}
+	b.WriteString("# 첫번째 섹션\n")
+	for i := 0; i < 100; i++ {
+		b.WriteString("mid padding line\n")
+	}
+	b.WriteString("=== 두번째 구간 ===\n")
+	for i := 0; i < 300; i++ {
+		b.WriteString("tail padding line\n")
+	}
+	content := b.String()
+
+	store := NewSpilloverStore(t.TempDir())
+	store.SetSessionLiveness(func(string) bool { return true })
+	const key = "client:main"
+	id, err := store.Store(key, "exec", content)
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	persisted, err := store.Load(id, key)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	fileLines := strings.Split(persisted, "\n")
+
+	out := TruncateHeadTail(content, 2600, id)
+
+	entries := outlineEntries(t, out)
+	if len(entries) == 0 {
+		t.Fatalf("no outline entries to check:\n%s", out)
+	}
+	for _, e := range entries {
+		if e.line < 1 || e.line > len(fileLines) {
+			t.Fatalf("outline points at line %d, file has %d", e.line, len(fileLines))
+		}
+		// The whole promise: read_spillover(offset=N) opens THIS heading.
+		if got := strings.TrimSpace(fileLines[e.line-1]); got != e.text {
+			t.Errorf("offset %d points at %q, outline claims %q", e.line, got, e.text)
+		}
+	}
+}
+
+// outlineEntries parses the "N: heading" pairs out of a truncation marker.
+func outlineEntries(t *testing.T, marker string) []struct {
+	line int
+	text string
+} {
+	t.Helper()
+	const head = "생략 구간 구조 (offset으로 열기): "
+	i := strings.Index(marker, head)
+	if i < 0 {
+		return nil
+	}
+	section := marker[i+len(head):]
+	if j := strings.Index(section, "\n"); j >= 0 {
+		section = section[:j]
+	}
+	var out []struct {
+		line int
+		text string
+	}
+	for _, part := range strings.Split(section, " · ") {
+		num, text, ok := strings.Cut(part, ": ")
+		if !ok {
+			continue // the trailing "…" marker
+		}
+		n, err := strconv.Atoi(num)
+		if err != nil {
+			continue
+		}
+		out = append(out, struct {
+			line int
+			text string
+		}{n, text})
+	}
+	return out
 }
 
 // Store must never evict the spill it is about to return a handle for.

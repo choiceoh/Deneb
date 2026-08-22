@@ -56,7 +56,7 @@ func TruncateHeadTail(content string, maxChars int, spillID string) string {
 		// pipeline/compaction/protected.go; keep its shape intact.
 		marker = fmt.Sprintf(
 			"\n\n... [%d lines truncated — use read_spillover(%q) for full content] ...%s\n\n",
-			truncatedLines, spillID, middleOutline(content, middle, len(head)),
+			truncatedLines, spillID, spilledMiddleOutline(content, maxChars),
 		)
 	} else {
 		marker = fmt.Sprintf("\n\n... [%d lines truncated] ...\n\n", truncatedLines)
@@ -74,6 +74,34 @@ const (
 	outlineEntryMaxChars = 70
 )
 
+// spilledMiddleOutline renders the outline in the coordinates of the PERSISTED
+// spill file, which is what a read_spillover(offset=N) actually opens.
+//
+// Store writes redact.String(content), and redaction is not line-count
+// preserving: a PEM block spanning thirty lines collapses to a single token, so
+// every heading after it sits that many lines earlier in the file than in the
+// raw output. Numbers taken from the raw content would point past their
+// heading — silently, and further off the more secrets the output carried,
+// which defeats the absolute-offset navigation the outline exists to provide.
+//
+// So the outline is computed over the same redacted text the file holds. The
+// head and tail the model reads stay raw, as they were: only the offsets have
+// to agree with the file. The cost is one more pass over the output, paid only
+// when the result actually spilled.
+func spilledMiddleOutline(content string, maxChars int) string {
+	persisted := redact.String(content)
+	if len(persisted) <= maxChars {
+		// Redaction shrank the output below the budget, so the persisted file
+		// has no discarded middle to point into.
+		return ""
+	}
+	half := maxChars / 2
+	head := textutil.TruncateBytes(persisted, half)
+	tail := textutil.TailBytes(persisted, half)
+	middle := persisted[len(head) : len(persisted)-len(tail)]
+	return middleOutline(persisted, middle, len(head))
+}
+
 // middleOutline renders the section markers found in the discarded middle,
 // each with its 1-based line number in the ORIGINAL content so it feeds
 // straight into read_spillover(offset=N). Returns "" when the middle has no
@@ -88,11 +116,12 @@ func middleOutline(content, middle string, headLen int) string {
 		if !isOutlineHeading(trimmed) {
 			continue
 		}
-		// Redact before surfacing, and BEFORE the length cap. The caller hands
-		// TruncateHeadTail the RAW output — only the spill file is redacted on
-		// its way to disk — so a secret-bearing heading ("# OPENAI_API_KEY=…")
-		// in the discarded middle would otherwise be lifted out of the part
-		// nobody was going to see and put in front of the provider.
+		// Redact before surfacing, and BEFORE the length cap. The entries come
+		// from already-redacted text today, so this is belt-and-braces — but it
+		// is the guard that keeps a heading like "# OPENAI_API_KEY=…" out of the
+		// marker if this is ever called with raw content, which is how the leak
+		// arose in the first place: the outline lifts text out of the part
+		// nobody was going to see and puts it in front of the provider.
 		//
 		// Order matters: the patterns are length-anchored (AKIA + exactly 16
 		// chars, a JWT's three segments), so cutting the heading first can end
