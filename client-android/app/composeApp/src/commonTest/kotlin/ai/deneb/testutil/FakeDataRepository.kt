@@ -94,21 +94,31 @@ class FakeDataRepository : DataRepository {
         }
     }
 
-    override suspend fun deleteConversation(id: String) {
+    /** Flip to false to exercise the refused/unreachable branch. */
+    var deleteConversationSucceeds: Boolean = true
+
+    override suspend fun deleteConversation(id: String): Boolean {
+        if (!deleteConversationSucceeds) return false
         if (currentConversationId.value == id) {
             currentConversationId.value = null
             chatHistory.value = emptyList()
         }
         savedConversations.update { it.filter { c -> c.id != id } }
+        return true
     }
 
     val renameCalls = mutableListOf<Pair<String, String>>()
 
-    override suspend fun renameConversation(id: String, label: String) {
+    /** Flip to false to exercise the refused/unreachable branch. */
+    var renameConversationSucceeds: Boolean = true
+
+    override suspend fun renameConversation(id: String, label: String): Boolean {
         renameCalls.add(id to label)
+        if (!renameConversationSucceeds) return false
         savedConversations.update { list ->
             list.map { if (it.id == id) it.copy(title = label) else it }
         }
+        return true
     }
 
     /**

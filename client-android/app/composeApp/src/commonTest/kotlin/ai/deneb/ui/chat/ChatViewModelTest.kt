@@ -422,23 +422,35 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `retry calls ask with null`() = runViewModelTest {
+    fun `error card action dismisses without resending`() = runViewModelTest {
+        // The failed text is already restored into the composer (failedInput), so the
+        // card's action must clear the banner and nothing else — resending here would
+        // put the same message in the transcript twice. It used to call ask(null),
+        // which askGateway drops on its empty-text guard: a button that did nothing.
+        fakeRepository.askException = GenericNetworkException("boom")
         val viewModel = createViewModel()
 
         viewModel.state.test {
             val initialState = awaitItem()
-
-            initialState.actions.retry()
+            initialState.actions.ask("질문")
             testDispatcher.scheduler.runCurrent()
 
-            // Wait for completion
-            var finalState: ChatUiState
+            var errorState: ChatUiState
             do {
-                finalState = awaitItem()
-            } while (finalState.isLoading)
+                errorState = awaitItem()
+            } while (errorState.error == null)
+            val callsBefore = fakeRepository.askCalls.size
 
-            // Verify ask was called with null
-            assertTrue(fakeRepository.askCalls.any { it.first == null })
+            errorState.actions.retry()
+            testDispatcher.scheduler.runCurrent()
+
+            var dismissed: ChatUiState
+            do {
+                dismissed = awaitItem()
+            } while (dismissed.error != null)
+
+            assertNull(dismissed.error)
+            assertEquals(callsBefore, fakeRepository.askCalls.size)
         }
     }
 

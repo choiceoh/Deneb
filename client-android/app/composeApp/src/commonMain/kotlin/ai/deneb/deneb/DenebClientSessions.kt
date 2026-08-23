@@ -375,11 +375,11 @@ internal suspend fun DenebGatewayClient.fetchTranscriptPayload(sessionKey: Strin
     },
 )
 
-private fun mapTranscriptMessages(messages: List<TranscriptMsgOut>): List<History> = messages.mapNotNull { m ->
+private fun mapTranscriptMessages(messages: List<TranscriptMsgOut>): List<History> = messages.mapIndexedNotNull { index, m ->
     val role = when (m.role.lowercase()) {
         "user" -> History.Role.USER
         "assistant" -> History.Role.ASSISTANT
-        else -> return@mapNotNull null
+        else -> return@mapIndexedNotNull null
     }
     val attachments = m.attachments
         .filter { it.data.isNotBlank() && it.mimeType.isNotBlank() }
@@ -390,6 +390,15 @@ private fun mapTranscriptMessages(messages: List<TranscriptMsgOut>): List<Histor
     if (m.content.isBlank() && attachments.isEmpty()) {
         null
     } else {
+        // A stored card interaction is restored as one, not left as its wire text.
+        val submission = if (role == History.Role.USER) {
+            val source = (index - 1 downTo 0).firstNotNullOfOrNull { j ->
+                messages[j].takeIf { it.role.equals("assistant", ignoreCase = true) && it.content.isNotBlank() }?.content
+            }.orEmpty()
+            parseUiCallback(m.content, source)
+        } else {
+            null
+        }
         History(
             id = stableTranscriptId(role, m.content, m.timestampMs),
             role = role,
@@ -397,6 +406,7 @@ private fun mapTranscriptMessages(messages: List<TranscriptMsgOut>): List<Histor
             attachments = attachments,
             timestampMs = m.timestampMs,
             reasoningContent = m.reasoning.ifBlank { null },
+            uiSubmission = submission,
         )
     }
 }

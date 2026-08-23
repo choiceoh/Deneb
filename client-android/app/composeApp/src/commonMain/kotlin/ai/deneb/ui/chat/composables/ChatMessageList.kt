@@ -744,7 +744,24 @@ internal fun ChatMessageList(
                     uiState.error?.let { error ->
                         item(key = "error") {
                             Column(denebContentWidthModifier()) {
-                                ErrorMessage(error = error, retry = uiState.actions.retry)
+                                ErrorMessage(error = error, onDismiss = uiState.actions.retry)
+                            }
+                        }
+                    }
+                    if (uiState.stoppedBeforeAnswer) {
+                        // Stopped before any answer text arrived: there is no assistant
+                        // row to tag, so say it here. Without this the same transcript
+                        // shape falls through to the empty-reply recovery below and the
+                        // user's own stop reads as a failure.
+                        item(key = "stopped-before-answer") {
+                            Column(
+                                denebContentWidthModifier().padding(horizontal = 16.dp, vertical = 8.dp),
+                            ) {
+                                Text(
+                                    "중단됨",
+                                    style = DenebType.meta,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }

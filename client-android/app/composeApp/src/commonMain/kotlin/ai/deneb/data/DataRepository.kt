@@ -50,10 +50,15 @@ interface DataRepository {
     /** Appends the next page to [savedConversations]. */
     fun loadMoreConversations()
     fun loadConversation(id: String)
-    suspend fun deleteConversation(id: String)
 
-    /** Pins a drawer label so the auto-titler will not overwrite it. */
-    suspend fun renameConversation(id: String, label: String)
+    /** True when the gateway accepted the delete; false when it refused or was unreachable. */
+    suspend fun deleteConversation(id: String): Boolean
+
+    /**
+     * Pins a drawer label so the auto-titler will not overwrite it.
+     * True when the gateway accepted the rename; false when it refused or was unreachable.
+     */
+    suspend fun renameConversation(id: String, label: String): Boolean
 
     /**
      * Folds a mid-turn note into the active reply. Returns `true` when the

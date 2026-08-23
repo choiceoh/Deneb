@@ -457,8 +457,12 @@ class GatewayAskStreamingStateMachineTest {
         val result = f.client.ask("question", emptyList(), null)
 
         assertFalse(result)
-        assertTrue(f.client.chatHistory.value.assistants().single().content.contains("HTTP 500"))
-        assertFalse(f.client.chatHistory.value.assistants().single().content.contains("must not accept"))
+        val bubble = f.client.chatHistory.value.assistants().single().content
+        // The status still identifies the failure, but in Korean — the raw
+        // "chat HTTP 500" is a log line, not something to show the reader.
+        assertTrue(bubble.contains("500"), bubble)
+        assertFalse(bubble.contains("must not accept"), bubble)
+        assertFalse(bubble.contains("HTTP"), bubble)
     }
 
     @Test
@@ -476,7 +480,7 @@ class GatewayAskStreamingStateMachineTest {
     }
 
     @Test
-    fun blockingFallbackTransportFailureSurfacesReason() = runTest {
+    fun blockingFallbackTransportFailureNamesTheConnection() = runTest {
         val f = gatewayClientFixture()
         f.transport.enqueueSse(error("stream failed"))
         f.transport.enqueueRpc(notArrivedTranscript())
@@ -486,7 +490,11 @@ class GatewayAskStreamingStateMachineTest {
         val result = f.client.ask("question", emptyList(), null)
 
         assertFalse(result)
-        assertEquals("⚠️ offline", f.client.chatHistory.value.assistants().single().content)
+        // No response ever arrived, so the bubble names the connection rather than
+        // echoing the exception's own English text.
+        val bubble = f.client.chatHistory.value.assistants().single().content
+        assertTrue(bubble.contains("연결하지 못했습니다"), bubble)
+        assertFalse(bubble.contains("offline"), bubble)
     }
 
     @Test

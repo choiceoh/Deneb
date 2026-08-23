@@ -161,6 +161,12 @@ data class ChatUiState(
     // Id of the assistant message whose streaming the user stopped, so the UI marks
     // it 중단됨 instead of leaving a half-answer that looks complete.
     val stoppedMessageId: String? = null,
+    // The user stopped before any answer text arrived, so there is no assistant row
+    // to mark. Distinct from [stoppedMessageId] because the transcript shape it
+    // leaves — a user turn with no answer — is identical to a silently dropped
+    // reply, and offering "다시 생성" for something the user just cancelled reads
+    // as a failure the app is asking them to retry.
+    val stoppedBeforeAnswer: Boolean = false,
 ) {
     val heartbeatConversationId: String?
         get() = savedConversations.firstOrNull { it.isHeartbeat }?.id
@@ -226,8 +232,11 @@ fun List<History>.hasUnansweredUserTurn(): Boolean {
     return lastAnswer < lastUser
 }
 
-/** Silent-death recovery: the turn finished, nothing rendered, no error banner. */
-fun ChatUiState.needsEmptyReplyRecovery(): Boolean = !isLoading && !isRestoring && error == null && history.hasUnansweredUserTurn()
+/**
+ * Silent-death recovery: the turn finished, nothing rendered, no error banner —
+ * and the user did not stop it themselves.
+ */
+fun ChatUiState.needsEmptyReplyRecovery(): Boolean = !isLoading && !isRestoring && error == null && !stoppedBeforeAnswer && history.hasUnansweredUserTurn()
 
 @Immutable
 data class ToolCallInfo(

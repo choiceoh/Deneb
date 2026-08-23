@@ -596,7 +596,7 @@ class DenebGatewayClient private constructor(
         scope.launch { loadTranscriptGuarded(id, replacing = true) }
     }
 
-    override suspend fun deleteConversation(id: String) {
+    override suspend fun deleteConversation(id: String): Boolean {
         // Tell the gateway to drop the session — its in-memory entry AND its
         // transcript — then remove it from the local drawer list. The session
         // Manager is a pure in-memory map with no disk restore, so a local-only
@@ -604,32 +604,37 @@ class DenebGatewayClient private constructor(
         // drawer / restart the app). The server-side delete is what makes the
         // dismissal stick. A running session is refused server-side; it'll
         // reappear on the next fetch, which is correct (it's still live).
+        // Offline or refused? Keep the row. Dropping it locally anyway made the
+        // conversation vanish and then silently reappear on the next drawer fetch,
+        // which reads as the app losing track of it.
         callRpc<JsonObject>(
             "miniapp.sessions.delete",
             buildJsonObject { put("sessionKey", id) },
-        )
+        ) ?: return false
         // Drop the local transcript cache too, so the deleted conversation can't be
         // instantly re-rendered from cache on a later reopen. (A still-live session is
         // refused server-side and reappears on the next sessions.recent fetch; its
         // cache will be rebuilt then — eviction here is harmless in that case.)
         removeCachedTranscript(id)
         _savedConversations.update { list -> list.filterNot { it.id == id } }
+        return true
     }
 
-    override suspend fun renameConversation(id: String, label: String) {
+    override suspend fun renameConversation(id: String, label: String): Boolean {
         val trimmed = label.trim()
-        if (id.isBlank() || trimmed.isEmpty()) return
+        if (id.isBlank() || trimmed.isEmpty()) return false
         val out = callRpc<JsonObject>(
             "miniapp.sessions.rename",
             buildJsonObject {
                 put("sessionKey", id)
                 put("label", trimmed)
             },
-        ) ?: return
+        ) ?: return false
         val applied = out["label"]?.jsonPrimitive?.contentOrNull ?: trimmed
         _savedConversations.update { list ->
             list.map { if (it.id == id) it.copy(title = applied) else it }
         }
+        return true
     }
 
     override suspend fun steer(note: String): Boolean {
