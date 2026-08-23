@@ -6,7 +6,11 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
@@ -47,17 +51,56 @@ func (s *Server) postDreamWorkfeedCard(r *autonomous.DreamReport) {
 			summary += fmt.Sprintf(" · 회상활용 %d면", r.RecallHitPages)
 		}
 	}
+	// Trust Inbox (improvement-ideas.md 4.7 + 5.8): the dream card settles like
+	// every other autonomous-change card, and — when the cycle's git snapshot
+	// hash travels on the report — carries a one-tap whole-cycle revert wired
+	// to Store.RevertDreamCycle. Page-level selective revert stays a chat turn
+	// (RevertDreamPages) — a card cannot pick pages.
+	actions := []workfeed.Action{{ID: "dream:ack", Kind: workfeed.ActionAck, Label: "확인"}}
+	if r.GitCommit != "" {
+		actions = append(actions, workfeed.Action{
+			ID: dreamRevertActionPrefix + r.GitCommit, Kind: workfeed.ActionAck, Label: "되돌리기",
+		})
+	}
 	if _, err := feed.Append(workfeed.Item{
 		Source:  workfeed.SourceDream,
 		Title:   title,
 		Summary: summary,
-		// Trust Inbox (improvement-ideas.md 4.7): the dream card is settleable
-		// like every other autonomous-change card. A machine-rollback action is
-		// deliberately absent — the dreamer's change summary is prose, not a
-		// restorable snapshot; operator correction goes through the weekly
-		// memory digest feedback (4.9) or a chat turn.
-		Actions: []workfeed.Action{{ID: "dream:ack", Kind: workfeed.ActionAck, Label: "확인"}},
+		RefType: "dream-cycle",
+		RefID:   r.GitCommit,
+		Body:    strings.TrimSpace(title + "\n" + r.WikiChangeSummary),
+		Actions: actions,
 	}); err != nil {
 		s.logger.Warn("dream workfeed card append failed", "error", err)
 	}
+}
+
+// dreamRevertActionPrefix carries the cycle's git snapshot hash in the action
+// id: "dream:revert:<hash>".
+const dreamRevertActionPrefix = "dream:revert:"
+
+// handleDreamRevertCardAction reverts one whole dream cycle. An error keeps
+// the card unsettled so the operator can retry (or investigate the conflict).
+func (s *Server) handleDreamRevertCardAction(item workfeed.Item, actionID string) error {
+	if s.wikiStore == nil {
+		return errors.New("wiki store unavailable")
+	}
+	if !strings.HasPrefix(actionID, dreamRevertActionPrefix) {
+		return fmt.Errorf("unsupported dream action %q", actionID)
+	}
+	hash := strings.TrimSpace(strings.TrimPrefix(actionID, dreamRevertActionPrefix))
+	if hash == "" {
+		hash = strings.TrimSpace(item.RefID)
+	}
+	if hash == "" {
+		return errors.New("dream card carries no cycle hash")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if err := s.wikiStore.RevertDreamCycle(ctx, hash); err != nil {
+		s.logger.Warn("dream cycle revert failed", "commit", hash, "error", err)
+		return fmt.Errorf("revert dream cycle %s: %w", hash, err)
+	}
+	s.logger.Info("dream cycle reverted from feed card", "commit", hash)
+	return nil
 }

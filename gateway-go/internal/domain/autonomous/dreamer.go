@@ -55,6 +55,10 @@ type DreamReport struct {
 	WikiGraphNodes       int      `json:"wikiGraphNodes,omitempty"`
 	WikiGraphEdges       int      `json:"wikiGraphEdges,omitempty"`
 	WikiGraphClustered   bool     `json:"wikiGraphClustered,omitempty"`
+	// GitCommit is the wiki git snapshot hash capturing this cycle's result —
+	// the key for whole-cycle and selective revert (5.8). Empty when nothing
+	// changed or git is unavailable.
+	GitCommit string `json:"gitCommit,omitempty"`
 	// WikiChangeSummary is a preformatted, human-readable block describing
 	// what this cycle changed (paths, git snapshot hash, diffstat, rollback
 	// hint). Appended verbatim to the dream notification.
