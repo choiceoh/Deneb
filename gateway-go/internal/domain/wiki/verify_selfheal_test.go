@@ -183,7 +183,7 @@ func TestDetectStaleSuperseded_ArchivesPastThresholdSkipsRecentAndIdempotent(t *
 		t.Fatalf("expected an archive fix, got %+v", findings[0].Fix)
 	}
 
-	if applied := wd.applyVerifyFixes(findings); applied != 1 {
+	if applied := wd.applyVerifyFixes(findings, nil); applied != 1 {
 		t.Fatalf("applied = %d, want 1", applied)
 	}
 	got, err := store.ReadPage("업무/구식-포트정책.md")
@@ -234,7 +234,7 @@ func TestDetectStaleMailAnalyses_ArchivesPastRetentionSkipsFreshAndNonMailIdempo
 	if findings[0].Fix == nil || findings[0].Fix.Kind != "archive" {
 		t.Fatalf("expected archive fix, got %+v", findings[0].Fix)
 	}
-	if applied := wd.applyVerifyFixes(findings); applied != 1 {
+	if applied := wd.applyVerifyFixes(findings, nil); applied != 1 {
 		t.Fatalf("applied = %d, want 1", applied)
 	}
 	got := testMustRead(t, store, "프로젝트/영산고/메일분석/19e8717314b5c914.md")

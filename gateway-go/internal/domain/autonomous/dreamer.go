@@ -16,10 +16,20 @@ type Dreamer interface {
 
 // DreamReport summarizes the results of a dreaming cycle.
 type DreamReport struct {
-	FactsVerified     int `json:"factsVerified"`
-	FactsMerged       int `json:"factsMerged"`
-	FactsExpired      int `json:"factsExpired"`
-	FactsPruned       int `json:"factsPruned"`
+	// FactsVerified/FactsPruned are legacy names from the pre-WikiDreamer SQL
+	// dreamer: WikiDreamer never set them and they stay 0 (wire compatibility
+	// only). The measured fact-level counters are FactsMerged/FactsExpired
+	// (verify fixes) and FactsLearned/FactsMoved below — all fed from the
+	// per-fact audit ledger (wiki/dream_fact_ledger.go).
+	FactsVerified int `json:"factsVerified"`
+	FactsMerged   int `json:"factsMerged"`
+	FactsExpired  int `json:"factsExpired"`
+	FactsPruned   int `json:"factsPruned"`
+	// FactsLearned counts synthesis proposals that actually wrote a page this
+	// cycle (== len(appliedPaths) — guards-dropped proposals never count).
+	FactsLearned int `json:"factsLearned,omitempty"`
+	// FactsMoved counts misclassification moves auto-applied by verify.
+	FactsMoved        int `json:"factsMoved,omitempty"`
 	PatternsExtracted int `json:"patternsExtracted"`
 	// UserModelUpdated counts 사용자-category wiki pages the cycle created or
 	// updated — the agent's model of its user (preferences, working style,

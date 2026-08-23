@@ -53,7 +53,7 @@ func TestApplyVerifyFixes_MoveRelocatesPageAndUpdatesCategory(t *testing.T) {
 		Type:  "misclassified",
 		PageA: "기타/김부장.md",
 		Fix:   &verifyFix{Kind: "move", NewPath: "인물/김부장.md"},
-	}})
+	}}, nil)
 	if n != 1 {
 		t.Fatalf("applied = %d, want 1", n)
 	}
@@ -76,7 +76,7 @@ func TestApplyVerifyFixes_MergeFoldsPagePreservingBothBodies(t *testing.T) {
 		PageA: "프로젝트/a.md", // keep
 		PageB: "프로젝트/b.md", // fold
 		Fix:   &verifyFix{Kind: "merge"},
-	}})
+	}}, nil)
 	if n != 1 {
 		t.Fatalf("applied = %d, want 1", n)
 	}
@@ -117,7 +117,7 @@ func TestApplyVerifyFixes_IgnoresAdvisoryAndCapsAppliedFixCount(t *testing.T) {
 	}
 	findings = append([]verifyFinding{advisory}, findings...)
 
-	n := wd.applyVerifyFixes(findings)
+	n := wd.applyVerifyFixes(findings, nil)
 	if n != maxAutoVerifyFixes {
 		t.Fatalf("applied = %d, want %d (cap)", n, maxAutoVerifyFixes)
 	}

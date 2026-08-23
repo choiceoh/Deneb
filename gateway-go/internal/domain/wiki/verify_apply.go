@@ -29,8 +29,10 @@ const maxAutoVerifyFixes = 15
 
 // applyVerifyFixes auto-applies the high-confidence findings (those carrying a
 // Fix) and returns the count applied. Findings without a Fix are ignored here —
-// they remain in the report as advisory items.
-func (wd *WikiDreamer) applyVerifyFixes(findings []verifyFinding) int {
+// they remain in the report as advisory items. record, when non-nil, is invoked
+// for every applied fix (the caller feeds the fact ledger + DreamReport
+// counters, 5.6); it must never panic or block.
+func (wd *WikiDreamer) applyVerifyFixes(findings []verifyFinding, record func(f verifyFinding)) int {
 	applied := 0
 	for _, f := range findings {
 		if f.Fix == nil {
@@ -50,6 +52,9 @@ func (wd *WikiDreamer) applyVerifyFixes(findings []verifyFinding) int {
 			}
 			wd.logger.Info("wiki-verify: auto-moved misclassified page",
 				"from", f.PageA, "to", f.Fix.NewPath)
+			if record != nil {
+				record(f)
+			}
 			applied++
 		case "merge":
 			if err := wd.store.FoldDuplicate(f.PageA, f.PageB); err != nil {
@@ -59,6 +64,9 @@ func (wd *WikiDreamer) applyVerifyFixes(findings []verifyFinding) int {
 			}
 			wd.logger.Info("wiki-verify: auto-merged duplicate",
 				"keep", f.PageA, "fold", f.PageB)
+			if record != nil {
+				record(f)
+			}
 			applied++
 		case "archive":
 			if err := wd.store.archivePage(f.PageA); err != nil {
@@ -69,6 +77,9 @@ func (wd *WikiDreamer) applyVerifyFixes(findings []verifyFinding) int {
 			// both arrive as "archive" fixes; the old fixed message mislabeled
 			// retention archives as superseded).
 			wd.logger.Info("wiki-verify: archived page", "path", f.PageA, "detail", f.Detail)
+			if record != nil {
+				record(f)
+			}
 			applied++
 		}
 	}

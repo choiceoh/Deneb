@@ -623,6 +623,7 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate, epi
 		updated += outcome.updated
 		if outcome.wrote {
 			appliedPaths = append(appliedPaths, u.Path)
+			wd.recordDreamFact("synthesize", "learned", u.Path, "", u.Summary)
 		}
 
 		// 사용자-category writes are the user model — counted separately so the

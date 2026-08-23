@@ -101,9 +101,10 @@ func writeDreamDigestState(atMs int64) {
 // dreamDigestStats aggregates one digest window of the rollup.
 type dreamDigestStats struct {
 	Cycles           int     `json:"cycles"`
-	FactsVerified    int     `json:"factsVerified"`
+	FactsLearned     int     `json:"factsLearned"`
 	FactsMerged      int     `json:"factsMerged"`
 	FactsExpired     int     `json:"factsExpired"`
+	FactsMoved       int     `json:"factsMoved"`
 	WikiPagesCreated int     `json:"wikiPagesCreated"`
 	WikiPagesUpdated int     `json:"wikiPagesUpdated"`
 	UserModelUpdated int     `json:"userModelUpdated"`
@@ -126,9 +127,10 @@ func aggregateDreamReports(entries []dreamReportEntry, sinceMs, untilMs int64) d
 	for _, e := range entries {
 		r := e.Report
 		stats.Cycles++
-		stats.FactsVerified += r.FactsVerified
+		stats.FactsLearned += r.FactsLearned
 		stats.FactsMerged += r.FactsMerged
 		stats.FactsExpired += r.FactsExpired
+		stats.FactsMoved += r.FactsMoved
 		stats.WikiPagesCreated += r.WikiPagesCreated
 		stats.WikiPagesUpdated += r.WikiPagesUpdated
 		stats.UserModelUpdated += r.UserModelUpdated
@@ -177,7 +179,11 @@ func (s *Server) postDreamDigestCard(stats dreamDigestStats) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "지난 %d일간 백그라운드 기억 통합(드림)이 위키 장기기억을 정리했습니다.\n\n", days)
 	fmt.Fprintf(&b, "- 드림 사이클: %d회\n", stats.Cycles)
-	fmt.Fprintf(&b, "- 사실: 검증 %d · 병합 %d · 만료 %d\n", stats.FactsVerified, stats.FactsMerged, stats.FactsExpired)
+	fmt.Fprintf(&b, "- 사실: 학습 %d · 병합 %d · 만료 %d", stats.FactsLearned, stats.FactsMerged, stats.FactsExpired)
+	if stats.FactsMoved > 0 {
+		fmt.Fprintf(&b, " · 재분류 %d", stats.FactsMoved)
+	}
+	b.WriteString("\n")
 	fmt.Fprintf(&b, "- 위키: 생성 %d · 갱신 %d (사용자 모델 %d)\n", stats.WikiPagesCreated, stats.WikiPagesUpdated, stats.UserModelUpdated)
 	if stats.RecallHitPages > 0 {
 		fmt.Fprintf(&b, "- 회상 활용: %d면\n", stats.RecallHitPages)
@@ -191,7 +197,7 @@ func (s *Server) postDreamDigestCard(stats dreamDigestStats) error {
 	b.WriteString("\n학습된 기억 중 사실과 다른 것이 있으면 '틀린 기억 알리기'로 알려주세요 — 정정은 다음 검증 주기에 반영됩니다.")
 	item := workfeed.Item{
 		Source:     dreamDigestSource,
-		Title:      fmt.Sprintf("주간 기억 다이제스트: 사실 %d검증 · %d병합 · %d만료", stats.FactsVerified, stats.FactsMerged, stats.FactsExpired),
+		Title:      fmt.Sprintf("주간 기억 다이제스트: 학습 %d · 병합 %d · 만료 %d", stats.FactsLearned, stats.FactsMerged, stats.FactsExpired),
 		Summary:    fmt.Sprintf("드림 %d사이클 · 위키 %d생성 %d갱신", stats.Cycles, stats.WikiPagesCreated, stats.WikiPagesUpdated),
 		Body:       b.String(),
 		Status:     workfeed.StatusUnread,
