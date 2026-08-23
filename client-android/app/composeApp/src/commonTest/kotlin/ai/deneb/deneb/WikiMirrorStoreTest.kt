@@ -83,6 +83,23 @@ class WikiMirrorStoreTest {
         assertEquals(setOf("프로젝트", "사람"), cats.categories.map { it.name }.toSet())
     }
 
+    @Test
+    fun syntheticFactsAreNeverStoredOrServedByOfflineMirror() = runTest {
+        val s = store(MemoryMirrorFiles())
+        val fact = page("@facts/fact-123.md", body = "stale fact value")
+        val ordinary = page("프로젝트/current.md", body = "ordinary page")
+
+        assertTrue(s.replaceAll(listOf(fact, ordinary), nowMs = 1))
+        assertEquals(1, s.pageCount())
+        assertNull(s.get(fact.path))
+        assertEquals(emptyList(), s.search("stale fact"))
+
+        assertTrue(s.upsert(fact.copy(body = "new stale value")))
+        assertEquals(1, s.pageCount())
+        assertNull(s.get(fact.path))
+        assertEquals("ordinary page", s.get(ordinary.path)?.body)
+    }
+
     // Offline parity: a code-named project folder must read in Korean without the
     // network, resolved the same way the gateway resolves it — alias == 대표 title.
     @Test

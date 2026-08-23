@@ -3000,6 +3000,26 @@ class MiniappWireValueContractTest {
                     value = JsonPrimitive(-12345.6789),
                     expectation = Expectation.Exact,
                 ),
+                fieldValue(
+                    name = "resultKind",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "readOnly",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "factId",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "subjectId",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
             ),
             invalidField = "path",
             invalidValue = JsonObject(emptyMap()),

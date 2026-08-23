@@ -41,11 +41,31 @@ type Adapter interface {
 	Read(ctx context.Context, id string) (*Document, error)
 }
 
+// RecallResultGuard is an optional post-federation safety boundary. The wiki
+// fact plane implements it so corrections and tombstones also govern evidence
+// returned by other adapters (for example an older value in a source file).
+type RecallResultGuard interface {
+	FilterRecallResults(query string, results []Result) []Result
+}
+
 // Writer extends Adapter for backends that accept agent-initiated writes.
 // Only the wiki adapter implements this today.
 type Writer interface {
 	Adapter
 	Record(ctx context.Context, opts RecordOptions) (Ref, error)
+}
+
+// FactWriter is the typed current-state extension implemented by the wiki
+// backend. It keeps fact correction/history behind the same knowledge surface
+// instead of adding another agent tool.
+type FactWriter interface {
+	Adapter
+	RecordFact(ctx context.Context, opts FactRecordOptions) (FactMutationResult, error)
+	ForgetFact(ctx context.Context, opts FactForgetOptions) (FactMutationResult, error)
+	// Facts returns one key's full history when key is non-empty. With an
+	// empty key it returns active facts for subject; an empty subject defaults
+	// to self so an agent-facing query cannot accidentally enumerate others.
+	Facts(ctx context.Context, subject, key string) ([]FactView, error)
 }
 
 // RecordOptions carries the fields the wiki record path needs. Optional
@@ -67,4 +87,55 @@ type RecordOptions struct {
 	Summary string
 	// Importance 0.0–1.0 for Tier1 surfacing.
 	Importance float64
+}
+
+type FactRecordOptions struct {
+	Subject   string
+	Key       string
+	Value     string
+	Kind      string
+	Authority string
+	Sources   []string
+	BasisAt   string
+	Actor     string
+	Reason    string
+}
+
+type FactForgetOptions struct {
+	Subject   string
+	Key       string
+	Authority string
+	Sources   []string
+	Actor     string
+	Reason    string
+}
+
+type FactMutationResult struct {
+	Revision        uint64
+	ClaimID         string
+	Status          string
+	Resolution      string
+	Committed       bool
+	ProjectionError string
+}
+
+// FactMutationObserver runs synchronously after a canonical fact assertion or
+// tombstone commits. Runtime wiring uses it to invalidate session-frozen
+// context and retrieval caches before the mutating tool call returns.
+type FactMutationObserver func(FactMutationResult)
+
+type FactView struct {
+	ID           string   `json:"id"`
+	Subject      string   `json:"subject"`
+	Key          string   `json:"key"`
+	Value        string   `json:"value"`
+	Kind         string   `json:"kind"`
+	Authority    string   `json:"authority"`
+	Status       string   `json:"status"`
+	Sources      []string `json:"sources,omitempty"`
+	Actor        string   `json:"actor,omitempty"`
+	Reason       string   `json:"reason,omitempty"`
+	RecordedAtMs int64    `json:"recordedAtMs"`
+	BasisAtMs    int64    `json:"basisAtMs,omitempty"`
+	Revision     uint64   `json:"revision"`
 }

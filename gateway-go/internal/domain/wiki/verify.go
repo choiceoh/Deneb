@@ -145,7 +145,7 @@ func (wd *WikiDreamer) detectUnrecalled() []verifyFinding {
 			continue
 		}
 		page, err := wd.store.ReadPage(rp)
-		if err != nil || page == nil || page.Meta.Archived || page.Meta.SupersededBy != "" {
+		if err != nil || page == nil || page.Meta.Archived || IsEffectivelySuperseded(rp, page.Meta) {
 			continue
 		}
 		if page.Meta.Importance >= unrecalledImportanceCeil {

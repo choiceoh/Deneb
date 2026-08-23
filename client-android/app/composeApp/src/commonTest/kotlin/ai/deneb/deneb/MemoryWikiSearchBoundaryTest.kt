@@ -17,6 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -315,6 +316,138 @@ class MemoryWikiSearchBoundaryTest {
         assertEquals("일기", result?.diary?.single()?.title)
         assertEquals("a@example.com", result?.people?.single()?.name)
         assertEquals(4, result?.people?.single()?.messageCount)
+    }
+
+    @Test
+    fun unifiedSearchPreservesFactIdentityAndDropsCandidateTimeValue() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc(
+            json.encodeToString(
+                SearchAllResult(
+                    wiki = listOf(
+                        SearchWikiHit(
+                            path = "@facts/fact-123.md",
+                            snippet = "교정 전 값이 남을 수 있는 검색 스니펫",
+                            resultKind = "fact",
+                            readOnly = true,
+                            factId = "fact-123",
+                            subjectId = "project:alpha",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val hit = assertNotNull(f.client.searchAll("alpha")?.wiki?.single())
+
+        assertEquals("project:alpha", hit.title)
+        assertEquals("", hit.snippet)
+        assertEquals("fact", hit.resultKind)
+        assertTrue(hit.readOnly)
+        assertEquals("fact-123", hit.factId)
+        assertEquals("project:alpha", hit.subjectId)
+        assertTrue(hit.isCurrentFactHit())
+    }
+
+    @Test
+    fun currentFactReadAlwaysHitsGatewayAndNeverUsesWikiSectionCache() = runTest {
+        val f = gatewayClientFixture()
+        val ref = "@facts/fact-123.md"
+        val poisonedCache = WikiPage(
+            path = ref,
+            title = "stale cache",
+            summary = "",
+            category = "fact-plane",
+            tags = emptyList(),
+            updated = "",
+            body = "stale",
+        )
+        f.client.sectionCaches.wikiPages.getOrLoad(ref) { poisonedCache }
+        f.transport.enqueueRpc(json.encodeToString(WikiPagePayload(path = ref, title = "Current one", body = "first")))
+        f.transport.enqueueRpc(json.encodeToString(WikiPagePayload(path = ref, title = "Current two", body = "second")))
+
+        val first = f.client.fetchCurrentFactPage(ref)
+        val second = f.client.fetchCurrentFactPage(ref)
+
+        assertEquals("first", first?.body)
+        assertEquals("second", second?.body)
+        assertEquals("stale", f.client.sectionCaches.wikiPages.peek(ref)?.body)
+        assertEquals(listOf("miniapp.memory.get_page", "miniapp.memory.get_page"), f.transport.requestMethods())
+        assertTrue(f.transport.requests.all { it.rpcParams?.get("path")?.jsonPrimitive?.content == ref })
+    }
+
+    @Test
+    fun pathOnlyBackslashFactHitUsesCanonicalUncachedReference() = runTest {
+        val f = gatewayClientFixture()
+        val hit = SearchHit(
+            path = "@facts\\fact-123.md",
+            title = "Current fact",
+            snippet = "",
+            category = "fact-plane",
+        )
+        val canonicalRef = "@facts/fact-123.md"
+        f.transport.enqueueRpc(
+            json.encodeToString(WikiPagePayload(path = canonicalRef, title = "Current fact", body = "current")),
+        )
+
+        assertTrue(hit.isCurrentFactHit())
+        assertEquals("current", f.client.fetchCurrentFactPage(hit.path)?.body)
+        assertEquals(canonicalRef, f.transport.requests.single().rpcParams?.get("path")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun currentFactReadFailsClosedForOldOrMalformedReferenceWithoutMirrorFallback() = runTest {
+        val f = gatewayClientFixture()
+        val oldRef = "@facts/fact-old.md"
+        val staleMirrorPage = WikiPage(
+            path = oldRef,
+            title = "stale mirror",
+            summary = "",
+            category = "fact-plane",
+            tags = emptyList(),
+            updated = "",
+            body = "forgotten value",
+        )
+        assertTrue(f.client.wikiMirror.replaceAll(listOf(staleMirrorPage), nowMs = 1))
+        assertNull(f.client.wikiMirror.get(oldRef))
+        // Even a successful envelope must match the exact immutable ref. A
+        // replacement claim cannot be silently substituted for the old one.
+        f.transport.enqueueRpc(
+            json.encodeToString(WikiPagePayload(path = "@facts/fact-new.md", body = "replacement")),
+        )
+
+        assertNull(f.client.fetchCurrentFactPage(oldRef))
+        assertNull(f.client.fetchCurrentFactPage("wiki/ordinary.md"))
+        assertEquals(1, f.transport.requests.size)
+    }
+
+    @Test
+    fun syntheticFactRefsCannotEnterEditableWikiRpcSurface() = runTest {
+        val f = gatewayClientFixture()
+        for (ref in listOf("@facts/fact-123.md", "사용자\\현행-사실.md")) {
+            assertNull(f.client.fetchWikiPage(ref))
+            assertFalse(f.client.saveWikiPage(ref, "overwrite"))
+            assertFalse(f.client.deleteCategoryPages(listOf(ref)))
+            assertFalse(f.client.moveWikiPage(ref, "wiki/ordinary.md"))
+            assertFalse(f.client.moveWikiPage("wiki/ordinary.md", ref))
+        }
+        assertNull(f.client.createWikiPage("Fact", "@facts", "body"))
+        assertTrue(f.transport.requests.isEmpty())
+    }
+
+    @Test
+    fun generatedCurrentFactsProfileIsExcludedFromEditableListings() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc(
+            pagesPayload(
+                page("사용자/현행-사실.md", title = "현행 사실"),
+                page("사용자/프로필.md", title = "프로필"),
+            ),
+        )
+
+        val result = f.client.fetchCategoryPages("사용자").orEmpty()
+
+        assertEquals(listOf("사용자/프로필.md"), result.map { it.path })
     }
 
     @Test

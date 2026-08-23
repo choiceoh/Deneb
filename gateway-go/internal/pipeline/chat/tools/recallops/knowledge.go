@@ -13,12 +13,21 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
+const (
+	knowledgeFactsDefaultLimit = 10
+	knowledgeFactsMaxLimit     = 50
+)
+
 // ToolKnowledge wraps the knowledge.Router as a single agent-facing tool over
-// the wiki knowledge base. Three ops:
+// the wiki knowledge base. Six ops:
 //
-//	recall  — federated search across all read backends, merged by score
-//	read    — fetch one document by its layered ref ("w:...")
-//	record  — write a wiki page (the only writable backend)
+//	recall      — federated search across all read backends, merged by score
+//	read        — fetch one document by its layered ref ("w:...")
+//	record      — write a wiki page (the only writable backend)
+//	assert_fact — append a typed claim and resolve its current-state status
+//	forget_fact — append a tombstone while preserving history
+//	facts       — read active facts or one key's history
+
 func ToolKnowledge(router *knowledge.Router) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -44,6 +53,16 @@ func ToolKnowledge(router *knowledge.Router) toolport.ToolFunc {
 			Related    []string `json:"related"`
 			Supersedes []string `json:"supersedes"`
 			Importance float64  `json:"importance"`
+
+			// assert_fact / forget_fact / facts
+			Subject    string   `json:"subject"`
+			FactKey    string   `json:"fact_key"`
+			Value      string   `json:"value"`
+			FactKind   string   `json:"fact_kind"`
+			Authority  string   `json:"authority"`
+			SourceRefs []string `json:"source_refs"`
+			BasisAt    string   `json:"basis_at"`
+			Reason     string   `json:"reason"`
 		}
 		if err := jsonutil.UnmarshalInto("knowledge params", input, &p); err != nil {
 			return "", err
@@ -81,10 +100,152 @@ func ToolKnowledge(router *knowledge.Router) toolport.ToolFunc {
 				Supersedes: p.Supersedes,
 				Importance: p.Importance,
 			})
+		case "assert_fact":
+			return knowledgeAssertFact(ctx, router, knowledge.FactRecordOptions{
+				Subject: p.Subject, Key: p.FactKey, Value: p.Value,
+				Kind: p.FactKind, Authority: p.Authority,
+				Sources: p.SourceRefs, BasisAt: p.BasisAt, Reason: p.Reason,
+			})
+		case "forget_fact":
+			return knowledgeForgetFact(ctx, router, knowledge.FactForgetOptions{
+				Subject: p.Subject, Key: p.FactKey, Authority: p.Authority,
+				Sources: p.SourceRefs, Reason: p.Reason,
+			})
+		case "facts":
+			return knowledgeFacts(ctx, router, p.Subject, p.FactKey, p.Limit)
 		default:
-			return "", fmt.Errorf("unknown knowledge op %q (expected recall|read|record)", op)
+			return "", fmt.Errorf("unknown knowledge op %q (expected recall|read|record|assert_fact|forget_fact|facts)", op)
 		}
 	}
+}
+
+func knowledgeAssertFact(ctx context.Context, router *knowledge.Router, opts knowledge.FactRecordOptions) (string, error) {
+	if strings.TrimSpace(opts.Key) == "" || strings.TrimSpace(opts.Value) == "" {
+		return "", fmt.Errorf("fact_key and value are required for knowledge(op=\"assert_fact\")")
+	}
+	if err := validateToolFactAssertion(opts); err != nil {
+		return "", err
+	}
+	result, err := router.RecordFact(ctx, opts)
+	if err != nil {
+		return "", err
+	}
+	if !result.Committed {
+		return "", fmt.Errorf("fact assertion was not committed (resolution=%s)", result.Resolution)
+	}
+	prefix := "사실 mutation 커밋됨"
+	switch result.Status {
+	case "current":
+		prefix = "현행 사실 반영됨"
+	case "conflicted":
+		prefix = "상충하는 사실로 기록됨"
+	case "superseded":
+		prefix = "사실 주장은 이력에 기록됐지만 현행 사실은 변경되지 않음"
+	}
+	message := fmt.Sprintf("%s: revision=%d status=%s resolution=%s claim=%s", prefix,
+		result.Revision, result.Status, result.Resolution, result.ClaimID)
+	if result.ProjectionError != "" {
+		message += "\n⚠ 정본은 커밋됐지만 호환 projection 갱신이 지연됨: " + result.ProjectionError
+	}
+	return message, nil
+}
+
+func knowledgeForgetFact(ctx context.Context, router *knowledge.Router, opts knowledge.FactForgetOptions) (string, error) {
+	if strings.TrimSpace(opts.Key) == "" {
+		return "", fmt.Errorf("fact_key is required for knowledge(op=\"forget_fact\")")
+	}
+	if err := validateToolFactEvidence(opts.Authority, opts.Sources); err != nil {
+		return "", err
+	}
+	result, err := router.ForgetFact(ctx, opts)
+	if err != nil {
+		return "", err
+	}
+	if !result.Committed {
+		return "", fmt.Errorf("fact tombstone was not committed (resolution=%s)", result.Resolution)
+	}
+	prefix := "사실을 소프트 삭제함"
+	switch {
+	case result.Status == "superseded":
+		prefix = "삭제 요청은 감사 이력에 기록됐지만 더 높은 권위의 현행 사실은 유지됨"
+	case result.Resolution == "already_absent":
+		prefix = "활성 사실은 없었으며 tombstone 장벽을 기록함"
+	}
+	message := fmt.Sprintf("%s: revision=%d resolution=%s tombstone=%s", prefix,
+		result.Revision, result.Resolution, result.ClaimID)
+	if result.ProjectionError != "" {
+		message += "\n⚠ 정본은 커밋됐지만 호환 projection 갱신이 지연됨: " + result.ProjectionError
+	}
+	return message, nil
+}
+
+func validateToolFactAuthority(authority string) error {
+	if strings.EqualFold(strings.TrimSpace(authority), "direct_user") {
+		return fmt.Errorf("authority=direct_user is reserved for trusted direct-message induction and is not accepted by the knowledge tool")
+	}
+	return nil
+}
+
+func validateToolFactAssertion(opts knowledge.FactRecordOptions) error {
+	if err := validateToolFactEvidence(opts.Authority, opts.Sources); err != nil {
+		return err
+	}
+	authority := strings.ToLower(strings.TrimSpace(opts.Authority))
+	kind := strings.ToLower(strings.TrimSpace(opts.Kind))
+	if authority == "primary_document" && (kind == "amount" || kind == "deadline" || kind == "contract") && strings.TrimSpace(opts.BasisAt) == "" {
+		return fmt.Errorf("basis_at is required for primary_document %s facts", kind)
+	}
+	return nil
+}
+
+func validateToolFactEvidence(authorityRaw string, sources []string) error {
+	if err := validateToolFactAuthority(authorityRaw); err != nil {
+		return err
+	}
+	authority := strings.ToLower(strings.TrimSpace(authorityRaw))
+	if authority == "primary_document" || authority == "runtime_observation" {
+		hasSource := false
+		for _, source := range sources {
+			if strings.TrimSpace(source) != "" {
+				hasSource = true
+				break
+			}
+		}
+		if !hasSource {
+			return fmt.Errorf("source_refs is required for authority=%s", authority)
+		}
+	}
+	return nil
+}
+
+func knowledgeFacts(ctx context.Context, router *knowledge.Router, subject, key string, limit int) (string, error) {
+	facts, err := router.Facts(ctx, subject, key)
+	if err != nil {
+		return "", err
+	}
+	if len(facts) == 0 {
+		return "현행/이력 사실 없음.", nil
+	}
+	if limit <= 0 {
+		limit = knowledgeFactsDefaultLimit
+	} else if limit > knowledgeFactsMaxLimit {
+		limit = knowledgeFactsMaxLimit
+	}
+	if len(facts) > limit {
+		if strings.TrimSpace(key) != "" {
+			// One-key history is revision-ordered oldest-first. Keep the latest
+			// bounded tail while the canonical ledger retains every revision.
+			facts = facts[len(facts)-limit:]
+		} else {
+			// Active facts are newest-first, so keep the bounded head.
+			facts = facts[:limit]
+		}
+	}
+	raw, err := json.MarshalIndent(facts, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
 }
 
 func knowledgeRecall(ctx context.Context, router *knowledge.Router, query string, limit int, options knowledge.RecallOptions) (string, error) {

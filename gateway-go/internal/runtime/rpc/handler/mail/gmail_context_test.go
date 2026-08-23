@@ -76,6 +76,32 @@ func TestSenderContextReturnsRecentMailAndWikiHits(t *testing.T) {
 	}
 }
 
+func TestSenderWikiHitsSkipsSyntheticFactResults(t *testing.T) {
+	store := &fakeMemoryStore{
+		searchFn: func(_ context.Context, _ string, _ int) ([]wiki.SearchResult, error) {
+			return []wiki.SearchResult{
+				{Path: "@facts/fact-123.md", FactID: "fact-123", SubjectID: "person:alice"},
+				{Path: "people/alice.md"},
+			}, nil
+		},
+		readPageFn: func(path string) (*wiki.Page, error) {
+			if path != "people/alice.md" {
+				t.Fatalf("ReadPage called for synthetic fact path %q", path)
+			}
+			return &wiki.Page{Meta: wiki.Frontmatter{Title: "Alice"}}, nil
+		},
+	}
+	rows, ok := senderWikiHits(context.Background(), func() (MemorySearcher, error) { return store, nil }, "Alice", "", 5, func(notice string) {
+		t.Fatalf("unexpected notice: %s", notice)
+	})
+	if !ok || len(rows) != 1 || rows[0].Path != "people/alice.md" {
+		t.Fatalf("rows = %+v, ok = %v", rows, ok)
+	}
+	if len(store.seenQueryOptions) != 1 || !store.seenQueryOptions[0].ExcludeFactResults {
+		t.Fatalf("wiki search options = %+v, want page-only", store.seenQueryOptions)
+	}
+}
+
 func TestSenderContextFallsBackToRawEmailForWikiQueryWhenNoDisplayName(t *testing.T) {
 	var seenGmailQuery string
 	var seenWikiQuery string

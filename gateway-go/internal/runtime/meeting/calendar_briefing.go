@@ -87,6 +87,10 @@ const (
 
 	// briefTopicMailCap limits topic-related recent mail subjects shown.
 	briefTopicMailCap = 3
+
+	// Shared wiki search can rank immutable fact evidence ahead of pages. The
+	// briefing is page-only, so inspect a small bounded window for the best page.
+	briefWikiSearchCandidates = 5
 )
 
 // errBriefingUndelivered is returned by sendBriefing when the native relay
@@ -632,9 +636,14 @@ func briefTopicQuery(summary string) string {
 	return s
 }
 
-// wikiTopNote returns a one-line "Title — Summary" for the best wiki hit on
-// query, or "" when the store is unavailable / nothing matches. The store is
-// resolved lazily so a nil (not-yet-initialized) store is a clean skip.
+type briefingWikiStore interface {
+	SearchWithOptions(ctx context.Context, query string, limit int, options wiki.QueryOptions) (wiki.SearchReport, error)
+	ReadPage(relPath string) (*wiki.Page, error)
+}
+
+// wikiTopNote returns a one-line "Title — Summary" for the best wiki page hit
+// on query, or "" when the store is unavailable / nothing matches. The store
+// is resolved lazily so a nil (not-yet-initialized) store is a clean skip.
 func wikiTopNote(ctx context.Context, getStore func() *wiki.Store, query string) string {
 	query = strings.TrimSpace(query)
 	if getStore == nil || query == "" {
@@ -644,24 +653,34 @@ func wikiTopNote(ctx context.Context, getStore func() *wiki.Store, query string)
 	if st == nil {
 		return ""
 	}
-	hits, err := st.Search(ctx, query, 1)
-	if err != nil || len(hits) == 0 {
+	return wikiTopPageNote(ctx, st, query)
+}
+
+func wikiTopPageNote(ctx context.Context, st briefingWikiStore, query string) string {
+	report, err := st.SearchWithOptions(ctx, query, briefWikiSearchCandidates, wiki.QueryOptions{ExcludeFactResults: true})
+	if err != nil || len(report.Results) == 0 {
 		return ""
 	}
-	page, err := st.ReadPage(hits[0].Path)
-	if err != nil || page == nil {
-		return ""
+	for _, hit := range report.Results {
+		if hit.FactID != "" || hit.Path == "" {
+			continue
+		}
+		page, readErr := st.ReadPage(hit.Path)
+		if readErr != nil || page == nil {
+			continue
+		}
+		title := strings.TrimSpace(page.Meta.Title)
+		summary := strings.TrimSpace(page.Meta.Summary)
+		switch {
+		case title != "" && summary != "":
+			return title + " — " + summary
+		case title != "":
+			return title
+		case summary != "":
+			return summary
+		}
 	}
-	title := strings.TrimSpace(page.Meta.Title)
-	summary := strings.TrimSpace(page.Meta.Summary)
-	switch {
-	case title != "" && summary != "":
-		return title + " — " + summary
-	case title != "":
-		return title
-	default:
-		return summary
-	}
+	return ""
 }
 
 // alreadySent / markSent / prune guard the dedup map.

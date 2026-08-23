@@ -132,6 +132,13 @@ func ClearSessionSnapshot(sessionKey string) {
 	Cache.ClearSession(sessionKey)
 }
 
+// ClearAllContextSnapshots applies a shared context-file update (notably the
+// generated MEMORY.md/USER.md fact projections) to every session on its next
+// turn.
+func ClearAllContextSnapshots() {
+	Cache.ClearAllContextSnapshots()
+}
+
 // contextLoadState accumulates results across the per-filename scans of
 // loadContextFilesFromDisk.
 type contextLoadState struct {

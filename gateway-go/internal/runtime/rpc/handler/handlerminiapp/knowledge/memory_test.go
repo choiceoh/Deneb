@@ -165,6 +165,37 @@ func TestMemorySearchReturnsEnrichedMatches(t *testing.T) {
 	}
 }
 
+func TestMemorySearchReturnsFactIdentityAsReadOnlyWithoutPageLookup(t *testing.T) {
+	store := &fakeMemoryStore{
+		searchFn: func(_ context.Context, _ string, _ int) ([]wiki.SearchResult, error) {
+			return []wiki.SearchResult{{
+				Path:      "@facts/fact-123.md",
+				Content:   "project:alpha owner is B",
+				Score:     0.97,
+				FactID:    "fact-123",
+				SubjectID: "project:alpha",
+			}}, nil
+		},
+		readPageFn: func(path string) (*wiki.Page, error) {
+			t.Fatalf("ReadPage called for fact hit %q", path)
+			return nil, nil
+		},
+	}
+	resp := memorySearch(memoryDepsFor(store))(authedCtx(), reqWith(t, "miniapp.memory.search", map[string]any{"query": "alpha"}))
+
+	var got struct {
+		Results []MemorySearchHit `json:"results"`
+	}
+	decode(t, resp, &got)
+	if len(got.Results) != 1 {
+		t.Fatalf("results = %+v", got.Results)
+	}
+	hit := got.Results[0]
+	if hit.ResultKind != "fact" || !hit.ReadOnly || hit.FactID != "fact-123" || hit.SubjectID != "project:alpha" {
+		t.Fatalf("fact identity = %+v", hit)
+	}
+}
+
 func TestMemorySearchReturnsExplicitDiagnosticsAndIntentExplanation(t *testing.T) {
 	store := &fakeMemoryStore{
 		querySearchFn: func(_ context.Context, q string, n int, options wiki.QueryOptions) (wiki.SearchReport, error) {

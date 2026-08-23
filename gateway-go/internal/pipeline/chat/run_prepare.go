@@ -48,6 +48,7 @@ func prepareContextAndPrompt(
 	var result prepResult
 	var resultMu sync.Mutex
 	var prepWg sync.WaitGroup
+	promptSnapshotGeneration := currentPromptSnapshotGeneration()
 
 	// Tier-1 wiki auto-injection (parallel). Frozen per session (tier1_cache.go):
 	// FormatTier1 reads the live store, and mid-session wiki writes would
@@ -105,7 +106,7 @@ func prepareContextAndPrompt(
 	// common path costs only a lock + map lookup. Reads after Wait() are safe:
 	// the WaitGroup is a barrier, so the goroutines' writes are visible here.
 	// See prompt_snapshot_persist.go.
-	recordPromptSnapshot(params.SessionKey, result.Tier1Wiki, result.ContextFiles, result.TopicKnowledge)
+	recordPromptSnapshot(params.SessionKey, result.Tier1Wiki, result.ContextFiles, result.TopicKnowledge, promptSnapshotGeneration)
 
 	return result
 }
@@ -122,11 +123,12 @@ func buildTier1WikiSnapshot(params RunParams, deps runDeps) string {
 	// memory on top of a deliberately lean caller prompt (review-sweep
 	// finding on #3103: the mini review prompt still carried tier-1 wiki).
 	if deps.memory.Wiki != nil && params.System == "" {
-		if cached, ok := cachedTier1Wiki(params.SessionKey); ok {
+		cached, ok, generation := cachedTier1WikiWithGeneration(params.SessionKey)
+		if ok {
 			tier1 = cached
 		} else {
 			tier1 = tooldeps.FormatWikiTier1(deps.memory.Wiki)
-			storeTier1Wiki(params.SessionKey, tier1)
+			storeTier1WikiIfGeneration(params.SessionKey, tier1, generation)
 		}
 	}
 	return tier1
@@ -156,12 +158,21 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, lo
 	}
 	fingerprint := chatrecall.CueFingerprint(params.Message)
 	hasCue := fingerprint != ""
+	// A rewritten elliptical turn depends on the immediately preceding user
+	// message. The raw cue alone is not a safe cache key: repeating "그거 뭐였지?"
+	// after Alpha then Beta must not reuse Alpha's fact snapshot in Beta context.
+	cacheableCue := hasCue && !chatrecall.NeedsContextRewrite(params.Message)
+	var recallCacheGeneration uint64
 	// Hermes-style auto_recall: run the preflight every turn, not just cue turns.
 	// recall.Build searches wiki/diary/polaris/transcript and returns
 	// "" silently when there's no evidence, so non-cue turns add latency but no noise.
 	if hasCue && !deps.briefcaseMode {
-		if cached, ok := chatrecall.CachedSnapshot(params.SessionKey, fingerprint); ok {
-			return cached
+		if cacheableCue {
+			cached, ok, generation := chatrecall.CachedSnapshotWithGeneration(params.SessionKey, fingerprint)
+			recallCacheGeneration = generation
+			if ok {
+				return cached
+			}
 		}
 		// Explicit recall: surface the recalling phase so the user sees the
 		// wiki/diary/transcript search. Silent auto-recall on no-cue turns
@@ -187,8 +198,8 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, lo
 		},
 		logger,
 	)
-	if !deps.briefcaseMode && chatrecall.ShouldFreeze(hasCue, recallTruncated, recallMemory) {
-		chatrecall.StoreSnapshot(params.SessionKey, fingerprint, recallMemory)
+	if !deps.briefcaseMode && cacheableCue && chatrecall.ShouldFreeze(hasCue, recallTruncated, recallMemory) {
+		chatrecall.StoreSnapshotIfGeneration(params.SessionKey, fingerprint, recallMemory, recallCacheGeneration)
 	}
 	return recallMemory
 }

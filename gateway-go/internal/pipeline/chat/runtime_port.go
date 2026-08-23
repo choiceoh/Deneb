@@ -42,6 +42,19 @@ func (h *Handler) BeginDrain(ctx context.Context) error {
 	}
 }
 
+// FatalDrain is the fail-stop counterpart to BeginDrain. It closes admission,
+// cancels every active/continuation run with cause, and makes the drain complete
+// immediately so process teardown never waits for unsafe work to finish.
+func (h *Handler) FatalDrain(cause error) {
+	if h == nil || h.abort == nil {
+		return
+	}
+	h.abort.FatalDrain(cause)
+	if h.pending != nil {
+		h.pending.Reset()
+	}
+}
+
 // RunSync executes the runtime-safe chatport request through the richer chat
 // implementation API.
 func (h *Handler) RunSync(ctx context.Context, req chatport.SyncRequest) (*chatport.SyncResult, error) {

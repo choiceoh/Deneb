@@ -415,9 +415,9 @@ func TestReclassifyTarget_AmbiguityBlocksTheDomainFallback(t *testing.T) {
 	}
 }
 
-// TestReclassifyUnlinkedMailAnalyses_SkipsRetiredPages: an archived or
-// superseded mail is already out of the working set — re-filing it re-dates it
-// and re-proposes it every cycle (the observe loop's 584-line repeat).
+// TestReclassifyUnlinkedMailAnalyses_SkipsRetiredPages: an archived mail is
+// already out of the working set — re-filing it re-dates it and re-proposes it
+// every cycle (the observe loop's 584-line repeat).
 func TestReclassifyUnlinkedMailAnalyses_SkipsRetiredPages(t *testing.T) {
 	store := newReclassifyStore(t)
 	writeUnlinkedMail(t, store, "retired1", "견적 회신", []string{"프로젝트/기아-화성/대표.md"})
@@ -435,5 +435,27 @@ func TestReclassifyUnlinkedMailAnalyses_SkipsRetiredPages(t *testing.T) {
 	}
 	if p, _ := store.ReadPage(rel); p == nil {
 		t.Error("retired mail left the bucket")
+	}
+}
+
+func TestReclassifyUnlinkedMailAnalysesIgnoresInvalidLegacySupersession(t *testing.T) {
+	store := newReclassifyStore(t)
+	writeUnlinkedMail(t, store, "legacy-bad-flag", "견적 회신", []string{"프로젝트/기아-화성/대표.md"})
+	rel := "프로젝트/메일분석/legacy-bad-flag.md"
+	if err := store.UpdatePage(rel, func(cur *Page) (*Page, error) {
+		// MarkSuperseded now refuses this relationship, but old data can still
+		// carry it. Mail analysis is raw evidence, never a valid old version.
+		cur.Meta.SupersededBy = "프로젝트/기아-화성/대표.md"
+		return cur, nil
+	}); err != nil {
+		t.Fatalf("seed legacy flag: %v", err)
+	}
+
+	moved, proposals := store.ReclassifyUnlinkedMailAnalyses(time.Now(), 10)
+	if len(moved) != 1 || len(proposals) != 0 {
+		t.Fatalf("invalid legacy flag suppressed W6 refile: moved=%+v proposals=%+v", moved, proposals)
+	}
+	if _, err := store.ReadPage(MailAnalysisPagePath("기아-화성", "legacy-bad-flag")); err != nil {
+		t.Fatalf("legacy-flagged mail was not refiled: %v", err)
 	}
 }

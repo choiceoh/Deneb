@@ -329,7 +329,8 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 	// against the full index anyway.
 	now := time.Now()
 	index := wd.store.SnapshotIndex()
-	indexContent := index.RenderSynthesisSubset(selectSynthesisIndexEntries(index.Entries, wd.recalledAnchorSet(now), now))
+	ordinaryEntries := wd.currentOrdinaryIndexEntries(index.Entries)
+	indexContent := index.RenderSynthesisSubset(selectSynthesisIndexEntries(ordinaryEntries, wd.recalledAnchorSet(now), now))
 	processedHistory := formatProcessedDiaryCapsules(state.Recent)
 
 	polarisSection := ""
@@ -534,7 +535,7 @@ func (wd *WikiDreamer) rankedRecallAnchors(now time.Time) []recallAnchor {
 			break
 		}
 		page, err := wd.store.ReadPage(a.path)
-		if err != nil || page == nil || page.Meta.Archived {
+		if err != nil || !isCurrentOrdinaryPage(a.path, page) {
 			continue // recalled path since deleted/archived — skip
 		}
 		title := page.Meta.Title
@@ -739,6 +740,14 @@ func (wd *WikiDreamer) prepareDreamUpdate(u wikiUpdate) (wikiUpdate, bool) {
 	// append-merge path (prompts are advisory, this is the enforcement).
 	if u.Path == ThemePagePath {
 		wd.logger.Warn("wiki-dream: skipped themes ledger page (system-maintained)",
+			"path", u.Path, "title", u.Title)
+		return u, false
+	}
+	// This page is a projection of the append-only fact journal. Letting model
+	// synthesis append or overwrite it would create a second, unaudited writer
+	// and could reintroduce a superseded value until the next projection repair.
+	if u.Path == factProfilePagePath {
+		wd.logger.Warn("wiki-dream: skipped current-facts page (fact-plane maintained)",
 			"path", u.Path, "title", u.Title)
 		return u, false
 	}

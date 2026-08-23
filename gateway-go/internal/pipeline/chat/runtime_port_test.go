@@ -53,6 +53,48 @@ func TestBeginDrainMarksHandlerUnreadyAndRejectsNewSyncRuns(t *testing.T) {
 	}
 }
 
+func TestFatalDrainCancelsActiveRunAndCompletesWithoutCleanup(t *testing.T) {
+	h := &Handler{
+		abort:       NewAbortTracker(),
+		pending:     NewPendingQueue(),
+		mergeWindow: NewMergeWindowTracker(),
+	}
+	t.Cleanup(h.abort.Close)
+
+	runCtx, cancel := context.WithCancelCause(context.Background())
+	entry := &runstate.AbortEntry{
+		SessionKey: "client:main",
+		ClientRun:  "run-fatal",
+		CancelFn:   cancel,
+		ExpiresAt:  time.Now().Add(time.Hour),
+	}
+	if !h.abort.TryRegister(entry.ClientRun, entry) {
+		t.Fatal("active run was not registered")
+	}
+	h.pending.Enqueue("client:main", RunParams{SessionKey: "client:main", Message: "queued"})
+
+	fatalErr := errors.New("ambiguous fact journal")
+	h.FatalDrain(fatalErr)
+
+	if h.ChatReady() {
+		t.Fatal("fatal-draining handler still reported ready")
+	}
+	if !errors.Is(context.Cause(runCtx), fatalErr) {
+		t.Fatalf("active run cause=%v, want %v", context.Cause(runCtx), fatalErr)
+	}
+	if h.pending.Len("client:main") != 0 {
+		t.Fatal("fatal drain retained a queued continuation")
+	}
+	drainCtx, drainCancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer drainCancel()
+	if err := h.BeginDrain(drainCtx); err != nil {
+		t.Fatalf("fatal drain waited for normal run cleanup: %v", err)
+	}
+	if h.abort.RegisterContinuation("late", entry) {
+		t.Fatal("fatal drain admitted a late continuation")
+	}
+}
+
 func TestStartOrQueueRunEnqueuesDuringDrainWhenParentStillActive(t *testing.T) {
 	h := &Handler{
 		abort:       NewAbortTracker(),

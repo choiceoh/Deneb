@@ -136,7 +136,7 @@ func TestRunCLIPreservesScoringAndSearchErrorPolicy(t *testing.T) {
 		t.Fatalf("exit=%d stderr=%q", code, stderr.String())
 	}
 	for _, want := range []string{
-		"== recall-bench  fusion=rrf(default)  graph_boost=false  semantic=false  K=2  cases=5\n",
+		"== recall-bench  plane=pages  fusion=rrf(default)  graph_boost=false  semantic=false  K=2  cases=5\n",
 		"gold=[projects/wanted.md]  got=[projects/wrong-a.md projects/wrong-b.md projects/wrong-c.md]",
 		"recall-bench: 1 search error(s) excluded from the metric\n",
 		"RECALL_BENCH hit@1=1 hit@2=2 total=3 p@1=33.3% r@2=66.7% mrr=0.500 fusion=rrf(default)\n",
@@ -150,6 +150,14 @@ func TestRunCLIPreservesScoringAndSearchErrorPolicy(t *testing.T) {
 	}
 	if embedder.healthChecks != 41 {
 		t.Fatalf("embedding health checks = %d, want 41", embedder.healthChecks)
+	}
+	if len(store.optionCalls) != 4 {
+		t.Fatalf("search calls = %d, want four scored/error cases", len(store.optionCalls))
+	}
+	for _, options := range store.optionCalls {
+		if !options.ExcludeFactResults {
+			t.Fatalf("default benchmark search used all-plane options: %+v", options)
+		}
 	}
 }
 
@@ -179,9 +187,107 @@ func TestRunCLIMatrixComparesAllRetrievalStagesWithLatency(t *testing.T) {
 		t.Fatalf("mode calls = %v, want %v", store.optionCalls, wantCalls)
 	}
 	for i := range wantCalls {
-		if store.optionCalls[i] != wantCalls[i] {
+		if store.optionCalls[i].Mode != wantCalls[i] || !store.optionCalls[i].ExcludeFactResults {
 			t.Fatalf("mode calls = %v, want %v", store.optionCalls, wantCalls)
 		}
+	}
+}
+
+func TestRunCLIWarnsWhenPagePlaneExcludesJournalFacts(t *testing.T) {
+	store := &fakeBenchmarkStore{
+		factRevision: 7,
+		results: map[string][]wiki.SearchResult{
+			"alpha": {{Path: "projects/alpha.md"}},
+		},
+	}
+	deps := successfulRunDependencies(store, &fakeBenchmarkEmbedder{}, []goldCase{{
+		ID: "one", Question: "alpha", GoldPaths: []string{"projects/alpha.md"},
+	}})
+
+	var stdout, stderr bytes.Buffer
+	code := runCLI("recall-bench", []string{"--wiki", "wiki-copy"}, &stdout, &stderr, deps)
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%q", code, stderr.String())
+	}
+	if strings.Count(stderr.String(), "fact journal revision=7 detected; plane=pages excludes synthetic fact hits") != 1 {
+		t.Fatalf("journal plane warning missing or duplicated: %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), bm25DegradedWarning) {
+		t.Fatalf("BM25 warning missing: %q", stderr.String())
+	}
+}
+
+func TestBenchmarkPagePlaneCannotBeCrowdedBySyntheticFacts(t *testing.T) {
+	dir := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	page := wiki.NewPage("alpha 견적", "프로젝트", nil)
+	page.Body = "alpha 견적 금액 기준 문서"
+	if err := store.WritePage("프로젝트/alpha.md", page); err != nil {
+		t.Fatal(err)
+	}
+	for index := range 8 {
+		if _, err := store.UpsertFact(wiki.FactInput{
+			Subject: "project:alpha", Key: "amount." + string(rune('a'+index)), Value: "value-" + string(rune('a'+index)),
+			Kind: wiki.FactKindAmount, Authority: wiki.FactAuthorityAgent,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	allPlane, err := store.Search(context.Background(), "alpha 견적 금액", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	factSeen := false
+	for _, result := range allPlane {
+		factSeen = factSeen || result.FactID != ""
+	}
+	if !factSeen {
+		t.Fatalf("fixture did not produce all-plane synthetic hits: %+v", allPlane)
+	}
+
+	result := evaluateCases(context.Background(), store, []goldCase{{
+		ID: "alpha", Question: "alpha 견적 금액", GoldPaths: []string{"프로젝트/alpha.md"},
+	}}, 1, false, io.Discard, nil, nil)
+	if result.scored != 1 || result.hit1 != 1 || result.hitK != 1 {
+		t.Fatalf("page baseline was contaminated by synthetic facts: %+v", result)
+	}
+}
+
+func TestBenchmarkAuxiliaryPathsKeepPagePlane(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		wantCalls int
+	}{
+		{name: "by category", args: []string{"--wiki", "wiki-copy", "--by-category"}, wantCalls: 4},
+		{name: "signal dump", args: []string{"--wiki", "wiki-copy", "--dump-signals"}, wantCalls: 3},
+		{name: "pool", args: []string{"--wiki", "wiki-copy", "--k", "1", "--pool-depth", "6"}, wantCalls: 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &fakeBenchmarkStore{results: map[string][]wiki.SearchResult{
+				"alpha": {{Path: "projects/wrong.md"}},
+			}}
+			deps := successfulRunDependencies(store, &fakeBenchmarkEmbedder{}, []goldCase{{
+				ID: "one", Category: "project", Question: "alpha", GoldPaths: []string{"projects/alpha.md"},
+			}})
+			var stdout, stderr bytes.Buffer
+			if code := runCLI("recall-bench", tt.args, &stdout, &stderr, deps); code != 0 {
+				t.Fatalf("exit=%d stderr=%q", code, stderr.String())
+			}
+			if len(store.optionCalls) != tt.wantCalls {
+				t.Fatalf("search calls = %d, want %d: %+v", len(store.optionCalls), tt.wantCalls, store.optionCalls)
+			}
+			for _, options := range store.optionCalls {
+				if !options.ExcludeFactResults {
+					t.Fatalf("auxiliary benchmark used all-plane options: %+v", options)
+				}
+			}
+		})
 	}
 }
 
@@ -280,18 +386,23 @@ func TestResolveFusionReturnsEffectiveGraphState(t *testing.T) {
 }
 
 type fakeBenchmarkStore struct {
-	results     map[string][]wiki.SearchResult
-	searchErrs  map[string]error
-	warmErr     error
-	embedder    wiki.Embedder
-	closed      bool
-	optionCalls []wiki.SearchMode
+	results      map[string][]wiki.SearchResult
+	searchErrs   map[string]error
+	warmErr      error
+	embedder     wiki.Embedder
+	closed       bool
+	factRevision wiki.FactRevision
+	optionCalls  []wiki.QueryOptions
 }
 
 func (s *fakeBenchmarkStore) SearchWithOptions(ctx context.Context, query string, limit int, options wiki.QueryOptions) (wiki.SearchReport, error) {
-	s.optionCalls = append(s.optionCalls, options.Mode)
+	s.optionCalls = append(s.optionCalls, options)
 	results, err := s.Search(ctx, query, limit)
 	return wiki.SearchReport{Results: results}, err
+}
+
+func (s *fakeBenchmarkStore) LatestFactRevision() wiki.FactRevision {
+	return s.factRevision
 }
 
 func (s *fakeBenchmarkStore) Close() error {

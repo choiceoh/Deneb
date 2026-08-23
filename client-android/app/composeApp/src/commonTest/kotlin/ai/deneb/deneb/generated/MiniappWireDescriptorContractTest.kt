@@ -484,7 +484,7 @@ class MiniappWireDescriptorContractTest {
             name = "SearchWikiHit",
             serializer = SearchWikiHit.serializer(),
             empty = SearchWikiHit(),
-            fields = listOf("path", "title", "summary", "category", "snippet", "score"),
+            fields = listOf("path", "title", "summary", "category", "snippet", "score", "resultKind", "readOnly", "factId", "subjectId"),
         ),
         contract(
             name = "SelfCorrectionCandidate",

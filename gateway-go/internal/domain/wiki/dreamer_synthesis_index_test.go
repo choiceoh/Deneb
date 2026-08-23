@@ -58,3 +58,36 @@ func TestRenderSynthesisSubset_RendersOnlySubset(t *testing.T) {
 		t.Errorf("subset render must exclude the unselected page: %q", out)
 	}
 }
+
+func TestCurrentOrdinaryIndexEntries_ExcludesDerivedAndHistoricalPages(t *testing.T) {
+	store := missStore(t)
+	write := func(path string, page *Page) {
+		t.Helper()
+		if err := store.WritePage(path, page); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("업무/live.md", &Page{Meta: Frontmatter{Title: "현행"}, Body: "live"})
+	write("업무/archived.md", &Page{Meta: Frontmatter{Title: "보관", Archived: true}, Body: "archived"})
+	write("업무/old.md", &Page{Meta: Frontmatter{Title: "구버전", SupersededBy: "업무/new.md"}, Body: "old"})
+	if _, err := store.UpsertFact(FactInput{
+		Subject: "self", Key: "communication.response_length", Value: "간결하게",
+		Kind: FactKindPreference, Authority: FactAuthorityDirectUser,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	entries := store.SnapshotIndex().Entries
+	if _, ok := entries[factProfilePagePath]; !ok {
+		t.Fatal("test setup: generated fact projection missing from master index")
+	}
+	got := (&WikiDreamer{store: store}).currentOrdinaryIndexEntries(entries)
+	if _, ok := got["업무/live.md"]; !ok {
+		t.Fatalf("live page missing from ordinary current subset: %+v", got)
+	}
+	for _, path := range []string{"업무/archived.md", "업무/old.md", factProfilePagePath} {
+		if _, ok := got[path]; ok {
+			t.Errorf("non-current page %q entered dreamer index subset", path)
+		}
+	}
+}

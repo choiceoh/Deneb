@@ -60,7 +60,7 @@ func TestAttachWikiMailConflicts_CuePullsMailAnalysisWithoutDroppingPerson(t *te
 	store := testWikiStore(t)
 	person := wiki.NewPage("박수진", "인물", nil)
 	person.Meta.Emails = []string{"park@oldco.com"}
-	person.Body = "박수진 담당"
+	person.Body = strings.Repeat("박수진 ", 20) + "담당"
 	if err := store.WritePage("인물/박수진.md", person); err != nil {
 		t.Fatal(err)
 	}
@@ -69,6 +69,17 @@ func TestAttachWikiMailConflicts_CuePullsMailAnalysisWithoutDroppingPerson(t *te
 	mailPath := "프로젝트/demo/메일분석/mid@newco.kr.md"
 	if err := store.WritePage(mailPath, mailPage); err != nil {
 		t.Fatal(err)
+	}
+	// Synthetic facts used to consume two of the three search slots. The one
+	// reserved page was the high-scoring person page itself, so the conflict
+	// mail never reached this page-only consumer.
+	for index := range 8 {
+		if _, err := store.UpsertFact(wiki.FactInput{
+			Subject: "person:박수진", Key: "field." + string(rune('a'+index)), Value: "value-" + string(rune('a'+index)),
+			Kind: wiki.FactKindGeneric, Authority: wiki.FactAuthorityAgent,
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	ev := []recallEvidence{
@@ -95,6 +106,67 @@ func TestAttachWikiMailConflicts_CuePullsMailAnalysisWithoutDroppingPerson(t *te
 	}
 	if !foundMail {
 		t.Fatalf("expected mail-analysis %s in %+v", mailPath, got)
+	}
+}
+
+func TestRecallWikiEvidenceKeepsFullPageWindowWhenFactsMatch(t *testing.T) {
+	store := testWikiStore(t)
+	for index := range 6 {
+		page := wiki.NewPage("alpha note "+string(rune('a'+index)), "업무", nil)
+		page.Body = "alpha background page " + string(rune('a'+index))
+		if err := store.WritePage("업무/alpha-"+string(rune('a'+index))+".md", page); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.UpsertFact(wiki.FactInput{
+			Subject: "project:alpha", Key: "field." + string(rune('a'+index)), Value: "value-" + string(rune('a'+index)),
+			Kind: wiki.FactKindGeneric, Authority: wiki.FactAuthorityAgent,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	evidence, err := recallWikiEvidenceResult(context.Background(), store, []string{"alpha"}, "alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(evidence) != 3 {
+		t.Fatalf("wiki evidence = %d rows, want the full three-page search window: %+v", len(evidence), evidence)
+	}
+	for _, row := range evidence {
+		if !strings.HasPrefix(row.Source, "업무/alpha-") {
+			t.Fatalf("unexpected non-page evidence row: %+v", row)
+		}
+	}
+}
+
+func TestBuildRefiltersMailConflictPullThroughFactSubjectGuard(t *testing.T) {
+	store := testWikiStore(t)
+	person := wiki.NewPage("박수진", "인물", nil)
+	person.Meta.Emails = []string{"park@oldco.com"}
+	person.Body = "박수진 담당자"
+	if err := store.WritePage("인물/박수진.md", person); err != nil {
+		t.Fatal(err)
+	}
+	const betaValue = "BETA-CODE-771"
+	mailPage := wiki.NewPage("박수진 담당 변경", "프로젝트", nil)
+	mailPage.Body = "> From: 박수진 <park@newco.kr>\n\n박수진 안내 " + betaValue
+	if err := store.WritePage("프로젝트/demo/메일분석/beta@newco.kr.md", mailPage); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertFact(wiki.FactInput{
+		Subject: "project:beta", Key: "contract.code", Value: betaValue,
+		Kind: wiki.FactKindContract, Authority: wiki.FactAuthorityDirectUser,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _ := Build(context.Background(), Params{SessionKey: "client:mail-fact", Message: "박수진 기억나?"}, Deps{Wiki: store}, nil)
+	if !strings.Contains(out, "박수진") {
+		t.Fatalf("person evidence disappeared: %q", out)
+	}
+	if strings.Contains(out, betaValue) || strings.Contains(out, "project:beta") ||
+		strings.Contains(out, wikiMailConflictMarker) || strings.Contains(out, "park@newco.kr") {
+		t.Fatalf("mail conflict pull bypassed unmatched-subject guard: %q", out)
 	}
 }
 

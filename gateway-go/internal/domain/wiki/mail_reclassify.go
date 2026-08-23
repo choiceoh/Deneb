@@ -84,7 +84,7 @@ func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) (mov
 		}
 		// A retired page is not a refile candidate under any signal: it is
 		// already out of the working set, and re-filing it re-dates it.
-		if page.Meta.Archived || strings.TrimSpace(page.Meta.SupersededBy) != "" {
+		if page.Meta.Archived || IsEffectivelySuperseded(rp, page.Meta) {
 			continue
 		}
 		project, signal, ambiguous := reclassifyTarget(page, projects)

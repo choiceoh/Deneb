@@ -8,7 +8,8 @@ import (
 // TestMatchCounterpartiesInTextReturnsMatches pins the ledger-anchor matching
 // rules: Korean names by normalized containment, long ASCII names by
 // containment, short ASCII names only as standalone tokens (with an attached
-// Korean particle allowed), archived ledgers excluded, longest key first.
+// Korean particle allowed), archived ledgers excluded, invalid legacy
+// supersession flags ignored, longest key first.
 func TestMatchCounterpartiesInTextReturnsMatches(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
@@ -35,7 +36,8 @@ func TestMatchCounterpartiesInTextReturnsMatches(t *testing.T) {
 		Meta: Frontmatter{Title: "옛거래처", Archived: true},
 		Body: "종료된 거래.",
 	})
-	// Superseded-but-not-yet-archived ledgers must not anchor either.
+	// Deal ledgers can never be a valid old-version relationship. Preserve an
+	// old bad flag as audit metadata without retiring the live anchor.
 	mustWrite(t, store, "프로젝트/거래/합병전거래처.md", &Page{
 		Meta: Frontmatter{Title: "합병전거래처", SupersededBy: "프로젝트/거래/대한전선.md"},
 		Body: "병합됨.",
@@ -54,7 +56,7 @@ func TestMatchCounterpartiesInTextReturnsMatches(t *testing.T) {
 		{"short ascii inside word rejected", "the threshold value is fine", 2, nil},
 		{"short ascii with ascii tail rejected", "skbroadband 문의", 2, nil},
 		{"archived skipped", "옛거래처 정리하자", 2, nil},
-		{"superseded skipped", "합병전거래처 근황 알려줘", 2, nil},
+		{"invalid legacy supersession stays active", "합병전거래처 근황 알려줘", 2, []string{"합병전거래처"}},
 		{"unknown", "없는회사 이야기", 2, nil},
 		{"longest key first", "대한전선이랑 sunkean 둘 다 확인해줘", 1, []string{"Sunkean"}},
 	}

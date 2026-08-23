@@ -27,7 +27,7 @@ internal suspend fun DenebGatewayClient.refreshMemories() {
         },
     ) ?: return
     _denebMemories.value = payload.pages
-        .filter { it.path.isNotBlank() }
+        .filter { it.path.isNotBlank() && !isSyntheticFactPath(it.path) }
         .distinctByLast { it.path }
         .map { p ->
             MemoryEntry(
@@ -60,6 +60,7 @@ suspend fun DenebGatewayClient.fetchCategories(force: Boolean = false): WikiCate
  *  misleading "empty category". Session-cached per category so browsing back
  *  and forth within the TTL skips the network; wiki writes invalidate. */
 suspend fun DenebGatewayClient.fetchCategoryPages(category: String, force: Boolean = false): List<WikiPageRef>? {
+    if (isSyntheticFactPath("$category/placeholder")) return null
     return sectionCaches.categoryPages.getOrLoad(category, force) {
         val p = callRpc<MemoryListPayload>(
             "miniapp.memory.list_in_category",
@@ -69,7 +70,7 @@ suspend fun DenebGatewayClient.fetchCategoryPages(category: String, force: Boole
             },
         ) ?: return@getOrLoad null
         p.pages
-            .filter { it.path.isNotBlank() }
+            .filter { it.path.isNotBlank() && !isSyntheticFactPath(it.path) }
             .distinctByLast { it.path }
             .map { WikiPageRef(it.path, it.title.ifBlank { it.path }, it.summary, it.updated) }
         // Offline: the mirror's listing, outside the session cache so a hit
@@ -110,6 +111,7 @@ suspend fun DenebGatewayClient.fetchRecentDiary(
 suspend fun DenebGatewayClient.deleteCategoryPages(paths: List<String>): Boolean {
     val uniquePaths = paths.distinct()
     if (uniquePaths.isEmpty()) return true
+    if (uniquePaths.any(::isSyntheticFactPath)) return false
     sectionCaches.categories.invalidate()
     uniquePaths.forEach { path ->
         sectionCaches.wikiPages.invalidate(path)
@@ -129,6 +131,7 @@ suspend fun DenebGatewayClient.deleteCategoryPages(paths: List<String>): Boolean
  *  backend rejects a traversal path, an invalid target category, or an existing
  *  target (no overwrite); returns true only when the move actually happened. */
 suspend fun DenebGatewayClient.moveWikiPage(from: String, to: String): Boolean {
+    if (isSyntheticFactPath(from) || isSyntheticFactPath(to)) return false
     sectionCaches.categories.invalidate()
     for (path in listOf(from, to)) {
         sectionCaches.wikiPages.invalidate(path)
@@ -162,14 +165,45 @@ suspend fun DenebGatewayClient.moveCategoryPages(paths: List<String>, targetCate
 /** Full wiki/memory page by path (`miniapp.memory.get_page`). Session-cached
  *  per path (bounded) so re-opening a just-read page is instant; a save to the
  *  path invalidates, so the post-save refetch is always fresh. */
-suspend fun DenebGatewayClient.fetchWikiPage(path: String, force: Boolean = false): WikiPage? = sectionCaches.wikiPages.getOrLoad(path, force) {
-    callRpc<WikiPagePayload>(
+suspend fun DenebGatewayClient.fetchWikiPage(path: String, force: Boolean = false): WikiPage? {
+    // Synthetic fact refs are currentness checks, not editable wiki pages. In
+    // particular, never let one reach the section cache or offline fallback.
+    if (isSyntheticFactPath(path)) return null
+    return sectionCaches.wikiPages.getOrLoad(path, force) {
+        callRpc<WikiPagePayload>(
+            "miniapp.memory.get_page",
+            buildJsonObject { put("path", path) },
+        )?.toWikiPage(fallbackPath = path)
+        // Offline: the mirror's copy (whole corpus on disk, WikiMirror.kt),
+        // outside the session cache so the next online view refetches fresh.
+    } ?: wikiMirror.get(path)
+}
+
+/** Resolve one synthetic fact ref directly against the gateway. This function
+ *  intentionally bypasses both [sectionCaches] and [wikiMirror]: a claim ID is
+ *  valid only while that exact fact version is current, so every tap must ask
+ *  `miniapp.memory.get_page` again. */
+internal suspend fun DenebGatewayClient.fetchCurrentFactPage(path: String): CurrentFactDetail? {
+    val ref = currentFactReference(path) ?: return null
+    val payload = callRpc<WikiPagePayload>(
         "miniapp.memory.get_page",
-        buildJsonObject { put("path", path) },
-    )?.toWikiPage(fallbackPath = path)
-    // Offline: the mirror's copy (whole corpus on disk, WikiMirror.kt),
-    // outside the session cache so the next online view refetches fresh.
-} ?: wikiMirror.get(path)
+        buildJsonObject { put("path", ref) },
+    ) ?: return null
+    if (payload.path.trim() != ref || !isSyntheticFactPath(payload.path)) return null
+    return CurrentFactDetail(
+        path = payload.path,
+        title = payload.title.ifBlank { ref },
+        summary = payload.summary,
+        body = payload.body,
+    )
+}
+
+private fun currentFactReference(path: String): String? {
+    val ref = path.trim().replace('\\', '/').trimStart('/')
+    if (!ref.startsWith("@facts/")) return null
+    val claimID = ref.removePrefix("@facts/").removeSuffix(".md")
+    return "@facts/$claimID.md".takeIf { claimID.isNotBlank() && '/' !in claimID }
+}
 
 /** Overwrite a wiki page; non-null title/summary/tags also update frontmatter. */
 suspend fun DenebGatewayClient.saveWikiPage(
@@ -179,6 +213,7 @@ suspend fun DenebGatewayClient.saveWikiPage(
     summary: String? = null,
     tags: List<String>? = null,
 ): Boolean {
+    if (isSyntheticFactPath(path)) return false
     // The page body changed and its title/summary feed the category list rows.
     sectionCaches.wikiPages.invalidate(path)
     sectionCaches.categoryPages.invalidate(wikiCategoryOf(path))
@@ -196,6 +231,7 @@ suspend fun DenebGatewayClient.saveWikiPage(
 
 /** Create a new wiki page (`miniapp.memory.create_page`); returns its path. */
 suspend fun DenebGatewayClient.createWikiPage(title: String, category: String, body: String): String? {
+    if (isSyntheticFactPath("$category/placeholder")) return null
     sectionCaches.categories.invalidate()
     sectionCaches.categoryPages.invalidate(category)
     return callRpc<WikiPagePayload>(
@@ -224,7 +260,28 @@ suspend fun DenebGatewayClient.searchAll(query: String): SearchResults? {
     ) ?: return offlineSearchAll(query)
     return SearchResults(
         wiki = p.wiki.filter { it.path.isNotBlank() }
-            .map { SearchHit(it.path, it.title.ifBlank { it.path }, it.snippet.ifBlank { it.summary }, it.category) },
+            .map {
+                val hit = SearchHit(
+                    path = it.path,
+                    title = it.title.ifBlank { it.path },
+                    snippet = it.snippet.ifBlank { it.summary },
+                    category = it.category,
+                    resultKind = it.resultKind,
+                    readOnly = it.readOnly,
+                    factId = it.factId,
+                    subjectId = it.subjectId,
+                )
+                if (hit.isCurrentFactHit()) {
+                    hit.copy(
+                        title = it.title.ifBlank { it.subjectId.ifBlank { "현재 사실" } },
+                        // A search snippet is only a candidate-time value. The
+                        // tap-time direct read below is the display authority.
+                        snippet = "",
+                    )
+                } else {
+                    hit
+                }
+            },
         diary = p.diary.map { SearchHit(it.file, it.header.ifBlank { "일기" }, it.content, "diary") },
         people = p.people.filter { it.email.isNotBlank() || it.name.isNotBlank() }
             .map { PersonHit(it.name.ifBlank { it.email }, it.email, it.messageCount, it.lastSubject) },

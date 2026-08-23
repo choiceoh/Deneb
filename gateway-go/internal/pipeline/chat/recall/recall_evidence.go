@@ -197,12 +197,21 @@ func recallWikiEvidenceResult(ctx context.Context, store *wiki.Store, queries []
 		}
 		plan.Clauses = append(plan.Clauses, wiki.QueryClause{Kind: wiki.QueryKindLex, Query: query, Weight: weight})
 	}
-	report, err := store.SearchPlan(ctx, plan, min(8, max(3, len(queries)*3)))
+	report, err := store.SearchPlanWithOptions(ctx, plan, min(8, max(3, len(queries)*3)), wiki.QueryOptions{
+		ExcludeFactResults: true,
+	})
 	if err != nil {
 		return evidence, err
 	}
 	queryLabel := queries[0]
 	for _, r := range report.Results {
+		if r.FactID != "" {
+			// Chat preflight renders canonical facts in its trusted, live
+			// <current-facts> block with subject isolation. Store.Search also
+			// exposes them for miniapp/knowledge callers, but duplicating the same
+			// claim here as untrusted wiki evidence wastes budget and blurs trust.
+			continue
+		}
 		if _, ok := seen[r.Path]; ok {
 			continue
 		}
@@ -210,7 +219,15 @@ func recallWikiEvidenceResult(ctx context.Context, store *wiki.Store, queries []
 		// let stale values occupy budget slots and confuse latest-state answers.
 		subjectID := ""
 		if page, err := store.ReadPage(r.Path); err == nil && page != nil {
-			if page.Meta.SupersededBy != "" {
+			if wiki.IsEffectivelySuperseded(r.Path, page.Meta) {
+				// Keep an internal-only marker long enough for Build to scrub
+				// matching legacy diary/transcript/file rows. The marker itself is
+				// never ranked or rendered, so history remains stored but cannot be
+				// mistaken for current evidence.
+				evidence = append(evidence, recallEvidence{
+					Kind: "superseded", Source: r.Path,
+					StaleValue: strings.TrimSpace(page.Body + "\n" + r.Content),
+				})
 				continue
 			}
 			// Only explicit subject_id gates recall — do not infer from PID, or
@@ -271,7 +288,7 @@ func formatRecallWikiNote(store *wiki.Store, result wiki.SearchResult) string {
 		// surface. Without an inline marker the model has no way to know the
 		// facts were revised and may cite an old value as current
 		// (agent-papers-2026-deep-dive 1A; Zep/Engram supersession).
-		if marker := recallWikiStalenessMarker(page.Meta); marker != "" {
+		if marker := recallWikiStalenessMarker(result.Path, page.Meta); marker != "" {
 			parts = append(parts, marker)
 		}
 		// Owning project in Korean, ahead of the page's own title: ref= carries
@@ -310,9 +327,9 @@ func formatRecallWikiNote(store *wiki.Store, result wiki.SearchResult) string {
 // page is superseded or archived, so the model treats its facts as possibly
 // outdated rather than current. Superseded takes priority (it names the
 // replacement); both states mean "do not cite as the current value."
-func recallWikiStalenessMarker(meta wiki.Frontmatter) string {
+func recallWikiStalenessMarker(relPath string, meta wiki.Frontmatter) string {
 	switch {
-	case meta.SupersededBy != "":
+	case wiki.IsEffectivelySuperseded(relPath, meta):
 		return "⚠ 대체됨(최신 사실은 " + meta.SupersededBy + " 참조 — 아래는 옛 값일 수 있으니 현행으로 단정하지 말 것)"
 	case meta.Archived:
 		return "⚠ 보관됨(비활성 문서 — 현행이 아닐 수 있음)"

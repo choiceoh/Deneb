@@ -24,6 +24,7 @@ type AbortTracker struct {
 	done        chan struct{}          // signals GC loop to stop
 	gcClosed    bool                   // prevents double-close of done
 	draining    bool                   // rejects new top-level runs during shutdown
+	fatal       bool                   // rejects even previously admitted continuations
 	drained     chan struct{}          // closed once every accepted run completes
 	drainedDone bool                   // prevents double-close of drained
 }
@@ -79,6 +80,9 @@ func (at *AbortTracker) tryRegister(clientRunID string, entry *AbortEntry, conti
 	}
 	at.mu.Lock()
 	defer at.mu.Unlock()
+	if at.fatal {
+		return false
+	}
 	if admitted && at.admissions == 0 {
 		return false
 	}
@@ -88,6 +92,29 @@ func (at *AbortTracker) tryRegister(clientRunID string, entry *AbortEntry, conti
 	at.entries[clientRunID] = entry
 	at.running[clientRunID] = struct{}{}
 	return true
+}
+
+// FatalDrain closes admission and cancels every active or admitted run without
+// waiting for normal cleanup. It is reserved for process-fatal integrity
+// failures where continuing an already accepted turn is unsafe (for example an
+// ambiguous canonical journal append). Later Cleanup/ReleaseAdmission calls are
+// harmless; the registry is deliberately considered drained immediately so an
+// already-running graceful shutdown cannot hold the process open.
+func (at *AbortTracker) FatalDrain(cause error) {
+	at.mu.Lock()
+	if !at.draining {
+		at.draining = true
+		at.drained = make(chan struct{})
+	}
+	at.fatal = true
+	for _, entry := range at.entries {
+		entry.CancelFn(cause)
+	}
+	at.entries = make(map[string]*AbortEntry)
+	at.running = make(map[string]struct{})
+	at.admissions = 0
+	at.signalDrainedLocked()
+	at.mu.Unlock()
 }
 
 // AcquireAdmission reserves one top-level request before it can mutate session

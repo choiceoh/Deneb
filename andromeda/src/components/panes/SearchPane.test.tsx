@@ -6,6 +6,10 @@ import { useAiFeed, useWorkspace } from "@/workspaceContext";
 import { SearchPane } from "./SearchPane";
 
 let payload: unknown;
+let factPageBody: string;
+let factPageFails: boolean;
+let getPageCalls: number;
+let lastGetPagePath: string;
 
 function WorkspaceProbe() {
   const { paneTarget } = useWorkspace();
@@ -18,6 +22,26 @@ function WorkspaceProbe() {
       <output data-testid="ai-text">{aiText}</output>
     </>
   );
+}
+
+function factPayload(path = "@facts/fact-123.md") {
+  return {
+    wiki: [
+      {
+        path,
+        snippet: "project:alpha owner is A (stale cache)",
+        resultKind: "fact",
+        readOnly: true,
+        factId: "fact-123",
+        subjectId: "project:alpha",
+      },
+    ],
+    diary: [],
+    people: [],
+    files: [],
+    mail: [],
+    sources: { wiki: "ok", diary: "ok", people: "ok", files: "ok", mail: "ok" },
+  };
 }
 
 beforeEach(() => {
@@ -52,16 +76,37 @@ beforeEach(() => {
     ],
     sources: { wiki: "ok", diary: "ok", people: "ok", files: "ok", mail: "ok" },
   };
+  factPageBody = "# Current fact\n\nproject:alpha owner is B (current)";
+  factPageFails = false;
+  getPageCalls = 0;
+  lastGetPagePath = "";
   if (!globalThis.crypto?.randomUUID) vi.stubGlobal("crypto", { randomUUID: () => "test-uuid" });
   vi.stubGlobal(
     "fetch",
-    vi.fn(
-      async () =>
-        ({
+    vi.fn(async (_url: string, init?: RequestInit) => {
+      const { method, params } = JSON.parse(String(init?.body ?? "{}")) as {
+        method?: string;
+        params?: { path?: string };
+      };
+      if (method === "miniapp.memory.get_page") {
+        getPageCalls += 1;
+        lastGetPagePath = params?.path ?? "";
+        if (factPageFails) {
+          return {
+            ok: true,
+            json: async () => ({ ok: false, error: { code: "NOT_FOUND", message: "fact no longer current" } }),
+          } as unknown as Response;
+        }
+        return {
           ok: true,
-          json: async () => ({ ok: true, payload }),
-        }) as unknown as Response,
-    ),
+          json: async () => ({ ok: true, payload: { body: factPageBody } }),
+        } as unknown as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({ ok: true, payload }),
+      } as unknown as Response;
+    }),
   );
 });
 
@@ -220,5 +265,110 @@ describe("SearchPane", () => {
     expect(screen.queryByText("늦게 도착한 A 결과")).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "위키" })).not.toBeInTheDocument();
     expect(screen.getByTestId("ai-text")).toBeEmptyDOMElement();
+  });
+
+  it("revalidates fact hits uncached, hides cached snippets, and keeps payloads out of AI context", async () => {
+    payload = factPayload();
+    renderWithProviders(
+      <>
+        <SearchPane />
+        <WorkspaceProbe />
+      </>,
+      { connected: true },
+    );
+
+    await userEvent.type(screen.getByPlaceholderText(/검색/), "alpha{enter}");
+    const hit = await screen.findByRole("button", { name: /project:alpha/ });
+    expect(hit).toHaveAttribute("title", "읽기 전용 사실 열기");
+    expect(hit).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("클릭해 현재 사실 확인")).toBeInTheDocument();
+    expect(screen.queryByText(/owner is A/)).not.toBeInTheDocument();
+
+    await userEvent.click(hit);
+    expect(await screen.findByText(/owner is B \(current\)/)).toBeInTheDocument();
+    expect(hit).toHaveAttribute("aria-expanded", "true");
+    expect(getPageCalls).toBe(1);
+    expect(lastGetPagePath).toBe("@facts/fact-123.md");
+    expect(screen.getByText(/읽기 전용 사실 · project:alpha · fact-123/)).toBeInTheDocument();
+    expect(screen.getByTestId("ai-text")).toHaveTextContent("[위키 · 1건]");
+    expect(screen.getByTestId("ai-text")).not.toHaveTextContent("project:alpha");
+    expect(screen.getByTestId("ai-text")).not.toHaveTextContent("owner is B");
+
+    await userEvent.click(hit);
+    expect(screen.queryByText(/owner is B \(current\)/)).not.toBeInTheDocument();
+    await userEvent.click(hit);
+    expect(await screen.findByText(/owner is B \(current\)/)).toBeInTheDocument();
+    expect(getPageCalls).toBe(2);
+
+    const persistedStorage = Array.from({ length: localStorage.length }, (_, index) => {
+      const key = localStorage.key(index);
+      return key ? `${key}:${localStorage.getItem(key)}` : "";
+    }).join("\n");
+    expect(persistedStorage).not.toContain("owner is A");
+    expect(persistedStorage).not.toContain("owner is B");
+  });
+
+  it("rejects a superseded fact ref and asks the user to search again", async () => {
+    payload = factPayload("@facts/fact-old.md");
+    factPageFails = true;
+    renderWithProviders(<SearchPane />, { connected: true });
+
+    await userEvent.type(screen.getByPlaceholderText(/검색/), "alpha{enter}");
+    await userEvent.click(await screen.findByRole("button", { name: /project:alpha/ }));
+
+    expect(await screen.findByText("사실이 변경되었습니다. 다시 검색하세요.")).toBeInTheDocument();
+    expect(screen.queryByText(/owner is A/)).not.toBeInTheDocument();
+    expect(getPageCalls).toBe(1);
+    expect(lastGetPagePath).toBe("@facts/fact-old.md");
+  });
+
+  it("discards a late fact detail after a new search generation", async () => {
+    payload = factPayload();
+    let resolveDetail!: (response: Response) => void;
+    let markDetailJsonRead!: () => void;
+    const detailJsonRead = new Promise<void>((resolve) => {
+      markDetailJsonRead = resolve;
+    });
+    const detailResponse = new Promise<Response>((resolve) => {
+      resolveDetail = resolve;
+    });
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const { method } = JSON.parse(String(init?.body ?? "{}")) as { method?: string };
+      if (method === "miniapp.memory.get_page") return detailResponse;
+      return {
+        ok: true,
+        json: async () => ({ ok: true, payload }),
+      } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithProviders(<SearchPane />, { connected: true });
+    const input = screen.getByPlaceholderText(/검색/);
+
+    await userEvent.type(input, "alpha{enter}");
+    await userEvent.click(await screen.findByRole("button", { name: /project:alpha/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    await userEvent.clear(input);
+    await userEvent.type(input, "beta{enter}");
+    const currentHit = await screen.findByRole("button", { name: /project:alpha/ });
+    expect(currentHit).toHaveAttribute("aria-expanded", "false");
+    expect(within(currentHit).getByText("클릭해 현재 사실 확인")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveDetail({
+        ok: true,
+        json: async () => {
+          markDetailJsonRead();
+          return { ok: true, payload: { body: "late alpha fact must stay hidden" } };
+        },
+      } as Response);
+      await detailJsonRead;
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText("late alpha fact must stay hidden")).not.toBeInTheDocument();
+    expect(currentHit).toHaveAttribute("aria-expanded", "false");
+    expect(within(currentHit).getByText("클릭해 현재 사실 확인")).toBeInTheDocument();
+    expect(screen.queryByText("현재 사실 확인 중...")).not.toBeInTheDocument();
   });
 });

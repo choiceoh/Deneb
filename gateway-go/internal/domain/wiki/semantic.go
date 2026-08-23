@@ -583,6 +583,9 @@ func (s *Store) SemanticStatus() SemanticIndexStatus {
 			status.CorpusErrors++
 			continue
 		}
+		if !semanticPageAdmitted(path, page) {
+			continue
+		}
 		text := semanticText(page)
 		if len(text) < semanticMinChars {
 			continue
@@ -655,6 +658,17 @@ func semanticText(page *Page) string {
 		sb.WriteString("\n" + page.Body)
 	}
 	return strings.TrimSpace(sb.String())
+}
+
+// semanticPageAdmitted is the single corpus predicate shared by refresh and
+// health accounting. Counting a page that refresh intentionally excludes
+// leaves SemanticStatus permanently pending after a fact projection or page
+// supersession.
+func semanticPageAdmitted(relPath string, page *Page) bool {
+	if page == nil || isGeneratedFactProjectionPage(relPath, page) {
+		return false
+	}
+	return !IsEffectivelySuperseded(relPath, page.Meta)
 }
 
 const wikiSemanticMaxChunks = textchunk.DefaultMaxChunks
@@ -978,7 +992,7 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 	inputs := make(map[string][]semanticChunkInput, len(relPaths))
 	for _, rp := range relPaths {
 		page, perr := store.ReadPage(rp)
-		if perr != nil || page == nil {
+		if perr != nil || !semanticPageAdmitted(rp, page) {
 			continue
 		}
 		text := semanticText(page)

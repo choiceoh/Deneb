@@ -140,6 +140,13 @@ func inQueryScopes(path string, scopes []string) bool {
 // with weighted RRF. It preserves the existing per-backend admission floors,
 // validity demotion, deterministic ties, and graceful semantic fallback.
 func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (SearchReport, error) {
+	return s.SearchPlanWithOptions(ctx, plan, limit, QueryOptions{})
+}
+
+// SearchPlanWithOptions executes a typed plan with caller-specific result-plane
+// options. SearchPlan keeps the production all-plane default; page-only
+// consumers set ExcludeFactResults so synthetic facts never consume page slots.
+func (s *Store) SearchPlanWithOptions(ctx context.Context, plan QueryPlan, limit int, options QueryOptions) (SearchReport, error) {
 	plan = normalizeQueryPlan(plan)
 	if len(plan.Clauses) == 0 || s == nil || s.fts == nil {
 		return SearchReport{}, nil
@@ -197,6 +204,13 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 	diagnostics.CandidateCount = len(results)
 	baseScores := resultScoreMap(results)
 	results = s.fts.applyValidity(results)
+	lifecycleQuery := factLifecyclePlanQuery(plan)
+	factSnapshot := s.RecallFactSnapshot()
+	beforeLifecycle := len(results)
+	results = s.filterFactLifecycleSearchResults(lifecycleQuery, results, factSnapshot)
+	if dropped := beforeLifecycle - len(results); dropped > 0 {
+		diagnostics.Dropped = appendDrop(diagnostics.Dropped, "superseded_fact_evidence", dropped)
+	}
 	intentResults := []SearchResult(nil)
 	if plan.Intent != "" && shouldIntentRerank(results, QueryOptions{Intent: plan.Intent}) {
 		intentResults, _ = s.fts.search(ctx, plan.Intent, fetchLimit)
@@ -209,6 +223,7 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 			}
 			intentResults = filtered
 		}
+		intentResults = s.filterFactLifecycleSearchResults(lifecycleQuery, intentResults, factSnapshot)
 	}
 	bonuses, applied := s.applyIntentRerank(results, intentResults, QueryOptions{Intent: plan.Intent})
 	diagnostics.IntentApplied = applied
@@ -221,6 +236,14 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 	}
 	rerankScores, rerankWeights, rerankDiagnostics := s.applyModelRerank(ctx, rerankQuery, results, plan.ForceRerank)
 	diagnostics.Rerank = rerankDiagnostics
+	if !options.ExcludeFactResults {
+		factResults := searchActiveFactsForPlan(plan, fetchLimit, factSnapshot.Active)
+		results = mergeActiveFactSearchResults(results, factResults, fetchLimit)
+		diagnostics.CandidateCount += len(factResults)
+		for _, result := range factResults {
+			baseScores[result.Path] = result.Score
+		}
+	}
 	results = truncateResults(results, limit)
 	// Vocabulary-gap backfill (query_expansion.go): fires only when the primary
 	// plan under-fills the limit — a full result list is byte-identical to the
@@ -229,12 +252,61 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 	results = s.backfillWithExpansion(ctx, rerankQuery, results, limit)
 	s.attachResultMetadata(plan.Clauses[0].Query, results)
 	diagnostics.ContextExpanded = s.attachLateContext(results)
+	latestFactSnapshot := s.RecallFactSnapshot()
+	beforeLifecycle = len(results)
+	results = s.filterFactLifecycleSearchResults(lifecycleQuery, results, latestFactSnapshot)
+	if !options.ExcludeFactResults {
+		results = mergeActiveFactSearchResults(
+			results,
+			searchActiveFactsForPlan(plan, fetchLimit, latestFactSnapshot.Active),
+			limit,
+		)
+	}
+	results = truncateResults(results, limit)
+	if dropped := beforeLifecycle - len(results); dropped > 0 {
+		diagnostics.Dropped = appendDrop(diagnostics.Dropped, "superseded_fact_late_context", dropped)
+	}
 	diagnostics.ReturnedCount = len(results)
 	if plan.Explain {
 		s.attachPlanExplanations(results, rankings, plan.Clauses, intentResults, baseScores, bonuses, applied)
 		attachRerankExplanations(results, rerankScores, rerankWeights)
+		markFactSearchExplanations(results)
 	}
 	return SearchReport{Results: results, Diagnostics: diagnostics}, nil
+}
+
+func factLifecyclePlanQuery(plan QueryPlan) string {
+	parts := make([]string, 0, len(plan.Clauses))
+	seen := make(map[string]struct{}, len(plan.Clauses))
+	for _, clause := range plan.Clauses {
+		query := strings.TrimSpace(clause.Query)
+		if query == "" {
+			continue
+		}
+		folded := strings.ToLower(strings.Join(strings.Fields(query), " "))
+		if _, duplicate := seen[folded]; duplicate {
+			continue
+		}
+		seen[folded] = struct{}{}
+		parts = append(parts, query)
+	}
+	return strings.Join(parts, " ")
+}
+
+func searchActiveFactsForPlan(plan QueryPlan, limit int, claims []FactClaim) []SearchResult {
+	if len(plan.Scopes) > 0 {
+		// Fact claims have no wiki page path to prove they belong to a requested
+		// path scope. Exclude them rather than crossing an explicit scope fence.
+		return nil
+	}
+	ambiguities := factSearchAmbiguousSubjectSignatures(claims)
+	rankings := make([][]SearchResult, 0, len(plan.Clauses))
+	for _, clause := range plan.Clauses {
+		rankings = append(rankings, searchActiveFactClaims(clause.Query, limit, claims, ambiguities))
+	}
+	// Facts participate in the same weighted-RRF admission contract as pages.
+	// Intent remains rerank-only and must never admit a new candidate.
+	return fuseQueryPlan(rankings, plan.Clauses, limit)
 }
 
 func fuseQueryPlan(rankings [][]SearchResult, clauses []QueryClause, limit int) []SearchResult {

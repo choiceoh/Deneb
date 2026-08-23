@@ -50,10 +50,13 @@ internal class WikiMirrorStore(
         }
     }
 
-    suspend fun get(path: String): WikiPage? = mutex.withLock {
-        withStateLock {
-            loadLocked()
-            pages[path]
+    suspend fun get(path: String): WikiPage? {
+        if (isSyntheticFactPath(path)) return null
+        return mutex.withLock {
+            withStateLock {
+                loadLocked()
+                pages[path]
+            }
         }
     }
 
@@ -140,7 +143,9 @@ internal class WikiMirrorStore(
         withStateLock state@{
             if (expectedOwner != null && owner() != expectedOwner) return@state false
             loadLocked()
-            val nextPages = all.filter { it.path.isNotBlank() }.associateByTo(mutableMapOf()) { it.path }
+            val nextPages = all
+                .filter { it.path.isNotBlank() && !isSyntheticFactPath(it.path) }
+                .associateByTo(mutableMapOf()) { it.path }
             val nextMeta = commitLocked(
                 nextPages = nextPages,
                 nextOwner = expectedOwner ?: owner(),
@@ -157,7 +162,7 @@ internal class WikiMirrorStore(
         withStateLock state@{
             if (expectedOwner != null && owner() != expectedOwner) return@state false
             loadLocked()
-            if (page.path.isBlank()) return@state true
+            if (page.path.isBlank() || isSyntheticFactPath(page.path)) return@state true
             val nextPages = pages.toMutableMap().apply { put(page.path, page) }
             val nextMeta = commitLocked(
                 nextPages = nextPages,
@@ -261,7 +266,9 @@ internal class WikiMirrorStore(
             loaded = true
             return
         }
-        pages = storedPages
+        // Older clients could persist a synthetic fact ref as if it were an
+        // ordinary page. Never revive that stale claim after an upgrade.
+        pages = storedPages.filterKeys { !isSyntheticFactPath(it) }.toMutableMap()
         meta = storedMeta
         loaded = true
     }

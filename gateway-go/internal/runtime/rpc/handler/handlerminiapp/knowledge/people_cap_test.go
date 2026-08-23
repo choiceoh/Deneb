@@ -43,3 +43,21 @@ func TestLoadWikiPeople_LoadsEveryPageAndCapsOnlyTheResponseTail(t *testing.T) {
 		t.Errorf("wiki-only tail = %d rows, want the %d cap", len(tail), maxPeopleWikiRows)
 	}
 }
+
+func TestLoadWikiPeople_ExcludesArchivedAndEffectivelySupersededPages(t *testing.T) {
+	pages := map[string]*wiki.Page{
+		"인물/live.md": {
+			Meta: wiki.Frontmatter{Title: "현행 인물", Category: "인물"},
+		},
+		"인물/archived.md": {
+			Meta: wiki.Frontmatter{Title: "보관 인물", Category: "인물", Archived: true},
+		},
+		"인물/old.md": {
+			Meta: wiki.Frontmatter{Title: "구 인물", Category: "인물", SupersededBy: "인물/new.md"},
+		},
+	}
+	got := loadWikiPeople(func() (MemorySearcher, error) { return peopleWikiStore(pages), nil })
+	if len(got) != 1 || got[0].path != "인물/live.md" {
+		t.Fatalf("loadWikiPeople returned historical rows: %+v", got)
+	}
+}

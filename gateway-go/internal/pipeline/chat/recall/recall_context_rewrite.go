@@ -10,10 +10,8 @@
 // self-contained text. No LLM call — preflight stays deterministic and inside
 // its 1.5s fan-out budget.
 //
-// Known limitation: the turn snapshot cache keys on the raw message
-// (CueFingerprint), so the same elliptical text in two different contexts
-// shares a cache slot. Bounded by the cache TTL; revisit if elliptical repeats
-// ever show stale evidence in practice.
+// Snapshot caching is deliberately bypassed for rewritten turns: the same raw
+// elliptical text can refer to different subjects in consecutive contexts.
 package recall
 
 import (
@@ -55,6 +53,12 @@ func needsContextRewrite(message string) bool {
 		}
 	}
 	return false
+}
+
+// NeedsContextRewrite exposes the transcript-dependence gate to the chat-level
+// snapshot cache without exporting the rewrite implementation itself.
+func NeedsContextRewrite(message string) bool {
+	return needsContextRewrite(message)
 }
 
 // lastPriorUserTurn returns the most recent earlier user message of the

@@ -24,6 +24,9 @@ import (
 func (s *Store) MovePage(from, to string) error {
 	from = normalizePagePath(from)
 	to = normalizePagePath(to)
+	if err := rejectFactProjectionMutation("move", from, to); err != nil {
+		return err
+	}
 	if from == to {
 		return nil
 	}

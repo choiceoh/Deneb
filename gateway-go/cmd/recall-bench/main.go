@@ -2,9 +2,11 @@
 // set, so fusion changes (RRF, graph-boost) can be scored before/after on real
 // data without a gateway.
 //
-// It calls wiki.Store.Search directly — the exact retrieval behind
-// miniapp.memory.search (see handlerminiapp/knowledge.MemorySearcher) — so the number
-// here IS what wiki-qa-bench.py's recall mode measures, minus the RPC hop.
+// It calls wiki.Store.SearchWithOptions on the page-only result plane. Production
+// search also returns synthetic canonical facts, but the historical path/content
+// gold reads page files from disk and cannot score @facts references. Keeping this
+// benchmark page-only preserves baseline comparability until a separate fact-aware
+// gold and lifecycle scorer exist.
 //
 // ALWAYS point --wiki at a COPY of the production wiki: wiki.NewStore is NOT
 // read-only (it reconciles the index and ensures category dirs) and SetEmbedder
@@ -159,6 +161,8 @@ type benchmarkConfig struct {
 // bm25DegradedWarning flags a run whose semantic arm never came up. Kept as a
 // const so tests pin the exact message alongside their own stderr expectations.
 const bm25DegradedWarning = "recall-bench: WARNING — embedding server unreachable; scoring is BM25-degraded, NOT production parity (set DENEB_EMBEDDING_URL, e.g. http://127.0.0.1:8002)\n"
+
+const factPlanePageWarning = "recall-bench: WARNING — fact journal revision=%d detected; plane=pages excludes synthetic fact hits. Page-path baselines remain comparable, but this run does NOT measure whole production/fact-plane recall.\n"
 
 // deadGoldWarning flags gold cases whose gold_paths match no page on disk. Such
 // a case can never be hit no matter how good retrieval is, so it silently caps
@@ -480,11 +484,19 @@ type benchmarkStore interface {
 	Close() error
 	SetEmbedder(wiki.Embedder)
 	WarmSemanticIndex(context.Context) error
-	Search(context.Context, string, int) ([]wiki.SearchResult, error)
+	SearchWithOptions(context.Context, string, int, wiki.QueryOptions) (wiki.SearchReport, error)
+	LatestFactRevision() wiki.FactRevision
 }
 
-type benchmarkOptionStore interface {
-	SearchWithOptions(context.Context, string, int, wiki.QueryOptions) (wiki.SearchReport, error)
+func pagePlaneOptions(mode wiki.SearchMode) wiki.QueryOptions {
+	return wiki.QueryOptions{Mode: mode, ExcludeFactResults: true}
+}
+
+func pagePlaneSearch(store benchmarkStore, mode wiki.SearchMode) func(context.Context, string, int) ([]wiki.SearchResult, error) {
+	return func(ctx context.Context, query string, limit int) ([]wiki.SearchResult, error) {
+		report, err := store.SearchWithOptions(ctx, query, limit, pagePlaneOptions(mode))
+		return report.Results, err
+	}
 }
 
 type runDependencies struct {
@@ -615,6 +627,9 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 		return fmt.Errorf("open wiki: %w", err)
 	}
 	defer store.Close()
+	if revision := store.LatestFactRevision(); revision > 0 {
+		fmt.Fprintf(stderr, factPlanePageWarning, revision)
+	}
 
 	semantic, err := prepareSemantic(ctx, store, deps.newEmbedder(logger), deps.sleep)
 	if err != nil {
@@ -670,32 +685,17 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 
 	var result benchmarkResult
 	if cfg.byCategory {
-		optionStore, ok := store.(benchmarkOptionStore)
-		if !ok {
-			return fmt.Errorf("store does not expose stage-specific search required by --by-category")
-		}
-		reportByCategory(ctx, optionStore, cases, cfg.k, stdout, content)
+		reportByCategory(ctx, store, cases, cfg.k, stdout, content)
 		return nil
 	}
 	if cfg.dumpSignals {
-		optionStore, ok := store.(benchmarkOptionStore)
-		if !ok {
-			return fmt.Errorf("store does not expose stage-specific search required by --dump-signals")
-		}
-		dumpSignals(ctx, optionStore, cases, cfg.k, stdout)
+		dumpSignals(ctx, store, cases, cfg.k, stdout)
 		return nil
 	}
 	if cfg.matrix {
-		optionStore, ok := store.(benchmarkOptionStore)
-		if !ok {
-			return fmt.Errorf("store does not expose stage-specific search required by --matrix")
-		}
 		fmt.Fprintln(stdout, "== recall-bench matrix  modes=bm25,semantic,hybrid,full")
 		for _, mode := range []wiki.SearchMode{wiki.SearchModeBM25, wiki.SearchModeSemantic, wiki.SearchModeHybrid, wiki.SearchModeFull} {
-			modeResult := evaluateCasesWithSearch(ctx, cases, cfg.k, cfg.verbose, stdout, func(ctx context.Context, query string, limit int) ([]wiki.SearchResult, error) {
-				report, searchErr := optionStore.SearchWithOptions(ctx, query, limit, wiki.QueryOptions{Mode: mode})
-				return report.Results, searchErr
-			}, content, holds)
+			modeResult := evaluateCasesWithSearch(ctx, cases, cfg.k, cfg.verbose, stdout, pagePlaneSearch(store, mode), content, holds)
 			if err := modeResult.validate(); err != nil {
 				return fmt.Errorf("mode %s: %w", mode, err)
 			}
@@ -711,7 +711,7 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 		}
 		writeBenchmarkResult(stdout, cfg.k, fusion, result)
 		if cfg.poolDepth > 0 {
-			pool := evaluatePoolCeiling(ctx, cases, result.ranks, cfg.k, cfg.poolDepth, store.Search, content)
+			pool := evaluatePoolCeiling(ctx, cases, result.ranks, cfg.k, cfg.poolDepth, pagePlaneSearch(store, wiki.SearchModeAuto), content)
 			writePoolCeilingResult(stdout, cfg.k, cfg.poolDepth, pool)
 		}
 	}
@@ -849,7 +849,7 @@ func evaluateCases(
 	content contentMatcher,
 	holds bodyHolder,
 ) benchmarkResult {
-	return evaluateCasesWithSearch(ctx, cases, k, verbose, stdout, store.Search, content, holds)
+	return evaluateCasesWithSearch(ctx, cases, k, verbose, stdout, pagePlaneSearch(store, wiki.SearchModeAuto), content, holds)
 }
 
 func evaluateCasesWithSearch(
@@ -1218,7 +1218,7 @@ func topResultPaths(results []wiki.SearchResult, limit int) []string {
 }
 
 func writeBenchmarkHeader(out io.Writer, cfg benchmarkConfig, fusion string, graphBoost, semantic bool, cases int) {
-	fmt.Fprintf(out, "== recall-bench  fusion=%s  graph_boost=%v  semantic=%v  K=%d  cases=%d\n",
+	fmt.Fprintf(out, "== recall-bench  plane=pages  fusion=%s  graph_boost=%v  semantic=%v  K=%d  cases=%d\n",
 		fusion, graphBoost, semantic, cfg.k, cases)
 }
 
@@ -1272,7 +1272,7 @@ func writeBenchmarkMatrixResult(out io.Writer, k int, mode wiki.SearchMode, resu
 // routing that category to different weights. Read-only over the wiki copy.
 func reportByCategory(
 	ctx context.Context,
-	store benchmarkOptionStore,
+	store benchmarkStore,
 	cases []goldCase,
 	k int,
 	stdout io.Writer,
@@ -1280,10 +1280,7 @@ func reportByCategory(
 ) {
 	modes := []wiki.SearchMode{wiki.SearchModeBM25, wiki.SearchModeSemantic, wiki.SearchModeHybrid, wiki.SearchModeFull}
 	searchFor := func(mode wiki.SearchMode) func(context.Context, string, int) ([]wiki.SearchResult, error) {
-		return func(ctx context.Context, query string, limit int) ([]wiki.SearchResult, error) {
-			report, err := store.SearchWithOptions(ctx, query, limit, wiki.QueryOptions{Mode: mode})
-			return report.Results, err
-		}
+		return pagePlaneSearch(store, mode)
 	}
 
 	// Group cases by category, preserving first-seen order for stable output.
@@ -1361,7 +1358,7 @@ func reportByCategory(
 // (SIGNAL prefix) so the numbers can be aggregated by category — the empirical
 // basis for scaling each signal's fusion weight by its own confidence instead of
 // a fixed global weight.
-func dumpSignals(ctx context.Context, store benchmarkOptionStore, cases []goldCase, k int, stdout io.Writer) {
+func dumpSignals(ctx context.Context, store benchmarkStore, cases []goldCase, k int, stdout io.Writer) {
 	fmt.Fprintln(stdout, "SIGNAL_HEADER category topSemCos goldSemRank goldSemCos goldBm25Rank goldFullRank id")
 	goldRankAndScore := func(results []wiki.SearchResult, gold []string) (int, float64) {
 		for i, r := range results {
@@ -1377,9 +1374,9 @@ func dumpSignals(ctx context.Context, store benchmarkOptionStore, cases []goldCa
 		if len(c.GoldPaths) == 0 {
 			continue
 		}
-		semRep, err1 := store.SearchWithOptions(ctx, c.Question, max(k, 10), wiki.QueryOptions{Mode: wiki.SearchModeSemantic})
-		bmRep, err2 := store.SearchWithOptions(ctx, c.Question, max(k, 10), wiki.QueryOptions{Mode: wiki.SearchModeBM25})
-		fullRep, err3 := store.SearchWithOptions(ctx, c.Question, max(k, 10), wiki.QueryOptions{Mode: wiki.SearchModeFull})
+		semRep, err1 := store.SearchWithOptions(ctx, c.Question, max(k, 10), pagePlaneOptions(wiki.SearchModeSemantic))
+		bmRep, err2 := store.SearchWithOptions(ctx, c.Question, max(k, 10), pagePlaneOptions(wiki.SearchModeBM25))
+		fullRep, err3 := store.SearchWithOptions(ctx, c.Question, max(k, 10), pagePlaneOptions(wiki.SearchModeFull))
 		if err1 != nil || err2 != nil || err3 != nil {
 			continue
 		}

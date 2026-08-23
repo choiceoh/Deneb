@@ -78,7 +78,7 @@ internal suspend fun DenebGatewayClient.refreshWikiMirrorFull(): Boolean {
         if (epoch != credEpoch) return false
         total = payload.total
         all += payload.pages
-            .filter { it.path.isNotBlank() }
+            .filter { it.path.isNotBlank() && !isSyntheticFactPath(it.path) }
             .map { it.toWikiPage() }
         if (!payload.hasMore) {
             syncComplete = true
@@ -115,6 +115,12 @@ internal suspend fun DenebGatewayClient.updateWikiMirrorPaths(paths: Collection<
     val expectedOwner = mailCacheOwner(gatewayUrl, clientToken)
     for (path in paths.filter { it.isNotBlank() }.distinct()) {
         if (epoch != credEpoch) return
+        if (isSyntheticFactPath(path)) {
+            // Virtual current-fact refs never belong in the offline wiki
+            // mirror. Avoid even reading one on a background sync event.
+            if (!wikiMirror.remove(path, expectedOwner = expectedOwner)) return
+            continue
+        }
         val outcome = callRpcOutcome<WikiPagePayload>(
             "miniapp.memory.get_page",
             buildJsonObject { put("path", path) },

@@ -8,8 +8,28 @@ import (
 	"testing"
 	"time"
 
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 )
+
+type fakeBriefingWikiStore struct {
+	hits        []wiki.SearchResult
+	pages       map[string]*wiki.Page
+	seenLimit   int
+	seenOptions wiki.QueryOptions
+	readPaths   []string
+}
+
+func (f *fakeBriefingWikiStore) SearchWithOptions(_ context.Context, _ string, limit int, options wiki.QueryOptions) (wiki.SearchReport, error) {
+	f.seenLimit = limit
+	f.seenOptions = options
+	return wiki.SearchReport{Results: f.hits}, nil
+}
+
+func (f *fakeBriefingWikiStore) ReadPage(path string) (*wiki.Page, error) {
+	f.readPaths = append(f.readPaths, path)
+	return f.pages[path], nil
+}
 
 // fullContextEnricher returns an enricher whose deps all produce data, so a
 // test can assert every enrichment section renders.
@@ -142,6 +162,31 @@ func TestBriefingEnricherAttendeeLineWithoutEmailUsesWikiOnly(t *testing.T) {
 	line := enr.attendeeLine(context.Background(), calendar.Attendee{DisplayName: "이름만"})
 	if !strings.Contains(line, "이름만") || !strings.Contains(line, "메모 있음") {
 		t.Errorf("expected wiki-only line, got %q", line)
+	}
+}
+
+func TestWikiTopPageNoteSkipsSyntheticFactResult(t *testing.T) {
+	store := &fakeBriefingWikiStore{
+		hits: []wiki.SearchResult{
+			{Path: "@facts/fact-123.md", FactID: "fact-123", SubjectID: "project:alpha"},
+			{Path: "projects/alpha.md"},
+		},
+		pages: map[string]*wiki.Page{
+			"projects/alpha.md": {Meta: wiki.Frontmatter{Title: "Alpha", Summary: "Current project note"}},
+		},
+	}
+	got := wikiTopPageNote(context.Background(), store, "alpha")
+	if got != "Alpha — Current project note" {
+		t.Fatalf("note = %q", got)
+	}
+	if store.seenLimit != briefWikiSearchCandidates {
+		t.Fatalf("search limit = %d, want %d", store.seenLimit, briefWikiSearchCandidates)
+	}
+	if !store.seenOptions.ExcludeFactResults {
+		t.Fatal("page-only calendar note search did not exclude synthetic facts")
+	}
+	if len(store.readPaths) != 1 || store.readPaths[0] != "projects/alpha.md" {
+		t.Fatalf("ReadPage paths = %v", store.readPaths)
 	}
 }
 

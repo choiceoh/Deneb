@@ -689,6 +689,10 @@ export interface SearchWikiHit {
   category?: string
   snippet?: string
   score?: number
+  resultKind?: string
+  readOnly?: boolean
+  factId?: string
+  subjectId?: string
 }
 
 export interface SelfCorrectionCandidate {

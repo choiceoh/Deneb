@@ -151,7 +151,11 @@ type Provenance struct {
 	ObservedAt  int64
 	Locator     Locator
 	Hierarchy   []string
-	Freshness   Freshness
+	// OriginRefs links a curated result back to the diary/document/runtime
+	// evidence that produced its claims. It is distinct from Locator, which
+	// addresses the current projection itself.
+	OriginRefs []string
+	Freshness  Freshness
 }
 
 func fallbackDescriptor(layer Layer) SourceDescriptor {

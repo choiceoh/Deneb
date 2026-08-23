@@ -232,7 +232,7 @@ func (s *Store) ExpireStaleOpenQuestions(now time.Time, minAgeDays int) int {
 		}
 		did := false
 		_ = s.UpdatePage(rp, func(cur *Page) (*Page, error) {
-			if cur == nil || cur.Meta.Archived || strings.TrimSpace(cur.Meta.SupersededBy) != "" {
+			if cur == nil || cur.Meta.Archived || IsEffectivelySuperseded(rp, cur.Meta) {
 				return nil, nil
 			}
 			next, _, _, ok := expireOpenQuestionsInBody(cur.Body, now, minAgeDays)
@@ -280,7 +280,7 @@ func CollectStaleOpenQuestions(wikiDir string, minAgeDays int, now time.Time) []
 		}
 		page, perr := ParsePageFile(path)
 		if perr != nil || page == nil || page.Meta.Archived ||
-			strings.TrimSpace(page.Meta.SupersededBy) != "" {
+			IsEffectivelySuperseded(rel, page.Meta) {
 			return nil //nolint:nilerr // unreadable/archived/superseded — skip
 		}
 		project, _ := ProjectNameOf(rel)

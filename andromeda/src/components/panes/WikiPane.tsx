@@ -36,14 +36,16 @@ export function WikiPane() {
   const [path, setPath] = useState<string | null>(null);
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
+  const [currentReadOnly, setCurrentReadOnly] = useState(false);
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [moving, setMoving] = useState(false);
   const [merging, setMerging] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [preview, setPreview] = useState(true);
-  const dirty = Boolean(path && content !== savedContent);
+  const dirty = Boolean(path && !currentReadOnly && content !== savedContent);
   const editorRef = useRef<HTMLDivElement>(null);
+  const pageOpenSeqRef = useRef(0);
 
   // 페이지 인쇄: 편집 중이었다면 미리보기(렌더된 마크다운)로 전환한 뒤, 그 렌더가 커밋된
   // 다음 프레임에 인쇄한다 — raw 마크다운 대신 읽기용 문서가 나가도록.
@@ -52,7 +54,14 @@ export function WikiPane() {
     requestAnimationFrame(() => printElement(editorRef.current));
   }
 
-  useRegisterPane(WIKI_RESOURCE, content.trim() ? `[위키${path ? ` ${path}` : ""}]\n${content}` : "");
+  // Synthetic facts are a read-only trust projection, not editable workspace
+  // prose. Never copy their body into the generic AI workspace context.
+  useRegisterPane(
+    WIKI_RESOURCE,
+    !currentReadOnly && !isFactDerivedPath(path ?? "") && content.trim()
+      ? `[위키${path ? ` ${path}` : ""}]\n${content}`
+      : "",
+  );
 
   useEffect(() => {
     if (!connected) return;
@@ -170,6 +179,10 @@ export function WikiPane() {
 
   function requestOpenPath(key: string) {
     if (!key) return;
+    if (isFactDerivedPath(key)) {
+      requestOpenFactRef(key);
+      return;
+    }
     if (dirty && key !== path) {
       setPendingPath(key);
       return;
@@ -177,18 +190,75 @@ export function WikiPane() {
     void openPath(key);
   }
 
+  function requestOpenSearchHit(hit: WikiPage) {
+    const ref = keyOf(hit);
+    if (hit.resultKind !== "fact" && !hit.readOnly && !isFactDerivedPath(ref)) {
+      requestOpenPath(ref);
+      return;
+    }
+    requestOpenFactRef(ref);
+  }
+
+  function requestOpenFactRef(ref: string) {
+    if (dirty) {
+      setStatus("먼저 현재 페이지를 저장하거나 되돌리세요");
+      return;
+    }
+    void openFactRef(ref);
+  }
+
+  async function openFactRef(rawRef: string) {
+    const ref = normalizeWikiRef(rawRef);
+    if (!ref) {
+      setStatus("사실 참조가 없습니다. 다시 검색하세요.");
+      return;
+    }
+    const requestID = ++pageOpenSeqRef.current;
+    // Never leave a previously-open fact visible while revalidating an old
+    // search ref. get_page bypasses the client cache so Store.ReadPage can
+    // reject a superseded claim ID.
+    setPath(null);
+    setContent("");
+    setSavedContent("");
+    setCurrentReadOnly(false);
+    const r = await call<WikiPageResponse>(MEMORY_RPC.getPage, { path: ref }, "현재 사실 확인 중...");
+    if (pageOpenSeqRef.current !== requestID) return;
+    if (!r.ok) {
+      setStatus("사실이 변경되었습니다. 다시 검색하세요.");
+      return;
+    }
+    if (typeof r.data === "string" || canonicalFactRef(r.data?.path ?? "") !== canonicalFactRef(ref)) {
+      setStatus("사실이 변경되었습니다. 다시 검색하세요.");
+      return;
+    }
+    const body = r.data?.body ?? r.data?.content ?? "";
+    setPath(r.data.path ?? ref);
+    setContent(body);
+    setSavedContent(body);
+    setCurrentReadOnly(true);
+    setPreview(true);
+    setStatus("읽기 전용 사실");
+  }
+
   async function openPath(key: string) {
     if (!key) return;
+    if (isFactDerivedPath(key)) {
+      await openFactRef(key);
+      return;
+    }
+    const requestID = ++pageOpenSeqRef.current;
     const r = await callCached<WikiPageResponse>(
       MEMORY_RPC.getPage,
       { path: key },
       {
         pending: "불러오는 중...",
         scope: "wiki:page",
-        apply: (data) => applyPage(key, data),
+        apply: (data) => {
+          if (pageOpenSeqRef.current === requestID) applyPage(key, data);
+        },
       },
     );
-    if (r.ok && r.applied) setStatus("");
+    if (r.ok && r.applied && pageOpenSeqRef.current === requestID) setStatus("");
   }
 
   function applyPage(key: string, page: WikiPageResponse) {
@@ -196,6 +266,7 @@ export function WikiPane() {
     setPath(key);
     setContent(body);
     setSavedContent(body);
+    setCurrentReadOnly(false);
     setPreview(true); // 페이지를 열면 미리보기가 기본 — 편집은 "편집" 탭으로 전환
   }
 
@@ -205,7 +276,7 @@ export function WikiPane() {
   }
 
   async function saveCurrent(): Promise<boolean> {
-    if (!path) return false;
+    if (!path || currentReadOnly) return false;
     const currentPath = path;
     const body = content;
     const r = await call(MEMORY_RPC.writePage, { path: currentPath, body }, "저장 중...");
@@ -256,7 +327,7 @@ export function WikiPane() {
   }
 
   async function movePage(to: string) {
-    if (!path) return;
+    if (!path || currentReadOnly) return;
     const dst = to.trim();
     if (!dst) return;
     const r = await call<{ to?: string }>(MEMORY_RPC.movePage, { from: path, to: dst }, "이동 중...");
@@ -272,7 +343,7 @@ export function WikiPane() {
   }
 
   async function mergePage(targetPath: string) {
-    if (!path) return;
+    if (!path || currentReadOnly) return;
     const target = targetPath.trim();
     if (!target) return;
     const r = await call(MEMORY_RPC.merge, { targetPath: target, sourcePath: path }, "병합 중...");
@@ -283,7 +354,7 @@ export function WikiPane() {
   }
 
   async function deletePage() {
-    if (!path) return;
+    if (!path || currentReadOnly) return;
     const current = path;
     const r = await call<{ ok?: boolean; deleted?: number }>(
       MEMORY_RPC.deletePages,
@@ -296,6 +367,7 @@ export function WikiPane() {
     setPath(null);
     setContent("");
     setSavedContent("");
+    setCurrentReadOnly(false);
     setPages((rows) => rows.filter((p) => keyOf(p) !== current));
     await loadCategories();
     await loadTree();
@@ -307,11 +379,12 @@ export function WikiPane() {
   const renderPage = (p: WikiPage) => (
     <button
       key={keyOf(p) || (p.title ?? "")}
-      onClick={() => requestOpenPath(keyOf(p))}
+      onClick={() => requestOpenSearchHit(p)}
       className="wiki-list-row"
       style={{ background: keyOf(p) === path ? color.active : "transparent" }}
     >
-      <span>{p.title ?? p.path ?? "(제목 없음)"}</span>
+      <span>{p.title ?? p.subjectId ?? p.path ?? "(제목 없음)"}</span>
+      {(p.resultKind === "fact" || p.readOnly) && <small>읽기 전용 사실</small>}
     </button>
   );
 
@@ -448,7 +521,7 @@ export function WikiPane() {
                 <h3>{path ?? "위키"}</h3>
                 {path && (
                   <span className={"wiki-save-state no-print" + (dirty ? " dirty" : "")}>
-                    {dirty ? "수정됨" : "저장됨"}
+                    {currentReadOnly ? "읽기 전용" : dirty ? "수정됨" : "저장됨"}
                   </span>
                 )}
               </div>
@@ -456,7 +529,7 @@ export function WikiPane() {
                 <button
                   className={"wiki-mode-tab" + (!preview ? " active" : "")}
                   onClick={() => setPreview(false)}
-                  disabled={!path}
+                  disabled={!path || currentReadOnly}
                   aria-pressed={!preview}
                 >
                   편집
@@ -471,10 +544,18 @@ export function WikiPane() {
                 </button>
               </div>
               <div className="wiki-editor-actions no-print">
-                <button className="btn btn-accent" onClick={() => void save()} disabled={!path || !dirty}>
+                <button
+                  className="btn btn-accent"
+                  onClick={() => void save()}
+                  disabled={!path || !dirty || currentReadOnly}
+                >
                   저장
                 </button>
-                <button className="row-btn" onClick={() => editContent(savedContent)} disabled={!dirty}>
+                <button
+                  className="row-btn"
+                  onClick={() => editContent(savedContent)}
+                  disabled={!dirty || currentReadOnly}
+                >
                   되돌리기
                 </button>
                 <button
@@ -485,16 +566,24 @@ export function WikiPane() {
                 >
                   인쇄
                 </button>
-                <button className="row-btn" onClick={() => setMoving(true)} disabled={!path || dirty}>
+                <button
+                  className="row-btn"
+                  onClick={() => setMoving(true)}
+                  disabled={!path || dirty || currentReadOnly}
+                >
                   이동
                 </button>
-                <button className="row-btn" onClick={() => setMerging(true)} disabled={!path || dirty}>
+                <button
+                  className="row-btn"
+                  onClick={() => setMerging(true)}
+                  disabled={!path || dirty || currentReadOnly}
+                >
                   병합
                 </button>
                 <button
                   className="row-btn"
                   onClick={() => setDeleting(true)}
-                  disabled={!path || dirty}
+                  disabled={!path || dirty || currentReadOnly}
                   style={{ color: color.danger }}
                 >
                   삭제
@@ -507,7 +596,7 @@ export function WikiPane() {
                 value={content}
                 onChange={editContent}
                 preview={preview}
-                disabled={false}
+                disabled={currentReadOnly}
                 fill
                 ariaLabel="위키 미리보기"
               />
@@ -527,7 +616,7 @@ export function WikiPane() {
         </div>
       </div>
       {creating && <NewPageModal onClose={() => setCreating(false)} onCreate={(p) => void createNewPage(p)} />}
-      {moving && path && (
+      {moving && path && !currentReadOnly && (
         <MovePageModal
           path={path}
           categories={categories}
@@ -535,7 +624,7 @@ export function WikiPane() {
           onSubmit={(v) => void movePage(v)}
         />
       )}
-      {merging && path && (
+      {merging && path && !currentReadOnly && (
         <OneFieldModal
           title="페이지 병합"
           label="병합 대상 경로"
@@ -544,7 +633,7 @@ export function WikiPane() {
           onSubmit={(v) => void mergePage(v)}
         />
       )}
-      {deleting && path && (
+      {deleting && path && !currentReadOnly && (
         <DeleteModal
           title="페이지 삭제"
           path={path}
@@ -566,6 +655,22 @@ export function WikiPane() {
 }
 
 const WIKI_RESOURCE = "wiki";
+const FACT_PROFILE_PATH = "사용자/현행-사실.md";
+
+function isFactDerivedPath(path: string): boolean {
+  return canonicalFactRef(path) !== "";
+}
+
+function canonicalFactRef(path: string): string {
+  const trimmed = normalizeWikiRef(path);
+  if (trimmed === FACT_PROFILE_PATH || trimmed === FACT_PROFILE_PATH.slice(0, -3)) return FACT_PROFILE_PATH;
+  if (!trimmed.startsWith("@facts/")) return "";
+  return trimmed.endsWith(".md") ? trimmed : `${trimmed}.md`;
+}
+
+function normalizeWikiRef(path: string): string {
+  return path.trim().replaceAll("\\", "/");
+}
 
 interface WikiCategoriesResponse {
   categories?: WikiCategory[];
@@ -582,7 +687,7 @@ interface WikiDiaryResponse {
   entries?: WikiDiaryEntry[];
 }
 
-type WikiPageResponse = { body?: string; content?: string } | string;
+type WikiPageResponse = { path?: string; body?: string; content?: string } | string;
 
 function keyOf(p: WikiPage): string {
   return p.path ?? String(p.id ?? "");

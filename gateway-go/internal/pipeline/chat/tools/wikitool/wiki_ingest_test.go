@@ -210,6 +210,50 @@ func TestWikiIngestCreatesDedupsAndRoutesProject(t *testing.T) {
 	}
 }
 
+func TestFindIngestedPageIgnoresSyntheticFactCrowding(t *testing.T) {
+	dir := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	const normalized = "https://example.com/docs/alpha"
+	materialPath := "프로젝트/자료/alpha-source.md"
+	material := wiki.NewPage("Alpha source", "프로젝트", nil)
+	material.Meta.Resource = normalized
+	material.Body = "source: " + normalized
+	if err := store.WritePage(materialPath, material); err != nil {
+		t.Fatal(err)
+	}
+	decoy := wiki.NewPage("Alpha URL index", "업무", nil)
+	decoy.Body = strings.Repeat(normalized+" ", 40)
+	if err := store.WritePage("업무/alpha-url-index.md", decoy); err != nil {
+		t.Fatal(err)
+	}
+	for index := range 12 {
+		if _, err := store.UpsertFact(wiki.FactInput{
+			Subject: "https example com docs alpha", Key: "field." + string(rune('a'+index)), Value: "value-" + string(rune('a'+index)),
+			Kind: wiki.FactKindGeneric, Authority: wiki.FactAuthorityAgent,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	allPlane, err := store.Search(context.Background(), normalized, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, result := range allPlane {
+		if result.Path == materialPath {
+			t.Fatalf("fixture did not crowd the material page on the all-plane search: %+v", allPlane)
+		}
+	}
+
+	if got := findIngestedPage(context.Background(), store, normalized); got != materialPath {
+		t.Fatalf("findIngestedPage() = %q, want %q", got, materialPath)
+	}
+}
+
 // TestWikiIngest_SummaryFailOpen: an LLM outage must not lose the capture —
 // the page lands with the excerpt fallback.
 // TestWikiIngestLinksProjectWhenRepIsLegacyFlat pins the Codex-review fix: a

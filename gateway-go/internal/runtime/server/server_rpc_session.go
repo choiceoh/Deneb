@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,15 +33,25 @@ import (
 
 // registerSessionRPCMethods registers session state, repair, daemon status, and
 // the full chat handler pipeline (init + all chat/session-exec RPC registrations).
-func (s *Server) registerSessionRPCMethods() {
-	s.registerSessionDomainMethods()
+func (s *Server) registerSessionRPCMethods() error {
 	transcriptStore, transcriptDir, polarisStoreForSweep := s.openSessionTranscriptStore()
-	s.startSessionMemorySweep(transcriptDir, polarisStoreForSweep)
 	agentLogWriter := s.newSessionAgentLogWriter()
+
+	chatCfg, err := s.buildSessionChatConfig(transcriptStore, agentLogWriter)
+	if err != nil {
+		if polarisStoreForSweep != nil {
+			if closeErr := polarisStoreForSweep.Close(); closeErr != nil {
+				s.logger.Warn("polaris close after chat config failure", "error", closeErr)
+			}
+			s.polarisStore = nil
+		}
+		return fmt.Errorf("build session chat config: %w", err)
+	}
+
+	s.registerSessionDomainMethods()
+	s.startSessionMemorySweep(transcriptDir, polarisStoreForSweep)
 	s.agentLogWriter = agentLogWriter
 	s.wireSessionInsights(agentLogWriter)
-
-	chatCfg := s.buildSessionChatConfig(transcriptStore, agentLogWriter)
 
 	s.chatHandler = chat.NewHandler(
 		s.sessions,
@@ -65,6 +76,7 @@ func (s *Server) registerSessionRPCMethods() {
 	// Chat, BTW, miniapp-chat bridge, Exec, Wiki, Genesis, and GmailAnalyze are
 	// registered in registerLateMethods() after this function returns; Aurora
 	// (dreaming) is wired later in registerWorkflowSideEffects().
+	return nil
 }
 
 func (s *Server) registerSessionDomainMethods() {
@@ -203,7 +215,7 @@ func sessionInsightToolStats(stats []agentlog.ToolStat) []insights.ToolStat {
 func (s *Server) buildSessionChatConfig(
 	transcriptStore chat.TranscriptStore,
 	agentLogWriter *agentlog.Writer,
-) chat.HandlerConfig {
+) (chat.HandlerConfig, error) {
 	chatCfg := chat.DefaultHandlerConfig()
 	chatCfg.Transcript = transcriptStore
 	s.genesisTranscripts = transcriptStore
@@ -213,11 +225,13 @@ func (s *Server) buildSessionChatConfig(
 	chatCfg.Ambient.TopicResolver = newTopicResolver(s.logger)
 
 	var registry *modelrole.Registry
-	s.initMemorySubsystem(&chatCfg, &registry)
+	if err := s.initMemorySubsystem(&chatCfg, &registry); err != nil {
+		return chat.HandlerConfig{}, fmt.Errorf("initialize memory subsystem: %w", err)
+	}
 	s.initSessionAI(&chatCfg, registry)
 	s.initToolsAndDeps(&chatCfg, registry, transcriptStore, agentLogWriter)
 	s.configureSessionChatCallbacks(&chatCfg)
-	return chatCfg
+	return chatCfg, nil
 }
 
 func (s *Server) initSessionAI(chatCfg *chat.HandlerConfig, registry *modelrole.Registry) {

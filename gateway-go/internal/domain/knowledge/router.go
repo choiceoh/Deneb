@@ -16,8 +16,12 @@ import (
 // backends are skipped silently so the router degrades gracefully when, for
 // example, a backend is not configured.
 type Router struct {
-	adapters []Adapter
-	writer   Writer // first writable adapter wins (today: wiki)
+	adapters          []Adapter
+	recallGuards      []RecallResultGuard
+	writer            Writer // first writable adapter wins (today: wiki)
+	facts             FactWriter
+	factObserverMu    sync.RWMutex
+	factMutationEvent FactMutationObserver
 }
 
 // New constructs a Router from the given adapters. nil entries are ignored so
@@ -29,8 +33,14 @@ func New(adapters ...Adapter) *Router {
 			continue
 		}
 		r.adapters = append(r.adapters, a)
+		if guard, ok := a.(RecallResultGuard); ok {
+			r.recallGuards = append(r.recallGuards, guard)
+		}
 		if w, ok := a.(Writer); ok && r.writer == nil {
 			r.writer = w
+		}
+		if f, ok := a.(FactWriter); ok && r.facts == nil {
+			r.facts = f
 		}
 	}
 	return r
@@ -152,6 +162,21 @@ func (r *Router) RecallPacket(ctx context.Context, query string, limit int, opti
 		}(a, source)
 	}
 	wg.Wait()
+	// Canonical lifecycle guards run after every source finishes but before
+	// quotas and fusion. This prevents a corrected value from re-entering via a
+	// non-wiki connector and prevents a now-superseded synthetic hit from
+	// surviving a mutation that committed while retrieval was in flight.
+	for _, guard := range r.recallGuards {
+		allHits := make([]Result, 0)
+		for _, hits := range byHits {
+			allHits = append(allHits, hits...)
+		}
+		guarded := guard.FilterRecallResults(query, allHits)
+		byHits = make(map[Layer][]Result, len(byHits))
+		for _, hit := range guarded {
+			byHits[hit.Ref.Layer] = append(byHits[hit.Ref.Layer], hit)
+		}
+	}
 
 	// Per-layer quota: at most quota hits from any one layer (a single-layer
 	// router is unaffected because quota is computed against limit). Each layer's
@@ -273,4 +298,59 @@ func (r *Router) Record(ctx context.Context, opts RecordOptions) (Ref, error) {
 		return Ref{}, fmt.Errorf("knowledge router has no writable adapter")
 	}
 	return r.writer.Record(ctx, opts)
+}
+
+func (r *Router) RecordFact(ctx context.Context, opts FactRecordOptions) (FactMutationResult, error) {
+	if r == nil || r.facts == nil {
+		return FactMutationResult{}, fmt.Errorf("knowledge router has no fact writer")
+	}
+	result, err := r.facts.RecordFact(ctx, opts)
+	r.notifyFactMutation(result)
+	return result, err
+}
+
+func (r *Router) ForgetFact(ctx context.Context, opts FactForgetOptions) (FactMutationResult, error) {
+	if r == nil || r.facts == nil {
+		return FactMutationResult{}, fmt.Errorf("knowledge router has no fact writer")
+	}
+	result, err := r.facts.ForgetFact(ctx, opts)
+	r.notifyFactMutation(result)
+	return result, err
+}
+
+func (r *Router) Facts(ctx context.Context, subject, key string) ([]FactView, error) {
+	if r == nil || r.facts == nil {
+		return nil, fmt.Errorf("knowledge router has no fact reader")
+	}
+	return r.facts.Facts(ctx, subject, key)
+}
+
+// SetFactMutationObserver replaces the optional post-commit hook. Passing nil
+// clears it. It is safe to call while the router serves concurrent requests.
+func (r *Router) SetFactMutationObserver(observer FactMutationObserver) {
+	if r == nil {
+		return
+	}
+	r.factObserverMu.Lock()
+	r.factMutationEvent = observer
+	r.factObserverMu.Unlock()
+}
+
+func (r *Router) notifyFactMutation(result FactMutationResult) {
+	if r == nil || !result.Committed {
+		return
+	}
+	r.factObserverMu.RLock()
+	observer := r.factMutationEvent
+	r.factObserverMu.RUnlock()
+	if observer == nil {
+		return
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			slog.Error("knowledge fact mutation observer panicked",
+				"revision", result.Revision, "panic", recovered)
+		}
+	}()
+	observer(result)
 }

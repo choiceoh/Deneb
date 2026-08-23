@@ -227,3 +227,36 @@ func TestShouldFreezeRecallSnapshotReturnsExpectedDecision(t *testing.T) {
 		}
 	}
 }
+
+func TestRecallSnapshot_ClearAllSessions(t *testing.T) {
+	ClearAll()
+	t.Cleanup(ClearAll)
+	StoreSnapshot("client:main", "fact", "old-main")
+	StoreSnapshot("cron:daily", "fact", "old-cron")
+
+	ClearAll()
+	for _, session := range []string{"client:main", "cron:daily"} {
+		if _, ok := CachedSnapshot(session, "fact"); ok {
+			t.Fatalf("snapshot for %q survived global fact invalidation", session)
+		}
+	}
+}
+
+func TestRecallSnapshot_GlobalClearRejectsInflightStaleRefill(t *testing.T) {
+	ClearAll()
+	t.Cleanup(ClearAll)
+	_, _, generation := CachedSnapshotWithGeneration("client:main", "fact")
+
+	ClearAll()
+	if StoreSnapshotIfGeneration("client:main", "fact", "stale-before-correction", generation) {
+		t.Fatal("pre-invalidation computation refilled the cleared recall cache")
+	}
+	if _, ok := CachedSnapshot("client:main", "fact"); ok {
+		t.Fatal("stale in-flight snapshot survived generation fence")
+	}
+
+	_, _, generation = CachedSnapshotWithGeneration("client:main", "fact")
+	if !StoreSnapshotIfGeneration("client:main", "fact", "fresh-after-correction", generation) {
+		t.Fatal("current-generation snapshot was rejected")
+	}
+}

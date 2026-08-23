@@ -162,8 +162,10 @@ func (s *Store) rebuildIndex() error {
 	return newIdx.Save(filepath.Join(s.dir, "index.md"))
 }
 
-// Tier1Pages returns all non-archived pages with importance >= minImportance,
-// sorted by importance descending. Each result includes the page path and content.
+// Tier1Pages returns all current, non-archived pages with importance >=
+// minImportance, sorted by importance descending. Each result includes the page
+// path and content. Superseded pages are historical evidence and must never be
+// frozen into the Tier1 system prompt.
 func (s *Store) Tier1Pages(minImportance float64) []Tier1Result {
 	// Snapshot, then walk without the lock — the page reads below do disk I/O
 	// and must not iterate the live map writers mutate in place.
@@ -175,7 +177,13 @@ func (s *Store) Tier1Pages(minImportance float64) []Tier1Result {
 			continue
 		}
 		page, err := s.ReadPage(path)
-		if err != nil || page.Meta.Archived {
+		if err != nil || page.Meta.Archived || IsEffectivelySuperseded(path, page.Meta) {
+			continue
+		}
+		// Generated current-facts are injected through the revision-live fact
+		// tail. A pre-cutover manual page at the same path remains ordinary user
+		// content until it has been byte-preserved and replaced with the marker.
+		if isGeneratedFactProjectionPage(path, page) {
 			continue
 		}
 		results = append(results, Tier1Result{

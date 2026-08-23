@@ -278,7 +278,7 @@ func (t *wikiScoutTask) collectFreshQuestions(repPath string, now time.Time) []w
 		return nil
 	}
 	page, err := t.wikiStore.ReadPage(repPath)
-	if err != nil || page == nil || page.Meta.Archived || strings.TrimSpace(page.Meta.SupersededBy) != "" {
+	if err != nil || page == nil || page.Meta.Archived || wiki.IsEffectivelySuperseded(repPath, page.Meta) {
 		return nil
 	}
 	project, _ := wiki.ProjectNameOf(repPath)

@@ -33,3 +33,36 @@ func TestTier1Snapshot_FreezeAndClear(t *testing.T) {
 		t.Fatal("/reset must clear the snapshot")
 	}
 }
+
+func TestTier1Snapshot_ClearAllSessions(t *testing.T) {
+	clearAllTier1Wiki()
+	t.Cleanup(clearAllTier1Wiki)
+	storeTier1Wiki("client:main", "old-main")
+	storeTier1Wiki("cron:daily", "old-cron")
+
+	clearAllTier1Wiki()
+	for _, session := range []string{"client:main", "cron:daily"} {
+		if _, ok := cachedTier1Wiki(session); ok {
+			t.Fatalf("tier1 snapshot for %q survived global fact invalidation", session)
+		}
+	}
+}
+
+func TestTier1Snapshot_GlobalClearRejectsInflightStaleRefill(t *testing.T) {
+	clearAllTier1Wiki()
+	t.Cleanup(clearAllTier1Wiki)
+	_, _, generation := cachedTier1WikiWithGeneration("client:main")
+
+	clearAllTier1Wiki()
+	if storeTier1WikiIfGeneration("client:main", "stale-before-correction", generation) {
+		t.Fatal("pre-invalidation computation refilled the cleared tier1 cache")
+	}
+	if _, ok := cachedTier1Wiki("client:main"); ok {
+		t.Fatal("stale in-flight tier1 snapshot survived generation fence")
+	}
+
+	_, _, generation = cachedTier1WikiWithGeneration("client:main")
+	if !storeTier1WikiIfGeneration("client:main", "fresh-after-correction", generation) {
+		t.Fatal("current-generation tier1 snapshot was rejected")
+	}
+}

@@ -128,6 +128,9 @@ func (s *Store) FoldDuplicate(keep, fold string) error {
 	// is the same file, and folding a page into itself deletes it.
 	keep = normalizePagePath(keep)
 	fold = normalizePagePath(fold)
+	if err := rejectFactProjectionMutation("fold duplicate", keep, fold); err != nil {
+		return err
+	}
 	if keep == fold {
 		return fmt.Errorf("wiki: cannot fold a page into itself")
 	}

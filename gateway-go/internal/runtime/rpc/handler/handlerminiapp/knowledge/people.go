@@ -276,7 +276,7 @@ func loadWikiPeople(storeFn func() (MemorySearcher, error)) []wikiPerson {
 	people := make([]wikiPerson, 0, len(relPaths))
 	for _, rel := range relPaths {
 		page, perr := store.ReadPage(rel)
-		if perr != nil || page == nil {
+		if perr != nil || page == nil || page.Meta.Archived || wiki.IsEffectivelySuperseded(rel, page.Meta) {
 			continue
 		}
 		// Same defensive check as wiki's contacts sync: a stray

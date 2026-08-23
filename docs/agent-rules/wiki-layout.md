@@ -158,6 +158,47 @@ globs:
 - 페이지 이동은 `Store.MovePage` (인바운드 related 재지향 포함), 병합은
   `Store.MergePage`. 파일을 직접 mv/rm 하지 말 것.
 
+## 현행 사실 plane (정정·삭제 가능한 기억)
+
+변할 수 있는 한 줄 사실(선호, 이름, 금액, 기한, 계약 상태, 런타임 상태)은 일반
+위키 본문을 덮어쓰는 방식으로 관리하지 않는다. 정본은 위키 루트의 append-only
+`.fact-mutations.jsonl`이며, `(subject, fact_key)`별 현재값은 사실 종류·출처 권위·
+기준 시각을 함께 해석해 결정한다.
+
+- **쓰기 계약**: 새 현행 사실/정정은 `knowledge(op="assert_fact")`, 의도적 삭제는
+  `knowledge(op="forget_fact")`를 쓴다. `forget_fact`는 과거를 지우지 않고 tombstone을
+  남겨 약한 추론이 삭제값을 되살리지 못하게 한다. `primary_document`의 금액·기한·계약
+  사실과 `runtime_observation`은 검증 가능한 source ref가 필수다. 에이전트가 도구로
+  `direct_user` 권위를 자칭할 수 없으며, 그 권위는 신뢰된 사용자 발화 induction에서만
+  부여한다.
+- **커밋 경계**: 저널 append+fsync가 먼저다. `.fact-state.json`,
+  `사용자/현행-사실.md`, 워크스페이스 `MEMORY.md`/`USER.md`는 재생성 가능한 호환 뷰다.
+  projection 오류가 나도 이미 커밋된 mutation을 재시도하지 말고
+  `FactProjectionStatus`의 degraded 상태로 수리한다. 기존 수동 파일은 최초 전환 전에
+  `.legacy` 백업으로 byte-preserving 보존한다.
+- **회상 현행성**: 채팅 회상은 한 revision의 `RecallFactSnapshot`에서 current/stale/
+  tombstone 규칙을 함께 읽는다. 현행 값은 최신 턴의 `<current-facts>`에 live로 붙이고,
+  과거 위키·일기·대화·파일 증거의 정정 전 값은 최종 증거에서 제거한다. 타 주체 사실은
+  질의나 직전 문맥으로 명시적으로 일치한 subject만 허용한다. 사실 mutation은 Tier1,
+  prompt snapshot, recall cache를 같은 generation 경계에서 무효화한다. typed 폐기값은
+  `(subject, fact_key)`가 해소된 증거에만 적용한다 — `A`, `80` 같은 짧은 값을 전역 문자열
+  deny로 쓰면 무관한 페이지까지 지워진다. 주체·키가 없는 레거시 superseded-page 줄은
+  충돌 가능성이 낮은 긴 문장만 전역 차단하고, 짧게 변하는 값은 반드시 사실 plane으로
+  이관한다.
+- **검색 plane**: 일반 검색은 현행 사실을 `@facts/<claim-id>.md` 읽기 전용 결과로 보여줄
+  수 있다. 이 namespace와 `사용자/현행-사실.md`는 write/update/delete/move/merge/fold
+  대상이 아니며, 클릭할 때 반드시 `ReadPage`로 현재 claim을 재검증한다. 캘린더·메일
+  보강·인물 dossier·채팅 page evidence·ingest 멱등 검사처럼 실제 위키 파일이 필요한
+  소비자는 `QueryOptions.ExcludeFactResults`를 검색 시점에 사용한다. 결과를 받은 뒤
+  `FactID`만 버리면 fact가 top-K 슬롯을 이미 밀어냈으므로 금지한다.
+- **평가 plane**: 기존 path/content 위키 골드는 page-only 결과만 평가한다. synthetic
+  fact 결과를 같은 scorer에 섞으면 맞는 사실도 MISS가 되므로, fact lifecycle은
+  A→B 정정 뒤 A=0/B=1, forget 뒤 A=B=0을 실제 knowledge→recall 경로에서 별도 측정한다.
+
+자동 생성 파일의 marker나 `@facts/` 경로를 일반 위키 페이지로 가장하지 말 것. 사용자가
+직접 관리하는 설명·근거·사건 서술은 기존 `knowledge(op="record")`/wiki 페이지에 남기고,
+현재값으로 판정해야 하는 좁은 주장만 사실 plane에 기록한다.
+
 ## 프로젝트 생애주기 (종결/재개)
 
 - **종결** = `Store.CloseProject` (도구: `wiki(action="close", query=이름, content=결과)`).

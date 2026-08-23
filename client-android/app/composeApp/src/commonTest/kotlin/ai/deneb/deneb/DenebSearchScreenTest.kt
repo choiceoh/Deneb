@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DenebSearchScreenTest {
@@ -43,6 +44,109 @@ class DenebSearchScreenTest {
         val second = edited.starting("새 질의")
         assertEquals(true, second.searching)
         assertEquals("새 질의", second.submittedQuery)
+    }
+
+    @Test
+    fun factMarkersAlwaysChooseInlineReadOnlyHandling() {
+        fun hit(
+            path: String = "wiki/page.md",
+            resultKind: String = "",
+            readOnly: Boolean = false,
+            factId: String = "",
+        ) = SearchHit(path, "title", "candidate", "wiki", resultKind, readOnly, factId)
+
+        assertFalse(hit().isCurrentFactHit())
+        assertTrue(hit(resultKind = "fact").isCurrentFactHit())
+        assertTrue(hit(readOnly = true).isCurrentFactHit())
+        assertTrue(hit(factId = "fact-123").isCurrentFactHit())
+        assertTrue(hit(path = "@facts/fact-123.md").isCurrentFactHit())
+        assertTrue(hit(path = "@facts\\fact-123.md").isCurrentFactHit())
+    }
+
+    @Test
+    fun factClickNeverInvokesEditableWikiNavigation() {
+        val fact = SearchHit(
+            path = "@facts/fact-123.md",
+            title = "Fact",
+            snippet = "",
+            category = "fact-plane",
+            resultKind = "fact",
+            readOnly = true,
+            factId = "fact-123",
+        )
+        var wikiPath: String? = null
+        var inlineFact: SearchHit? = null
+
+        openSearchWikiHit(fact, onOpenWiki = { wikiPath = it }, onOpenFact = { inlineFact = it })
+
+        assertNull(wikiPath)
+        assertEquals(fact, inlineFact)
+
+        val page = fact.copy(path = "wiki/page.md", resultKind = "page", readOnly = false, factId = "")
+        inlineFact = null
+        openSearchWikiHit(page, onOpenWiki = { wikiPath = it }, onOpenFact = { inlineFact = it })
+        assertEquals(page.path, wikiPath)
+        assertNull(inlineFact)
+    }
+
+    @Test
+    fun eachFactTapClearsPreviousPayloadAndFailedOldRefRequiresNewSearch() {
+        val old = SearchHit(
+            path = "@facts/fact-old.md",
+            title = "Old",
+            snippet = "",
+            category = "fact-plane",
+            resultKind = "fact",
+            readOnly = true,
+            factId = "fact-old",
+            subjectId = "project:alpha",
+        )
+        val previous = CurrentFactDetail(
+            path = "@facts/fact-previous.md",
+            title = "Previous",
+            summary = "",
+            body = "previous value",
+        )
+        val state = CurrentFactDetailState(
+            path = previous.path,
+            detail = previous,
+        )
+
+        val loading = state.starting(old)
+
+        assertTrue(loading.loading)
+        assertEquals(old.path, loading.path)
+        assertEquals(old.factId, loading.factId)
+        assertEquals(old.subjectId, loading.subjectId)
+        assertNull(loading.detail)
+
+        val rejected = loading.completed(loading.generation, old.path, null)
+        assertFalse(rejected.loading)
+        assertTrue(rejected.newSearchRequired)
+        assertNull(rejected.detail)
+    }
+
+    @Test
+    fun queryEditOrNewerFactTapDiscardsLateFactPayload() {
+        val firstHit = SearchHit(
+            "@facts/first.md",
+            "First",
+            "",
+            "fact-plane",
+            resultKind = "fact",
+            factId = "first",
+        )
+        val secondHit = firstHit.copy(path = "@facts/second.md", factId = "second")
+        val first = CurrentFactDetailState().starting(firstHit)
+        val second = first.starting(secondHit)
+        val late = CurrentFactDetail(firstHit.path, "Late", "", "stale payload")
+
+        assertEquals(second, second.completed(first.generation, firstHit.path, late))
+
+        val cleared = second.cleared()
+        val current = CurrentFactDetail(secondHit.path, "Current", "", "current payload")
+        assertEquals(cleared, cleared.completed(second.generation, secondHit.path, current))
+        assertNull(cleared.detail)
     }
 
     @Test
