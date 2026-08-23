@@ -9,6 +9,24 @@ import kotlinx.serialization.Serializable
 
 @Immutable
 @Serializable
+data class BrowserConfigOut(
+    val version: Int = 0,
+    val adHostSuffixes: List<String> = emptyList(),
+    val adPathSegments: List<String> = emptyList(),
+    val adPathTokens: List<String> = emptyList(),
+    val adQueryMarkers: List<String> = emptyList(),
+    val quirks: List<BrowserQuirkOut> = emptyList(),
+)
+
+@Immutable
+@Serializable
+data class BrowserQuirkOut(
+    val hosts: List<String> = emptyList(),
+    val css: String = "",
+)
+
+@Immutable
+@Serializable
 data class CalendarAttendeeOut(
     val email: String = "",
     val displayName: String = "",

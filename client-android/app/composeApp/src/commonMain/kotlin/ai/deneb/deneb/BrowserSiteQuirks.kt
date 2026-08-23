@@ -34,10 +34,56 @@ internal fun isRedditHost(url: String): Boolean = urlHost(url) in REDDIT_HOSTS
 
 /**
  * JavaScript to run after page load for [url], or null when the site needs no
- * quirk. Kept as a pure function so the host matching is unit-tested; the
- * Android side only decides *when* to evaluate it.
+ * quirk: the compiled-in Reddit unlock, plus any remotely delivered quirks
+ * (BrowserRuleRegistry) whose host matches. Kept as a pure function so the host
+ * matching is unit-tested; the Android side only decides *when* to evaluate it.
  */
-internal fun browserSiteQuirkScript(url: String): String? = if (isRedditHost(url)) REDDIT_SCROLL_UNLOCK else null
+internal fun browserSiteQuirkScript(url: String): String? {
+    val scripts = ArrayList<String>(2)
+    if (isRedditHost(url)) scripts += REDDIT_SCROLL_UNLOCK
+    browserRemoteQuirkScript(url)?.let(scripts::add)
+    return scripts.takeIf { it.isNotEmpty() }?.joinToString("\n")
+}
+
+/**
+ * Style-injection script for remote quirks matching [url]'s host (exact or
+ * dot-suffix). Operator CSS is trusted like prompt overrides; the gateway
+ * already rejects `</style` breakouts and size outliers before they reach here.
+ */
+internal fun browserRemoteQuirkScript(url: String): String? {
+    val host = urlHost(url)
+    if (host.isEmpty()) return null
+    val css = BrowserRuleRegistry.current().quirks
+        .filter { quirk -> quirk.hosts.any { host == it || host.endsWith(".$it") } }
+        .joinToString("\n") { it.css }
+        .trim()
+    if (css.isEmpty()) return null
+    return """
+(function () {
+  var ID = '__deneb-remote-quirk';
+  if (document.getElementById(ID)) return;
+  var st = document.createElement('style');
+  st.id = ID;
+  st.appendChild(document.createTextNode(${jsCssLiteral(css)}));
+  (document.head || document.documentElement).appendChild(st);
+})();
+"""
+}
+
+/** Single-quoted JS string literal; escapes backslash, quote, and newlines. */
+private fun jsCssLiteral(css: String): String = buildString {
+    append('\'')
+    for (ch in css) {
+        when (ch) {
+            '\\' -> append("\\\\")
+            '\'' -> append("\\'")
+            '\n' -> append("\\n")
+            '\r' -> {}
+            else -> append(ch)
+        }
+    }
+    append('\'')
+}
 
 /**
  * Restores viewport scrolling.

@@ -21,6 +21,8 @@ import ai.deneb.ui.icons.outlined.Translate
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -236,6 +238,12 @@ fun DenebBrowserScreen(
         ) { "browser" }
         browserTranslateCache.attachPersistence(load = { slot.load() }, save = { slot.save(it) })
     }
+    // Remote browser rules (additive ad-block hosts + site quirks) from the
+    // gateway; TTL-gated inside refreshBrowserRules, so opening the browser
+    // usually costs nothing.
+    LaunchedEffect(Unit) {
+        client.refreshBrowserRules()
+    }
     var homeUrl by remember { mutableStateOf(appSettings.getBrowserHomeUrl()) }
     var bookmarks by remember { mutableStateOf(decodeBrowserBookmarks(appSettings.getBrowserBookmarksJson())) }
     var history by remember { mutableStateOf(decodeBrowserHistory(appSettings.getBrowserHistoryJson())) }
@@ -296,6 +304,11 @@ fun DenebBrowserScreen(
             appSettings.setBrowserHomeUrl("")
             homeUrl = ""
         },
+        suggestions = browserOmniboxSuggestions(state.omniboxDraft, bookmarks, history),
+        onOpenSuggestion = { url ->
+            state.load(url)
+            state.editOmnibox(url)
+        },
     ) {
         if (browserShowsStart(state.url, state.currentUrl) && !state.rendererRecoveryPending) {
             BrowserStartPane(
@@ -316,7 +329,6 @@ fun DenebBrowserScreen(
                         }
                     },
                     modifier = Modifier.fillMaxWidth().weight(1f),
-                    onOpenNewTab = ::openInTab,
                 )
             }
         }
@@ -400,6 +412,7 @@ fun DenebBrowserScreen(
                 showHistory = false
             },
             onDelete = { visit -> persistHistory(removeBrowserVisit(history, visit.url)) },
+            onClearAll = { persistHistory(emptyList()) },
             onDismiss = { showHistory = false },
         )
     }
@@ -489,6 +502,7 @@ private fun BrowserTabSnapshot.toRuntime(adBlockEnabled: Boolean): BrowserTabRun
         initialPageTitle = title,
         translateEnabled = translateEnabled,
         adBlockEnabled = adBlockEnabled,
+        tabId = id,
     ),
     lastUsedAtMs = lastUsedAtMs,
     initialUrl = url,
@@ -568,6 +582,8 @@ fun DenebBrowserChrome(
     onGoHome: (() -> Unit)? = null,
     onSetHome: (() -> Unit)? = null,
     onClearHome: (() -> Unit)? = null,
+    suggestions: List<BrowserOmniboxSuggestion> = emptyList(),
+    onOpenSuggestion: (String) -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val haptics = rememberHaptics()
@@ -590,6 +606,8 @@ fun DenebBrowserChrome(
     val field = if (state.popupActive) state.popupUrl else state.omniboxDraft
     var menuOpen by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
+    val omniboxInteraction = remember { MutableInteractionSource() }
+    val omniboxFocused by omniboxInteraction.collectIsFocusedAsState()
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -627,7 +645,7 @@ fun DenebBrowserChrome(
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), progress = { state.progress / 100f })
                 }
             }
-            if (state.translateEnabled && !state.popupActive && pageError == null) {
+            if (state.translateEnabled && pageError == null) {
                 val translation = state.translationProgress
                 Row(
                     modifier = Modifier
@@ -659,6 +677,54 @@ fun DenebBrowserChrome(
                 }
             }
             HorizontalDivider(color = denebHairline())
+            if (omniboxFocused && !state.popupActive && suggestions.isNotEmpty()) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface),
+                ) {
+                    suggestions.forEach { suggestion ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    haptics.tap()
+                                    onOpenSuggestion(suggestion.url)
+                                    focusManager.clearFocus()
+                                }
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                if (suggestion.source == BrowserOmniboxSuggestion.Source.BOOKMARK) {
+                                    Icons.Filled.Bookmark
+                                } else {
+                                    Icons.Outlined.History
+                                },
+                                contentDescription = null,
+                                tint = if (suggestion.source == BrowserOmniboxSuggestion.Source.BOOKMARK) denebInsight() else denebHint(),
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                                Text(
+                                    suggestion.title,
+                                    style = DenebType.rowTitle,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    suggestion.url,
+                                    style = DenebType.meta,
+                                    color = denebHint(),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             // Bottom chrome (Safari-style): close · forward · editable address bar
             // (omnibox) · reload-or-stop · translate · overflow (⋮), above the
             // system gesture bar. Secondary actions (copy, open-external, fallback)
@@ -706,6 +772,7 @@ fun DenebBrowserChrome(
                     onValueChange = { if (!state.popupActive) state.editOmnibox(it) },
                     singleLine = true,
                     readOnly = state.popupActive,
+                    interactionSource = omniboxInteraction,
                     textStyle = DenebType.meta.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
@@ -763,20 +830,22 @@ fun DenebBrowserChrome(
                         tint = denebHint(),
                     )
                 }
+                // Shown for popups too: a link that opened a new window must still
+                // be translatable, following the same per-tab flag.
+                IconButton(
+                    onClick = {
+                        haptics.tap()
+                        state.translateEnabled = !state.translateEnabled
+                    },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        Icons.Outlined.Translate,
+                        contentDescription = if (state.translateEnabled) "원문 보기" else "DeepL로 한국어 번역",
+                        tint = if (state.translateEnabled) denebInsight() else denebHint(),
+                    )
+                }
                 if (!state.popupActive) {
-                    IconButton(
-                        onClick = {
-                            haptics.tap()
-                            state.translateEnabled = !state.translateEnabled
-                        },
-                        modifier = Modifier.size(40.dp),
-                    ) {
-                        Icon(
-                            Icons.Outlined.Translate,
-                            contentDescription = if (state.translateEnabled) "원문 보기" else "DeepL로 한국어 번역",
-                            tint = if (state.translateEnabled) denebInsight() else denebHint(),
-                        )
-                    }
                     // Frequency-ordered (operator feedback): the persistent bar hosts the
                     // FREQUENT action — opening the bookmark list — while the rare
                     // add/remove toggle lives in the More menu. The filled/insight tint
@@ -1192,9 +1261,11 @@ private fun BrowserHistorySheet(
     visits: List<BrowserVisit>,
     onOpen: (BrowserVisit) -> Unit,
     onDelete: (BrowserVisit) -> Unit,
+    onClearAll: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val haptics = rememberHaptics()
+    var confirmClear by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier
@@ -1202,13 +1273,34 @@ private fun BrowserHistorySheet(
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 24.dp),
         ) {
-            Text("최근 방문", style = DenebType.subject, color = MaterialTheme.colorScheme.onSurface)
-            Spacer(Modifier.height(2.dp))
-            Text(
-                if (visits.isEmpty()) "최근 방문이 없습니다" else "최근 ${visits.size}개",
-                style = DenebType.meta,
-                color = denebHint(),
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("최근 방문", style = DenebType.subject, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        if (visits.isEmpty()) "최근 방문이 없습니다" else "최근 ${visits.size}개",
+                        style = DenebType.meta,
+                        color = denebHint(),
+                    )
+                }
+                if (visits.isNotEmpty()) {
+                    TextButton(onClick = {
+                        haptics.tap()
+                        confirmClear = true
+                    }) {
+                        Icon(
+                            Icons.Outlined.Delete,
+                            contentDescription = null,
+                            tint = denebHint(),
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text("전체 삭제", modifier = Modifier.padding(start = 4.dp))
+                    }
+                }
+            }
             Spacer(Modifier.height(12.dp))
             if (visits.isEmpty()) {
                 Text(
@@ -1265,6 +1357,20 @@ private fun BrowserHistorySheet(
                 }
             }
         }
+    }
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("방문 기록 삭제") },
+            text = { Text("최근 방문 ${visits.size}개를 모두 삭제할까요?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmClear = false
+                    onClearAll()
+                }) { Text("삭제") }
+            },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("취소") } },
+        )
     }
 }
 

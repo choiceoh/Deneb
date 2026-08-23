@@ -24,6 +24,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.Toast
+import kotlinx.coroutines.CoroutineScope
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -34,15 +35,21 @@ import java.util.concurrent.atomic.AtomicInteger
  * `window.opener` / postMessage (OAuth, 본인인증), and `about:blank` windows that
  * only exist after document.write. Keep the child attached until the page or the
  * user closes it.
+ *
+ * Each popup carries its own translate bridge: a link that opens a new window
+ * must still translate, following the owning tab's toggle.
  */
 internal class BrowserPopupLayer(
     private val state: DenebWebViewState,
     private val context: Context,
+    private val scope: CoroutineScope,
+    private val translate: TranslateFn,
     private val fileChooser: FileChooserHolder,
     private val launchFilePicker: (Intent) -> Unit,
     private val layer: FrameLayout,
 ) {
     private val stack = ArrayDeque<WebView>()
+    private val bridges = HashMap<WebView, BrowserTranslateBridge>()
     private val adBlockHits = AtomicInteger(0)
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -57,7 +64,16 @@ internal class BrowserPopupLayer(
         }
         val popup = WebView(context)
         applyDenebBrowserWebSettings(popup)
-        attachClients(popup)
+        val bridge = BrowserTranslateBridge(
+            scope = scope,
+            translateSegments = translate,
+            state = state,
+            webView = { popup },
+            translationEnabled = { state.translateEnabled },
+        )
+        bridges[popup] = bridge
+        popup.addJavascriptInterface(bridge, BROWSER_TRANSLATE_BRIDGE_NAME)
+        attachClients(popup, bridge)
         layer.addView(
             popup,
             FrameLayout.LayoutParams(
@@ -120,9 +136,17 @@ internal class BrowserPopupLayer(
 
     private fun destroyTop() {
         val web = stack.removeLast()
+        bridges.remove(web)?.cancelForNavigation()
         layer.removeView(web)
+        web.removeJavascriptInterface(BROWSER_TRANSLATE_BRIDGE_NAME)
         web.stopLoading()
         web.destroy()
+    }
+
+    /** Pushes the owning tab's translate toggle into every live popup document. */
+    fun setTranslationEnabled(enabled: Boolean) {
+        val js = "window.DenebTranslate&&window.DenebTranslate.setEnabled($enabled);"
+        for (web in stack) web.evaluateJavascript(js, null)
     }
 
     private fun publish() {
@@ -147,7 +171,7 @@ internal class BrowserPopupLayer(
         )
     }
 
-    private fun attachClients(popup: WebView) {
+    private fun attachClients(popup: WebView, bridge: BrowserTranslateBridge) {
         popup.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
             val name = browserDownloadFileName(url, contentDisposition, mimeType)
             val started = startBrowserDownload(context, url, userAgent, mimeType, name)
@@ -179,6 +203,7 @@ internal class BrowserPopupLayer(
 
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                 if (view !== top) return
+                bridge.cancelForNavigation()
                 adBlockHits.set(0)
                 state.popupError = null
                 publishLocation(view, loading = true)
@@ -186,7 +211,15 @@ internal class BrowserPopupLayer(
 
             override fun onPageFinished(view: WebView, url: String) {
                 if (view !== top) return
-                if (state.popupError == null) injectSiteQuirk(view, url)
+                if (state.popupError == null) {
+                    injectSiteQuirk(view, url)
+                    injectTranslateScript(view)
+                }
+                bridge.resumeForDocument()
+                view.evaluateJavascript(
+                    "window.DenebTranslate&&window.DenebTranslate.setEnabled(${state.translateEnabled});",
+                    null,
+                )
                 publishLocation(view, loading = false)
             }
 

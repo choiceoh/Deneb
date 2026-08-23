@@ -32,7 +32,7 @@ class BrowserTabsTest {
         assertEquals("https://one.example", reused.tabs.first { it.id == reused.activeId }.url)
         assertEquals(3, reused.tabs.first { it.id == reused.activeId }.lastUsedAtMs)
 
-        for (i in 3..5) {
+        for (i in 3..BROWSER_TAB_LIMIT) {
             store = resolveBrowserTabStore(store, "https://$i.example", "", false, nowMs = i.toLong())
         }
         assertEquals(BROWSER_TAB_LIMIT, store.tabs.size)
@@ -68,7 +68,7 @@ class BrowserTabsTest {
         val raw = buildString {
             append("{\"activeId\":\"same\",\"tabs\":[")
             append("{\"id\":\"bad id\",\"url\":\"https://drop.example\"},")
-            repeat(7) { index ->
+            repeat(BROWSER_TAB_LIMIT + 2) { index ->
                 if (index > 0) append(',')
                 append("{\"id\":\"${if (index == 1 || index == 2) "same" else "t$index"}\",\"url\":\"https://$index.example\"}")
             }

@@ -183,6 +183,15 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_BROWSER_TABS, json)
     }
 
+    // Remote browser rules JSON (miniapp.browser.config.get): additive ad-block
+    // hosts and site quirks served from the gateway. Browsing data, not account
+    // data — deliberately kept across credential switches.
+    fun getBrowserRemoteRulesJson(): String = settings.getString(KEY_BROWSER_REMOTE_RULES, "")
+
+    fun setBrowserRemoteRulesJson(json: String) {
+        settings.putString(KEY_BROWSER_REMOTE_RULES, json)
+    }
+
     // Last page shown in the in-app translation browser. Restored when reopening
     // from More with an empty route URL (leave → re-enter resumes where you left).
     fun getBrowserLastUrl(): String = settings.getString(KEY_BROWSER_LAST_URL, "")
@@ -807,6 +816,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_BROWSER_HISTORY = "browser_history"
         const val KEY_BROWSER_HOME_URL = "browser_home_url"
         const val KEY_BROWSER_ADBLOCK_ENABLED = "browser_adblock_enabled"
+        const val KEY_BROWSER_REMOTE_RULES = "browser_remote_rules"
         const val KEY_CONVERSATIONS = "conversations_json"
         const val KEY_CURRENT_CONVERSATION_ID = "current_conversation_id"
         const val KEY_CURRENT_CONVERSATION_MIGRATED = "current_conversation_migrated"

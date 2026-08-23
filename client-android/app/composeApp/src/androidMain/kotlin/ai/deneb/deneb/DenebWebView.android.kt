@@ -58,13 +58,11 @@ private val webViewJson = Json { ignoreUnknownKeys = true }
  * text segments to [translate] (the gateway RPC) and applies the result in place.
  */
 @SuppressLint("SetJavaScriptEnabled")
-@Suppress("UNUSED_PARAMETER")
 @Composable
 actual fun DenebWebView(
     state: DenebWebViewState,
     translate: TranslateFn,
     modifier: Modifier,
-    onOpenNewTab: (String) -> Unit,
 ) {
     // Composition-scoped: translate round-trips launched from the JS bridge are
     // cancelled when the browser screen leaves (rememberCoroutineScope), so a
@@ -89,6 +87,9 @@ actual fun DenebWebView(
                     holder.web?.onPause()
                     holder.web?.pauseTimers()
                     flushBrowserCookies()
+                    // The process can die at any moment in the background; park
+                    // the session on disk so the next launch restores history.
+                    holder.web?.let { BrowserTabStateDisk.save(context, state.tabId, it) }
                 }
 
                 Lifecycle.Event.ON_START -> {
@@ -128,6 +129,8 @@ actual fun DenebWebView(
             holder.popups = BrowserPopupLayer(
                 state = state,
                 context = ctx,
+                scope = scope,
+                translate = translate,
                 fileChooser = fileChooser,
                 launchFilePicker = { filePicker.launch(it) },
                 layer = popupLayerView,
@@ -409,8 +412,17 @@ actual fun DenebWebView(
                 ): Boolean = fileChooser.start(callback) { filePicker.launch(params.createIntent()) }
             }
             val savedPlatformState = state.platformState as? Bundle
-            holder.restoringDetachedTab = savedPlatformState != null
-            val restored = savedPlatformState?.let { saved ->
+            // A cold start after process death has no in-memory parked Bundle —
+            // fall back to the disk-parked state (consumed on read) so the
+            // back/forward list and scroll survive the restart.
+            val diskState = if (savedPlatformState == null) BrowserTabStateDisk.load(ctx, state.tabId) else null
+            diskState?.let {
+                state.platformScrollX = it.scrollX
+                state.platformScrollY = it.scrollY
+            }
+            val restoreBundle = savedPlatformState ?: diskState?.bundle
+            holder.restoringDetachedTab = restoreBundle != null
+            val restored = restoreBundle?.let { saved ->
                 state.platformState = null
                 runCatching { web.restoreState(saved) != null }.getOrDefault(false)
             } ?: false
@@ -437,6 +449,9 @@ actual fun DenebWebView(
                 if (runCatching { web.saveState(saved) }.getOrNull() != null) {
                     state.platformState = saved
                 }
+                // Also park on disk: this release may be the last one before a
+                // background kill, and a restore after that needs the disk copy.
+                BrowserTabStateDisk.save(context, state.tabId, web)
                 web.removeJavascriptInterface(BROWSER_TRANSLATE_BRIDGE_NAME)
                 web.destroy()
             }
@@ -477,6 +492,9 @@ actual fun DenebWebView(
         if (target.isNotBlank() && (explicit || holder.lastCommandUrl != target)) {
             holder.popups?.destroyAll()
             holder.finishDetachedRestore()
+            // A deliberate navigation retires the saved session — restoring the
+            // old back/forward list after the user navigated away would be a lie.
+            BrowserTabStateDisk.remove(context, state.tabId)
             holder.lastCommandUrl = target
             holder.web?.loadUrl(target)
         }
@@ -551,6 +569,7 @@ actual fun DenebWebView(
     LaunchedEffect(state.translateEnabled) {
         holder.translationEnabled = state.translateEnabled
         if (!state.translateEnabled) state.clearTranslationProgress()
+        holder.popups?.setTranslationEnabled(state.translateEnabled)
         holder.web?.evaluateJavascript(
             "window.DenebTranslate&&window.DenebTranslate.setEnabled(${state.translateEnabled});",
             null,
@@ -642,7 +661,8 @@ internal fun injectSiteQuirk(view: WebView, url: String) {
 // load. Read it once.
 private val translateScriptSource = AtomicReference<String?>(null)
 
-private fun injectTranslateScript(view: WebView) {
+/** Shared with the popup layer: child windows translate too. */
+internal fun injectTranslateScript(view: WebView) {
     val cached = translateScriptSource.get()
     val js = cached ?: runCatching {
         view.context.assets.open("deneb-translate.js").bufferedReader().use { it.readText() }
