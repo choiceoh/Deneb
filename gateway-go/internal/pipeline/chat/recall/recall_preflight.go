@@ -371,6 +371,9 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 		return "", truncated
 	}
 
+	// wiki↔메일 담당자 충돌: 둘 다 올리고 불일치만 표시. 점수 중재 없음
+	// (stale 위키가 이기면 안 된다). 검색은 cue 턴에서만 보강.
+	evidence = attachWikiMailConflicts(ctx, deps.Wiki, evidence, cue)
 	evidence = rankRecallEvidence(evidence, queries, message, cue, deps.now())
 	if logger != nil {
 		logger.Info("recall preflight: evidence injected",

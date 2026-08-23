@@ -73,6 +73,37 @@ func TestWikiAdapterRecallCarriesLateContextAndTypedLocation(t *testing.T) {
 
 // TestWikiAdapterRecallUsesDefaultRerankPath pins that agent knowledge recall
 // no longer forces SkipRerank — empty QueryOptions keep gated model rerank eligible.
+func TestWikiAdapterRecallCarriesPersonEmails(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	t.Cleanup(func() { _ = store.Close() })
+	page := wiki.NewPage("이현성", "인물", nil)
+	page.Meta.Emails = []string{"2555151@kia.com"}
+	page.Body = "기아 광주시설관리팀"
+	if err := store.WritePage("인물/이현성.md", page); err != nil {
+		t.Fatal(err)
+	}
+
+	hits := testutil.Must(NewWikiAdapter(store).Recall(context.Background(), "이현성", 3))
+	found := false
+	for _, h := range hits {
+		if h.Ref.ID == "인물/이현성.md" {
+			found = true
+			if h.Meta["emails"] != "2555151@kia.com" {
+				t.Fatalf("emails meta = %q", h.Meta["emails"])
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected 인물 hit, got %+v", hits)
+	}
+
+	doc := testutil.Must(NewWikiAdapter(store).Read(context.Background(), "인물/이현성.md"))
+	if doc.Meta["emails"] != "2555151@kia.com" {
+		t.Fatalf("Read emails = %q", doc.Meta["emails"])
+	}
+}
+
 func TestWikiAdapterRecallUsesDefaultRerankPath(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
