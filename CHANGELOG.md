@@ -1,5 +1,31 @@
 # Changelog
 
+## [5.2.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.1.0...deneb-v5.2.0) (2026-08-23)
+
+
+### ✨ Features
+
+* **feed:** 카드 소스 아이덴티티 + 드림 카드 정비 신호·정정 반영·페이지별 되돌리기 ([#4628](https://github.com/choiceoh/Deneb/issues/4628)) ([a79cb1e](https://github.com/choiceoh/Deneb/commit/a79cb1e1ede3be8808a8695333b73eab63e10a62))
+* **knowledge:** page structure metadata, dead wiki.* RPC removal, and the wiki rule patch (W15/W16) ([#4622](https://github.com/choiceoh/Deneb/issues/4622)) ([edc101c](https://github.com/choiceoh/Deneb/commit/edc101c8ad31a075ef323d12e3a390888b1c7d7f))
+
+
+### 🐛 Bug Fixes
+
+* **browser:** keep Korean page-load errors instead of Chromium's English page ([#4619](https://github.com/choiceoh/Deneb/issues/4619)) ([265a053](https://github.com/choiceoh/Deneb/commit/265a05325274476a67ad16b165e01ebc777d8bc3))
+* **dev:** give every coding tool the same CodeGraph stack ([#4621](https://github.com/choiceoh/Deneb/issues/4621)) ([636d6ff](https://github.com/choiceoh/Deneb/commit/636d6ffb4ce1a8d38efaff294df86ed37df17af1))
+* **embed:** respawn nemotron adapter after unexpected SIGTERM ([#4624](https://github.com/choiceoh/Deneb/issues/4624)) ([3a072c7](https://github.com/choiceoh/Deneb/commit/3a072c7c6cd583e74edb1aad9d2880dfe9a4a918))
+* **knowledge:** let people matching see every person page (W8) ([#4615](https://github.com/choiceoh/Deneb/issues/4615)) ([92ee3b8](https://github.com/choiceoh/Deneb/commit/92ee3b8f7650d25eba7c50f66486ac11edb49cc1))
+* **wiki:** demote empty person pages, repair body wikilinks, bound expansion (W8/W10/W12) ([#4625](https://github.com/choiceoh/Deneb/issues/4625)) ([f9f8d85](https://github.com/choiceoh/Deneb/commit/f9f8d858cbf389834ccad0802e2551e89f7dcc04))
+* **wiki:** keep every counterparty ledger in 프로젝트/거래 (W7) ([#4620](https://github.com/choiceoh/Deneb/issues/4620)) ([99105cc](https://github.com/choiceoh/Deneb/commit/99105cc5ec7157cfd6cc5e1f3919be66f3762500))
+* **wiki:** require slot and title agreement before retargeting a dream update (W4) ([#4617](https://github.com/choiceoh/Deneb/issues/4617)) ([305bd15](https://github.com/choiceoh/Deneb/commit/305bd1567f96ae5fca327a2e3806939552e0c2c3))
+* **wiki:** routing-shape telemetry and entry-based log rotation (W13/W17) ([#4623](https://github.com/choiceoh/Deneb/issues/4623)) ([d143ffa](https://github.com/choiceoh/Deneb/commit/d143ffafc68cf71a2a82c14354c22096087887c4))
+* **wiki:** stop merging two people into one contact page and flag the ones already merged (W8) ([#4627](https://github.com/choiceoh/Deneb/issues/4627)) ([486b999](https://github.com/choiceoh/Deneb/commit/486b99979765563414e49dbea5a6416976390ca8))
+
+
+### ⚡ Performance
+
+* **wiki:** stop tracking churning ledgers in git and shipping rebuildable caches (W11) ([#4626](https://github.com/choiceoh/Deneb/issues/4626)) ([dc304d8](https://github.com/choiceoh/Deneb/commit/dc304d89951416ce9bde7769f913a624cec84799))
+
 ## [5.1.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.0.0...deneb-v5.1.0) (2026-08-23)
 
 
