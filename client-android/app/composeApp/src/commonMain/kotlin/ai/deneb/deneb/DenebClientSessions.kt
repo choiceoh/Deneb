@@ -68,6 +68,12 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(offset: Int = 0): Re
                 title = conversationTitle(s),
             )
         }
+    val models = payload.sessions
+        .filter { it.key.isNotBlank() && it.model.isNotBlank() }
+        .associate { it.key to it.model }
+    if (models.isNotEmpty()) {
+        _sessionModels.value = _sessionModels.value + models
+    }
     // An older gateway sends no `total` — fall back to what this page held so the
     // drawer stops offering more instead of paging into nothing.
     val total = payload.total ?: (offset + recent.size)

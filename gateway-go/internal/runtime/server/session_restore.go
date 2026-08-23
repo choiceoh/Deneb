@@ -44,6 +44,10 @@ func (s *Server) restoreAndWakeSessions(_ context.Context) {
 	if pinsPath, pinsErr := sessionPinsStorePath(); pinsErr == nil {
 		storedPins = loadSessionPins(pinsPath)
 	}
+	storedModels := map[string]string{}
+	if modelsPath, modelsErr := sessionModelsStorePath(); modelsErr == nil {
+		storedModels = loadSessionModels(modelsPath)
+	}
 	var untitled []string
 
 	var restored int
@@ -84,6 +88,7 @@ func (s *Server) restoreAndWakeSessions(_ context.Context) {
 			Channel:     channel,
 			Label:       label,
 			LabelPinned: storedPins[sessionKey],
+			Model:       storedModels[sessionKey],
 			UpdatedAt:   updatedAt,
 		}); err != nil {
 			s.logger.Warn("session restore: failed to restore session",

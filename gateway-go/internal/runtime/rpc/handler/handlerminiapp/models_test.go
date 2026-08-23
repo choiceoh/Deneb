@@ -103,6 +103,43 @@ func TestModelsSet_WithRole(t *testing.T) {
 	}
 }
 
+func TestModelsSet_WithSessionKeyBindsSessionNotRole(t *testing.T) {
+	var sessionKey, modelID, roleSet string
+	h := modelsSet(ModelDeps{
+		SetModel: func(_ context.Context, role, id string) (string, error) {
+			roleSet = role + "/" + id
+			return id, nil
+		},
+		SetSessionModel: func(_ context.Context, key, id string) (string, error) {
+			sessionKey = key
+			modelID = id
+			return id, nil
+		},
+	})
+	req := reqWith(t, "miniapp.models.set", map[string]any{
+		"id":         "kimi/kimi-k2.5",
+		"sessionKey": " client:main:alpha ",
+	})
+	ctx := clientauth.WithContext(context.Background(), sampleIdentity())
+
+	got := decodePayload(t, h(ctx, req))
+	if roleSet != "" {
+		t.Errorf("SetModel was called with %q; session-scoped set must not persist a role", roleSet)
+	}
+	if sessionKey != "client:main:alpha" {
+		t.Errorf("sessionKey = %q, want trimmed client:main:alpha", sessionKey)
+	}
+	if modelID != "kimi/kimi-k2.5" {
+		t.Errorf("modelID = %q, want kimi/kimi-k2.5", modelID)
+	}
+	if got["sessionKey"] != "client:main:alpha" {
+		t.Errorf("response sessionKey = %v", got["sessionKey"])
+	}
+	if got["current"] != "kimi/kimi-k2.5" {
+		t.Errorf("current = %v, want kimi/kimi-k2.5", got["current"])
+	}
+}
+
 func TestModelsSet_MissingID(t *testing.T) {
 	h := modelsSet(ModelDeps{})
 	ctx := clientauth.WithContext(context.Background(), sampleIdentity())

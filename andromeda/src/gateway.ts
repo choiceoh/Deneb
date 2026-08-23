@@ -166,9 +166,14 @@ export interface ModelsList {
 
 export const listModels = (cfg: GatewayConfig) => callRpc<ModelsList>(cfg, "miniapp.models.list");
 
-// Bind a model to a role (default main) — persists the picker choice gateway-side.
-export const setModel = (cfg: GatewayConfig, id: string, role = "main") =>
-  callRpc<{ ok: boolean; role: string; current: string }>(cfg, "miniapp.models.set", { id, role });
+// Bind a model. With sessionKey this is a per-conversation override (chat
+// picker). Without it, role (default main) is the gateway-wide settings bind.
+export const setModel = (cfg: GatewayConfig, id: string, role = "main", sessionKey?: string) =>
+  callRpc<{ ok: boolean; role: string; current: string; sessionKey?: string }>(cfg, "miniapp.models.set", {
+    id,
+    role,
+    ...(sessionKey ? { sessionKey } : {}),
+  });
 
 // --- Prompt templates (miniapp.prompts.*) ---
 

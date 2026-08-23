@@ -131,6 +131,7 @@ type Controller struct {
 	refreshCodingModelConsumers func()
 	providerConfigs             func() map[string]chatport.ProviderConfig
 	usageStats                  func(sinceMs int64) []agentlog.ModelStat
+	sessions                    sessionBinder
 
 	// usageCache memoizes the 24h usage aggregation: usageStats folds every
 	// agent-log file on each call, which is too heavy per list render.
@@ -156,6 +157,9 @@ type ControllerConfig struct {
 	// UsageStats aggregates per-model run/token counters since a cutoff
 	// (agentlog.Writer.AggregateByModel). nil = no usage enrichment.
 	UsageStats func(sinceMs int64) []agentlog.ModelStat
+	// Sessions patches a conversation's model when the chat picker sends
+	// miniapp.models.set with sessionKey. nil disables session-scoped set.
+	Sessions sessionBinder
 }
 
 // NewController constructs a model-picker controller.
@@ -168,6 +172,7 @@ func NewController(cfg ControllerConfig) *Controller {
 		refreshCodingModelConsumers: cfg.RefreshCodingModelConsumers,
 		providerConfigs:             cfg.ProviderConfigs,
 		usageStats:                  cfg.UsageStats,
+		sessions:                    cfg.Sessions,
 	}
 }
 
@@ -211,13 +216,14 @@ func (s *Controller) chatReady() bool {
 // Methods returns the complete miniapp model-picker RPC domain.
 func (s *Controller) Methods() map[string]rpcutil.HandlerFunc {
 	return handlerminiapp.ModelMethods(handlerminiapp.ModelDeps{
-		CurrentModel:  s.currentMiniappModel,
-		RoleModels:    s.roleMiniappModels,
-		ListModels:    s.listMiniappModels,
-		SetModel:      s.setMiniappModel,
-		AddModel:      s.addMiniappCustomModel,
-		DeleteModel:   s.deleteMiniappCustomModel,
-		MainHasVision: s.mainModelHasVision,
+		CurrentModel:    s.currentMiniappModel,
+		RoleModels:      s.roleMiniappModels,
+		ListModels:      s.listMiniappModels,
+		SetModel:        s.setMiniappModel,
+		SetSessionModel: s.setMiniappSessionModel,
+		AddModel:        s.addMiniappCustomModel,
+		DeleteModel:     s.deleteMiniappCustomModel,
+		MainHasVision:   s.mainModelHasVision,
 		Advisories: func() []string {
 			return modeltuner.LoadScorecard(modeltuner.DefaultStatePath()).AdvisoryLines()
 		},
@@ -313,27 +319,9 @@ func (s *Controller) setMiniappModel(ctx context.Context, role, requested string
 		return "", rpcerr.InvalidRequest("unknown model role: " + role)
 	}
 
-	modelID := strings.TrimSpace(requested)
-	if s.modelRegistry != nil {
-		if resolved, _, ok := s.modelRegistry.ResolveModel(modelID); ok {
-			modelID = resolved
-		}
-	}
-
-	allowed := false
-	for _, section := range s.miniappModelSections(ctx) {
-		for _, entry := range section.entries {
-			if entry.fullID == modelID {
-				allowed = true
-				break
-			}
-		}
-		if allowed {
-			break
-		}
-	}
-	if !allowed {
-		return "", rpcerr.Newf(protocol.ErrNotFound, "model not available: %s", requested)
+	modelID, err := s.resolveAllowedMiniappModel(ctx, requested)
+	if err != nil {
+		return "", err
 	}
 
 	cfgPath := config.ResolveConfigPath()
