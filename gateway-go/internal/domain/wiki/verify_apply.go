@@ -143,6 +143,16 @@ func (s *Store) FoldDuplicate(keep, fold string) error {
 		return fmt.Errorf("wiki: refusing to fold two distinct mail analyses (%s ≠ %s) — 메일 1통 = 1페이지",
 			mailAnalysisMsgID(keep), mailAnalysisMsgID(fold))
 	}
+	// Same class of backstop for project layout slots. A project folder's 대표 /
+	// 로그 / 상세 pages are DIFFERENT documents about one project by design, and
+	// two 대표 pages under different code folders are two different projects —
+	// neither is ever a duplicate, whatever a title- or id-based detector
+	// concluded. Both shapes actually fired in 2026-08 (대표←로그 three times,
+	// pl2-kia-epc-001/대표 ← pl2-kia-epc-002/대표 once, which is how a project
+	// lost its 대표페이지).
+	if err := refuseLayoutSlotFold(keep, fold); err != nil {
+		return err
+	}
 
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -151,6 +161,46 @@ func (s *Store) FoldDuplicate(keep, fold string) error {
 			"\n\n## 병합된 중복 문서 (" + fold + ")\n\n" + foldPage.Body
 	})
 	return err
+}
+
+// refuseLayoutSlotFold rejects folds between pages whose relationship is fixed
+// by the project layout rather than by their content: two pages inside one
+// project folder (대표/로그/상세 are distinct documents about the same project),
+// and two 대표 pages belonging to different project codes (two projects).
+//
+// Only in-folder pages (프로젝트/<name>/…) are guarded. The legacy flat form
+// 프로젝트/<name>.md is a migration remnant whose repair IS a fold into the
+// folder's 대표 slot (wiki-review's layout repair), so folding it must stay
+// possible.
+func refuseLayoutSlotFold(keep, fold string) error {
+	keepProject, keepOK := inFolderProjectOf(keep)
+	foldProject, foldOK := inFolderProjectOf(fold)
+	if !keepOK || !foldOK {
+		return nil
+	}
+	if keepProject == foldProject {
+		return fmt.Errorf("wiki: refusing to fold two pages of project %q (%s ← %s) — 대표/로그/상세는 같은 프로젝트의 다른 문서",
+			keepProject, keep, fold)
+	}
+	// Two 대표 pages under DIFFERENT minted codes are two different deals
+	// (pl2-kia-epc-001 vs -002), never a spelling variant of one project — the
+	// fold that cost pl2-kia-epc-002 its 대표페이지. Folder names that are not
+	// codes (탑솔라 vs 탑솔라-중복) are exactly the splintering that normalized-title
+	// merges exist to repair, so those still fold.
+	if IsProjectRepPage(keep) && IsProjectRepPage(fold) &&
+		validProjectCode(keepProject) && validProjectCode(foldProject) {
+		return fmt.Errorf("wiki: refusing to fold 대표 pages of different project codes (%s ← %s)", keep, fold)
+	}
+	return nil
+}
+
+// inFolderProjectOf returns the owning project for a page that lives INSIDE a
+// project folder (프로젝트/<name>/…), excluding the legacy flat form.
+func inFolderProjectOf(relPath string) (string, bool) {
+	if len(splitProjectPath(relPath)) < 2 {
+		return "", false
+	}
+	return ProjectNameOf(relPath)
 }
 
 // archivePage sets a page's Archived flag in place (no move, no delete) — the
