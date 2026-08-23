@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/sparkfleet"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
@@ -105,8 +106,15 @@ func RegisterRoutes(mux *http.ServeMux, cfg Config) {
 	})
 
 	if os.Getenv("DENEB_MCP_DISABLE") != "1" {
+		mcpAuth := nativeapi.Authenticator(cfg.Logger)
+		// Dedicated broker token (improvement-ideas.md 5.5): when set, /mcp
+		// additionally accepts this token, so a tailnet-exposed client never
+		// needs the full-privileged client token. Unset → status quo.
+		if mcpToken := strings.TrimSpace(os.Getenv("DENEB_MCP_TOKEN")); mcpToken != "" {
+			mcpAuth = mcpapi.WithDedicatedToken(mcpToken, mcpAuth)
+		}
 		mcpHandler := mcpapi.New(mcpapi.Config{
-			Authenticate: nativeapi.Authenticator(cfg.Logger),
+			Authenticate: mcpAuth,
 			Dispatcher:   cfg.Dispatcher,
 			Version:      cfg.Version,
 			Logger:       cfg.Logger,
