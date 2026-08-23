@@ -1023,14 +1023,6 @@ func systemPromptSequenceDigest(digests []string) (string, error) {
 	return runcontract.SystemPromptSequenceDigest(digests)
 }
 
-// SetRunProvenance fills the derived fixed-profile fields on a detached run.
-// Runtime producers call it after episode prompt digests are known; tests and
-// importers can use it to construct schema-valid fixtures without duplicating
-// canonical hashing rules.
-func SetRunProvenance(result *RunResult) error {
-	return runcontract.SetRunProvenance(result)
-}
-
 // ValidateRunProvenance checks the self-consistency of the run's fixed
 // execution profile and finalized system-prompt sequence.
 func ValidateRunProvenance(result *RunResult) error {

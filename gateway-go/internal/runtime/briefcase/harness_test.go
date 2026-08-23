@@ -24,6 +24,33 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
+func setRunProvenanceForTest(t *testing.T, result *RunResult) {
+	t.Helper()
+	result.Sampling = SamplingProfile{Temperature: 0, TopP: 1}
+	promptDigests := make([]string, 0, len(result.Episodes))
+	for _, episode := range result.Episodes {
+		if episode.SystemPromptSHA256 != "" {
+			promptDigests = append(promptDigests, episode.SystemPromptSHA256)
+		}
+	}
+	var err error
+	result.SystemPromptSequenceSHA256, err = systemPromptSequenceDigest(promptDigests)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result.ExecutionProfileSHA256, err = canonicalExecutionProfileDigest(
+		result.Model,
+		result.APIMode,
+		result.ToolSchemaSHA256,
+		result.EndpointSHA256,
+		result.BuildSHA256,
+		result.Sampling,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWorldRejectsEarlyReleaseAndTamperedMaterialization(t *testing.T) {
 	pack := writeHarnessCase(t)
 	clock := NewManualClock(pack.Manifest.FrozenNow)
@@ -779,9 +806,7 @@ func TestValidateRunProvenanceRejectsDerivedFieldMutation(t *testing.T) {
 			StopReason: "end_turn", SystemPromptSHA256: digest, Text: "done",
 		}},
 	}
-	if err := SetRunProvenance(valid); err != nil {
-		t.Fatal(err)
-	}
+	setRunProvenanceForTest(t, valid)
 	if err := ValidateRunProvenance(valid); err != nil {
 		t.Fatalf("valid provenance rejected: %v", err)
 	}
