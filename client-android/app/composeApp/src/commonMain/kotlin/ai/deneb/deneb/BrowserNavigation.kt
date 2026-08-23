@@ -16,13 +16,6 @@ package ai.deneb.deneb
 /** Schemes the WebView renders itself. Anything else belongs to the OS. */
 private val IN_PAGE_SCHEMES = setOf("http", "https", "about", "data", "blob", "javascript")
 
-internal enum class BrowserPopupRoute {
-    NEW_TAB,
-    SAME_TAB,
-    EXTERNAL,
-    IGNORE,
-}
-
 private fun Char.isAsciiAlpha(): Boolean = this in 'a'..'z' || this in 'A'..'Z'
 
 /** Returns the lowercase scheme of [url], or "" when it has none. */
@@ -59,16 +52,6 @@ internal fun urlScheme(url: String): String {
 internal fun isExternalSchemeUrl(url: String): Boolean {
     val scheme = urlScheme(url)
     return scheme.isNotEmpty() && scheme !in IN_PAGE_SCHEMES
-}
-
-/** Decides how a resolved target=_blank URL is adopted without dropping it. */
-internal fun browserPopupRoute(url: String): BrowserPopupRoute {
-    if (!browserAdoptPopupUrl(url)) return BrowserPopupRoute.IGNORE
-    return when (urlScheme(url)) {
-        "http", "https" -> BrowserPopupRoute.NEW_TAB
-        "blob", "data" -> BrowserPopupRoute.SAME_TAB
-        else -> if (isExternalSchemeUrl(url)) BrowserPopupRoute.EXTERNAL else BrowserPopupRoute.IGNORE
-    }
 }
 
 /**

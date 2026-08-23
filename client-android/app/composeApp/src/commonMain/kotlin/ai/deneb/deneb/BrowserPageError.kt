@@ -144,16 +144,3 @@ internal class BrowserJsDialog(
     /** Dismiss = cancel, which is what the page sees if the user taps outside. */
     fun cancel() = answer(false, null)
 }
-
-/**
- * True when a stolen popup URL is worth adopting as a navigation target.
- * Live popups no longer use this path — the child WebView stays attached —
- * but the predicate still documents which URLs are real vs hitch placeholders.
- */
-internal fun browserAdoptPopupUrl(url: String): Boolean {
-    val s = url.trim()
-    if (s.isEmpty()) return false
-    if (s.startsWith("about:", ignoreCase = true)) return false
-    if (s.startsWith("javascript:", ignoreCase = true)) return false
-    return true
-}

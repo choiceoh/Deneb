@@ -4,6 +4,20 @@
 //
 // The gateway omits empty JSON fields, so every property is optional.
 
+export interface BrowserConfigOut {
+  version?: number
+  adHostSuffixes?: string[]
+  adPathSegments?: string[]
+  adPathTokens?: string[]
+  adQueryMarkers?: string[]
+  quirks?: BrowserQuirkOut[]
+}
+
+export interface BrowserQuirkOut {
+  hosts?: string[]
+  css?: string
+}
+
 export interface CalendarAttendeeOut {
   email?: string
   displayName?: string

@@ -30,17 +30,6 @@ class BrowserPageErrorTest {
     }
 
     @Test
-    fun popupHitchAcceptsRealTargetsAndSkipsBlankAboutAndJavascript() {
-        assertTrue(browserAdoptPopupUrl("https://pay.example/auth"))
-        assertTrue(browserAdoptPopupUrl("http://login.example"))
-        assertTrue(browserAdoptPopupUrl("intent://scan/#Intent;end"))
-        assertFalse(browserAdoptPopupUrl(""))
-        assertFalse(browserAdoptPopupUrl("about:blank"))
-        assertFalse(browserAdoptPopupUrl("  about:blank  "))
-        assertFalse(browserAdoptPopupUrl("javascript:void(0)"))
-    }
-
-    @Test
     fun rendererExitsDistinguishCrashesFromMemoryReclamation() {
         assertTrue(browserRendererGoneMessage(crashed = true).contains("비정상 종료"))
         assertTrue(browserRendererGoneMessage(crashed = false).contains("메모리"))

@@ -49,6 +49,18 @@ class MiniappWireDescriptorContractTest {
 
     private val contracts = listOf(
         contract(
+            name = "BrowserConfigOut",
+            serializer = BrowserConfigOut.serializer(),
+            empty = BrowserConfigOut(),
+            fields = listOf("version", "adHostSuffixes", "adPathSegments", "adPathTokens", "adQueryMarkers", "quirks"),
+        ),
+        contract(
+            name = "BrowserQuirkOut",
+            serializer = BrowserQuirkOut.serializer(),
+            empty = BrowserQuirkOut(),
+            fields = listOf("hosts", "css"),
+        ),
+        contract(
             name = "CalendarAttendeeOut",
             serializer = CalendarAttendeeOut.serializer(),
             empty = CalendarAttendeeOut(),

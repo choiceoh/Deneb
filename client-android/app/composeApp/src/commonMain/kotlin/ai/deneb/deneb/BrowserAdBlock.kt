@@ -217,13 +217,19 @@ internal fun shouldBlockBrowserAdRequest(url: String, isForMainFrame: Boolean = 
     val host = browserRequestHost(lower) ?: return false
     if (isBrowserAdHost(host)) return true
 
+    // Remote rules (miniapp.browser.config.get) ADD entries to the compiled-in
+    // lists — an empty registry reads as two empty lists and changes nothing.
+    val remote = BrowserRuleRegistry.current()
+
     val pathAndQuery = lower.substringAfter("://", missingDelimiterValue = lower).substringAfter('/', missingDelimiterValue = "")
     val marked = "/$pathAndQuery"
 
-    if (BROWSER_AD_PATH_SEGMENTS.any { marked.contains(it) }) return true
+    if (BROWSER_AD_PATH_SEGMENTS.any { marked.contains(it) } || remote.adPathSegments.any { marked.contains(it) }) return true
     // Domain-ish tokens (e.g. facebook.com/tr) need the full URL — path-only
     // marked drops the hostname after the first slash of the authority.
     if (BROWSER_AD_PATH_HOSTISH.any { token ->
+            marked.contains(token) || (token.contains('.') && lower.contains(token))
+        } || remote.adPathTokens.any { token ->
             marked.contains(token) || (token.contains('.') && lower.contains(token))
         }
     ) {
@@ -233,10 +239,12 @@ internal fun shouldBlockBrowserAdRequest(url: String, isForMainFrame: Boolean = 
 
     val query = marked.substringAfter('?', missingDelimiterValue = "")
     if (query.isNotEmpty() && BROWSER_AD_QUERY_MARKERS.any { query.contains(it) }) return true
+    if (query.isNotEmpty() && remote.adQueryMarkers.any { query.contains(it) }) return true
     return false
 }
 
-internal fun isBrowserAdHost(host: String): Boolean = BROWSER_AD_HOST_SUFFIXES.any { host == it || host.endsWith(".$it") }
+internal fun isBrowserAdHost(host: String): Boolean = BROWSER_AD_HOST_SUFFIXES.any { host == it || host.endsWith(".$it") } ||
+    BrowserRuleRegistry.current().adHostSuffixes.any { host == it || host.endsWith(".$it") }
 
 /**
  * MIME hint for the empty [android.webkit.WebResourceResponse] so script/CSS

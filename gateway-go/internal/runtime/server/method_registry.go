@@ -414,6 +414,9 @@ func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities 
 			},
 		}),
 		handlerminiapp.WormholeMethods(handlerminiapp.WormholeDeps{}),
+		// Remote browser rules (additive ad-block/site-quirk entries served from
+		// <denebDir>/browser-rules.json) so site fixes ship without an app release.
+		handlerminiapp.BrowserConfigMethods(handlerminiapp.BrowserConfigDeps{DenebDir: s.denebDir}),
 		handlerminiapp.WorkFeedMethods(handlerminiapp.WorkFeedDeps{
 			Store:          capabilities.nativeWorkFeed,
 			OnAnswer:       s.recordDealQuestionAnswer,

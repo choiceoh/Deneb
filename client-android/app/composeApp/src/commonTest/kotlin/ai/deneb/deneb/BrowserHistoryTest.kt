@@ -6,14 +6,14 @@ import kotlin.test.assertTrue
 
 class BrowserHistoryTest {
     @Test
-    fun `record moves url to front updates title and caps at 20`() {
+    fun `record moves url to front updates title and caps at 100`() {
         var visits = emptyList<BrowserVisit>()
-        for (i in 0 until 22) {
+        for (i in 0 until 102) {
             visits = recordBrowserVisit(visits, "https://example.com/p$i", "Page $i", nowMs = i.toLong())
         }
-        assertEquals(20, visits.size)
-        assertEquals("https://example.com/p21", visits.first().url)
-        assertEquals("Page 21", visits.first().title)
+        assertEquals(100, visits.size)
+        assertEquals("https://example.com/p101", visits.first().url)
+        assertEquals("Page 101", visits.first().title)
         assertTrue(visits.none { it.url == "https://example.com/p0" })
         assertTrue(visits.none { it.url == "https://example.com/p1" })
 

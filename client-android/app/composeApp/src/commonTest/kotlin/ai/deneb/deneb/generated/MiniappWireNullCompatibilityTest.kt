@@ -46,6 +46,54 @@ class MiniappWireNullCompatibilityTest {
 
     private val contracts = listOf(
         nullContract(
+            name = "BrowserConfigOut.version",
+            serializer = BrowserConfigOut.serializer(),
+            empty = BrowserConfigOut(),
+            field = "version",
+        ),
+        nullContract(
+            name = "BrowserConfigOut.adHostSuffixes",
+            serializer = BrowserConfigOut.serializer(),
+            empty = BrowserConfigOut(),
+            field = "adHostSuffixes",
+        ),
+        nullContract(
+            name = "BrowserConfigOut.adPathSegments",
+            serializer = BrowserConfigOut.serializer(),
+            empty = BrowserConfigOut(),
+            field = "adPathSegments",
+        ),
+        nullContract(
+            name = "BrowserConfigOut.adPathTokens",
+            serializer = BrowserConfigOut.serializer(),
+            empty = BrowserConfigOut(),
+            field = "adPathTokens",
+        ),
+        nullContract(
+            name = "BrowserConfigOut.adQueryMarkers",
+            serializer = BrowserConfigOut.serializer(),
+            empty = BrowserConfigOut(),
+            field = "adQueryMarkers",
+        ),
+        nullContract(
+            name = "BrowserConfigOut.quirks",
+            serializer = BrowserConfigOut.serializer(),
+            empty = BrowserConfigOut(),
+            field = "quirks",
+        ),
+        nullContract(
+            name = "BrowserQuirkOut.hosts",
+            serializer = BrowserQuirkOut.serializer(),
+            empty = BrowserQuirkOut(),
+            field = "hosts",
+        ),
+        nullContract(
+            name = "BrowserQuirkOut.css",
+            serializer = BrowserQuirkOut.serializer(),
+            empty = BrowserQuirkOut(),
+            field = "css",
+        ),
+        nullContract(
             name = "CalendarAttendeeOut.email",
             serializer = CalendarAttendeeOut.serializer(),
             empty = CalendarAttendeeOut(),

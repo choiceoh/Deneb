@@ -427,6 +427,9 @@ class DenebGatewayClient private constructor(
         // lists when it succeeds.
         loadCachedWorkFeed()?.let { _denebWorkFeed.value = it }
         loadCachedCalendar()?.let { _denebCalendar.value = it }
+        // Browser rules are additive and tiny — seed from the disk cache so
+        // ad-block/quirk behavior is correct on cold start, offline included.
+        seedBrowserRulesFromDisk(appSettings.getBrowserRemoteRulesJson())
     }
 
     // In-process guard for the window AFTER [callRpc] returns a (still-valid) result

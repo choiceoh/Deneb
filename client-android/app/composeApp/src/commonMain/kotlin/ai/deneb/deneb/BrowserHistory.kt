@@ -6,7 +6,7 @@ import kotlinx.serialization.json.Json
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
-private const val BROWSER_HISTORY_LIMIT = 20
+private const val BROWSER_HISTORY_LIMIT = 100
 private const val BROWSER_HISTORY_TITLE_LIMIT = 96
 
 private val browserHistoryJson = Json { ignoreUnknownKeys = true }

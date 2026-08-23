@@ -73,6 +73,7 @@ class DenebWebViewState(
     initialPageTitle: String = "",
     translateEnabled: Boolean = false,
     adBlockEnabled: Boolean = true,
+    tabId: String = "",
 ) {
     /** The URL the WebView should load; setting it via [load] navigates. */
     var url by mutableStateOf(initialUrl)
@@ -200,6 +201,10 @@ class DenebWebViewState(
     private var lastCommittedNavigationUrl = ""
     internal var pendingNavigationCommit by mutableStateOf<BrowserNavigationCommit?>(null)
         private set
+
+    /** Identifies the owning tab: Android parks its WebView session state on
+     *  disk under this id so a process death restores back/forward history. */
+    internal val tabId: String = tabId
 
     /** Opaque platform state. Android stores a Bundle here while a background
      * tab is detached, preserving its back/forward list and scroll position. */
@@ -386,5 +391,4 @@ expect fun DenebWebView(
     state: DenebWebViewState,
     translate: TranslateFn,
     modifier: Modifier,
-    onOpenNewTab: (String) -> Unit = { state.load(it) },
 )

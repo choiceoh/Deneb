@@ -14,7 +14,6 @@ actual fun DenebWebView(
     state: DenebWebViewState,
     translate: TranslateFn,
     modifier: Modifier,
-    onOpenNewTab: (String) -> Unit,
 ) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("인앱 브라우저는 안드로이드 전용입니다")

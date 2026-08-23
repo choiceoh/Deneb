@@ -81,6 +81,62 @@ class MiniappWireValueContractTest {
 
     private val contracts = listOf(
         wireContract(
+            name = "BrowserConfigOut",
+            serializer = BrowserConfigOut.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "version",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "adHostSuffixes",
+                    value = stringList,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "adPathSegments",
+                    value = stringList,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "adPathTokens",
+                    value = stringList,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "adQueryMarkers",
+                    value = stringList,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "quirks",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+            ),
+            invalidField = "version",
+            invalidValue = JsonPrimitive("not-an-int"),
+        ),
+        wireContract(
+            name = "BrowserQuirkOut",
+            serializer = BrowserQuirkOut.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "hosts",
+                    value = stringList,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "css",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "hosts",
+            invalidValue = JsonObject(mapOf("not" to JsonPrimitive("a-list"))),
+        ),
+        wireContract(
             name = "CalendarAttendeeOut",
             serializer = CalendarAttendeeOut.serializer(),
             fields = listOf(

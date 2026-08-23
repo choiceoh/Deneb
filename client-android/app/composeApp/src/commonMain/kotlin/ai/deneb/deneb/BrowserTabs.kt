@@ -6,7 +6,10 @@ import kotlinx.serialization.json.Json
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
-internal const val BROWSER_TAB_LIMIT = 5
+// Eight tabs cost nothing beyond tab metadata: only the ACTIVE tab holds a live
+// WebView — background tabs park a state Bundle — so the cap guards UI clutter,
+// not memory.
+internal const val BROWSER_TAB_LIMIT = 8
 private const val BROWSER_TAB_ID_LIMIT = 64
 private const val BROWSER_TAB_TITLE_LIMIT = 96
 
@@ -39,7 +42,7 @@ internal fun encodeBrowserTabStore(store: BrowserTabStore): String = browserTabs
 
 /**
  * Resolves entry into the browser. A routed web link gets its own tab while room
- * remains. At the five-tab cap the opener is preserved; the UI asks the user to
+ * remains. At the tab cap the opener is preserved; the UI asks the user to
  * close a tab before continuing. A lone blank tab is reused instead of leaving
  * dead clutter.
  */
