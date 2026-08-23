@@ -93,6 +93,7 @@ func (wd *WikiDreamer) verifyPages(ctx context.Context) []verifyFinding {
 
 	// 5e-3: Person pages holding two identities (동명이인 merged into one node).
 	findings = append(findings, wd.detectHomonymPersonPages()...)
+	findings = append(findings, wd.detectDuplicatePersonPages()...)
 
 	// 5f: Unrecalled-cold detection (효용 접지). Old low-importance pages that
 	// never surfaced in the recall-utility ledger are candidate dead weight the
@@ -824,6 +825,39 @@ func (wd *WikiDreamer) detectHomonymPersonPages() []verifyFinding {
 			Detail: fmt.Sprintf("%q 한 페이지에 회사 도메인 %s — 동명이인 병합 의심 (분리는 운영자 판단)",
 				title, strings.Join(domains, ", ")),
 			PageA: rp,
+		})
+	}
+	return findings
+}
+
+// duplicatePersonFindingLimit caps how many name-collision groups one cycle
+// reports; like homonyms these are resolved by hand.
+const duplicatePersonFindingLimit = 5
+
+// detectDuplicatePersonPages flags 인물 pages that share a base name — the same
+// person filed twice under different naming conventions (rank carried or not).
+//
+// Detection only, never a Fix: the group may genuinely be two people, and
+// merging them is what the 2026-07-28 incident did. The detail lists each
+// page's company domains so the operator can tell the cases apart at a glance.
+func (wd *WikiDreamer) detectDuplicatePersonPages() []verifyFinding {
+	groups := wd.store.DuplicatePersonGroups(duplicatePersonFindingLimit)
+	findings := make([]verifyFinding, 0, len(groups))
+	for _, g := range groups {
+		parts := make([]string, 0, len(g.Pages))
+		for _, p := range g.Pages {
+			if len(p.Domains) == 0 {
+				parts = append(parts, fmt.Sprintf("%s(도메인 없음)", p.PagePath))
+				continue
+			}
+			parts = append(parts, fmt.Sprintf("%s(%s)", p.PagePath, strings.Join(p.Domains, ",")))
+		}
+		findings = append(findings, verifyFinding{
+			Type: "person-duplicate",
+			Detail: fmt.Sprintf("%q 이름으로 인물 페이지 %d장 — %s (병합은 운영자 판단)",
+				g.Name, len(g.Pages), strings.Join(parts, " · ")),
+			PageA: g.Pages[0].PagePath,
+			PageB: g.Pages[1].PagePath,
 		})
 	}
 	return findings
