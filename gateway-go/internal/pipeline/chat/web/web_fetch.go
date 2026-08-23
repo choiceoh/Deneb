@@ -64,6 +64,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.Spillover
 			Academic bool     `json:"academic"`
 			Extract  string   `json:"extract"`
 			Focus    string   `json:"focus"`
+			Probe    string   `json:"probe"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			//nolint:nilerr // tool returns user-facing error in result string
@@ -77,6 +78,17 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.Spillover
 		case p.Extract != "":
 			// Extract mode: Kagi renders a URL into clean markdown (standalone).
 			return webKagiExtract(ctx, p.Extract)
+
+		case p.URL != "" && strings.TrimSpace(p.Probe) != "":
+			// Probe mode: answer one claim about the page, not the page.
+			full, err := webFetchURL(ctx, cache, localAI, spill, p.URL, 0, "")
+			if err != nil {
+				return "", err
+			}
+			if strings.HasPrefix(full, "<error>") {
+				return full, nil
+			}
+			return probeContent(p.URL, p.Probe, full), nil
 
 		case p.URL != "":
 			// Fetch mode: extract content from URL.
@@ -222,6 +234,12 @@ func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalA
 	out, ok := v.(fetchOutcome)
 	if !ok {
 		return fetchOutcome{}, fmt.Errorf("web fetch %q: unexpected result type %T", targetURL, v)
+	}
+	// Record the page's shape and, on a re-fetch, say what moved. Computed on the
+	// full content before narrowing, so the answer describes the page rather than
+	// the excerpt the caller happened to ask for.
+	if summary := changeSummary(targetURL, extractEnvelopeContent(out.Content)); summary != "" {
+		out.Content = strings.Replace(out.Content, "</metadata>", summary+"\n</metadata>", 1)
 	}
 	out.Content = applyFocusAndTruncation(out.Content, focus, maxChars)
 	return out, nil

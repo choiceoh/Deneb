@@ -352,6 +352,10 @@ func WebToolSchema() map[string]any {
 				"type":        "number",
 				"description": "Maximum content characters total (default: 20000). search+fetch may use a lower internal budget",
 			},
+			"probe": map[string]any{
+				"type":        "string",
+				"description": "Check one claim against the page instead of reading it: returns a verdict plus the supporting sentence (tens of tokens, not thousands). Use with url. 'no-mention' is an answer, not a failure — re-fetch without probe to read the page.",
+			},
 			"queries": map[string]any{
 				"type":        "array",
 				"description": "Multiple parallel search queries (max 5)",
