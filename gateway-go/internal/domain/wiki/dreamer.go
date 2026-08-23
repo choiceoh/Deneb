@@ -29,6 +29,11 @@ const (
 	// window. The floor keeps back-to-back preference turns from dreaming
 	// every turn.
 	wikiDreamPrefMinInterval = 30 * time.Minute
+	// wikiDreamDemandFreshWindow is how recent an unanswered recall miss must be
+	// to arm the demand fast path — the demand ledger's freshness signal. A
+	// measured knowledge hole fresher than this shortens the dream wait to
+	// wikiDreamPrefMinInterval so it consolidates without the full batch window.
+	wikiDreamDemandFreshWindow = 6 * time.Hour
 	// Cloud synthesis is intentionally allowed well beyond the old six-minute
 	// retry wall. GLM's non-streaming response can spend several minutes on a
 	// large wiki batch before returning headers; leave a second half-cycle for
@@ -196,6 +201,11 @@ type WikiDreamer struct {
 	// land on the 프로젝트 page within the hour, not after the 8h batch window.
 	// Asking "프로젝트 근황" must not increment this (see diaryHasProjectSignal).
 	projectSignals int
+	// demandFresh / demandFreshAt cache the demand fast path so ShouldDream —
+	// called on every chat turn — does not re-read the demand ledger per turn.
+	// Guarded by cmu; refreshed at most every demandFreshCacheTTL.
+	demandFresh   bool
+	demandFreshAt time.Time
 	// synthRetryNotBefore holds ShouldDream after a transient synthesis
 	// failure (see errSynthesisLLMCall); synthTransientFails counts the
 	// consecutive misses that escalate to a full-interval backoff. In-memory
@@ -404,7 +414,34 @@ func (wd *WikiDreamer) ShouldDream(_ context.Context) bool {
 			"elapsed", time.Since(last).Round(time.Minute))
 		return true
 	}
+	// Demand fast path: a fresh unanswered recall miss (a measured knowledge
+	// hole) shortens the wait to the same min-interval floor as the preference
+	// path, so a hole the user keeps hitting consolidates without the full 8h
+	// batch wait. Safe when there is nothing to consume — RunDream then returns
+	// "no input" without an LLM call. The min-interval floor keeps a hot demand
+	// stream from dreaming every turn.
+	if wd.hasFreshDemand(time.Now()) && !last.IsZero() && time.Since(last) >= wikiDreamPrefMinInterval {
+		wd.logger.Info("wiki-dream: demand threshold reached", "elapsed", time.Since(last).Round(time.Minute))
+		return true
+	}
 	return false
+}
+
+// hasFreshDemand reports whether the demand ledger holds a recent unanswered
+// recall miss, cached under cmu so ShouldDream (called every chat turn) does
+// not re-read the ledger per turn. The cache TTL is short relative to the 8h
+// interval, so a fresh hole arms the fast path within minutes while a chatty
+// session pays one ledger read per TTL, not per turn.
+func (wd *WikiDreamer) hasFreshDemand(now time.Time) bool {
+	wd.cmu.Lock()
+	defer wd.cmu.Unlock()
+	if now.Sub(wd.demandFreshAt) < demandFreshCacheTTL {
+		return wd.demandFresh
+	}
+	fresh := wd.store != nil && wd.store.HasRecentRecallMiss(now, wikiDreamDemandFreshWindow)
+	wd.demandFresh = fresh
+	wd.demandFreshAt = now
+	return fresh
 }
 
 type dreamCycle struct {
@@ -536,6 +573,23 @@ func (wd *WikiDreamer) scoreDreamCycle(cycle *dreamCycle) {
 	})
 	cycle.report.QualityScore = q.Score
 	cycle.report.RecallHitPages = q.RecalledPages
+	// Persist the score so the slow rules-revision loop (and any operator
+	// audit) can trend it against the rules version that produced it. Advisory:
+	// an append failure is a phase error, never a cycle failure.
+	if err := wd.appendDreamQualityEntry(dreamQualityEntry{
+		Ts:            now.UnixMilli(),
+		Score:         q.Score,
+		Precision:     q.Precision,
+		Confidence:    q.Confidence,
+		Utility:       q.Utility,
+		UtilitySet:    q.UtilitySet,
+		RecalledPages: q.RecalledPages,
+		Proposed:      cycle.report.WikiUpdatesProposed,
+		Applied:       cycle.created + cycle.updated,
+		RulesHash:     shortRulesHash(wd.loadWikiSynthesisRules()),
+	}); err != nil {
+		cycle.addPhaseError("quality-ledger: %v", err)
+	}
 	if q.Signals > 0 {
 		wd.logger.Info("wiki-dream: quality",
 			"score", int(q.Score+0.5),

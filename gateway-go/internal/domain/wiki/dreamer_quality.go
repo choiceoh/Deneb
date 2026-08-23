@@ -30,6 +30,7 @@ type dreamQuality struct {
 	Precision     float64 // applied / proposed — synthesis surviving guards
 	Confidence    float64 // mean confidence of applied updates
 	Utility       float64 // recalled fraction of prior-cycle pages past the grace window
+	UtilitySet    bool    // whether the utility axis had evidence this cycle (denom > 0)
 	RecalledPages int     // distinct prior-cycle pages recalled in the score window
 	Signals       int     // how many axes contributed (0 → not scored)
 }
@@ -132,6 +133,7 @@ func computeDreamQuality(in dreamQualityInputs) dreamQuality {
 	if denom > 0 {
 		u := num / float64(denom)
 		q.Utility = u
+		q.UtilitySet = true
 		// The utility axis only participates in the collapsed Score when this
 		// cycle actually did work. An idle cycle (nothing proposed, nothing
 		// applied) used to collapse to utility alone — and utility judges PRIOR

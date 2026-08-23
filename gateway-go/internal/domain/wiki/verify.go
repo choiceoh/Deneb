@@ -66,6 +66,8 @@ func (wd *WikiDreamer) verifyPages(ctx context.Context) []verifyFinding {
 	// 5b: Misclassification detection (single LLM call).
 	if wd.client != nil {
 		findings = append(findings, wd.detectMisclassifications(ctx, entries)...)
+		// 5b-2: 사용자 모델 축 간 모순 (advisory — no auto-fix, detection only).
+		findings = append(findings, wd.detectUserModelContradictions(ctx)...)
 	}
 
 	// 5c: Stale-deadline detection (pure computation).

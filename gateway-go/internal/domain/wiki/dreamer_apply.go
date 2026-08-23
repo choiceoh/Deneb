@@ -320,8 +320,14 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 	defer cancel()
 
 	// Build existing wiki context. Snapshot before rendering — Render walks the
-	// entry map, which writers mutate in place under the store lock.
-	indexContent := wd.store.SnapshotIndex().Render()
+	// entry map, which writers mutate in place under the store lock. The
+	// synthesis view is a CAPPED subset (anchors + high-importance + recently
+	// updated): the full index at a few hundred pages drowns the diary content
+	// the dreamer is digesting, and the critique pass re-checks duplicates
+	// against the full index anyway.
+	now := time.Now()
+	index := wd.store.SnapshotIndex()
+	indexContent := index.RenderSynthesisSubset(selectSynthesisIndexEntries(index.Entries, wd.recalledAnchorSet(now), now))
 	processedHistory := formatProcessedDiaryCapsules(state.Recent)
 
 	polarisSection := ""
@@ -337,7 +343,7 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 
 	// 효용 접지: bias synthesis toward the pages that actually get recalled, so
 	// new facts attach to living knowledge rather than cold pages (recall_hits.go).
-	anchorSection := wd.formatRecalledAnchors(time.Now())
+	anchorSection := wd.formatRecalledAnchors(now)
 
 	// Rules block is externalizable (P1 절차 외부화): re-read every cycle so a
 	// slow-loop/operator edit lands on the next dream without a restart.
@@ -491,23 +497,28 @@ func (wd *WikiDreamer) loadWikiSynthesisRules() string {
 // recallAnchorLimit caps how many "living" anchors the synthesis hint lists.
 const recallAnchorLimit = 8
 
-// formatRecalledAnchors renders the pages pulled into chat turns most often in
-// the score window as a synthesis hint. The dreamer should connect new facts to
-// knowledge that gets used, not spawn cold pages beside it. Empty when the
-// recall-utility ledger has nothing yet (early cycles) — the section then
-// vanishes from the prompt rather than showing a hollow header.
-func (wd *WikiDreamer) formatRecalledAnchors(now time.Time) string {
+// recallAnchor is a living page pulled into chat turns, ranked by recall count.
+type recallAnchor struct {
+	path  string
+	title string
+	n     int
+}
+
+// rankedRecallAnchors returns the top recallAnchorLimit living recalled pages
+// (archived/missing skipped), ranked by recall count in the score window.
+// nil/empty when the recall ledger has no traffic yet.
+func (wd *WikiDreamer) rankedRecallAnchors(now time.Time) []recallAnchor {
 	counts := wd.store.RecallHitScoreCounts(now)
 	if len(counts) == 0 {
-		return ""
+		return nil
 	}
-	type anchor struct {
+	type raw struct {
 		path string
 		n    int
 	}
-	ranked := make([]anchor, 0, len(counts))
+	ranked := make([]raw, 0, len(counts))
 	for p, n := range counts {
-		ranked = append(ranked, anchor{p, n})
+		ranked = append(ranked, raw{p, n})
 	}
 	sort.Slice(ranked, func(i, j int) bool {
 		if ranked[i].n != ranked[j].n {
@@ -515,10 +526,9 @@ func (wd *WikiDreamer) formatRecalledAnchors(now time.Time) string {
 		}
 		return ranked[i].path < ranked[j].path // stable tie-break
 	})
-	var sb strings.Builder
-	shown := 0
+	out := make([]recallAnchor, 0, recallAnchorLimit)
 	for _, a := range ranked {
-		if shown >= recallAnchorLimit {
+		if len(out) >= recallAnchorLimit {
 			break
 		}
 		page, err := wd.store.ReadPage(a.path)
@@ -529,11 +539,38 @@ func (wd *WikiDreamer) formatRecalledAnchors(now time.Time) string {
 		if title == "" {
 			title = strings.TrimSuffix(filepath.Base(a.path), ".md")
 		}
-		fmt.Fprintf(&sb, "- [[%s]] %s (회상 %d회)\n", a.path, title, a.n)
-		shown++
+		out = append(out, recallAnchor{path: a.path, title: title, n: a.n})
 	}
-	if shown == 0 {
+	return out
+}
+
+// recalledAnchorSet returns the anchor paths as a set, for the synthesis-index
+// subset selection (which needs O(1) membership, not the rendered lines).
+func (wd *WikiDreamer) recalledAnchorSet(now time.Time) map[string]struct{} {
+	anchors := wd.rankedRecallAnchors(now)
+	if len(anchors) == 0 {
+		return nil
+	}
+	out := make(map[string]struct{}, len(anchors))
+	for _, a := range anchors {
+		out[a.path] = struct{}{}
+	}
+	return out
+}
+
+// formatRecalledAnchors renders the pages pulled into chat turns most often in
+// the score window as a synthesis hint. The dreamer should connect new facts to
+// knowledge that gets used, not spawn cold pages beside it. Empty when the
+// recall-utility ledger has nothing yet (early cycles) — the section then
+// vanishes from the prompt rather than showing a hollow header.
+func (wd *WikiDreamer) formatRecalledAnchors(now time.Time) string {
+	anchors := wd.rankedRecallAnchors(now)
+	if len(anchors) == 0 {
 		return ""
+	}
+	var sb strings.Builder
+	for _, a := range anchors {
+		fmt.Fprintf(&sb, "- [[%s]] %s (회상 %d회)\n", a.path, a.title, a.n)
 	}
 	return "\n## 자주 회상된 앵커 (실제 쓰이는 지식 — 새 사실을 여기에 연결하고 중복 생성 대신 갱신하라)\n" +
 		strings.TrimRight(sb.String(), "\n") + "\n"
