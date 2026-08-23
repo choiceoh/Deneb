@@ -99,9 +99,17 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         FileKit.init(this)
-        handleDeepLinkIntent(intent)
-        handleShareIntent(intent)
-        handleVoiceIntent(intent)
+        // Only on a fresh start. The intent is "consumed" by mutating our in-process
+        // copy (removeExtra / data = null), which says nothing to the system: after a
+        // process death the task is restored WITH the original intent, and handling it
+        // again re-sent the shared file or re-asked the spoken question. A
+        // savedInstanceState means the system is restoring us, so the intent has been
+        // seen before.
+        if (savedInstanceState == null) {
+            handleDeepLinkIntent(intent)
+            handleShareIntent(intent)
+            handleVoiceIntent(intent)
+        }
 
         val dynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         val appSettings: AppSettings = get()

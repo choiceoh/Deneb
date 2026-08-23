@@ -80,7 +80,10 @@ class DaemonService : Service() {
         val notificationBuilder = builder
             .setContentTitle(getString(R.string.app_name))
             .setContentText(getString(R.string.daemon_notification_text))
-            .setSmallIcon(android.R.drawable.ic_popup_sync)
+            // The app's own monochrome mark, not the platform's generic sync glyph —
+            // this notification is permanently in the shade, so it is the app's face
+            // there.
+            .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
 
         pendingIntent?.let { notificationBuilder.setContentIntent(it) }

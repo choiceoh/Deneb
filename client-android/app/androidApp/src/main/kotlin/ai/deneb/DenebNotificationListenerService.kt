@@ -7,6 +7,7 @@ import ai.deneb.network.httpTeardownTolerantHandler
 import android.app.Notification
 import android.app.NotificationManager
 import android.app.RemoteInput
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -128,6 +129,11 @@ class DenebNotificationListenerService : NotificationListenerService() {
     override fun onListenerDisconnected() {
         NotificationReplyBridge.replier = null
         super.onListenerDisconnected()
+        // The system unbinds listeners on app update and after a crash, and does not
+        // always come back on its own — the access toggle looks enabled while nothing
+        // is delivered, so the phone-signal ledger silently stops until the user
+        // toggles it off and on. Ask for the rebind instead.
+        runCatching { requestRebind(ComponentName(this, DenebNotificationListenerService::class.java)) }
     }
 
     override fun onDestroy() {

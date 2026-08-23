@@ -197,6 +197,21 @@ class AppSettings(internal val settings: Settings) {
     }
 
     // In-place DeepL toggle preference — remembered across browser opens.
+
+    /**
+     * Whether the notification permission prompt has been shown once.
+     *
+     * Android only allows one prompt: a second request after a denial is a silent
+     * no-op, so re-asking on every launch would neither work nor be polite. The
+     * flag is about having ASKED, not about the answer — the current grant state
+     * is always read from the platform.
+     */
+    fun notificationPermissionAsked(): Boolean = settings.getBoolean(KEY_NOTIFICATION_PERMISSION_ASKED, false)
+
+    fun setNotificationPermissionAsked(asked: Boolean) {
+        settings.putBoolean(KEY_NOTIFICATION_PERMISSION_ASKED, asked)
+    }
+
     fun isBrowserTranslateEnabled(): Boolean = settings.getBoolean(KEY_BROWSER_TRANSLATE_ENABLED, false)
 
     fun setBrowserTranslateEnabled(enabled: Boolean) {
@@ -788,6 +803,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_BROWSER_TABS = "browser_tabs_v1"
         const val KEY_BROWSER_LAST_URL = "browser_last_url"
         const val KEY_BROWSER_TRANSLATE_ENABLED = "browser_translate_enabled"
+        const val KEY_NOTIFICATION_PERMISSION_ASKED = "notification_permission_asked"
         const val KEY_BROWSER_HISTORY = "browser_history"
         const val KEY_BROWSER_HOME_URL = "browser_home_url"
         const val KEY_BROWSER_ADBLOCK_ENABLED = "browser_adblock_enabled"
