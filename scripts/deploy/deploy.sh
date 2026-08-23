@@ -342,9 +342,37 @@ git -c pull.rebase=false pull --ff-only origin main
 # that do not resolve to Wormhole's client-facing route names.
 check_model_route_topology
 
+# Records the wormhole binary this host last restarted onto, so a rebuild that
+# produces identical bytes does not cost the router a restart.
+WORMHOLE_LIVE_SUM_FILE="${WORMHOLE_LIVE_SUM_FILE:-$HOME/.deneb/.wormhole-deployed.sha256}"
+
 # Build
 echo "==> make gateway-prod"
 make gateway-prod
+
+# Wormhole (the model router every LLM call goes through) is a SIBLING service
+# with its own binary, and deploying only the gateway leaves it frozen at
+# whatever commit last built it by hand: on 2026-08-23 dist/wormhole was six
+# days stale, so a landed routing fix simply never took effect while the code
+# in the repo said otherwise. Build it here and swap only when the bytes
+# actually changed — an unchanged binary must not cost a restart, because a
+# restart drops in-flight LLM requests.
+echo "==> make wormhole"
+if make wormhole; then
+    wormhole_new_sum="$(sha256sum dist/wormhole 2>/dev/null | cut -d' ' -f1)"
+    wormhole_live_sum="$(cat "$WORMHOLE_LIVE_SUM_FILE" 2>/dev/null || true)"
+    if [[ -n "$wormhole_new_sum" && "$wormhole_new_sum" != "$wormhole_live_sum" ]]; then
+        echo "    wormhole binary changed — restarting the router"
+        if systemctl --user restart wormhole 2>/dev/null \
+            || "$PWD/scripts/deploy/start-wormhole.sh" restart; then
+            printf '%s\n' "$wormhole_new_sum" > "$WORMHOLE_LIVE_SUM_FILE"
+        else
+            echo "    wormhole restart FAILED — the router is still on the previous binary" >&2
+        fi
+    fi
+else
+    echo "    wormhole build failed (non-fatal); the router stays on its previous binary" >&2
+fi
 
 # Amaranth reader (Playwright) — node_modules is gitignored; keep prod in sync
 # so miniapp.groupware.* / radar don't fail with ERR_MODULE_NOT_FOUND.
