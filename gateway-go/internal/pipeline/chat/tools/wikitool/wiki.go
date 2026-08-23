@@ -454,6 +454,10 @@ func wikiIndex(store *wiki.Store, category string) (string, error) {
 }
 
 type wikiWriteRequest struct {
+	// path is the resolved destination, filled in by persistWikiWrite (not a
+	// tool argument): the merge step needs to know whether it is writing a
+	// layout slot page (대표.md/로그.md) whose title is structural.
+	path       string
 	title      string
 	id         string
 	summary    string
@@ -582,6 +586,7 @@ func shouldAppendProjectLog(path string, force bool) bool {
 func persistWikiWrite(store *wiki.Store, path string, req wikiWriteRequest, logAppend bool) (*wiki.Page, bool, error) {
 	var page *wiki.Page
 	var existed bool
+	req.path = path
 	err := store.UpdatePage(path, func(existing *wiki.Page) (*wiki.Page, error) {
 		page, existed = mergeWikiWrite(existing, req, logAppend)
 		return page, nil
@@ -597,9 +602,26 @@ func mergeWikiWrite(existing *wiki.Page, req wikiWriteRequest, logAppend bool) (
 	return existing, true
 }
 
+// isLayoutSlotPage reports whether a path is a structural project slot whose
+// title is derived from the project, not from a page's contents.
+func isLayoutSlotPage(relPath string) bool {
+	return wiki.IsProjectRepPage(relPath) || wiki.IsProjectLogPage(relPath) || wiki.IsMailAnalysisPath(relPath)
+}
+
 func updateWikiWritePage(page *wiki.Page, req wikiWriteRequest, logAppend bool) {
-	page.Meta.Title = req.title
-	if req.id != "" {
+	// `title` is a required tool argument, so an agent appending one fact still
+	// restates it — and a restatement phrased as that update's topic renames the
+	// page. Editorial pages may legitimately be retitled this way, but a layout
+	// SLOT page's name is structural: 로그.md is "<project> — 진행 로그", not
+	// whatever landed in it today (2026-08-13: wiki-research renamed a project's
+	// 로그.md to "솔리스 인수 업무 분장 — 백창선 컨트롤타워", and titles feed both search
+	// ranking and the duplicate detectors).
+	if !isLayoutSlotPage(req.path) || page.Meta.Title == "" {
+		page.Meta.Title = req.title
+	}
+	// Fill-only for the same reason mergeDreamUpdate is: id is the key
+	// similar/verify/link_prune/graph resolve by, not a per-update slug.
+	if req.id != "" && page.Meta.ID == "" {
 		page.Meta.ID = req.id
 	}
 	if req.summary != "" {
