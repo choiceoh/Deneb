@@ -54,17 +54,51 @@ export DENEB_RERANK_MODEL="${DENEB_RERANK_MODEL:-xprovence-bgem3-v2}"
 # Vocabulary-gap expansion backfill went live in production on 2026-08-08
 # (#4473; gateway drop-in sets DENEB_WIKI_QUERY_EXPANSION=backfill), so parity
 # needs the bench arm too — the exact drift class this block exists to prevent.
-# The bench expander mirrors the production tiny role (qwen via wormhole);
-# without the wormhole token the expander calls fail per-query and the run is
-# effectively expansion-off, so warn loudly rather than measure silently.
+# The bench expander mirrors the production tiny role via wormhole; without the
+# wormhole token the expander calls fail per-query and the run is effectively
+# expansion-off, so warn loudly rather than measure silently.
+#
+# The model名 must track the tiny role in deneb.json (tinyModel). It was pinned
+# to qwen3.6-35b-a3b, whose local serving died on 2026-08-06 — wormhole then
+# failed the calls over to a cloud REASONING model, which burned the expander's
+# output budget on chain-of-thought and returned empty content on 46% of the
+# calls (measured 2026-08-23). A dead pin does not fail; it silently measures a
+# different model than production runs.
 export DENEB_WIKI_QUERY_EXPANSION="${DENEB_WIKI_QUERY_EXPANSION:-backfill}"
-export DENEB_EXPANSION_MODEL="${DENEB_EXPANSION_MODEL:-qwen3.6-35b-a3b}"
+export DENEB_EXPANSION_MODEL="${DENEB_EXPANSION_MODEL:-dsv4-nothink}"
 if [[ -z "${DENEB_EXPANSION_API_KEY:-}" && -f "$HOME/.wormhole/config.json" ]]; then
     DENEB_EXPANSION_API_KEY="$(python3 -c 'import json,os;print(os.path.expandvars(json.load(open(os.path.expanduser("~/.wormhole/config.json")))["token"]))' 2>/dev/null || true)"
     export DENEB_EXPANSION_API_KEY
 fi
 if [[ "$DENEB_WIKI_QUERY_EXPANSION" == "backfill" && -z "${DENEB_EXPANSION_API_KEY:-}" ]]; then
     echo "recall-health: WARNING — expansion=backfill but no wormhole token; expander calls will fail and the run scores expansion-OFF (not production parity)" >&2
+fi
+
+# Parity check against the gateway's configured tiny role: a bench pinned to a
+# model production no longer uses measures the wrong thing, and (as above) says
+# nothing while doing it.
+if [[ "$DENEB_WIKI_QUERY_EXPANSION" == "backfill" && -f "$HOME/.deneb/deneb.json" ]]; then
+    prod_tiny="$(python3 -c 'import json,os,sys
+try:
+    cfg=json.load(open(os.path.expanduser("~/.deneb/deneb.json")))
+except Exception:
+    sys.exit()
+def find(node):
+    if isinstance(node,dict):
+        if isinstance(node.get("tinyModel"),str):
+            return node["tinyModel"]
+        for v in node.values():
+            hit=find(v)
+            if hit: return hit
+    elif isinstance(node,list):
+        for v in node:
+            hit=find(v)
+            if hit: return hit
+    return ""
+print(find(cfg).rsplit("/",1)[-1])' 2>/dev/null || true)"
+    if [[ -n "$prod_tiny" && "$prod_tiny" != "$DENEB_EXPANSION_MODEL" ]]; then
+        echo "recall-health: WARNING — expansion model '$DENEB_EXPANSION_MODEL' != production tiny role '$prod_tiny'; this run is NOT expansion parity" >&2
+    fi
 fi
 
 echo "recall-health: fusion 1:${DENEB_WIKI_RRF_SEM_WEIGHT}:${DENEB_WIKI_RRF_GRAPH_WEIGHT}" \
