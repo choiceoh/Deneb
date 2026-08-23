@@ -12,9 +12,18 @@ import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebPressable
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.icons.filled.Mic
+import ai.deneb.ui.icons.filled.PushPin
+import ai.deneb.ui.icons.filled.School
 import ai.deneb.ui.icons.filled.TaskAlt
+import ai.deneb.ui.icons.filled.Terminal
+import ai.deneb.ui.icons.filled.Verified
 import ai.deneb.ui.icons.outlined.Archive
+import ai.deneb.ui.icons.outlined.Article
 import ai.deneb.ui.icons.outlined.AutoAwesome
+import ai.deneb.ui.icons.outlined.Autorenew
+import ai.deneb.ui.icons.outlined.Bolt
+import ai.deneb.ui.icons.outlined.Book
+import ai.deneb.ui.icons.outlined.KeyboardVoice
 import ai.deneb.ui.icons.outlined.QuestionAnswer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -194,10 +203,12 @@ internal fun WorkFeedPanel(
                     .fillMaxWidth()
                     .heightIn(max = 520.dp),
             ) {
-                // No key: the feed can carry duplicate item ids (server-side), and a
-                // duplicate LazyColumn key crashes. Position-based identity is fine
-                // for a short, rebuilt-on-refresh list.
-                itemsIndexed(items) { _, item ->
+                // The gateway deliberately tolerates duplicate item ids (ack/
+                // trash/snooze apply to EVERY entry sharing the id — the
+                // zombie-duplicate safety net), and a duplicate LazyColumn key
+                // crashes. The id#position composite is unique by construction
+                // and stays stable for this rebuilt-on-refresh list.
+                itemsIndexed(items, key = { index, item -> "${item.id}#$index" }) { _, item ->
                     WorkFeedRow(item = item, onOpen = onOpen, onRunAction = onRunAction)
                 }
             }
@@ -447,6 +458,82 @@ internal fun WorkFeedAnswerBlock(
     }
 }
 
+/** Universal inbox-lifecycle kinds — already surfaced elsewhere (확인 quick
+ *  button, long-press sheet) so the chip row never repeats them. */
+internal val WorkFeedLifecycleKinds = setOf("open", "followup", "snooze", "ack", "answer", "trash")
+
+/**
+ * Card-specific operations promoted to chips under the expanded body (e.g. a
+ * dream card's 전체/페이지별 되돌리기). Done operations drop off.
+ */
+internal fun WorkFeedItem.chipActions(): List<WorkFeedAction> = actions.filter { action ->
+    val kind = action.kind.ifBlank { action.id }
+    kind !in WorkFeedLifecycleKinds && action.status != "done"
+}
+
+/**
+ * Chip row for a NON-question card's own actions (question cards render theirs
+ * through [WorkFeedAnswerBlock]; groupware approvals keep their inline body
+ * buttons). Revert-style actions confirm first — they rewrite wiki pages back
+ * to a previous state.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun WorkFeedActionChips(
+    item: WorkFeedItem,
+    onRunAction: (String, String) -> Unit,
+) {
+    val chips = remember(item.id, item.actions) { item.chipActions() }
+    if (chips.isEmpty()) return
+    val haptics = rememberHaptics()
+    var pendingRevert by remember(item.id) { mutableStateOf<WorkFeedAction?>(null) }
+    pendingRevert?.let { action ->
+        AlertDialog(
+            onDismissRequest = { pendingRevert = null },
+            title = { Text(action.label, style = DenebType.subject) },
+            text = {
+                Text(
+                    "이 작업은 위키 페이지를 이전 상태로 되돌립니다. 계속할까요?",
+                    style = DenebType.body,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        haptics.confirm()
+                        pendingRevert = null
+                        onRunAction(item.id, action.id)
+                    },
+                ) { Text("되돌리기", style = DenebType.button) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRevert = null }) { Text("취소", style = DenebType.button) }
+            },
+        )
+    }
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 12.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        chips.forEach { action ->
+            AssistChip(
+                onClick = {
+                    if (action.id.startsWith("dream:revert")) {
+                        pendingRevert = action
+                    } else {
+                        haptics.confirm()
+                        onRunAction(item.id, action.id)
+                    }
+                },
+                label = { Text(action.label, style = DenebType.button) },
+                modifier = Modifier.handCursor(),
+            )
+        }
+    }
+}
+
 @Composable
 internal fun WorkFeedActionSheetContent(
     item: WorkFeedItem,
@@ -598,6 +685,17 @@ internal enum class WorkFeedSourceIcon {
     AUDIO,
     CONTACTS,
     APPROVAL,
+    BOARD,
+    QUESTION,
+    MEETING,
+    REPORT,
+    DREAM,
+    DIGEST,
+    TRUST,
+    GENESIS,
+    INTERVIEW,
+    HEARTBEAT,
+    LOG,
     DOCUMENT,
 }
 
@@ -606,18 +704,40 @@ internal data class WorkFeedSourcePresentation(
     val label: String?,
 )
 
+/**
+ * Source → (icon, a11y label). Identity rides the GLYPH, not a per-source color:
+ * the feed's palette is deliberately monochrome plus the single warm urgent
+ * accent (see the tint note in WorkFeedRow), so cards from the dreamer, the
+ * Trust Inbox, and question cards are told apart by shape while the color
+ * channel keeps meaning exactly one thing — urgency. Labels mirror the
+ * gateway's source strings (internal/domain/workfeed/store.go and the
+ * per-producer literals); unknown sources keep the generic document fallback.
+ */
 internal fun workFeedSourcePresentation(source: String): WorkFeedSourcePresentation = when (source.trim()) {
     "mail_report" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.MAIL, "메일")
     "capture_image" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.IMAGE, "이미지")
     "capture_audio" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.AUDIO, "음성")
     "capture_contacts" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.CONTACTS, "연락처")
+    "capture_document" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.DOCUMENT, "문서")
     "groupware-approval" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.APPROVAL, "전자결재")
+    "groupware-board" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.BOARD, "공지")
+    "proactive" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.REPORT, "리포트")
+    "meeting_report" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.MEETING, "회의")
+    "dream" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.DREAM, "드림")
+    "dream-digest" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.DIGEST, "기억 다이제스트")
+    "self-correction" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.TRUST, "자기교정")
+    "deal_question" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.QUESTION, "질문")
+    "kb-interview" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.INTERVIEW, "인터뷰")
+    "genesis-meta", "genesis-evolve-verdict", "genesis-ladder" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.GENESIS, "자가개선")
+    "heartbeat" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.HEARTBEAT, "하트비트")
+    "system_log" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.LOG, "로그")
     else -> WorkFeedSourcePresentation(WorkFeedSourceIcon.DOCUMENT, null)
 }
 
 /** Leading icon by card source: an envelope for mail reports, a checked document
- *  for electronic approvals, a generic report page for other proactive
- *  briefings, and a concrete glyph for each capture kind. */
+ *  for electronic approvals, a glyph per autonomous producer (dreamer, digest,
+ *  trust inbox, questions, genesis watches), and a concrete glyph for each
+ *  capture kind. */
 @Composable
 private fun sourcePainter(source: WorkFeedSourceIcon): Painter = when (source) {
     WorkFeedSourceIcon.MAIL -> rememberVectorPainter(Icons.Outlined.MailOutline)
@@ -625,6 +745,17 @@ private fun sourcePainter(source: WorkFeedSourceIcon): Painter = when (source) {
     WorkFeedSourceIcon.AUDIO -> rememberVectorPainter(Icons.Filled.Mic)
     WorkFeedSourceIcon.CONTACTS -> rememberVectorPainter(Icons.Filled.Person)
     WorkFeedSourceIcon.APPROVAL -> rememberVectorPainter(Icons.Filled.TaskAlt)
+    WorkFeedSourceIcon.BOARD -> rememberVectorPainter(Icons.Filled.PushPin)
+    WorkFeedSourceIcon.QUESTION -> rememberVectorPainter(Icons.Outlined.QuestionAnswer)
+    WorkFeedSourceIcon.MEETING -> rememberVectorPainter(Icons.Outlined.KeyboardVoice)
+    WorkFeedSourceIcon.REPORT -> rememberVectorPainter(Icons.Outlined.Article)
+    WorkFeedSourceIcon.DREAM -> rememberVectorPainter(Icons.Outlined.AutoAwesome)
+    WorkFeedSourceIcon.DIGEST -> rememberVectorPainter(Icons.Outlined.Book)
+    WorkFeedSourceIcon.TRUST -> rememberVectorPainter(Icons.Filled.Verified)
+    WorkFeedSourceIcon.GENESIS -> rememberVectorPainter(Icons.Outlined.Autorenew)
+    WorkFeedSourceIcon.INTERVIEW -> rememberVectorPainter(Icons.Filled.School)
+    WorkFeedSourceIcon.HEARTBEAT -> rememberVectorPainter(Icons.Outlined.Bolt)
+    WorkFeedSourceIcon.LOG -> rememberVectorPainter(Icons.Filled.Terminal)
     WorkFeedSourceIcon.DOCUMENT -> painterResource(Res.drawable.ic_file)
 }
 
