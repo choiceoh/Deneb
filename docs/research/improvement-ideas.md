@@ -50,7 +50,7 @@
 | 21 | Trust Inbox: 자율 변경 통합 승인 대기열 (안드로이드 워크피드) — ✅ 구현됨 | P1 | M |
 | 22 | 개인 MCP 브로커 — tailnet 경유 읽기 전용 노출 | P2 | M |
 | 23 | 인물·거래 도시에 (Business Dossier) | P2 | M |
-| 24 | 주간 기억 다이제스트 + dreamer 피드백 루프 | P2 | S |
+| 24 | 주간 기억 다이제스트 + dreamer 피드백 루프 — ✅ 구현됨 | P2 | S |
 
 ---
 
@@ -371,7 +371,7 @@
 
 ---
 
-### 4.9 주간 기억 다이제스트 + dreamer 피드백 — **P2 / S · ideation**
+### 4.9 주간 기억 다이제스트 + dreamer 피드백 — **P2 / S · implemented 2026-08-23**
 
 **무엇.** dreamer가 주간에 검증·병합·만료한 기억 요약 카드(새 사실 N개 / 병합 M개 / 만료 K개 + 항목 펼침 보기)를 발행하고, 사실별 맞아요/틀려요 피드백을 dreamer 검증 루프로 회귀.
 
@@ -506,7 +506,7 @@
 - 4.4 Cadence editor
 - 6.1 Live-test 시간 단축
 - 4.8 인물·거래 도시에 Business Dossier (ideation)
-- 4.9 주간 기억 다이제스트 + dreamer 피드백 (ideation)
+- 4.9 주간 기억 다이제스트 + dreamer 피드백 (implemented 2026-08-23)
 - 5.5 개인 MCP 브로커 (ideation — §8 개정 전제)
 
 ### Later — 분기 단위 (P3)
@@ -544,6 +544,7 @@
 | 2026-06-02 | Claude | PR 1922 (Telegram 봇 제거) 반영 — 표면 참조를 네이티브 클라로 정정 |
 | 2026-08-23 | ZCode (GLM-5.3) | 운영자 요청 4개 제안 추가 (모두 ideation) — 4.7 Trust Inbox(안드로이드), 4.8 Business Dossier, 4.9 주간 기억 다이제스트, 5.5 개인 MCP 브로커(§8 긴장 명시) |
 | 2026-08-23 | ZCode (GLM-5.3) | 4.7 Trust Inbox 구현 — 자기교정 감시 태스크(신규 후보 승인/거절 카드) + dream 카드 확인 액션 + 안드로이드 알림 tray 승인/거절 버튼. 기존 auto-apply 표면(meta·graduation·evolve verdict) 카드는 이미 존재해 재활용 |
+| 2026-08-23 | ZCode (GLM-5.3) | 4.9 주간 기억 다이제스트 구현 — DreamReport 롤업(`dream-reports.jsonl`) + 주간 다이제스트 카드(확인/틀린 기억 알리기 → 정정 턴) |
 
 ---
 

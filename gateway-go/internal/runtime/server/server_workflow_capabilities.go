@@ -92,9 +92,16 @@ func (s *Server) configureAutonomousWorkflow(hub *rpcutil.GatewayHub) {
 		dreamWire, _ := events.PayloadOf(event)
 		hub.Broadcast("dreaming.cycle", dreamWire)
 		if event.Type == "dreaming_completed" {
+			// Rollup first (4.9 digest source of truth), then the per-cycle card.
+			s.appendDreamReport(event.DreamReport)
 			s.postDreamWorkfeedCard(event.DreamReport)
 		}
 	})
+	// Weekly memory digest (improvement-ideas.md 4.9): one rollup card per
+	// week with fresh dream reports, with a feedback action routing wrong
+	// memories into a correction turn. Registered before SetDreamer below (the
+	// scheduler starts with the dreamer loop).
+	s.autonomousSvc.RegisterTask(&DreamDigestTask{Server: s})
 	if n := s.proactiveRelay.NotifierForSession(proactive.DreamWorkSessionKey); n != nil {
 		s.autonomousSvc.SetNotifier(n)
 	}
