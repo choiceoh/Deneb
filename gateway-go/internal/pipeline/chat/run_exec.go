@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
 	"strings"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
@@ -321,20 +319,6 @@ func persistInitialUserMessage(params RunParams, deps runDeps, logger *slog.Logg
 		return fmt.Errorf("briefcase transcript persistence: %w", err)
 	}
 	return nil
-}
-
-// prewarmPromptWorkspace resolves the workspace dir and pre-warms the context
-// file snapshot for this session so disk I/O happens before the parallel prep
-// phase (no-op if already cached from a prior turn).
-func prewarmPromptWorkspace(params RunParams, deps runDeps) string {
-	workspaceDir := params.WorkspaceDir
-	if workspaceDir == "" {
-		workspaceDir = resolveWorkspaceDirForPrompt()
-	}
-	if !deps.briefcaseMode {
-		prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
-	}
-	return workspaceDir
 }
 
 // lookupRunSession fetches the session once for reuse throughout the run.
@@ -884,29 +868,4 @@ func activeGroundingNotebook(deps runDeps, sessionKey string) (id string, update
 		return "", 0, false
 	}
 	return id, nb.Updated, true
-}
-
-func formatToolHist(counts map[string]int) string {
-	if len(counts) == 0 {
-		return ""
-	}
-	type kv struct {
-		name  string
-		count int
-	}
-	pairs := make([]kv, 0, len(counts))
-	for k, v := range counts {
-		pairs = append(pairs, kv{k, v})
-	}
-	sort.Slice(pairs, func(i, j int) bool {
-		if pairs[i].count != pairs[j].count {
-			return pairs[i].count > pairs[j].count
-		}
-		return pairs[i].name < pairs[j].name
-	})
-	parts := make([]string, 0, len(pairs))
-	for _, p := range pairs {
-		parts = append(parts, fmt.Sprintf("%s:%d", p.name, p.count))
-	}
-	return strings.Join(parts, ",")
 }
