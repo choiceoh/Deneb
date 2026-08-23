@@ -107,14 +107,34 @@ class DeadcodeAuditTests(FakeGoTestCase):
         self.assertIn("0 new", proc.stdout)
 
     def test_deadcode_tool_failure_has_distinct_exit_two(self) -> None:
+        # One attempt, no sleep: the contract under test is the exit code and
+        # the diagnostic, not the production retry budget (3 × 20s).
+        env = self.env("partial output\n", rc=1)
+        env["DENEB_DEADCODE_RETRIES"] = "1"
         proc = run_script(
             "scripts/audit/deadcode-audit.sh",
-            env=self.env("partial output\n", rc=1),
+            env=env,
             timeout=20,
         )
         self.assertEqual(proc.returncode, 2)
         self.assertEqual(proc.stdout, "")
         self.assertIn("failed to run deadcode", proc.stderr)
+
+    def test_deadcode_tool_failure_retries_then_surfaces_go_stderr(self) -> None:
+        # 2026-08-18: the weekly miner failed with a bare "failed to run
+        # deadcode" because go's stderr was discarded. The retry loop must try
+        # the configured number of times and the final message must carry the
+        # tool's own error text.
+        env = self.env("", rc=1)
+        env["DENEB_DEADCODE_RETRIES"] = "2"
+        env["DENEB_DEADCODE_RETRY_SLEEP"] = "0"
+        proc = run_script(
+            "scripts/audit/deadcode-audit.sh",
+            env=env,
+            timeout=20,
+        )
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("2 attempt(s)", proc.stderr)
 
 
 class RecallGainTests(FakeGoTestCase):

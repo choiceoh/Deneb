@@ -261,3 +261,49 @@ class ImpactContractTests(unittest.TestCase):
 
         # Another evaluator's namespace is not ours to guess.
         self.assertIsNone(resolve("health.finding_present:abc"))
+
+
+class RunStatusTests(unittest.TestCase):
+    """The lane used to leave no trace: the 2026-08-18 weekly unit failed on the
+    deadcode tooling and nothing the operator reads recorded it. Both the
+    failure path and the success path must drop a status file; dry runs must
+    not touch it."""
+
+    def test_failure_path_records_status(self):
+        import deadcode_finding_miner as dfm
+
+        with tempfile.TemporaryDirectory() as tmp:
+            status_path = os.path.join(tmp, "status.json")
+            original = dfm.miner_status_path
+            dfm.miner_status_path = lambda: status_path
+            try:
+                rc = main(["--audit-output", os.path.join(tmp, "missing.txt"),
+                           "--url", "http://127.0.0.1:1", "--token", "t"],
+                          stdout=io.StringIO(), stderr=io.StringIO())
+            finally:
+                dfm.miner_status_path = original
+            self.assertEqual(rc, 1)
+            with open(status_path, encoding="utf-8") as handle:
+                payload = json.load(handle)
+            self.assertFalse(payload["ok"])
+            self.assertIn("missing.txt", payload["error"])
+            self.assertEqual(payload["planned"], 0)
+
+    def test_dry_run_leaves_status_untouched(self):
+        import deadcode_finding_miner as dfm
+
+        with tempfile.TemporaryDirectory() as tmp:
+            status_path = os.path.join(tmp, "status.json")
+            audit = os.path.join(tmp, "audit.txt")
+            with open(audit, "w", encoding="utf-8") as handle:
+                handle.write(AUDIT_OUTPUT)
+            original = dfm.miner_status_path
+            dfm.miner_status_path = lambda: status_path
+            try:
+                rc = main(["--audit-output", audit, "--dry-run", "--json",
+                           "--url", "http://127.0.0.1:1", "--token", "t"],
+                          stdout=io.StringIO(), stderr=io.StringIO())
+            finally:
+                dfm.miner_status_path = original
+            self.assertEqual(rc, 0)
+            self.assertFalse(os.path.exists(status_path))

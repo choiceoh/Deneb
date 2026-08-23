@@ -434,8 +434,9 @@ func (t *Tracker) rsiAssessL4() rsiLayer {
 	_, dispatchedToday := t.codingDispatchCounts()
 	runtime := t.codingDispatchRuntimeStatus()
 	miner := t.healthMinerRuntimeStatus()
+	deadcode := t.deadcodeMinerRuntimeStatus()
 	declineReasons := rsiDeclineReasons(cands, 3)
-	base := newRSILayer(rsilifecycle.LayerL4, rsiL4Metrics(tally, len(cands), dispatchedToday, runtime, miner, declineReasons))
+	base := newRSILayer(rsilifecycle.LayerL4, rsiL4Metrics(tally, len(cands), dispatchedToday, runtime, miner, deadcode, declineReasons))
 	base.State, base.Diagnosis = rsiL4Verdict(tally, len(cands), runtime)
 	// Dispatch-outcome history (graduation-ladder evidence: the cap-raise row
 	// needs a measured land rate) rides the diagnosis text — no new metric row,
@@ -559,7 +560,7 @@ func (t *Tracker) tallyL4Candidates(cands []SelfCorrectionCandidateRecord) l4Tal
 	return tally
 }
 
-func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispatchRuntime, miner healthMinerRuntime, declineReasons string) []rsiMetric {
+func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispatchRuntime, miner healthMinerRuntime, deadcode deadcodeMinerRuntime, declineReasons string) []rsiMetric {
 	return []rsiMetric{
 		{Label: "후보", Value: strconv.Itoa(total)},
 		{Label: "코드 후보", Value: strconv.Itoa(tally.byScope["code"])},
@@ -578,6 +579,7 @@ func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispa
 		{Label: "최근 성공", Value: rsiAgeValue(runtime.LastSuccessfulAtMs)},
 		{Label: "최장 대기", Value: rsiAgeValue(tally.oldestPendingAt)},
 		{Label: "공급 벤치", Value: rsiMinerBenchValue(miner)},
+		{Label: "deadcode 마이너", Value: rsiDeadcodeMinerValue(deadcode)},
 		{Label: "안전 종료 사유", Value: declineReasons},
 	}
 }
@@ -709,6 +711,65 @@ type healthMinerRuntime struct {
 	FallbackReason   string `json:"fallbackReason"`
 	Planned          int    `json:"planned"`
 	Filed            int    `json:"filed"`
+	// Supply accounting (2026-08-23): a healthy bench with planned=0 read as a
+	// clean row while 13/13 candidates were reopen-blocked for weeks — the lane
+	// was not idle, it was fully blocked, and nothing said so.
+	Skipped          int `json:"skipped"`
+	BlockedPermanent int `json:"blockedPermanent"`
+	BlockedCooldown  int `json:"blockedCooldown"`
+	Capped           int `json:"capped"`
+}
+
+// deadcodeMinerRuntime mirrors scripts/audit/deadcode_finding_miner.py's status
+// payload. The miner used to write nothing at all, so a failed weekly unit
+// (2026-08-18, deadcode tooling failure) left no trace anywhere the operator
+// looks.
+type deadcodeMinerRuntime struct {
+	LastRunAtMs int64  `json:"lastRunAtMs"`
+	OK          bool   `json:"ok"`
+	Error       string `json:"error"`
+	Findings    int    `json:"findings"`
+	Planned     int    `json:"planned"`
+	Filed       int    `json:"filed"`
+}
+
+func (t *Tracker) deadcodeMinerRuntimeStatus() deadcodeMinerRuntime {
+	path := filepath.Join(filepath.Dir(t.selfCorrectionPath), "deadcode_finding_miner_status.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return deadcodeMinerRuntime{}
+	}
+	var status deadcodeMinerRuntime
+	if json.Unmarshal(raw, &status) != nil {
+		return deadcodeMinerRuntime{}
+	}
+	return status
+}
+
+// rsiDeadcodeMinerValue renders the deadcode lane's last run: never ran, ran
+// clean (with its supply), or FAILED with the tooling error head.
+func rsiDeadcodeMinerValue(status deadcodeMinerRuntime) string {
+	if status.LastRunAtMs == 0 {
+		return "기록 없음"
+	}
+	age := rsiAgeValue(status.LastRunAtMs)
+	if !status.OK {
+		return "⚠ 실패 · " + age + rsiMinerReasonSuffix(status.Error)
+	}
+	return fmt.Sprintf("정상 · %s · 신규 %d / 후보 %d / 제출 %d", age, status.Findings, status.Planned, status.Filed)
+}
+
+// rsiMinerSupplySuffix appends the health miner's supply accounting. The
+// loud case is planned=0 with skips: the lane is BLOCKED, not quiet.
+func rsiMinerSupplySuffix(status healthMinerRuntime) string {
+	switch {
+	case status.Planned == 0 && status.Skipped > 0:
+		return fmt.Sprintf(" · ⚠ 공급 차단 %d건(영구 %d · 쿨다운 %d)", status.Skipped, status.BlockedPermanent, status.BlockedCooldown)
+	case status.Planned > 0:
+		return fmt.Sprintf(" · 후보 %d / 제출 %d", status.Planned, status.Filed)
+	default:
+		return ""
+	}
 }
 
 func (t *Tracker) healthMinerRuntimeStatus() healthMinerRuntime {
@@ -737,7 +798,7 @@ func rsiMinerBenchValue(status healthMinerRuntime) string {
 	age := rsiAgeValue(status.LastRunAtMs)
 	switch source {
 	case "health-bench-v3":
-		return "v3 · " + age
+		return "v3 · " + age + rsiMinerSupplySuffix(status)
 	case "unavailable":
 		return "⚠ 벤치 실패 · " + age + rsiMinerReasonSuffix(status.FallbackReason)
 	case "codebase-health-v2":

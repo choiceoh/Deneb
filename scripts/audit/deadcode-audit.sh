@@ -27,12 +27,34 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 baseline="$repo_root/scripts/audit/deadcode-baseline.txt"
 cd "$repo_root/gateway-go"
 
+# Pinned analyzer version: "@latest" made every run a network fetch and an
+# unpinned baseline (2026-08-18: a DNS outage turned the weekly miner run into
+# "failed to run deadcode" — with go's stderr thrown away, no diagnostic at
+# all). Override with DENEB_DEADCODE_VERSION when bumping deliberately.
+deadcode_version="${DENEB_DEADCODE_VERSION:-v0.49.0}"
+deadcode_log="$(mktemp)"
+trap 'rm -f "$deadcode_log"' EXIT
+
+# Bounded retry: the tool is fetched/built by `go run`, so a transient
+# network hiccup should not cost the lane a whole week. Tests and ad-hoc runs
+# dial it down with DENEB_DEADCODE_RETRIES / DENEB_DEADCODE_RETRY_SLEEP.
+retries="${DENEB_DEADCODE_RETRIES:-3}"
+retry_sleep="${DENEB_DEADCODE_RETRY_SLEEP:-20}"
+raw=""
+for (( attempt = 1; attempt <= retries; attempt++ )); do
+    if raw="$(go run "golang.org/x/tools/cmd/deadcode@${deadcode_version}" ./cmd/... 2>"$deadcode_log")"; then
+        break
+    fi
+    if (( attempt >= retries )); then
+        echo "deadcode-audit: failed to run deadcode (${deadcode_version}, ${attempt} attempt(s)): $(tail -c 400 "$deadcode_log" | tr '\n' ' ')" >&2
+        exit 2
+    fi
+    sleep "$retry_sleep"
+done
+
 # Normalize to "path :: symbol" (line:col drift with unrelated edits).
-current="$(go run golang.org/x/tools/cmd/deadcode@latest ./cmd/... 2>/dev/null |
-    sed -E 's/^([^:]+):[0-9]+:[0-9]+: unreachable func: (.*)$/\1 :: \2/' | sort)" || {
-    echo "deadcode-audit: failed to run deadcode" >&2
-    exit 2
-}
+current="$(printf '%s\n' "$raw" |
+    sed -E 's/^([^:]+):[0-9]+:[0-9]+: unreachable func: (.*)$/\1 :: \2/' | sort)"
 
 if [[ "${1:-}" == "--update" ]]; then
     {
