@@ -231,26 +231,21 @@ suspend fun DenebGatewayClient.captureBatch(files: List<DenebAttachment>, captio
     val pending = History(role = History.Role.USER, content = label)
     _chatHistory.update { it + pending }
     val reply = try {
-        val payload = callRpc<CaptureBatchPayload>(
-            "miniapp.capture.batch",
-            buildJsonObject {
-                putJsonArray("files") {
-                    usable.forEach { file ->
-                        addJsonObject {
-                            put("data", Base64.encode(file.bytes))
-                            put("mimeType", file.mimeType)
-                            put("filename", file.filename)
-                        }
-                    }
-                }
-                put("sessionKey", sessionKey)
-                if (trimmedCaption.isNotBlank()) put("caption", trimmedCaption)
-            },
-        )
-        CaptureAck(
-            payload?.text?.ifBlank { null } ?: "첨부 파일을 저장했습니다. 분석합니다.",
-            payload?.turnMessage.orEmpty(),
-        )
+        // callRpcOutcome, not callRpc: a null from callRpc cannot be told apart from
+        // a gateway that answered with no text, so the old code reported EVERY
+        // failure — offline, 5xx, "읽을 내용을 찾지 못했습니다" — as
+        // "첨부 파일을 저장했습니다. 분석합니다." The user then waited for an
+        // analysis that was never going to arrive.
+        when (val outcome = callRpcOutcome<CaptureBatchPayload>("miniapp.capture.batch", captureBatchParams(usable, trimmedCaption))) {
+            is RpcOutcome.Ok -> CaptureAck(
+                outcome.payload.text.ifBlank { "첨부 파일을 저장했습니다. 분석합니다." },
+                outcome.payload.turnMessage,
+            )
+
+            is RpcOutcome.Rejected -> CaptureAck("⚠️ 첨부를 저장하지 못했습니다 (${outcome.code}).")
+
+            RpcOutcome.Unreachable -> CaptureAck("⚠️ 게이트웨이에 연결하지 못해 첨부를 보내지 못했습니다.")
+        }
     } catch (c: CancellationException) {
         _chatHistory.update { history -> history.filterNot { it.id == pending.id } }
         throw c
@@ -259,6 +254,21 @@ suspend fun DenebGatewayClient.captureBatch(files: List<DenebAttachment>, captio
     }
     finishAcceptedCapture(reply)
     return true
+}
+
+@OptIn(ExperimentalEncodingApi::class)
+private fun DenebGatewayClient.captureBatchParams(files: List<DenebAttachment>, caption: String) = buildJsonObject {
+    putJsonArray("files") {
+        files.forEach { file ->
+            addJsonObject {
+                put("data", Base64.encode(file.bytes))
+                put("mimeType", file.mimeType)
+                put("filename", file.filename)
+            }
+        }
+    }
+    put("sessionKey", sessionKey)
+    if (caption.isNotBlank()) put("caption", caption)
 }
 
 /**

@@ -27,11 +27,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.conversation_untitled
+import deneb.composeapp.generated.resources.error_conversation_delete_failed
+import deneb.composeapp.generated.resources.error_conversation_rename_failed
 import deneb.composeapp.generated.resources.error_file_too_large
 import deneb.composeapp.generated.resources.error_unsupported_file_type
 import io.github.vinceglb.filekit.PlatformFile
 import io.github.vinceglb.filekit.extension
-import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.size
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -72,7 +73,7 @@ class ChatViewModel(
 
     private val actions = ChatActions(
         ask = ::ask,
-        retry = ::retry,
+        retry = ::dismissError,
         toggleSpeechOutput = ::toggleSpeechOutput,
         clearHistory = ::clearHistory,
         setIsSpeaking = ::setIsSpeaking,
@@ -352,6 +353,7 @@ class ChatViewModel(
                     error = null,
                     failedInput = null,
                     stoppedMessageId = null,
+                    stoppedBeforeAnswer = false,
                     // Only a direct send consumes the staged files; a drained queue
                     // entry carries its own snapshot, so anything staged since then
                     // stays with the user's next draft.
@@ -456,8 +458,11 @@ class ChatViewModel(
             }
             return
         }
-        // Skip a file already staged (same name) so a double-pick doesn't duplicate it.
-        if (_state.value.files.any { it.name == file.name }) return
+        // Skip the SAME file picked twice. Matched by identity, not by name: two
+        // different files can share a name (Download/report.pdf and the one in
+        // Documents), and dropping the second silently lost an attachment the user
+        // had explicitly picked.
+        if (_state.value.files.any { it == file }) return
         viewModelScope.launch {
             // Cap non-image uploads (images are downsampled before send) so a huge pick
             // can't OOM the device or bloat the turn payload — checked via size(), which
@@ -468,7 +473,7 @@ class ChatViewModel(
                 return@launch
             }
             _state.update {
-                if (it.files.any { staged -> staged.name == file.name }) {
+                if (it.files.any { staged -> staged == file }) {
                     it
                 } else {
                     it.copy(files = (it.files + file).toImmutableList())
@@ -489,8 +494,14 @@ class ChatViewModel(
         }
     }
 
-    private fun retry() {
-        ask(null)
+    // The error card's action. It does NOT resend: by the time the card is on
+    // screen the failed text is already back in the composer (failedInput ->
+    // ChatModeScreen's restore effect), so resending would put the same message in
+    // twice. The user retries by pressing send; this just clears the banner.
+    // (It used to call ask(null), which askGateway drops on the empty-text guard —
+    // the button looked like a retry and did nothing at all.)
+    private fun dismissError() {
+        _state.update { it.copy(error = null) }
     }
 
     private fun toggleSpeechOutput() {
@@ -508,11 +519,8 @@ class ChatViewModel(
         // mid-thinking leaves no new tokens — lastRenderedAssistant() would be the
         // previous complete reply, which must not be marked stopped.
         val history = dataRepository.chatHistory.value
-        val stoppedId = if (history.hasUnansweredUserTurn()) {
-            null
-        } else {
-            history.lastRenderedAssistant()?.id
-        }
+        val beforeAnswer = history.hasUnansweredUserTurn()
+        val stoppedId = if (beforeAnswer) null else history.lastRenderedAssistant()?.id
         _state.update {
             // A stop also cancels the auto-send of queued messages (the user pulled
             // the brake) — fold them back into the input instead of firing them.
@@ -520,6 +528,7 @@ class ChatViewModel(
                 isLoading = false,
                 lastSteerNote = null,
                 stoppedMessageId = stoppedId,
+                stoppedBeforeAnswer = beforeAnswer,
                 failedInput = foldIntoInput(null, it.pendingQuestions),
                 pendingQuestions = persistentListOf(),
             )
@@ -635,7 +644,11 @@ class ChatViewModel(
         val trimmed = label.trim()
         if (id.isBlank() || trimmed.isEmpty()) return
         viewModelScope.launch(backgroundDispatcher + teardownHandler) {
-            dataRepository.renameConversation(id, trimmed)
+            // A rename that did not reach the gateway used to return silently, so
+            // the label simply stayed as it was with no hint why.
+            if (!dataRepository.renameConversation(id, trimmed)) {
+                _state.update { it.copy(snackbarMessage = Res.string.error_conversation_rename_failed) }
+            }
         }
     }
 
@@ -644,8 +657,17 @@ class ChatViewModel(
         _state.update { it.copy(pendingConversationDeletion = id) }
         pendingConversationDeleteJob = viewModelScope.launch(backgroundDispatcher + teardownHandler) {
             delay(4.seconds)
-            dataRepository.deleteConversation(id)
+            // Deleting the conversation you are reading has to move you out of it.
+            // Staying put left the composer bound to a session that no longer
+            // exists, so the next message silently recreated it as a ghost.
+            val wasOpen = dataRepository.currentConversationId.value == id
+            val deleted = dataRepository.deleteConversation(id)
             _state.update { it.copy(pendingConversationDeletion = null) }
+            if (!deleted) {
+                _state.update { it.copy(snackbarMessage = Res.string.error_conversation_delete_failed) }
+                return@launch
+            }
+            if (wasOpen) startNewChat()
         }
     }
 
