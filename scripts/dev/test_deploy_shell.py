@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
 
 from test_shell_support import isolated_env, run_script, write_executable
+
+
+WORMHOLE_FIXTURE = b"fixture-wormhole\n"
 
 
 class DeployShellTests(unittest.TestCase):
@@ -20,9 +24,14 @@ class DeployShellTests(unittest.TestCase):
         self.log = self.root / "calls.log"
         self.pid_counter = self.root / "pid-counter"
         self.active_marker = self.root / "active"
+        self.wormhole_live_sum = self.root / "wormhole-live.sha256"
         self.home.mkdir()
         self.prod.mkdir()
         self.bin.mkdir()
+        self.wormhole_live_sum.write_text(
+            hashlib.sha256(WORMHOLE_FIXTURE).hexdigest() + "\n",
+            encoding="utf-8",
+        )
         write_executable(self.bin / "git", """
             #!/usr/bin/env bash
             printf 'git cwd=%s args=%s\n' "$PWD" "$*" >> "$FAKE_LOG"
@@ -35,6 +44,10 @@ class DeployShellTests(unittest.TestCase):
         write_executable(self.bin / "make", """
             #!/usr/bin/env bash
             printf 'make cwd=%s args=%s\n' "$PWD" "$*" >> "$FAKE_LOG"
+            if [[ "$*" == "wormhole" && "${MAKE_RC:-0}" == "0" ]]; then
+              mkdir -p dist
+              printf 'fixture-wormhole\n' > dist/wormhole
+            fi
             exit "${MAKE_RC:-0}"
         """)
         write_executable(self.bin / "systemctl", """
@@ -96,6 +109,7 @@ class DeployShellTests(unittest.TestCase):
             "CURL_RC": "0",
             "TOPOLOGY_RC": "0",
             "DENEB_MODEL_ROUTE_TOPOLOGY_PYTHON": str(self.topology_python),
+            "WORMHOLE_LIVE_SUM_FILE": str(self.wormhole_live_sum),
         }
         defaults.update(values)
         return isolated_env(self.home, self.bin, **defaults)
@@ -145,6 +159,19 @@ class DeployShellTests(unittest.TestCase):
         self.assertIn("args=-c pull.rebase=false pull --ff-only origin main", calls)
         self.assertIn(f"make cwd={self.prod} args=gateway-prod", calls)
         self.assertNotIn("systemctl", calls)
+
+    def test_changed_wormhole_binary_restarts_and_records_checksum(self) -> None:
+        self.wormhole_live_sum.write_text("stale\n", encoding="utf-8")
+
+        proc = self.invoke()
+
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("wormhole binary changed — restarting the router", proc.stdout)
+        self.assertIn("systemctl --user restart wormhole", self.calls())
+        self.assertEqual(
+            self.wormhole_live_sum.read_text(encoding="utf-8"),
+            hashlib.sha256(WORMHOLE_FIXTURE).hexdigest() + "\n",
+        )
 
     def test_pull_failure_stops_before_build_and_propagates_status(self) -> None:
         proc = self.invoke("--build-only", env=self.env(GIT_PULL_RC="7"))
