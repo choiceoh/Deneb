@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -276,6 +277,9 @@ func writeArchive(w io.Writer, stateDir string, targets []string) error {
 				if strings.HasSuffix(name, ".tmp") || strings.HasSuffix(name, ".lock") || strings.HasSuffix(name, ".partial") {
 					return nil
 				}
+				if isRegenerableCache(name) {
+					return nil
+				}
 				return addFile(tw, path, name, fi)
 			default:
 				return nil // sockets, symlinks, devices: not memory
@@ -314,4 +318,31 @@ func addFile(tw *tar.Writer, path, name string, fi os.FileInfo) error {
 		return fmt.Errorf("backup: %s truncated while archiving", name)
 	}
 	return err
+}
+
+// regenerableCaches are embedding caches: derived entirely from the pages plus
+// the embedder, and rebuilt automatically on the first warm after a restore.
+//
+// They dominate the archive without protecting anything — measured 2026-08-23,
+// the wiki tarred to 117MB of which 69MB was one vector cache, while the pages
+// themselves were 1.6MB. Shipping that daily across the retention window costs
+// transfer and storage on the backup host for bytes a restore does not need.
+// The tradeoff is explicit: after a restore the first boot re-embeds the corpus
+// (minutes, search degrades to BM25 meanwhile) instead of reading a cache.
+var regenerableCaches = []string{
+	".semantic-cache.json",
+	".diary-semantic-cache.json",
+	"semantic-index.json",
+	"workfeed.semantic.json",
+}
+
+// isRegenerableCache reports whether a state-dir-relative path is one of them.
+func isRegenerableCache(name string) bool {
+	base := path.Base(name)
+	for _, c := range regenerableCaches {
+		if base == c {
+			return true
+		}
+	}
+	return false
 }
