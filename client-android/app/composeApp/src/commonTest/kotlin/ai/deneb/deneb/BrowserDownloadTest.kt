@@ -69,6 +69,14 @@ class BrowserDownloadTest {
     }
 
     @Test
+    fun nulBecomesAnUnderscoreLikeOtherUnsafeChars() {
+        // The source declares NUL as '\u0000' so file tools do not misread the
+        // file as binary; the code point itself must sanitize like any other
+        // unsafe character.
+        assertEquals("a_b", sanitizeFileName("a\u0000b"))
+    }
+
+    @Test
     fun neverReturnsBlank() {
         assertEquals("download", sanitizeFileName("   "))
         assertEquals("download", sanitizeFileName("..."))
