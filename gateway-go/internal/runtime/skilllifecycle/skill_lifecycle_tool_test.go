@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
@@ -1020,5 +1021,97 @@ func TestProposeSkillEvolutionIgnoresVerdictsInSuccessRateStats(t *testing.T) {
 	}
 	if stats.TotalUses != 0 {
 		t.Fatalf("review verdicts must not feed the success rate, got total=%d", stats.TotalUses)
+	}
+}
+
+// A route=evolve proposal naming a skill the evolver's gates refuse (here the
+// recency gate: last real use older than the evidence window) must be recorded
+// with the gate reason and NOT executed — no evolve attempt, no evolve_rejected
+// row feeding the rejection backoff — and the suppression must be countable
+// on the L1 scoreboard. This is the 2026-08 morning-letter pattern: 17
+// proposals in 21 days, every one executed and then stopped by the same gate.
+func TestProposeSkillEvolution_GatedSkillIsRecordedNotExecuted(t *testing.T) {
+	t.Setenv("DENEB_SKILL_EVOLVE_EVIDENCE_DAYS", "7")
+	tracker := newSkillLifecycleTestTracker(t)
+	stale := time.Now().Add(-30 * 24 * time.Hour).UnixMilli()
+	if err := tracker.RecordUsage(genesis.UsageRecord{
+		SkillName: "morning-letter", SessionKey: "cron:morning-letter:1", Success: true,
+		Source: genesis.UsageSourceReal, UsedAt: stale,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	evolver := genesis.NewEvolver(nil, nil, tracker, "test-model", slog.Default())
+	b := &skillLifecycleBackend{tracker: tracker, evolver: evolver}
+
+	res, err := b.ProposeSkillEvolution(context.Background(), chattools.SkillEvolutionProposalRequest{
+		Route:      "evolve",
+		SkillName:  "morning-letter",
+		Candidate:  "tighten the weather paragraph",
+		Reason:     "the letter repeated the forecast twice",
+		SessionKey: "cron:morning-letter:2",
+		Execute:    true,
+	})
+	if err != nil {
+		t.Fatalf("ProposeSkillEvolution: %v", err)
+	}
+	if !res.OK || res.Executed {
+		t.Fatalf("gated proposal must be OK and unexecuted, got %+v", res)
+	}
+	if !strings.Contains(res.Suppressed, "recency gate") {
+		t.Fatalf("suppression reason missing: %+v", res)
+	}
+	if !strings.Contains(res.NextAction, "no-op") {
+		t.Fatalf("next action should steer the reviewer back: %q", res.NextAction)
+	}
+
+	entries, err := tracker.RecentLifecycleLog(5)
+	if err != nil {
+		t.Fatalf("RecentLifecycleLog: %v", err)
+	}
+	var proposal *genesis.LifecycleLogEntry
+	for i := range entries {
+		switch entries[i].Type {
+		case "evolution_proposal":
+			proposal = &entries[i]
+		case "evolve_rejected", "evolved":
+			t.Fatalf("a gated proposal must not become an evolve row: %+v", entries[i])
+		}
+	}
+	if proposal == nil || !strings.Contains(proposal.Suppressed, "recency gate") || proposal.Executed {
+		t.Fatalf("proposal row must carry the suppression and stay unexecuted: %+v", proposal)
+	}
+	if n := tracker.RecentEvolveRejections("morning-letter", 24*time.Hour); n != 0 {
+		t.Fatalf("rejection backoff fed by a gated proposal: %d", n)
+	}
+}
+
+// The gate only applies to route=evolve: a genesis/no-op proposal for a stale
+// skill name is untouched, and a fresh skill still executes through the
+// evolver path (which fails here only because no LLM client is configured).
+func TestProposeSkillEvolution_GateLeavesFreshAndNonEvolveRoutesAlone(t *testing.T) {
+	t.Setenv("DENEB_SKILL_EVOLVE_EVIDENCE_DAYS", "7")
+	tracker := newSkillLifecycleTestTracker(t)
+	if err := tracker.RecordUsage(genesis.UsageRecord{
+		SkillName: "contract-review", SessionKey: "client:main", Success: true, Source: genesis.UsageSourceReal,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	evolver := genesis.NewEvolver(nil, nil, tracker, "test-model", slog.Default())
+	b := &skillLifecycleBackend{tracker: tracker, evolver: evolver}
+
+	noop, err := b.ProposeSkillEvolution(context.Background(), chattools.SkillEvolutionProposalRequest{
+		Route: "no-op", SkillName: "morning-letter", SessionKey: "client:main", Reason: "fine as is",
+	})
+	if err != nil || noop.Suppressed != "" {
+		t.Fatalf("no-op must never be gated: %+v err=%v", noop, err)
+	}
+	fresh, err := b.ProposeSkillEvolution(context.Background(), chattools.SkillEvolutionProposalRequest{
+		Route: "evolve", SkillName: "contract-review", Candidate: "add DR comparison", SessionKey: "client:main", Execute: true,
+	})
+	if err != nil {
+		t.Fatalf("ProposeSkillEvolution: %v", err)
+	}
+	if fresh.Suppressed != "" {
+		t.Fatalf("fresh skill must not be gated: %+v", fresh)
 	}
 }

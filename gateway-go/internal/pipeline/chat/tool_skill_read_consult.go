@@ -12,10 +12,10 @@
 // directory names a skill in the runtime catalog, record the consult.
 //
 // Catalog-gated on purpose: a SKILL.md read in a coding worktree (editing a
-// skill as CODE) only matches if the dirname is a live skill name — and those
-// coding sessions are additionally excluded at the recording layer
-// (recordTurnSkillUsage skips code:* sessions), so editing a skill never
-// counts as using it.
+// skill as CODE) only matches if the dirname is a live skill name. That catalog
+// gate is the only filter — the recording layer (recordRunSkillUsage) excludes
+// nothing but the review fork's own sessions, so a catalog-named SKILL.md read
+// in a coding session does count as a consult.
 package chat
 
 import (

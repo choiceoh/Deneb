@@ -201,6 +201,10 @@ func (t *Tracker) rsiAssessL1() rsiLayer {
 		{Label: "진화(7일)", Value: strconv.Itoa(h.Evolves7d)},
 		{Label: "신규 스킬", Value: strconv.Itoa(h.Genesis7d)},
 		{Label: "제안", Value: strconv.Itoa(h.Proposals7d)},
+		// Proposals the evolver's gates refused at proposal time: the reviewer
+		// nominating a skill the loop cannot act on (stale usage, backoff,
+		// thrash) — waste to route back into the prompt, not candidate quality.
+		{Label: "제안 중 게이트 억제", Value: strconv.Itoa(h.ProposalsSuppressed7d)},
 		{Label: "기각", Value: strconv.Itoa(h.EvolveRejected7d)},
 		// Ties are the blind pool failing to SEE the change, not the candidate
 		// failing the contract — surfaced apart so the headline cannot read
@@ -232,6 +236,9 @@ func (t *Tracker) rsiAssessL1() rsiLayer {
 		// left proposal-only weeks looking IDLE.
 		base.State = rsiStateDataGated
 		base.Diagnosis = fmt.Sprintf("제안 %d · 기각 %d — 후보는 있지만 이번 주 게이트를 통과한 진화가 없습니다", h.Proposals7d, h.EvolveRejected7d)
+		if h.ProposalsSuppressed7d > 0 {
+			base.Diagnosis += fmt.Sprintf(" (제안 %d건은 진화 게이트에 걸린 스킬을 지목해 실행 전 억제)", h.ProposalsSuppressed7d)
+		}
 	default:
 		base.State = rsiStateIdle
 		base.Diagnosis = "최근 7일간 스킬 진화 활동이 없습니다"
@@ -250,6 +257,12 @@ func (t *Tracker) rsiAssessL2() rsiLayer {
 	}
 	if strings.TrimSpace(h.LastEpoch) != "" {
 		metrics = append(metrics, rsiMetric{Label: "최근 에폭", Value: h.LastEpoch})
+	}
+	// Ledger hygiene: rows outside the plausible time band are excluded from
+	// every consumer (drift brake, rotation, this status) — show the count so a
+	// contaminated ledger is an operator-visible fact, not a silent freeze cause.
+	if n := t.MetaLedgerImplausibleRows(); n > 0 {
+		metrics = append(metrics, rsiMetric{Label: "원장 무효 행(제외)", Value: strconv.Itoa(n)})
 	}
 	// L1.5-trap telemetry (advisory): structural vs parametric mix of recent
 	// proposals, plus the consecutive-parametric-adoption streak once it hits

@@ -40,12 +40,16 @@ type HeartbeatShadowReplayResult struct {
 // SkillEvolutionProposalResult records a routing decision and, when requested,
 // the concrete execution result for the selected route.
 type SkillEvolutionProposalResult struct {
-	OK         bool                                   `json:"ok"`
-	Candidate  string                                 `json:"candidate"`
-	Route      string                                 `json:"route"`
-	Executed   bool                                   `json:"executed"`
-	Reason     string                                 `json:"reason,omitempty"`
-	NextAction string                                 `json:"nextAction,omitempty"`
+	OK         bool   `json:"ok"`
+	Candidate  string `json:"candidate"`
+	Route      string `json:"route"`
+	Executed   bool   `json:"executed"`
+	Reason     string `json:"reason,omitempty"`
+	NextAction string `json:"nextAction,omitempty"`
+	// Suppressed carries the evolver's gate reason when a route=evolve proposal
+	// named a skill the deterministic gates refuse right now (thrash cooldown,
+	// rejection backoff, recency gate). The proposal is recorded, not executed.
+	Suppressed string                                 `json:"suppressed,omitempty"`
 	Error      string                                 `json:"error,omitempty"`
 	Result     *SkillEvolutionProposalExecutionResult `json:"result,omitempty"`
 }

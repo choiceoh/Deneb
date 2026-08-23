@@ -35,6 +35,7 @@ type LifecycleLogEntry struct {
 	Reason           string                `json:"reason,omitempty"`
 	Executed         bool                  `json:"executed,omitempty"`
 	Result           string                `json:"result,omitempty"`
+	Suppressed       string                `json:"suppressed,omitempty"`
 	NewVersion       string                `json:"newVersion,omitempty"`
 	SelfHarnessAudit *HarnessEditAudit     `json:"selfHarnessAudit,omitempty"`
 	Provenance       *evolveProvenance     `json:"provenance,omitempty"`
@@ -64,6 +65,9 @@ type EvolutionProposalRecord struct {
 	Reason     string `json:"reason,omitempty"`
 	Executed   bool   `json:"executed,omitempty"`
 	Result     string `json:"result,omitempty"`
+	// Suppressed is the evolver gate reason when a route=evolve proposal was
+	// recorded but deliberately not executed (proposal-lane waste telemetry).
+	Suppressed string `json:"suppressed,omitempty"`
 	CreatedAt  int64  `json:"createdAt"`
 }
 
