@@ -175,9 +175,34 @@ func (s *Server) postMetaProposalCard(artifact, epoch, reason, path string, adop
 			{ID: metaProposalActionReject, Kind: workfeed.ActionAck, Label: "기각"},
 		}
 	}
+	// A new proposal for the same path supersedes the card that pointed at the
+	// previous content: WriteProposal overwrote <name>.proposed, so adopting the
+	// old card would have adopted THIS proposal under the old reason. Settle
+	// the stale card first so only one live decision exists per proposal file.
+	if !adopted {
+		if err := nf.AckBySourceRef(metaProposalSource, path); err != nil {
+			s.logger.Warn("meta proposal: stale card settle failed", "artifact", artifact, "error", err)
+		}
+	}
 	if _, err := nf.Append(item); err != nil {
 		s.logger.Warn("meta proposal 카드 생성 실패", "artifact", artifact, "error", err)
 	}
+}
+
+// settleMetaProposalCard closes the decision card of a proposal whose verdict
+// window expired (MetaEvolutionTask.expireStaleProposals discarded the file and
+// wrote the ledger row). The card is acknowledged, not deleted — the feed
+// history keeps the ask; the ledger keeps the outcome.
+func (s *Server) settleMetaProposalCard(artifact, path, reason string) {
+	nf := s.nativeWorkFeedStore()
+	if nf == nil {
+		return
+	}
+	if err := nf.AckBySourceRef(metaProposalSource, path); err != nil {
+		s.logger.Warn("meta proposal: expired card settle failed", "artifact", artifact, "error", err)
+		return
+	}
+	s.logger.Info("meta proposal card settled (verdict expired)", "artifact", artifact, "reason", reason)
 }
 
 // postDriftFreezeCard notifies the operator that the evolution self-brake

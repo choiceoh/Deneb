@@ -845,10 +845,12 @@ func TestMetaLowConfidenceReasonReturnsFlatOrEqualMarginsNotImprovingOnes(t *tes
 	if metaLowConfidenceReason(worse, better, nil, nil) != "" {
 		t.Fatal("improving judge margin must be confident")
 	}
-	if metaLowConfidenceReason(nil, nil, &producerBenchOutcome{IncumbentScore: 0.6, ProposalScore: 0.6}, nil) == "" {
+	// Scored benches carry Skills ≥ 1 by construction; Skills == 0 is the
+	// separate "nothing scored" reason.
+	if metaLowConfidenceReason(nil, nil, &producerBenchOutcome{Skills: 1, IncumbentScore: 0.6, ProposalScore: 0.6}, nil) == "" {
 		t.Fatal("flat shadow margin must be low-confidence")
 	}
-	if metaLowConfidenceReason(nil, nil, &producerBenchOutcome{IncumbentScore: 0.5, ProposalScore: 0.7}, nil) != "" {
+	if metaLowConfidenceReason(nil, nil, &producerBenchOutcome{Skills: 1, IncumbentScore: 0.5, ProposalScore: 0.7}, nil) != "" {
 		t.Fatal("improving shadow margin must be confident")
 	}
 	if metaLowConfidenceReason(nil, nil, nil, nil) != "" {

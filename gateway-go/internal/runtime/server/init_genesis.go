@@ -398,9 +398,10 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// Surface each revision as a work-feed card (auto-adopted
 			// notification with 되돌리기 veto, or the propose-only decision card
 			// when the kill switch is off), and revert-watch notifications.
-			OnProposal:    s.postMetaProposalCard,
-			OnReverted:    s.postMetaRevertedCard,
-			OnDriftFreeze: s.postDriftFreezeCard,
+			OnProposal:        s.postMetaProposalCard,
+			OnProposalExpired: s.settleMetaProposalCard,
+			OnReverted:        s.postMetaRevertedCard,
+			OnDriftFreeze:     s.postDriftFreezeCard,
 			// RSI P5-5: advisory runtime-health evidence — grounds the producer's
 			// prose on operator-experienced latency/reliability (p95 agentMs,
 			// error/timeout/tool-error rates). Sourced from the shared agentlog
