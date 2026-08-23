@@ -878,6 +878,9 @@ func TestDefaultTargetsSatisfyPathSafetyContract(t *testing.T) {
 		"network", // infra config snapshots (CRS812 switch export) — device-only state
 		"contacts.json",
 		"kv.json",
+		// Recall gold sets — the retrieval bench's ground truth, hand-curated
+		// over months and otherwise held in a single unbacked copy.
+		"wiki-qa-gold*.jsonl",
 	}
 	if !reflect.DeepEqual(DefaultTargets, want) {
 		t.Fatalf("DefaultTargets = %v, want %v", DefaultTargets, want)
