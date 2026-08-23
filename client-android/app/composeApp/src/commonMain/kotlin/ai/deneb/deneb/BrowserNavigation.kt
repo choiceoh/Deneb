@@ -26,6 +26,18 @@ internal enum class BrowserPopupRoute {
 private fun Char.isAsciiAlpha(): Boolean = this in 'a'..'z' || this in 'A'..'Z'
 
 /** Returns the lowercase scheme of [url], or "" when it has none. */
+
+/**
+ * Whether a URL may become the address the chrome shows and acts on.
+ *
+ * `onPageStarted`/`onPageFinished` also fire for navigations the app itself
+ * refused — an aborted `tel:`, `intent://` or `kakaotalk://` link arrives with
+ * that URL as the "finished" one. Committing it put an un-openable address in the
+ * omnibox, and 'URL 복사' / '외부 브라우저로 열기' then acted on it. Only real web
+ * pages (and the blob:/data: documents a page can produce) belong there.
+ */
+internal fun canShowAsAddress(url: String): Boolean = canBookmarkUrl(url) || urlScheme(url) == "blob" || urlScheme(url) == "data"
+
 internal fun urlScheme(url: String): String {
     val trimmed = url.trim()
     val colon = trimmed.indexOf(':')
@@ -80,24 +92,32 @@ internal fun intentFallbackUrl(url: String): String? {
     return decoded.takeIf { urlScheme(it) == "http" || urlScheme(it) == "https" }
 }
 
-/** Minimal percent-decoding — the fallback URL arrives percent-encoded. */
-private fun percentDecode(value: String): String {
+/**
+ * Percent-decoding for the fallback URL, over BYTES rather than chars.
+ *
+ * `%EA%B0%80` is one UTF-8 character, not three. Turning each `%XX` straight into
+ * a Char decoded it as Latin-1, so a Korean fallback ("…/검색?q=…") came out as
+ * mojibake, which loadUrl then re-encoded as UTF-8 of the wrong characters — a
+ * 404 instead of the page.
+ */
+internal fun percentDecode(value: String): String {
     if (!value.contains('%')) return value
-    val out = StringBuilder(value.length)
+    val bytes = ArrayList<Byte>(value.length)
     var i = 0
     while (i < value.length) {
         val c = value[i]
         if (c == '%' && i + 2 < value.length) {
-            val hex = value.substring(i + 1, i + 3)
-            val code = hex.toIntOrNull(16)
+            val code = value.substring(i + 1, i + 3).toIntOrNull(16)
             if (code != null) {
-                out.append(code.toChar())
+                bytes.add(code.toByte())
                 i += 3
                 continue
             }
         }
-        out.append(c)
+        // Anything not percent-encoded is already text; re-encode it so the byte
+        // stream stays one consistent UTF-8 sequence.
+        for (b in c.toString().encodeToByteArray()) bytes.add(b)
         i++
     }
-    return out.toString()
+    return bytes.toByteArray().decodeToString()
 }

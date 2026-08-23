@@ -123,8 +123,10 @@ internal val BROWSER_AD_HOST_SUFFIXES: Set<String> = setOf(
     "consentframework.com",
     "cache.consentframework.com",
     "choices.consentframework.com",
-    // Substack publisher pixels / common newsletter trackers
-    "connect.facebook.net",
+    // Substack publisher pixels / common newsletter trackers.
+    // NOT connect.facebook.net as a whole host: it serves the Facebook Login SDK
+    // (sdk.js) alongside the pixel, and blocking the host broke every
+    // "Facebook으로 로그인" button. The pixel is matched by path below instead.
     "analytics.twitter.com",
     "static.ads-twitter.com",
     "parsely.com",
@@ -179,7 +181,10 @@ private val BROWSER_AD_PATH_HOSTISH: List<String> = listOf(
     "taboola.com/libtrc",
     "viously.com",
     "facebook.com/tr",
-    "connect.facebook.net",
+    // Path-scoped so sdk.js (Facebook Login) still loads from the same host.
+    // Matched against the lowercased URL, so no upper-case locale segments here.
+    "connect.facebook.net/signals/",
+    "fbevents.js",
     "wprp.sovrn.com",
 )
 

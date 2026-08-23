@@ -70,6 +70,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
@@ -182,9 +183,19 @@ fun DenebBrowserScreen(
         // it into the existing tab set so background WebView Bundles survive.
         if (url.isNotBlank()) openInTab(url)
     }
-    LaunchedEffect(state.translateEnabled) {
-        if (state.translateEnabled != appSettings.isBrowserTranslateEnabled()) {
-            appSettings.setBrowserTranslateEnabled(state.translateEnabled)
+    // Keyed on the tab too, and only writes when the flag changed WITHIN a tab.
+    // Keyed on the bare boolean it also fired on a tab switch, so moving from a tab
+    // with translation on to one with it off silently rewrote the global default
+    // for new tabs — a preference the user never touched.
+    LaunchedEffect(activeRuntime.id) {
+        var previous = state.translateEnabled
+        snapshotFlow { state.translateEnabled }.collect { enabled ->
+            if (enabled != previous) {
+                previous = enabled
+                if (enabled != appSettings.isBrowserTranslateEnabled()) {
+                    appSettings.setBrowserTranslateEnabled(enabled)
+                }
+            }
         }
     }
     LaunchedEffect(state.adBlockEnabled) {
