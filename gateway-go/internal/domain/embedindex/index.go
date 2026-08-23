@@ -523,13 +523,19 @@ func (ix *Index) SearchVec(qv []float32, limit int) []Hit {
 	return out
 }
 
-// cachedVecWire is the JSON shape of one cached embedding.
+// cachedVecWire is the JSON shape of one cached embedding. Version 2 carried
+// the numbers inline (Vec); version 3 keeps only an index into the sidecar blob
+// (Idx) — see blobPathFor.
 type cachedVecWire struct {
 	Hash string    `json:"hash"`
-	Vec  []float32 `json:"vec"`
+	Vec  []float32 `json:"vec,omitempty"`
+	Idx  *int      `json:"idx,omitempty"`
 }
 
-const cacheSchemaVersion = 2
+// cacheSchemaVersion 3 moved the vectors into a float32 sidecar
+// (pkg/vectorutil/blob.go); the manifest keeps ids and content hashes. A v2 file
+// still loads and is rewritten as v3 on the next save.
+const cacheSchemaVersion = 3
 
 type cacheEnvelope struct {
 	Version       int                      `json:"version"`
@@ -537,6 +543,11 @@ type cacheEnvelope struct {
 	Dimensions    int                      `json:"dimensions,omitempty"`
 	Preprocessing string                   `json:"preprocessing,omitempty"`
 	Entries       map[string]cachedVecWire `json:"entries"`
+}
+
+// blobPathFor names the sidecar beside its manifest: ".../x.json" → ".../x.f32".
+func blobPathFor(cachePath string) string {
+	return strings.TrimSuffix(cachePath, ".json") + ".f32"
 }
 
 func (ix *Index) loadCache() {
@@ -556,16 +567,35 @@ func (ix *Index) loadCache() {
 			"index", ix.name, "path", ix.cachePath, "error", err)
 		return
 	}
+	// v3 keeps the numbers in the sidecar. A missing or mis-sized blob means the
+	// manifest's indexes point at nothing trustworthy, so the whole cache is
+	// dropped and re-embedded rather than handing items someone else's vector.
+	var blob *vectorutil.BlobReader
+	if envelope.Version >= 3 {
+		blob, err = vectorutil.ReadBlob(blobPathFor(ix.cachePath), envelope.Dimensions)
+		if err != nil {
+			slog.Warn("embedindex: vector blob unusable; re-embedding from scratch",
+				"index", ix.name, "path", blobPathFor(ix.cachePath), "error", err)
+			return
+		}
+	}
 	ix.mu.Lock()
 	defer ix.mu.Unlock()
 	ix.cacheFingerprint = envelope.Fingerprint
 	ix.cacheDimensions = envelope.Dimensions
 	ix.cachePreprocessing = envelope.Preprocessing
 	for id, cv := range wire {
-		if cv.Hash == "" || len(cv.Vec) == 0 {
+		if cv.Hash == "" {
 			continue
 		}
-		ix.vecs[id] = cachedVec{hash: cv.Hash, vec: cv.Vec}
+		vec := cv.Vec
+		if blob != nil && cv.Idx != nil {
+			vec = blob.At(*cv.Idx)
+		}
+		if len(vec) == 0 {
+			continue
+		}
+		ix.vecs[id] = cachedVec{hash: cv.Hash, vec: vec}
 	}
 }
 
@@ -574,9 +604,15 @@ func (ix *Index) saveCache() {
 		return
 	}
 	ix.mu.Lock()
-	wire := make(map[string]cachedVecWire, len(ix.vecs))
+	entries := make([]struct {
+		id string
+		cv cachedVec
+	}, 0, len(ix.vecs))
 	for id, cv := range ix.vecs {
-		wire[id] = cachedVecWire{Hash: cv.hash, Vec: cv.vec}
+		entries = append(entries, struct {
+			id string
+			cv cachedVec
+		}{id, cv})
 	}
 	fingerprint := ix.cacheFingerprint
 	dimensions := ix.cacheDimensions
@@ -585,6 +621,27 @@ func (ix *Index) saveCache() {
 	if identity := IdentityOf(ix.embedder); identity.Fingerprint != "" {
 		fingerprint = identity.Fingerprint
 		dimensions = identity.Dimensions
+	}
+	// Dimensions drive the blob's stride, so an index whose embedder never
+	// reported them falls back to the width of the vectors it actually holds.
+	if dimensions <= 0 {
+		for _, e := range entries {
+			if len(e.cv.vec) > 0 {
+				dimensions = len(e.cv.vec)
+				break
+			}
+		}
+	}
+
+	blob := vectorutil.NewBlobWriter(dimensions, len(entries))
+	wire := make(map[string]cachedVecWire, len(entries))
+	for _, e := range entries {
+		idx := blob.Add(e.cv.vec)
+		if idx < 0 {
+			// Wrong width for this cache — drop it; the next refresh re-embeds.
+			continue
+		}
+		wire[e.id] = cachedVecWire{Hash: e.cv.hash, Idx: &idx}
 	}
 
 	data, err := json.Marshal(cacheEnvelope{
@@ -602,6 +659,20 @@ func (ix *Index) saveCache() {
 	// before the first entry) — the cache must not fail on that.
 	if err := os.MkdirAll(filepath.Dir(tmp), 0o755); err != nil {
 		slog.Warn("embedindex: cache dir create failed", "index", ix.name, "path", ix.cachePath, "error", err)
+		return
+	}
+	// Blob first: a manifest is only trustworthy once the vectors it indexes are
+	// on disk. The reverse order would leave a crash-interrupted save pointing at
+	// the previous blob's offsets.
+	blobPath := blobPathFor(ix.cachePath)
+	blobTmp := blobPath + ".tmp"
+	if err := os.WriteFile(blobTmp, blob.Bytes(), 0o644); err != nil {
+		slog.Warn("embedindex: vector blob write failed", "index", ix.name, "path", blobPath, "error", err)
+		return
+	}
+	if err := os.Rename(blobTmp, blobPath); err != nil {
+		os.Remove(blobTmp)
+		slog.Warn("embedindex: vector blob rename failed", "index", ix.name, "path", blobPath, "error", err)
 		return
 	}
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {

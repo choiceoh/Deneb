@@ -39,6 +39,7 @@ const gitSnapTimeout = 30 * time.Second
 const wikiGitIgnore = `.semantic-cache.json
 .semantic-cache.f32
 .diary-semantic-cache.json
+.diary-semantic-cache.f32
 .diary-process-state.json
 .dream-last-proposal.json
 .recall-hits.jsonl

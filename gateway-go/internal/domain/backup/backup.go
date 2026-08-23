@@ -340,8 +340,11 @@ var regenerableCaches = []string{
 	".semantic-cache.json",
 	".semantic-cache.f32",
 	".diary-semantic-cache.json",
+	".diary-semantic-cache.f32",
 	"semantic-index.json",
+	"semantic-index.f32",
 	"workfeed.semantic.json",
+	"workfeed.semantic.f32",
 }
 
 // isRegenerableCache reports whether a state-dir-relative path is one of them.
