@@ -8,13 +8,16 @@ import {
   callRpc,
   chatStream,
   deleteSession,
+  focusSession,
   fetchGatewayBlob,
   filesDownloadUrl,
   listCalendarProposals,
   listPrompts,
+  pinSession,
   mailAttachmentUrl,
   approvalAttachmentUrl,
   recentSessions,
+  searchSessions,
   sessionTranscript,
   setModel,
   streamFetch,
@@ -193,6 +196,39 @@ describe("RPC convenience methods", () => {
       { method: "miniapp.mail.analyze", params: { id: "mail-1", force: true } },
       { method: "miniapp.mail.ask", params: { id: "mail-1", question: "question", history: [] } },
     ]);
+  });
+
+  it("scopes recent sessions and returns focus when present", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ sessions: [], count: 0, total: 0, focus: "client:main:x" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(recentSessions(CFG, 20, "client", 0, "client")).resolves.toEqual({
+      sessions: [],
+      total: 0,
+      focus: "client:main:x",
+    });
+    expect(requestAt(fetchMock).body?.params).toEqual({ limit: 20, channel: "client", excludeChannel: "client" });
+  });
+
+  it("pins, focuses, and searches sessions", async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ ok: true, pinned: true, sessionKey: "client:main:a", hits: [] }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(pinSession(CFG, "client:main:a", true)).resolves.toBe(true);
+    await expect(focusSession(CFG, "client:main:a")).resolves.toBe("client:main:a");
+    await expect(searchSessions(CFG, "hello")).resolves.toEqual([]);
+    expect(requestAt(fetchMock, 0).body).toMatchObject({
+      method: "miniapp.sessions.pin",
+      params: { sessionKey: "client:main:a", pinned: true },
+    });
+    expect(requestAt(fetchMock, 1).body).toMatchObject({
+      method: "miniapp.sessions.focus",
+      params: { sessionKey: "client:main:a" },
+    });
+    expect(requestAt(fetchMock, 2).body).toMatchObject({
+      method: "miniapp.sessions.search",
+      params: { query: "hello", maxResults: 20 },
+    });
   });
 
   it("scopes models.set to a session when sessionKey is passed", async () => {

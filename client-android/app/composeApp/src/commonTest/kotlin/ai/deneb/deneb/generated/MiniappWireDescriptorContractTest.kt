@@ -541,10 +541,28 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("path", "title", "summary", "category"),
         ),
         contract(
+            name = "SessionFocusResult",
+            serializer = SessionFocusResult.serializer(),
+            empty = SessionFocusResult(),
+            fields = listOf("sessionKey"),
+        ),
+        contract(
             name = "SessionRowOut",
             serializer = SessionRowOut.serializer(),
             empty = SessionRowOut(),
-            fields = listOf("key", "kind", "status", "channel", "model", "label", "updatedAtMs", "startedAtMs", "runtimeMs", "totalTokens"),
+            fields = listOf("key", "kind", "status", "channel", "model", "label", "pinned", "updatedAtMs", "startedAtMs", "runtimeMs", "totalTokens"),
+        ),
+        contract(
+            name = "SessionSearchHitOut",
+            serializer = SessionSearchHitOut.serializer(),
+            empty = SessionSearchHitOut(),
+            fields = listOf("sessionKey", "snippet", "label"),
+        ),
+        contract(
+            name = "SessionSearchResult",
+            serializer = SessionSearchResult.serializer(),
+            empty = SessionSearchResult(),
+            fields = listOf("hits"),
         ),
         contract(
             name = "SkillDetailResponse",

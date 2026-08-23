@@ -7,6 +7,7 @@ import "time"
 type PatchFields struct {
 	Label                *string `json:"label,omitempty"`
 	LabelPinned          *bool   `json:"labelPinned,omitempty"`
+	Pinned               *bool   `json:"pinned,omitempty"`
 	Model                *string `json:"model,omitempty"`
 	ThinkingLevel        *string `json:"thinkingLevel,omitempty"`
 	InterleavedThinking  *bool   `json:"interleavedThinking,omitempty"`
@@ -76,6 +77,7 @@ func (s *Session) ApplyPatch(p PatchFields) bool {
 	changed := false
 	changed = patchStr(&s.Label, p.Label) || changed
 	changed = patchBoolVal(&s.LabelPinned, p.LabelPinned) || changed
+	changed = patchBoolVal(&s.Pinned, p.Pinned) || changed
 	changed = patchStr(&s.Model, p.Model) || changed
 	changed = patchStr(&s.ThinkingLevel, p.ThinkingLevel) || changed
 	changed = patchBool(&s.InterleavedThinking, p.InterleavedThinking) || changed

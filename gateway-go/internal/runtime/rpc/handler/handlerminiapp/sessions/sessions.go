@@ -29,6 +29,9 @@ type (
 	sessionRowOut           = miniappcontract.SessionRowOut
 	transcriptAttachmentOut = miniappcontract.TranscriptAttachmentOut
 	transcriptMsgOut        = miniappcontract.TranscriptMsgOut
+	sessionSearchHitOut     = miniappcontract.SessionSearchHitOut
+	sessionSearchResult     = miniappcontract.SessionSearchResult
+	sessionFocusResult      = miniappcontract.SessionFocusResult
 )
 
 // SessionsLister is the subset of *session.Manager the handler needs:
@@ -53,6 +56,7 @@ type SessionsLister interface {
 type TranscriptLoader interface {
 	Load(sessionKey string, limit int) ([]toolport.ChatMessage, int, error)
 	Delete(sessionKey string) error
+	Search(query string, maxResults int) ([]toolport.SearchResult, error)
 }
 
 // SessionsDeps holds the session list manager (required) and an optional
@@ -63,6 +67,11 @@ type TranscriptLoader interface {
 type SessionsDeps struct {
 	Manager     SessionsLister
 	Transcripts func() (TranscriptLoader, error)
+	// OnForgotten drops per-session sidecars (model override, list pin) so a
+	// deleted conversation cannot resurrect its extras on the next sweep.
+	OnForgotten func(sessionKey string)
+	Focus       func() string
+	SetFocus    func(sessionKey string) error
 }
 
 const (
@@ -81,12 +90,15 @@ func SessionsMethods(deps SessionsDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.sessions.recent": sessionsRecent(deps),
 		"miniapp.sessions.delete": sessionsDelete(deps),
 		"miniapp.sessions.rename": sessionsRename(deps),
+		"miniapp.sessions.pin":    sessionsPin(deps),
+		"miniapp.sessions.focus":  sessionsFocus(deps),
 	}
 	// Transcript registration is conditional — without a transcript
 	// loader factory the gateway boots fine, the method just isn't
 	// available.
 	if deps.Transcripts != nil {
 		out["miniapp.sessions.transcript"] = sessionsTranscript(deps)
+		out["miniapp.sessions.search"] = sessionsSearch(deps)
 	}
 	return out
 }
@@ -266,9 +278,10 @@ func effectiveChannel(s *session.Session) string {
 
 func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 	type params struct {
-		Limit   int    `json:"limit,omitempty"`
-		Offset  int    `json:"offset,omitempty"`
-		Channel string `json:"channel,omitempty"`
+		Limit          int    `json:"limit,omitempty"`
+		Offset         int    `json:"offset,omitempty"`
+		Channel        string `json:"channel,omitempty"`
+		ExcludeChannel string `json:"excludeChannel,omitempty"`
 	}
 	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		limit := p.Limit
@@ -295,11 +308,22 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 			}
 			sessions = filtered
 		}
+		if p.ExcludeChannel != "" {
+			filtered := make([]*session.Session, 0, len(sessions))
+			for _, s := range sessions {
+				if effectiveChannel(s) != p.ExcludeChannel {
+					filtered = append(filtered, s)
+				}
+			}
+			sessions = filtered
+		}
 
-		// Sort newest-first by UpdatedAt (UnixMilli). Sessions whose
-		// UpdatedAt is zero fall to the back so they don't pollute the
-		// fresh top of the list.
+		// Pinned conversations stay at the top; within each group, newest
+		// UpdatedAt wins. Zero UpdatedAt falls to the back of its group.
 		sort.SliceStable(sessions, func(i, j int) bool {
+			if sessions[i].Pinned != sessions[j].Pinned {
+				return sessions[i].Pinned
+			}
 			return sessions[i].UpdatedAt > sessions[j].UpdatedAt
 		})
 
@@ -327,18 +351,23 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 				Channel:     effectiveChannel(s),
 				Model:       s.Model,
 				Label:       s.Label,
+				Pinned:      s.Pinned,
 				UpdatedAtMs: s.UpdatedAt,
 				StartedAtMs: s.StartedAt,
 				RuntimeMs:   s.RuntimeMs,
 				TotalTokens: s.TotalTokens,
 			})
 		}
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		payload := map[string]any{
 			"sessions": out,
 			"count":    len(out),
 			"offset":   offset,
 			"total":    total,
-		})
+		}
+		if deps.Focus != nil {
+			payload["focus"] = deps.Focus()
+		}
+		return rpcutil.RespondOK(req.ID, payload)
 	})
 }
 
@@ -415,6 +444,9 @@ func sessionsDelete(deps SessionsDeps) rpcutil.HandlerFunc {
 						"sessionKey", key, "error", delErr)
 				}
 			}
+		}
+		if deps.OnForgotten != nil {
+			deps.OnForgotten(key)
 		}
 
 		return rpcutil.RespondOK(req.ID, map[string]bool{"deleted": deleted})

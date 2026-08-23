@@ -1,24 +1,44 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type GatewayConfig, type SessionRow, deleteSession, recentSessions, sessionTranscript } from "@/gateway";
+import {
+  type GatewayConfig,
+  type SessionRow,
+  deleteSession,
+  focusSession,
+  pinSession,
+  recentSessions,
+  sessionTranscript,
+  setModel,
+} from "@/gateway";
 import { useSessions } from "./useSessions";
 
 vi.mock("@/gateway", () => ({
   TRANSCRIPT_MAX: 200,
   deleteSession: vi.fn(),
+  focusSession: vi.fn(),
+  pinSession: vi.fn(),
   recentSessions: vi.fn(),
   renameSession: vi.fn(),
+  searchSessions: vi.fn(),
   sessionTranscript: vi.fn(),
+  setModel: vi.fn(),
 }));
 
 const cfg: GatewayConfig = { url: "http://test", token: "token" };
 const recent = vi.mocked(recentSessions);
 // The RPC returns a page (rows + the size of the whole scoped set) so the
 // drawer can page past the gateway's per-response cap.
-const page = (sessions: SessionRow[], total = sessions.length) => ({ sessions, total });
+const page = (sessions: SessionRow[], total = sessions.length, focus?: string) => ({
+  sessions,
+  total,
+  ...(focus ? { focus } : {}),
+});
 const transcript = vi.mocked(sessionTranscript);
 const remove = vi.mocked(deleteSession);
+const focus = vi.mocked(focusSession);
+const pin = vi.mocked(pinSession);
+const persist = vi.mocked(setModel);
 
 function chatDouble() {
   return { clear: vi.fn(), setTurns: vi.fn() };
@@ -28,6 +48,10 @@ beforeEach(() => {
   recent.mockResolvedValue(page([]));
   transcript.mockResolvedValue({ messages: [], total: 0, turnRunning: false });
   remove.mockResolvedValue(true);
+  focus.mockResolvedValue("");
+  pin.mockResolvedValue(true);
+  persist.mockResolvedValue({ ok: true, role: "main", current: "" });
+  localStorage.removeItem("andromeda.chat.lastSession");
 });
 
 afterEach(() => {
@@ -207,5 +231,73 @@ describe("useSessions", () => {
     rerender({ connected: false });
 
     expect(result.current.sessions).toEqual([]);
+  });
+
+  it("restores the last chat session and loads its transcript", async () => {
+    localStorage.setItem("andromeda.chat.lastSession", "client:main:restored");
+    transcript.mockResolvedValue({
+      messages: [{ id: "u1", role: "user", content: "이어서" }],
+      total: 1,
+      turnRunning: false,
+    });
+    const chat = chatDouble();
+    const { result } = renderHook(() => useSessions(cfg, true, false, chat, { newKey: () => "client:main:new" }));
+
+    expect(result.current.sessionKey).toBe("client:main:restored");
+    await waitFor(() => expect(chat.setTurns).toHaveBeenCalled());
+    expect(transcript).toHaveBeenCalledWith(cfg, "client:main:restored", undefined);
+  });
+
+  it("adopts gateway focus when the chat tab is still on home", async () => {
+    recent.mockResolvedValue(page([{ key: "client:main", label: "업무" }], 1, "client:main:from-phone"));
+    transcript.mockResolvedValue({
+      messages: [{ id: "u1", role: "user", content: "폰" }],
+      total: 1,
+      turnRunning: false,
+    });
+    const chat = chatDouble();
+    const { result } = renderHook(() => useSessions(cfg, true, false, chat, { newKey: () => "client:main:new" }));
+
+    await waitFor(() => expect(result.current.sessionKey).toBe("client:main:from-phone"));
+    expect(localStorage.getItem("andromeda.chat.lastSession")).toBe("client:main:from-phone");
+  });
+
+  it("writes focus and lastSession when switching on the chat tab", async () => {
+    const chat = chatDouble();
+    const { result } = renderHook(() => useSessions(cfg, true, false, chat, { newKey: () => "client:main:new" }));
+
+    await act(async () => result.current.selectSession("client:main:abc"));
+
+    expect(focus).toHaveBeenCalledWith(cfg, "client:main:abc");
+    expect(localStorage.getItem("andromeda.chat.lastSession")).toBe("client:main:abc");
+  });
+
+  it("pins a conversation to the top of the drawer", async () => {
+    recent.mockResolvedValue(
+      page([
+        { key: "client:main:a", label: "A" },
+        { key: "client:main:b", label: "B" },
+      ]),
+    );
+    const chat = chatDouble();
+    const { result } = renderHook(() => useSessions(cfg, true, false, chat));
+    await waitFor(() => expect(result.current.sessions).toHaveLength(2));
+
+    await act(async () => result.current.pinConversation("client:main:b", true));
+
+    expect(pin).toHaveBeenCalledWith(cfg, "client:main:b", true);
+    expect(result.current.sessions.map((s) => s.key)).toEqual(["client:main:b", "client:main:a"]);
+  });
+
+  it("clears a conversation model override", async () => {
+    recent.mockResolvedValue(page([{ key: "client:main:a", label: "A", model: "gpt" }]));
+    const chat = chatDouble();
+    const { result } = renderHook(() => useSessions(cfg, true, false, chat));
+    await waitFor(() => expect(result.current.sessions[0]?.model).toBe("gpt"));
+
+    await act(async () => result.current.resetConversationModel("client:main:a"));
+
+    expect(persist).toHaveBeenCalledWith(cfg, "", "main", "client:main:a");
+    expect(result.current.sessions[0]?.model).toBe("");
   });
 });

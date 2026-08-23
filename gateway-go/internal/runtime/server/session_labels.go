@@ -180,6 +180,32 @@ func snapshotSessionPins(sessions []*session.Session) map[string]bool {
 	return out
 }
 
+func dropStoredSessionLabel(key string) {
+	path, err := sessionLabelStorePath()
+	if err != nil {
+		return
+	}
+	labels := loadSessionLabels(path)
+	if _, ok := labels[key]; !ok {
+		return
+	}
+	delete(labels, key)
+	_ = saveSessionLabels(path, labels)
+}
+
+func dropStoredSessionPin(key string) {
+	path, err := sessionPinsStorePath()
+	if err != nil {
+		return
+	}
+	pins := loadSessionPins(path)
+	if !pins[key] {
+		return
+	}
+	delete(pins, key)
+	_ = saveSessionPins(path, pins)
+}
+
 func pinsEqual(a, b map[string]bool) bool {
 	if len(a) != len(b) {
 		return false
@@ -202,6 +228,7 @@ func (s *Server) startSessionLabelPersistence() {
 	}
 	pinsPath, pinsPathErr := sessionPinsStorePath()
 	modelsPath, modelsPathErr := sessionModelsStorePath()
+	listPinsPath, listPinsPathErr := sessionListPinsStorePath()
 	safego.GoWithSlog(s.logger, "session-label-persist", func() {
 		ctx := s.ShutdownCtx()
 		last := loadSessionLabels(path)
@@ -213,16 +240,26 @@ func (s *Server) startSessionLabelPersistence() {
 		if modelsPathErr == nil {
 			lastModels = loadSessionModels(modelsPath)
 		}
+		var lastListPins map[string]bool
+		if listPinsPathErr == nil {
+			lastListPins = loadSessionListPins(listPinsPath)
+		}
 		flush := func() {
 			live := s.sessions.List()
+			forgotten := s.isForgottenSession
 			snap := snapshotSessionLabels(live)
 			// Merge over the stored map: a session evicted from memory keeps its
 			// stored title for the next restore instead of being dropped.
+			// Forgotten keys (user-deleted conversations) never come back.
+			last = dropForgottenKeys(last, forgotten)
 			merged := make(map[string]string, len(last)+len(snap))
 			for k, v := range last {
 				merged[k] = v
 			}
 			for k, v := range snap {
+				if forgotten(k) {
+					continue
+				}
 				merged[k] = v
 			}
 			if !labelsEqual(merged, last) {
@@ -234,11 +271,15 @@ func (s *Server) startSessionLabelPersistence() {
 			}
 			if modelsPathErr == nil {
 				modelSnap := snapshotSessionModels(live)
+				lastModels = dropForgottenKeys(lastModels, forgotten)
 				mergedModels := make(map[string]string, len(lastModels)+len(modelSnap))
 				for k, v := range lastModels {
 					mergedModels[k] = v
 				}
 				for k, v := range modelSnap {
+					if forgotten(k) {
+						continue
+					}
 					mergedModels[k] = v
 				}
 				if !labelsEqual(mergedModels, lastModels) {
@@ -249,17 +290,42 @@ func (s *Server) startSessionLabelPersistence() {
 					}
 				}
 			}
+			if listPinsPathErr == nil {
+				listPinSnap := snapshotSessionListPins(live)
+				lastListPins = dropForgottenPins(lastListPins, forgotten)
+				mergedListPins := make(map[string]bool, len(lastListPins)+len(listPinSnap))
+				for k := range lastListPins {
+					mergedListPins[k] = true
+				}
+				for k := range listPinSnap {
+					if forgotten(k) {
+						continue
+					}
+					mergedListPins[k] = true
+				}
+				if !pinsEqual(mergedListPins, lastListPins) {
+					if err := saveSessionListPins(listPinsPath, mergedListPins); err != nil {
+						s.logger.Warn("session list pins: persist failed", "error", err)
+					} else {
+						lastListPins = mergedListPins
+					}
+				}
+			}
 			// Pins ride the same sweep. Merge over the stored set so a pin whose
 			// session is evicted from memory survives to the next restore.
 			if pinsPathErr != nil {
 				return
 			}
 			pinSnap := snapshotSessionPins(live)
+			lastPins = dropForgottenPins(lastPins, forgotten)
 			mergedPins := make(map[string]bool, len(lastPins)+len(pinSnap))
 			for k := range lastPins {
 				mergedPins[k] = true
 			}
 			for k := range pinSnap {
+				if forgotten(k) {
+					continue
+				}
 				mergedPins[k] = true
 			}
 			if pinsEqual(mergedPins, lastPins) {

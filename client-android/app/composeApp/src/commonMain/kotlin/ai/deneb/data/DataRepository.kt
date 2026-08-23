@@ -60,6 +60,15 @@ interface DataRepository {
      */
     suspend fun renameConversation(id: String, label: String): Boolean
 
+    /** Pins or unpins a conversation at the top of the drawer. */
+    suspend fun pinConversation(id: String, pinned: Boolean)
+
+    /** Clears a per-conversation model override so the global default applies. */
+    suspend fun resetConversationModel(id: String)
+
+    /** Title + transcript search for the session drawer. */
+    suspend fun searchConversations(query: String): List<Conversation>
+
     /**
      * Folds a mid-turn note into the active reply. Returns `true` when the
      * gateway accepted it; `false` means the caller should queue instead.

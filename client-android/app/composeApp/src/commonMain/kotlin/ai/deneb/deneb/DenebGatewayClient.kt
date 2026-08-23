@@ -25,6 +25,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -524,9 +525,11 @@ class DenebGatewayClient private constructor(
             // 업무 home pulls in the mirrored proactive reports via openWorkTopic.
             sessionKey == "client:main" -> openWorkTopic()
 
-            // Legacy 챗봇 sessions (flat chat:<uuid>, retired workspace) — just
-            // load the last one's transcript so a cold start restores it.
-            isChatWorkspaceKey(sessionKey) -> {
+            // Branched 업무 chats (client:main:<id>) and legacy chat:<uuid> must
+            // load their own transcript. Leaving them to fall through left an
+            // empty box while sends still went to the stored session — and the
+            // new-chat button hid itself because history looked empty.
+            sessionKey.startsWith("client:main:") || isChatWorkspaceKey(sessionKey) -> {
                 syncNativeStateAsync()
                 scope.launch { loadTranscriptGuarded(sessionKey) }
             }
@@ -559,17 +562,23 @@ class DenebGatewayClient private constructor(
 
     override fun loadConversations() {
         scope.launch {
-            val epoch = credEpoch
-            // Keep the current list when the fetch fails (null) so a transient
-            // sessions.recent RPC error doesn't flap the drawer between the full
-            // list and just the 업무 home row.
-            val fresh = fetchRecentSessions() ?: return@launch
-            // Credentials switched mid-fetch — don't repopulate the drawer with the
-            // old account's private session titles under the new gateway.
-            if (epoch != credEpoch) return@launch
-            _savedConversations.value = fresh.conversations
-            serverRowsLoaded = fresh.serverRows
-            _hasMoreConversations.value = fresh.serverRows < fresh.total
+            // The gateway flips ready before restoreAndWakeSessions finishes.
+            // One shot during that window froze the drawer on just client:main;
+            // the same 0 / 1.5s / 4s backoff Andromeda uses rides it out.
+            for (waitMs in longArrayOf(0L, 1_500L, 4_000L)) {
+                if (waitMs > 0L) delay(waitMs)
+                val epoch = credEpoch
+                val fresh = fetchRecentSessions(channel = "client") ?: continue
+                if (epoch != credEpoch) return@launch
+                val extras = fetchRecentSessions(excludeChannel = "client")
+                val extraRows = extras?.conversations.orEmpty().filter { row ->
+                    fresh.conversations.none { it.id == row.id }
+                }
+                _savedConversations.value = fresh.conversations + extraRows
+                serverRowsLoaded = fresh.serverRows
+                _hasMoreConversations.value = fresh.serverRows < fresh.total
+                adoptGatewayFocus(fresh.focus)
+            }
         }
     }
 
@@ -580,7 +589,7 @@ class DenebGatewayClient private constructor(
             // Offset by what the SERVER has handed over so far. The 업무 home row is
             // synthesized locally when the first page lacks it, so counting the
             // rendered list would skip a real conversation at the page boundary.
-            val next = fetchRecentSessions(offset = serverRowsLoaded) ?: return@launch
+            val next = fetchRecentSessions(offset = serverRowsLoaded, channel = "client") ?: return@launch
             if (epoch != credEpoch) return@launch
             serverRowsLoaded += next.serverRows
             val known = loaded.mapTo(mutableSetOf()) { it.id }
@@ -637,6 +646,51 @@ class DenebGatewayClient private constructor(
         return true
     }
 
+    override suspend fun pinConversation(id: String, pinned: Boolean) {
+        if (id.isBlank()) return
+        callRpc<JsonObject>(
+            "miniapp.sessions.pin",
+            buildJsonObject {
+                put("sessionKey", id)
+                put("pinned", pinned)
+            },
+        ) ?: return
+        _savedConversations.update { list ->
+            list.map { if (it.id == id) it.copy(pinned = pinned) else it }
+        }
+    }
+
+    override suspend fun resetConversationModel(id: String) {
+        if (id.isBlank()) return
+        if (setSessionModel(id, "")) {
+            _savedConversations.update { list ->
+                list.map { if (it.id == id) it.copy(model = "") else it }
+            }
+        }
+    }
+
+    override suspend fun searchConversations(query: String): List<Conversation> {
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+        val payload = callRpc<ai.deneb.deneb.generated.SessionSearchResult>(
+            "miniapp.sessions.search",
+            buildJsonObject {
+                put("query", q)
+                put("maxResults", 20)
+            },
+        ) ?: return emptyList()
+        return payload.hits.map { hit ->
+            Conversation(
+                id = hit.sessionKey,
+                messages = emptyList(),
+                createdAt = 0,
+                updatedAt = 0,
+                title = hit.label.ifBlank { hit.sessionKey },
+                snippet = hit.snippet,
+            )
+        }
+    }
+
     override suspend fun steer(note: String): Boolean {
         val trimmed = note.trim()
         if (trimmed.isEmpty()) return false
@@ -667,6 +721,18 @@ class DenebGatewayClient private constructor(
         _currentConversationId.value = key
         // Remember this as the active session so a restart restores it.
         appSettings.setLastSession(key)
+        scope.launch { writeSessionFocus(key) }
+    }
+
+    private var adoptedGatewayFocus = false
+
+    private fun adoptGatewayFocus(focus: String) {
+        val next = focus.trim()
+        if (adoptedGatewayFocus || next.isEmpty() || next == sessionKey) return
+        if (sessionKey != "client:main" || !next.startsWith("client:main")) return
+        adoptedGatewayFocus = true
+        switchSession(next)
+        scope.launch { loadTranscriptGuarded(next, replacing = true) }
     }
 
     // --- DataRepository: non-chat surface -----------------------------------

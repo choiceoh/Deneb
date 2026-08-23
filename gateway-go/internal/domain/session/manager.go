@@ -119,6 +119,10 @@ type Session struct {
 	// re-title can't clobber a name the user chose. Persisted via the label
 	// sidecar so the lock survives the frequent hot-swap restarts.
 	LabelPinned bool `json:"labelPinned,omitempty"`
+	// Pinned keeps the conversation at the top of the drawer (distinct from
+	// LabelPinned, which only locks the auto-title). Persisted via the list-pin
+	// sidecar so a hot-swap does not drop the user's pins.
+	Pinned bool `json:"pinned,omitempty"`
 
 	// Token accounting (cleared on compaction).
 	InputTokens  *int64 `json:"inputTokens,omitempty"`

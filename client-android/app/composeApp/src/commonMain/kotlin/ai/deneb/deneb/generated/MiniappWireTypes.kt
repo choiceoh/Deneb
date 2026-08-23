@@ -965,6 +965,12 @@ data class SenderWikiHitOut(
 
 @Immutable
 @Serializable
+data class SessionFocusResult(
+    val sessionKey: String = "",
+)
+
+@Immutable
+@Serializable
 data class SessionRowOut(
     val key: String = "",
     val kind: String = "",
@@ -972,10 +978,25 @@ data class SessionRowOut(
     val channel: String = "",
     val model: String = "",
     val label: String = "",
+    val pinned: Boolean = false,
     val updatedAtMs: Long = 0L,
     val startedAtMs: Long? = null,
     val runtimeMs: Long? = null,
     val totalTokens: Long? = null,
+)
+
+@Immutable
+@Serializable
+data class SessionSearchHitOut(
+    val sessionKey: String = "",
+    val snippet: String = "",
+    val label: String = "",
+)
+
+@Immutable
+@Serializable
+data class SessionSearchResult(
+    val hits: List<SessionSearchHitOut> = emptyList(),
 )
 
 @Immutable

@@ -126,3 +126,62 @@ func TestRestoreAndWakeSessions_RestoresSessionModel(t *testing.T) {
 		t.Fatalf("model = %q, want kimi/kimi-k2.5", got.Model)
 	}
 }
+
+func TestRestoreAndWakeSessions_RestoresListPinAndFocus(t *testing.T) {
+	tmpHome := t.TempDir()
+	transcriptDir := filepath.Join(tmpHome, ".deneb", "transcripts")
+	if err := os.MkdirAll(transcriptDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", tmpHome)
+	makeSessionTranscript(t, transcriptDir, "client:main:pinned")
+	if err := os.WriteFile(filepath.Join(tmpHome, ".deneb", "session-list-pins.json"), []byte(`["client:main:pinned"]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpHome, ".deneb", "session-focus.json"), []byte(`{"sessionKey":"client:main:pinned"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	mgr := session.NewManager()
+	srv := newTestServerForRestore(mgr)
+	srv.restoreAndWakeSessions(context.Background())
+
+	got := mgr.Get("client:main:pinned")
+	if got == nil {
+		t.Fatal("expected client:main:pinned to be restored")
+	}
+	if !got.Pinned {
+		t.Fatal("expected list pin to restore")
+	}
+	if srv.currentSessionFocus() != "client:main:pinned" {
+		t.Fatalf("focus = %q", srv.currentSessionFocus())
+	}
+}
+
+func TestForgetSessionExtrasDropsSidecars(t *testing.T) {
+	tmpHome := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmpHome, ".deneb"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", tmpHome)
+	if err := os.WriteFile(filepath.Join(tmpHome, ".deneb", "session-models.json"), []byte(`{"client:main:gone":"kimi/kimi-k2.5"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpHome, ".deneb", "session-list-pins.json"), []byte(`["client:main:gone"]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := newTestServerForRestore(session.NewManager())
+	srv.forgetSessionExtras("client:main:gone")
+	if !srv.isForgottenSession("client:main:gone") {
+		t.Fatal("expected forgotten mark")
+	}
+	models := loadSessionModels(filepath.Join(tmpHome, ".deneb", "session-models.json"))
+	if _, ok := models["client:main:gone"]; ok {
+		t.Fatal("model sidecar kept a deleted conversation")
+	}
+	pins := loadSessionListPins(filepath.Join(tmpHome, ".deneb", "session-list-pins.json"))
+	if pins["client:main:gone"] {
+		t.Fatal("list-pin sidecar kept a deleted conversation")
+	}
+}

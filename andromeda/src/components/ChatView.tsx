@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { type GatewayConfig } from "@/gateway";
 import { useChat } from "@/hooks";
 import { parseUiSubmission } from "@/markdown/denebUiParse";
-import { useAttachPipeline, useComposerBehavior, useModels } from "@/useChatSurface";
+import { useAttachPipeline, useComposerBehavior, useModels, useSessionDraft } from "@/useChatSurface";
 import { useFileDrop } from "@/useFileDrop";
 import { useSessions } from "@/useSessions";
 import { useStickyScroll } from "@/useStickyScroll";
@@ -59,6 +59,9 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
     selectSession,
     removeSession,
     renameSession,
+    pinConversation,
+    searchConversationHits,
+    resetConversationModel,
     canLoadMoreSessions,
     loadMoreSessions,
     newChat,
@@ -76,10 +79,11 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
       // window; filter stays as the client-side guard.
       channel: "client",
       filter: "client:",
-      // 새 대화 → 홈에서 분기한 고유 client:main:<id> 발급. Date.now/random은 앱 런타임이라 사용 가능.
-      newKey: () => `client:main:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      // 새 대화 → 홈에서 분기한 고유 client:main:<uuid> 발급.
+      newKey: () => `client:main:${crypto.randomUUID()}`,
     },
   );
+  const { clearDraft } = useSessionDraft(sessionKey, input, setInput);
   const sessionModel = sessions.find((s) => s.key === sessionKey)?.model ?? "";
   const { models, model, setModel } = useModels(cfg, connected, sessionKey, sessionModel);
   const { ref: transcriptRef, onScroll, pin, atBottom, scrollToBottom } = useStickyScroll([turns, thinking]);
@@ -110,6 +114,7 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
       return;
     }
     if (!msg) return;
+    clearDraft();
     setInput("");
     pin();
     // refresh the history once the turn finishes — the gateway may have created or
@@ -244,6 +249,12 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
           onDelete={removeSession}
           onNew={newChat}
           onRename={(key, label) => void renameSession(key, label)}
+          onPin={(key, pinned) => void pinConversation(key, pinned)}
+          onResetModel={(key) => {
+            void resetConversationModel(key);
+            if (key === sessionKey) setModel("");
+          }}
+          onSearch={searchConversationHits}
           canLoadMore={canLoadMoreSessions}
           onLoadMore={() => void loadMoreSessions()}
         />

@@ -23,6 +23,9 @@ data class ConversationSummary(
     val title: String,
     val updatedAt: Long,
     val isHeartbeat: Boolean = false,
+    val model: String = "",
+    val pinned: Boolean = false,
+    val snippet: String = "",
 )
 
 @Immutable
@@ -143,6 +146,7 @@ data class ChatUiState(
     // updated in the wiki"); shown as a snackbar on the feed, then cleared.
     val feedbackResultText: String? = null,
     val pendingConversationDeletion: String? = null,
+    val sessionSearchHits: ImmutableList<ConversationSummary> = persistentListOf(),
     // Messages sent while a reply was still streaming: queued client-side (FIFO)
     // and auto-sent the moment the running turn completes SUCCESSFULLY. An errored
     // or stopped turn never auto-sends — user-typed entries fold back into

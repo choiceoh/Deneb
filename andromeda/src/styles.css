@@ -1778,8 +1778,18 @@ input[type="checkbox"] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.session-row-del {
+.session-row-del,
+.session-row-pin,
+.session-row-reset {
   flex: 0 0 auto;
+}
+.session-row-pin,
+.session-row-reset {
+  font-size: 11px;
+}
+.session-row-hint {
+  font-size: 11px;
+  color: var(--muted-2);
 }
 
 /* tool-call chip (inline in the assistant reply) */

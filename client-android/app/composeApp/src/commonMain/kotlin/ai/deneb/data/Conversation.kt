@@ -18,6 +18,7 @@ data class Attachment(
     val fileName: String? = null,
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class Conversation(
     val id: String,
@@ -27,6 +28,14 @@ data class Conversation(
     val title: String = "",
     val type: String = TYPE_CHAT,
     val shellTranscript: List<TerminalLine> = emptyList(),
+    // Drawer-only sidecar fields. Omit empties so persisted conversation
+    // snapshots stay the same shape as before these columns existed.
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val model: String = "",
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val pinned: Boolean = false,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val snippet: String = "",
 ) {
     companion object {
         const val TYPE_CHAT = "chat"

@@ -64,6 +64,18 @@ class SessionTranscriptStateMachineTest {
     }
 
     @Test
+    fun fetchRecentSessionsSendsClientChannelWhenRequested() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc(sessionsPayload())
+
+        f.client.fetchRecentSessions(channel = "client")
+
+        val params = f.transport.singleRequest().requireRpc("miniapp.sessions.recent")
+        assertEquals("client", params["channel"]?.jsonPrimitive?.content)
+        assertEquals(50, params["limit"]?.jsonPrimitive?.content?.toInt())
+    }
+
+    @Test
     fun failedRecentSessionsRpcReturnsNullInsteadOfSyntheticHome() = runTest {
         val f = gatewayClientFixture()
         f.transport.enqueueJson("malformed")
@@ -751,7 +763,11 @@ class SessionTranscriptStateMachineTest {
 
         f.client.recoverTurnFromTranscript("client:main:pinned", "question")
 
-        f.transport.requests.forEach { request ->
+        // switchSession also writes miniapp.sessions.focus — only the recovery
+        // transcript calls are under test here.
+        val transcriptRequests = f.transport.requests.filter { it.rpcMethod == "miniapp.sessions.transcript" }
+        assertTrue(transcriptRequests.isNotEmpty())
+        transcriptRequests.forEach { request ->
             val params = request.requireRpc("miniapp.sessions.transcript")
             assertEquals("client:main:pinned", params["sessionKey"]?.jsonPrimitive?.content)
             assertEquals(200, params["limit"]?.jsonPrimitive?.content?.toInt())

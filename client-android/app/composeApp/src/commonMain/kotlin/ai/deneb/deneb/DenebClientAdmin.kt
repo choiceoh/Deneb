@@ -216,16 +216,21 @@ fun DenebGatewayClient.selectDenebModelInstance(instanceId: String) {
 /** Persist a chat-picker choice on one session. Settings still uses [setRoleModel]. */
 suspend fun DenebGatewayClient.setSessionModel(sessionKey: String, id: String): Boolean {
     val key = sessionKey.trim()
-    if (key.isEmpty() || id.isBlank()) return false
+    if (key.isEmpty()) return false
+    val modelId = id.trim()
     val ok = callRpc<JsonObject>(
         "miniapp.models.set",
         buildJsonObject {
-            put("id", id)
+            put("id", modelId)
             put("sessionKey", key)
         },
     ) != null
     if (ok) {
-        _sessionModels.value = _sessionModels.value + (key to id)
+        _sessionModels.value = if (modelId.isEmpty()) {
+            _sessionModels.value - key
+        } else {
+            _sessionModels.value + (key to modelId)
+        }
     }
     return ok
 }

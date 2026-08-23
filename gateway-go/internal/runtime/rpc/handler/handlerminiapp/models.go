@@ -185,14 +185,14 @@ func modelsSet(deps ModelDeps) rpcutil.HandlerFunc {
 		}
 		return rpcutil.BindCtx[params](ctx, req, func(ctx context.Context, p params) (any, error) {
 			id := strings.TrimSpace(p.ID)
-			if id == "" {
-				return nil, rpcerr.MissingParam("id")
-			}
 			role := strings.TrimSpace(p.Role)
 			if role == "" {
 				role = "main"
 			}
 			sessionKey := strings.TrimSpace(p.SessionKey)
+			if id == "" && sessionKey == "" {
+				return nil, rpcerr.MissingParam("id")
+			}
 			if sessionKey != "" {
 				if deps.SetSessionModel == nil {
 					return nil, rpcerr.Unavailable("session model switch is unavailable")
