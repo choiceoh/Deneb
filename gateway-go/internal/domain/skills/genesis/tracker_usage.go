@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
@@ -57,8 +58,14 @@ func (t *Tracker) ingest(r UsageRecord) {
 	}
 }
 
-// RecordUsage logs a skill usage event.
+// RecordUsage logs a skill usage event. The skill name is the stats key the
+// evolver later resolves against the catalog by exact match, so an empty or
+// whitespace name is refused here rather than accruing a phantom entry.
 func (t *Tracker) RecordUsage(record UsageRecord) error {
+	record.SkillName = strings.TrimSpace(record.SkillName)
+	if record.SkillName == "" {
+		return fmt.Errorf("genesis-tracker: usage record without skill name")
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 

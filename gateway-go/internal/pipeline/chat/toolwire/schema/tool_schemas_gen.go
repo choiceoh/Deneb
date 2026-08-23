@@ -1959,7 +1959,7 @@ func WorkstationToolSchema() map[string]any {
 			},
 			"view": map[string]any{
 				"type":        "string",
-				"description": "대상 pane 키 (open/split/focus/close): today|projects|progress|todo|notebook|mail|calendar|wiki|search|people|crons|fleet|workfeed|approvals|groupware|skills|rsi|observe|sitemap",
+				"description": "대상 pane 키 (open/split/focus/close): today|projects|todo|notebook|mail|calendar|wiki|search|people|crons|fleet|workfeed|approvals|groupware|skills|rsi|observe",
 			},
 			"views": map[string]any{
 				"type":        "string",
