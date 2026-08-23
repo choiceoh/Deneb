@@ -1,5 +1,8 @@
 [Unit]
 Description=Deneb SOP miner (recurring action n-grams -> composite-tool candidates)
+# Bound the retry stanza in [Service]: a genuinely broken miner still fails.
+StartLimitIntervalSec=1d
+StartLimitBurst=4
 
 [Service]
 Type=oneshot
@@ -10,3 +13,11 @@ WorkingDirectory=%h/deneb
 # miner that silently never runs.
 TimeoutStartSec=10min
 ExecStart=%h/deneb/scripts/audit/sop-miner.py
+
+# A miner's nonzero exits are all transient infrastructure (audit tooling or the
+# gateway RPC unreachable), never "nothing to file" — so a single blip must not
+# cost a whole cadence. 2026-08-18: a DNS outage broke `go run …deadcode@latest`
+# and the weekly deadcode miner stayed dead for 5 days, starving L4 supply while
+# 3 fileable findings waited. Bounded so a genuinely broken miner still fails.
+Restart=on-failure
+RestartSec=30min
