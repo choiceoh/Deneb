@@ -18,6 +18,38 @@ import (
 // The digest posts at most weekly and only when fresh dream reports exist:
 // first run baselines silently, the weekly gap gates posting, and the state
 // bump only follows a successful card post.
+// The text sparkline scales to the series' own range (a flat series reads
+// flat, a slide reads as a slide) and the digest body carries the trend line.
+func TestSparklineBarsScalesToSeriesRange(t *testing.T) {
+	if got := sparklineBars(nil); got != "" {
+		t.Fatalf("empty series = %q", got)
+	}
+	if got := sparklineBars([]float64{60, 70, 80, 90}); got != "▁ ▃ ▅ █" {
+		t.Fatalf("rising series = %q, want ▁ ▃ ▅ █", got)
+	}
+	if got := sparklineBars([]float64{90, 60}); got != "█ ▁" {
+		t.Fatalf("falling series = %q, want █ ▁", got)
+	}
+	if got := sparklineBars([]float64{75, 75}); got != "▅ ▅" {
+		t.Fatalf("flat series = %q, want mid bars ▅ ▅", got)
+	}
+}
+
+func TestAggregateDreamReportsBuildsQualityTrend(t *testing.T) {
+	entries := []dreamReportEntry{
+		{AtMs: 1, Report: autonomous.DreamReport{WikiPagesUpdated: 1, QualityScore: 60}},
+		{AtMs: 2, Report: autonomous.DreamReport{WikiPagesUpdated: 1}}, // unscored → skipped
+		{AtMs: 3, Report: autonomous.DreamReport{WikiPagesUpdated: 1, QualityScore: 80}},
+	}
+	stats := aggregateDreamReports(entries, 0, 10)
+	if len(stats.QualityTrend) != 2 || stats.QualityTrend[0] != 60 || stats.QualityTrend[1] != 80 {
+		t.Fatalf("trend = %v, want [60 80]", stats.QualityTrend)
+	}
+	if stats.QualityAvg != 70 {
+		t.Fatalf("avg = %v, want 70", stats.QualityAvg)
+	}
+}
+
 func TestDreamDigestTaskPostsWeeklyOnlyWithFreshReports(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)

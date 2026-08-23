@@ -102,6 +102,9 @@ func (s *Server) configureAutonomousWorkflow(hub *rpcutil.GatewayHub) {
 	// memories into a correction turn. Registered before SetDreamer below (the
 	// scheduler starts with the dreamer loop).
 	s.autonomousSvc.RegisterTask(&DreamDigestTask{Server: s})
+	// Wiki-maint watch (위키 개선 방안 W15): advisory wiki mismatches (v1: the
+	// wiki↔mail person conflict scan) as approve/reject decision cards.
+	s.autonomousSvc.RegisterTask(&WikiMaintTask{Server: s})
 	if n := s.proactiveRelay.NotifierForSession(proactive.DreamWorkSessionKey); n != nil {
 		s.autonomousSvc.SetNotifier(n)
 	}
