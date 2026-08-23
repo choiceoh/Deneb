@@ -27,11 +27,26 @@ import (
 const gitSnapTimeout = 30 * time.Second
 
 // wikiGitIgnore excludes derived/state files from version control: embedding
-// cache, dreamer cursors, and write-temp artifacts churn on every cycle and
-// would bury the meaningful page history.
+// cache, dreamer cursors, append-only ledgers, and write-temp artifacts churn
+// on every cycle and would bury the meaningful page history.
+//
+// The ledgers below are appended several times an hour and each commit stores a
+// fresh whole-file blob, so they dominated the repository's loose objects
+// (measured 2026-08-23: 39MB loose vs 6.8MB packed, with the ledgers plus the
+// regenerated index/log among the largest contributors). They are still backed
+// up — the daily offsite tar takes untracked files too. `.deals.jsonl` stays
+// tracked on purpose: it is the financial audit surface, not derived state.
 const wikiGitIgnore = `.semantic-cache.json
+.diary-semantic-cache.json
 .diary-process-state.json
 .dream-last-proposal.json
+.recall-hits.jsonl
+.verify-findings.json
+.dream-selfcompare.jsonl
+.dream-fact-ledger.jsonl
+.wiki.db
+.wiki.db-shm
+.wiki.db-wal
 *.tmp
 *.lock
 `
@@ -109,11 +124,55 @@ func (s *Store) ensureGitRepo(ctx context.Context) error {
 	if out, err := s.git(ctx, "config", "user.email", "deneb@localhost"); err != nil {
 		return fmt.Errorf("git config user.email: %w (%s)", err, out)
 	}
+	if err := s.reconcileGitIgnore(); err != nil {
+		return err
+	}
+	// Pack early. Nothing here ever runs `git gc`, so the only maintenance is
+	// the one `git commit` triggers at gc.auto — 6700 loose objects by default,
+	// which at this repo's ~24KB/object is well over 100MB of loose files
+	// before anything is packed. autoDetach=false keeps the pack inside the
+	// snapshot's own 30s timeout instead of leaving a background process behind.
+	if out, err := s.git(ctx, "config", "gc.auto", "512"); err != nil {
+		return fmt.Errorf("git config gc.auto: %w (%s)", err, out)
+	}
+	if out, err := s.git(ctx, "config", "gc.autoDetach", "false"); err != nil {
+		return fmt.Errorf("git config gc.autoDetach: %w (%s)", err, out)
+	}
+	return nil
+}
+
+// reconcileGitIgnore creates .gitignore, or appends the entries a newer release
+// added. It used to be written once at repo creation, so every ignore rule
+// added afterwards silently did nothing on existing wikis — which is why the
+// dreamer ledgers were still tracked months later. Existing lines are never
+// removed: an operator may have added their own.
+func (s *Store) reconcileGitIgnore() error {
 	ignorePath := filepath.Join(s.dir, ".gitignore")
-	if _, err := os.Stat(ignorePath); os.IsNotExist(err) {
-		if werr := os.WriteFile(ignorePath, []byte(wikiGitIgnore), 0o644); werr != nil {
-			return fmt.Errorf("write .gitignore: %w", werr)
+	current, err := os.ReadFile(ignorePath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read .gitignore: %w", err)
+	}
+	have := make(map[string]bool)
+	for _, line := range strings.Split(string(current), "\n") {
+		have[strings.TrimSpace(line)] = true
+	}
+	var missing []string
+	for _, want := range strings.Split(strings.TrimSpace(wikiGitIgnore), "\n") {
+		want = strings.TrimSpace(want)
+		if want != "" && !have[want] {
+			missing = append(missing, want)
 		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	body := string(current)
+	if body != "" && !strings.HasSuffix(body, "\n") {
+		body += "\n"
+	}
+	body += strings.Join(missing, "\n") + "\n"
+	if werr := os.WriteFile(ignorePath, []byte(body), 0o644); werr != nil {
+		return fmt.Errorf("write .gitignore: %w", werr)
 	}
 	return nil
 }
