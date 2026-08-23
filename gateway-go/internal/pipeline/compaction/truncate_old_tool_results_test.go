@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
@@ -230,6 +231,61 @@ func TestTruncateOldToolResults_CJKRunesNotBytes(t *testing.T) {
 	}
 	if got := firstToolResultContent(t, json.RawMessage(out2[1].Content.Bytes())); got != stubPlaceholder {
 		t.Errorf("Korean long content not stubbed: %q", got)
+	}
+}
+
+// TestTruncateOldToolResults_CJKRuneBoundary pins the exact 255/256/257-rune
+// boundary (improvement-ideas §3.2): minChars gates on rune count (<= survives,
+// > is stubbed), never on byte length, and the counter is code-point-based so it
+// stays consistent for both NFC and NFD Hangul (a decomposed syllable is 2
+// code points). Mixed Hangul+ASCII at the boundary is covered too.
+func TestTruncateOldToolResults_CJKRuneBoundary(t *testing.T) {
+	cases := []struct {
+		name     string
+		content  string
+		runes    int
+		wantStub bool
+	}{
+		{"NFC_255", strings.Repeat("가", 255), 255, false},
+		{"NFC_256", strings.Repeat("가", 256), 256, false},
+		{"NFC_257", strings.Repeat("가", 257), 257, true},
+		{"mixed_256", strings.Repeat("가", 128) + strings.Repeat("a", 128), 256, false},
+		{"mixed_257", strings.Repeat("가", 129) + strings.Repeat("a", 128), 257, true},
+		// NFD "가" = U+1100 U+1161 (2 code points), so 128 syllables = 256 runes.
+		{"NFD_256", strings.Repeat("\u1100\u1161", 128), 256, false},
+		{"NFD_257", strings.Repeat("\u1100\u1161", 129), 258, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := utf8.RuneCountInString(tc.content); got != tc.runes {
+				t.Fatalf("fixture rune count = %d, want %d", got, tc.runes)
+			}
+			msgs := []llm.Message{
+				assistantMsg(t, "a1"),
+				toolResultMsg(tc.content),
+				assistantMsg(t, "a2"),
+				assistantMsg(t, "a3"),
+				assistantMsg(t, "a4"),
+				assistantMsg(t, "a5"),
+			}
+			out, stubbed := TruncateOldToolResults(msgs, 4, 256)
+			got := firstToolResultContent(t, json.RawMessage(out[1].Content.Bytes()))
+			if tc.wantStub {
+				if stubbed != 1 {
+					t.Fatalf("stubbed = %d, want 1", stubbed)
+				}
+				if got != stubPlaceholder {
+					t.Fatalf("content not stubbed at boundary: %q", got)
+				}
+			} else {
+				if stubbed != 0 {
+					t.Fatalf("stubbed = %d, want 0", stubbed)
+				}
+				if got != tc.content {
+					t.Fatalf("content modified below boundary (byte-identity broken)")
+				}
+			}
+		})
 	}
 }
 
