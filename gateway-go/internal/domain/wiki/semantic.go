@@ -389,9 +389,9 @@ func (si *semanticIndex) loadCacheV4(env semanticCacheEnvelopeV4) {
 			"path", si.blobPath(), "error", err)
 		return
 	}
-	if reader.count() != env.BlobVectors {
+	if reader.Count() != env.BlobVectors {
 		slog.Warn("wiki: semantic manifest and vector blob disagree; re-embedding from scratch",
-			"manifestVectors", env.BlobVectors, "blobVectors", reader.count())
+			"manifestVectors", env.BlobVectors, "blobVectors", reader.Count())
 		return
 	}
 	si.mu.Lock()
@@ -400,13 +400,13 @@ func (si *semanticIndex) loadCacheV4(env semanticCacheEnvelopeV4) {
 	si.cacheDimensions = env.Dimensions
 	si.cachePreprocessing = env.Preprocessing
 	for rp, cv := range env.Entries {
-		vec := reader.at(cv.VecIndex)
+		vec := reader.At(cv.VecIndex)
 		if cv.Hash == "" || vec == nil {
 			continue
 		}
 		chunks := make([]semanticChunk, 0, len(cv.Chunks))
 		for _, chunk := range cv.Chunks {
-			cvec := reader.at(chunk.VecIndex)
+			cvec := reader.At(chunk.VecIndex)
 			if cvec == nil {
 				continue
 			}
@@ -448,13 +448,13 @@ func (si *semanticIndex) saveCache() {
 	blob := newBlobWriter(dimensions, len(si.vecs)*6)
 	entries := make(map[string]cachedVecWireV4, len(si.vecs))
 	for rp, cv := range si.vecs {
-		idx := blob.add(cv.vec)
+		idx := blob.Add(cv.vec)
 		if idx < 0 {
 			continue // wrong-dimension vector: re-embedded on the next refresh
 		}
 		chunks := make([]semanticChunkWireV4, 0, len(cv.chunks))
 		for _, chunk := range cv.chunks {
-			cidx := blob.add(chunk.vec)
+			cidx := blob.Add(chunk.vec)
 			if cidx < 0 {
 				continue
 			}
@@ -473,7 +473,7 @@ func (si *semanticIndex) saveCache() {
 		Fingerprint:   fingerprint,
 		Dimensions:    dimensions,
 		Preprocessing: preprocessing,
-		BlobVectors:   blob.n,
+		BlobVectors:   blob.Len(),
 		Entries:       entries,
 	})
 	if err != nil {
@@ -481,7 +481,7 @@ func (si *semanticIndex) saveCache() {
 	}
 	blobPath := si.blobPath()
 	blobTmp := blobPath + ".tmp"
-	if err := writeFileSync(blobTmp, blob.buf, 0o644); err != nil {
+	if err := writeFileSync(blobTmp, blob.Bytes(), 0o644); err != nil {
 		slog.Warn("wiki: semantic vector blob write failed", "path", blobPath, "error", err)
 		return
 	}
