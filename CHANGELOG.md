@@ -1,5 +1,72 @@
 # Changelog
 
+## [5.0.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.143.0...deneb-v5.0.0) (2026-08-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* **mcp:** POST /mcp no longer serves the initialize handshake era (2024-11-05 through 2025-11-25). Clients on those revisions receive 400 rather than a negotiated session. Reverting means reverting this commit; there is no flag, because a flag would be the second code path this removes.
+
+### ✨ Features
+
+* **android:** polish chat recovery, more hub, and composer draft ([#4524](https://github.com/choiceoh/Deneb/issues/4524)) ([9c018a4](https://github.com/choiceoh/Deneb/commit/9c018a4542f9fb3192c03404053cb83723bc6e17))
+* **andromeda:** 컴퓨터 use — computer 도구로 데스크톱 화면·마우스·키보드 조종 ([#4576](https://github.com/choiceoh/Deneb/issues/4576)) ([fe78035](https://github.com/choiceoh/Deneb/commit/fe78035f42bc798d0a8630475eebd6e37d75bd70))
+* **browser:** 탭과 WebView 복구를 추가 ([#4532](https://github.com/choiceoh/Deneb/issues/4532)) ([3334609](https://github.com/choiceoh/Deneb/commit/33346091058ae1c36dfcba751b7bcdfe2f77b3b7))
+* **chat:** rename sessions, fold card chats, and steer mid-turn ([#4520](https://github.com/choiceoh/Deneb/issues/4520)) ([b7e29e5](https://github.com/choiceoh/Deneb/commit/b7e29e508f3d5356b13146d7aa92e3443c9374a5))
+* **chat:** RLM 도입 — 스필오버 재귀 서브콜·세션 수명 결속·잘림 신호 ([#4566](https://github.com/choiceoh/Deneb/issues/4566)) ([7f54dc5](https://github.com/choiceoh/Deneb/commit/7f54dc55bfec64796f5d8e5904ef03122f735f43))
+* **chat:** show steer bubbles, fold Hangul cards, and label mid-turn send ([#4529](https://github.com/choiceoh/Deneb/issues/4529)) ([4274346](https://github.com/choiceoh/Deneb/commit/42743466b6b90aeab88a9f53d6eeec582076bab2))
+* **chat:** watch 대담 전사와 타임아웃 잔해, 모닝 할 일·견적 묶음 ([#4568](https://github.com/choiceoh/Deneb/issues/4568)) ([7819a6f](https://github.com/choiceoh/Deneb/commit/7819a6f7d35413bac7f81edbd4573e5b763f22f3))
+* **dev:** mine decision rationale from git into session memory ([#4564](https://github.com/choiceoh/Deneb/issues/4564)) ([0a453bc](https://github.com/choiceoh/Deneb/commit/0a453bc9e083c621377cd319663e2369e7682057))
+* **knowledge:** person dossier RPC and client surfaces (improvement-ideas 4.8) ([#4578](https://github.com/choiceoh/Deneb/issues/4578)) ([57f28a9](https://github.com/choiceoh/Deneb/commit/57f28a94c3304b1a70920e510b600dcba1d5ea95))
+* **mcp:** adopt MCP 2.0 (2026-07-28) across server and both clients ([#4561](https://github.com/choiceoh/Deneb/issues/4561)) ([b6f9ec1](https://github.com/choiceoh/Deneb/commit/b6f9ec1527b41ec2cdd977c8e7999b74ae1236c7))
+* **mcp:** dedicated broker token for the personal MCP surface (improvement-ideas 5.5) ([#4579](https://github.com/choiceoh/Deneb/issues/4579)) ([a996168](https://github.com/choiceoh/Deneb/commit/a99616827cf8f24eaedc271cd06dc3183c6eca81))
+* **workfeed:** trust inbox — self-correction approval cards and tray actions (improvement-ideas 4.7) ([#4575](https://github.com/choiceoh/Deneb/issues/4575)) ([60c6bd9](https://github.com/choiceoh/Deneb/commit/60c6bd9e6c9b003eb1a2322fd41fd936ae9ea0c1))
+* **workfeed:** weekly memory digest — dream report rollup and feedback card (improvement-ideas 4.9) ([#4577](https://github.com/choiceoh/Deneb/issues/4577)) ([6692ddb](https://github.com/choiceoh/Deneb/commit/6692ddbf45d40704ef0ef2d13d81b699a4bfea94))
+
+
+### 🐛 Bug Fixes
+
+* **android:** scope composer drafts per session and prune ghost more-tile keys ([#4528](https://github.com/choiceoh/Deneb/issues/4528)) ([08dcdb0](https://github.com/choiceoh/Deneb/commit/08dcdb034be420baa6efb83c73fa051d3da0636a))
+* **android:** show browser start surface and open popups in-place ([#4531](https://github.com/choiceoh/Deneb/issues/4531)) ([c7548de](https://github.com/choiceoh/Deneb/commit/c7548dece17396585d7ad7931780aabc150b42d4))
+* **android:** 프로젝트 진행상황 모아보기를 제거 ([#4521](https://github.com/choiceoh/Deneb/issues/4521)) ([92344ed](https://github.com/choiceoh/Deneb/commit/92344edb594a5274578f0d7ba4048937377005aa))
+* **android:** 현장 지도 기능을 제거 ([#4517](https://github.com/choiceoh/Deneb/issues/4517)) ([5642169](https://github.com/choiceoh/Deneb/commit/5642169514992a4a5fe5213d9aca83710476ea7b))
+* **browser:** retry transient body translation failures ([#4538](https://github.com/choiceoh/Deneb/issues/4538)) ([5ac3598](https://github.com/choiceoh/Deneb/commit/5ac35982dd8a37766c96420b76d33e9c740c9164))
+* **browser:** stabilize tabs and translation ([#4535](https://github.com/choiceoh/Deneb/issues/4535)) ([2280b09](https://github.com/choiceoh/Deneb/commit/2280b0941bbb4426d2df9d7c6e440fe7954a0e14))
+* **chat:** edit aliases, miner filters, and bounded tool ownership splits ([#4554](https://github.com/choiceoh/Deneb/issues/4554)) ([2d19e6d](https://github.com/choiceoh/Deneb/commit/2d19e6d757eeaad5e10775d7c39fc47627f00810))
+* **chat:** extract gateway and heartbeat into gatewayops ([#4557](https://github.com/choiceoh/Deneb/issues/4557)) ([b827d6e](https://github.com/choiceoh/Deneb/commit/b827d6e03f1dd60dee858af5102752db26e904b3))
+* **chat:** extract host wrappers into hostops ([#4558](https://github.com/choiceoh/Deneb/issues/4558)) ([046e421](https://github.com/choiceoh/Deneb/commit/046e421f0e24d2c06ae6c151724cb1e5c2572cb8))
+* **chat:** extract remaining root tools into sibling packages ([#4559](https://github.com/choiceoh/Deneb/issues/4559)) ([6b7b29f](https://github.com/choiceoh/Deneb/commit/6b7b29fdcb0e27bee3b90d9e98990a70e4b3daab))
+* **chat:** extract sessions and subagents into sessionops ([#4556](https://github.com/choiceoh/Deneb/issues/4556)) ([ecbf9b8](https://github.com/choiceoh/Deneb/commit/ecbf9b82949aac32f446b720f8a6462678f17953))
+* **chat:** teach phone/lifecycle aliases and extract fetchops ([#4555](https://github.com/choiceoh/Deneb/issues/4555)) ([a4322ab](https://github.com/choiceoh/Deneb/commit/a4322ab831877a34361dac52f65fc13afd1dd47e))
+* **chat:** teach wiki/cron/calendar/knowledge/polaris/message/skill aliases ([#4560](https://github.com/choiceoh/Deneb/issues/4560)) ([fec0787](https://github.com/choiceoh/Deneb/commit/fec07878e837cef43b41f408208f8a75af210023))
+* **chat:** workstation tool drops removed view keys; skill consults record the catalog name ([#4571](https://github.com/choiceoh/Deneb/issues/4571)) ([963c161](https://github.com/choiceoh/Deneb/commit/963c1613990d6841f36578ce59317452a5c8842f))
+* **chat:** 긴 응답 진행 상태를 표시하고 타임아웃 응답을 보존 ([#4526](https://github.com/choiceoh/Deneb/issues/4526)) ([1799e64](https://github.com/choiceoh/Deneb/commit/1799e64e8b53a8726ec8a52f17af3fa380215fcc))
+* **chat:** 답변 중 대기 칩을 숨기고 음성은 끝난 뒤 읽게 ([#4527](https://github.com/choiceoh/Deneb/issues/4527)) ([2b415e4](https://github.com/choiceoh/Deneb/commit/2b415e4c40f149bdb9ffa81d711244560da9a14e))
+* **chat:** 스트리밍 중에도 대화가 밑으로 따라가게 ([#4525](https://github.com/choiceoh/Deneb/issues/4525)) ([1bcf805](https://github.com/choiceoh/Deneb/commit/1bcf80559a3166a78fd794c78084b68d421fab17))
+* **chat:** 키보드와 스트리밍을 대화가 자연스럽게 따라가게 ([#4523](https://github.com/choiceoh/Deneb/issues/4523)) ([9380a8d](https://github.com/choiceoh/Deneb/commit/9380a8d9482501464d35504fd8efd3507de35586))
+* **dev:** 마킹 후 블록 상한 + 초 미만 ts ([#4565](https://github.com/choiceoh/Deneb/issues/4565) 머지 경합으로 누락된 커밋) ([#4567](https://github.com/choiceoh/Deneb/issues/4567)) ([9f74866](https://github.com/choiceoh/Deneb/commit/9f748661b99a78499aaa710ead230980454053a5))
+* **dev:** 세션 기억 잠금·유실·신뢰 경계 교체 + golangci 스키마 의존 제거 ([#4565](https://github.com/choiceoh/Deneb/issues/4565)) ([1c990f1](https://github.com/choiceoh/Deneb/commit/1c990f16146b4e817fa14df152162a466e1a7323))
+* **dream:** allow long cloud synthesis responses ([#4542](https://github.com/choiceoh/Deneb/issues/4542)) ([d6eb4d9](https://github.com/choiceoh/Deneb/commit/d6eb4d9f0329f9c964d49fcd4b80f2752a3f1f74))
+* **dream:** disable GLM reasoning for wiki synthesis ([#4541](https://github.com/choiceoh/Deneb/issues/4541)) ([faae557](https://github.com/choiceoh/Deneb/commit/faae557f6ea53bc5ba696cd88170f6a916fcc948))
+* **dream:** route Aurora synthesis through tiny ([#4543](https://github.com/choiceoh/Deneb/issues/4543)) ([9a1f556](https://github.com/choiceoh/Deneb/commit/9a1f556ece4b5b01062dea3c38ac948a5ee28bc2))
+* **feed:** stamp system_log at write instead of guessing from titles ([#4533](https://github.com/choiceoh/Deneb/issues/4533)) ([cc1c525](https://github.com/choiceoh/Deneb/commit/cc1c5256b5e712909b022e7a83e51d048d02dc80))
+* **genesis:** drift brake skips implausible meta rows; proposal lane gates evolve before execution ([#4570](https://github.com/choiceoh/Deneb/issues/4570)) ([6368104](https://github.com/choiceoh/Deneb/commit/6368104f38c213f8e302f186527f22d38888b1ce))
+* **heartbeat:** preload lifecycle tool for self-coding nudges ([#4548](https://github.com/choiceoh/Deneb/issues/4548)) ([9152d2a](https://github.com/choiceoh/Deneb/commit/9152d2ace942abafd6eb2a531450c61a2e8d61c3))
+* **mcp:** opt MCP children out of telemetry and collapse repeating stderr lines ([#4574](https://github.com/choiceoh/Deneb/issues/4574)) ([2ceea8e](https://github.com/choiceoh/Deneb/commit/2ceea8e9557b7c4699e730e3fe0d9f41d7f80398))
+* **rsi:** harvest which meta revisions landed, not just that the loop ran ([#4534](https://github.com/choiceoh/Deneb/issues/4534)) ([6f0b1d4](https://github.com/choiceoh/Deneb/commit/6f0b1d4380e10f0b635d56730beacae5543bbb71))
+* **rsi:** L4 miners report blocked supply and failed runs; superseded twins reopen after cooldown; pin deadcode analyzer ([#4580](https://github.com/choiceoh/Deneb/issues/4580)) ([8cf87d3](https://github.com/choiceoh/Deneb/commit/8cf87d3b0e3667df2d82e109b25bf5a604eabf3a))
+* **rsi:** staged-sources row graduates; incremental health backlog is manual, not pending ([#4537](https://github.com/choiceoh/Deneb/issues/4537)) ([e359f5e](https://github.com/choiceoh/Deneb/commit/e359f5ea22c975190721714e2a8d095f50c0d717))
+* **rsi:** 런타임 체크 수리 — MCP stderr 오계상·L4 미너 정지·리플레이 파싱 진단 ([#4581](https://github.com/choiceoh/Deneb/issues/4581)) ([c4608f0](https://github.com/choiceoh/Deneb/commit/c4608f07eacb0f2790a38386d4b23415ee11ce64))
+* **skilllifecycle:** bound self-review fork latency ([#4544](https://github.com/choiceoh/Deneb/issues/4544)) ([cf4989e](https://github.com/choiceoh/Deneb/commit/cf4989e044fd9f13d5051e8d111a9606892973ef))
+
+
+### 🔧 Internal
+
+* **android:** move deneb-ui reveal tweens onto named motion tokens ([#4530](https://github.com/choiceoh/Deneb/issues/4530)) ([dd99e09](https://github.com/choiceoh/Deneb/commit/dd99e09e30a5c3e806421f9f037c8d8b42c9a6de))
+* **chat:** extract tool histogram and workspace prewarm from run_exec.go ([#4573](https://github.com/choiceoh/Deneb/issues/4573)) ([96b898c](https://github.com/choiceoh/Deneb/commit/96b898ced511ac06027a501d211f9560e977b2b2))
+* **llm:** remove unused SSE byte-limit wrapper ([#4547](https://github.com/choiceoh/Deneb/issues/4547)) ([d0b8125](https://github.com/choiceoh/Deneb/commit/d0b8125025f234eb3049c2088c05c9bd95b15450))
+* **mcp:** serve only 2026-07-28 on the gateway MCP endpoint ([#4562](https://github.com/choiceoh/Deneb/issues/4562)) ([17cba2c](https://github.com/choiceoh/Deneb/commit/17cba2c10c53cd01a9cce552bbec233be7fa36fd))
+
 ## [4.143.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.142.2...deneb-v4.143.0) (2026-08-16)
 
 
