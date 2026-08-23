@@ -174,7 +174,10 @@ func (si *semanticIndex) refreshAsync(store *Store) {
 // content hash, so stale vectors for edited pages are re-embedded naturally.
 const semanticCacheFile = ".semantic-cache.json"
 
-const semanticCacheSchemaVersion = 3
+// semanticCacheSchemaVersion 4 moved the vectors into a sidecar blob
+// (semantic_cache_blob.go); the manifest keeps paths, hashes and chunk
+// metadata. A v3 file still loads and is rewritten as v4 on the next save.
+const semanticCacheSchemaVersion = 4
 
 // semanticPreprocessingVersion identifies how a wiki page becomes embedding
 // input. Bump it whenever semanticText normalization/chunking semantics change,
@@ -285,6 +288,37 @@ type semanticCacheEnvelope struct {
 	Dimensions    int                      `json:"dimensions,omitempty"`
 	Preprocessing string                   `json:"preprocessing,omitempty"`
 	Entries       map[string]cachedVecWire `json:"entries"`
+	// BlobVectors is how many vectors the sidecar must hold (v4+). It is the
+	// integrity check between the two files: a manifest and blob that disagree
+	// would slice someone else's embedding into a page, so a mismatch drops the
+	// whole cache and re-embeds.
+	BlobVectors int `json:"blobVectors,omitempty"`
+}
+
+// cachedVecWireV4 is one entry in a v4 manifest: the same metadata, with the
+// vectors replaced by indices into the sidecar blob.
+type cachedVecWireV4 struct {
+	Hash     string                `json:"hash"`
+	VecIndex int                   `json:"vecIndex"`
+	Chunks   []semanticChunkWireV4 `json:"chunks,omitempty"`
+}
+
+type semanticChunkWireV4 struct {
+	Snippet   string `json:"snippet"`
+	StartLine int    `json:"startLine"`
+	EndLine   int    `json:"endLine"`
+	Kind      string `json:"kind,omitempty"`
+	VecIndex  int    `json:"vecIndex"`
+}
+
+// semanticCacheEnvelopeV4 is the manifest actually written from v4 on.
+type semanticCacheEnvelopeV4 struct {
+	Version       int                        `json:"version"`
+	Fingerprint   string                     `json:"fingerprint,omitempty"`
+	Dimensions    int                        `json:"dimensions,omitempty"`
+	Preprocessing string                     `json:"preprocessing,omitempty"`
+	BlobVectors   int                        `json:"blobVectors"`
+	Entries       map[string]cachedVecWireV4 `json:"entries"`
 }
 
 // loadCache hydrates vecs from the on-disk cache. Missing file is the normal
@@ -297,6 +331,12 @@ func (si *semanticIndex) loadCache() {
 	if err != nil {
 		return
 	}
+	// v4+: vectors live in the sidecar blob.
+	var v4 semanticCacheEnvelopeV4
+	if err := json.Unmarshal(data, &v4); err == nil && v4.Version >= 4 && v4.Entries != nil {
+		si.loadCacheV4(v4)
+		return
+	}
 	var envelope semanticCacheEnvelope
 	var wire map[string]cachedVecWire
 	if err := json.Unmarshal(data, &envelope); err == nil && envelope.Version > 0 && envelope.Entries != nil {
@@ -306,6 +346,8 @@ func (si *semanticIndex) loadCache() {
 			"path", si.cachePath, "error", err)
 		return
 	}
+	slog.Info("wiki: reading legacy semantic cache; it will be rewritten in the compact format",
+		"path", si.cachePath, "entries", len(wire))
 	si.mu.Lock()
 	defer si.mu.Unlock()
 	si.cacheFingerprint = envelope.Fingerprint
@@ -329,41 +371,123 @@ func (si *semanticIndex) loadCache() {
 	}
 }
 
-// saveCache mirrors vecs to disk (atomic tmp+rename). Failures only cost a
-// warm start, so they are logged and otherwise ignored.
+// blobPath is the vector sidecar beside the manifest.
+func (si *semanticIndex) blobPath() string {
+	if si.cachePath == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(si.cachePath), semanticBlobFile)
+}
+
+// loadCacheV4 hydrates from a manifest plus its vector blob. Any inconsistency
+// between the two — missing blob, wrong length, out-of-range index — drops the
+// cache instead of hydrating a page with another page's vector.
+func (si *semanticIndex) loadCacheV4(env semanticCacheEnvelopeV4) {
+	reader, err := readSemanticBlob(si.blobPath(), env.Dimensions)
+	if err != nil {
+		slog.Warn("wiki: semantic vector blob unreadable; re-embedding from scratch",
+			"path", si.blobPath(), "error", err)
+		return
+	}
+	if reader.count() != env.BlobVectors {
+		slog.Warn("wiki: semantic manifest and vector blob disagree; re-embedding from scratch",
+			"manifestVectors", env.BlobVectors, "blobVectors", reader.count())
+		return
+	}
+	si.mu.Lock()
+	defer si.mu.Unlock()
+	si.cacheFingerprint = env.Fingerprint
+	si.cacheDimensions = env.Dimensions
+	si.cachePreprocessing = env.Preprocessing
+	for rp, cv := range env.Entries {
+		vec := reader.at(cv.VecIndex)
+		if cv.Hash == "" || vec == nil {
+			continue
+		}
+		chunks := make([]semanticChunk, 0, len(cv.Chunks))
+		for _, chunk := range cv.Chunks {
+			cvec := reader.at(chunk.VecIndex)
+			if cvec == nil {
+				continue
+			}
+			chunks = append(chunks, semanticChunk{
+				snippet: chunk.Snippet, startLine: chunk.StartLine, endLine: chunk.EndLine,
+				kind: chunk.Kind, vec: cvec,
+			})
+		}
+		si.vecs[rp] = cachedVec{hash: cv.Hash, vec: vec, chunks: chunks}
+	}
+}
+
+// saveCache mirrors vecs to disk: a JSON manifest plus the float32 vector blob,
+// each written atomically (tmp+rename). The blob lands first so a crash between
+// the two leaves the OLD manifest with a newer blob — caught on load by the
+// vector-count check, which drops the cache and re-embeds rather than serving
+// mis-sliced vectors. Failures only cost a warm start, so they are logged and
+// otherwise ignored.
 func (si *semanticIndex) saveCache() {
 	if si.cachePath == "" {
 		return
 	}
-	si.mu.Lock()
-	wire := make(map[string]cachedVecWire, len(si.vecs))
-	for rp, cv := range si.vecs {
-		chunks := make([]semanticChunkWire, 0, len(cv.chunks))
-		for _, chunk := range cv.chunks {
-			chunks = append(chunks, semanticChunkWire{
-				Snippet: chunk.snippet, StartLine: chunk.startLine, EndLine: chunk.endLine,
-				Kind: chunk.kind, Vec: chunk.vec,
-			})
-		}
-		wire[rp] = cachedVecWire{Hash: cv.hash, Vec: cv.vec, Chunks: chunks}
-	}
 	fingerprint := si.cacheFingerprint
 	dimensions := si.cacheDimensions
-	preprocessing := semanticPreprocessingVersion
-	si.mu.Unlock()
 	if identity := embedindex.IdentityOf(si.embedder); identity.Fingerprint != "" {
 		fingerprint = identity.Fingerprint
 		dimensions = identity.Dimensions
 	}
 
-	data, err := json.Marshal(semanticCacheEnvelope{
+	si.mu.Lock()
+	if dimensions <= 0 {
+		for _, cv := range si.vecs { // fall back to whatever the vectors carry
+			if len(cv.vec) > 0 {
+				dimensions = len(cv.vec)
+				break
+			}
+		}
+	}
+	blob := newBlobWriter(dimensions, len(si.vecs)*6)
+	entries := make(map[string]cachedVecWireV4, len(si.vecs))
+	for rp, cv := range si.vecs {
+		idx := blob.add(cv.vec)
+		if idx < 0 {
+			continue // wrong-dimension vector: re-embedded on the next refresh
+		}
+		chunks := make([]semanticChunkWireV4, 0, len(cv.chunks))
+		for _, chunk := range cv.chunks {
+			cidx := blob.add(chunk.vec)
+			if cidx < 0 {
+				continue
+			}
+			chunks = append(chunks, semanticChunkWireV4{
+				Snippet: chunk.snippet, StartLine: chunk.startLine, EndLine: chunk.endLine,
+				Kind: chunk.kind, VecIndex: cidx,
+			})
+		}
+		entries[rp] = cachedVecWireV4{Hash: cv.hash, VecIndex: idx, Chunks: chunks}
+	}
+	preprocessing := semanticPreprocessingVersion
+	si.mu.Unlock()
+
+	data, err := json.Marshal(semanticCacheEnvelopeV4{
 		Version:       semanticCacheSchemaVersion,
 		Fingerprint:   fingerprint,
 		Dimensions:    dimensions,
 		Preprocessing: preprocessing,
-		Entries:       wire,
+		BlobVectors:   blob.n,
+		Entries:       entries,
 	})
 	if err != nil {
+		return
+	}
+	blobPath := si.blobPath()
+	blobTmp := blobPath + ".tmp"
+	if err := writeFileSync(blobTmp, blob.buf, 0o644); err != nil {
+		slog.Warn("wiki: semantic vector blob write failed", "path", blobPath, "error", err)
+		return
+	}
+	if err := os.Rename(blobTmp, blobPath); err != nil {
+		os.Remove(blobTmp)
+		slog.Warn("wiki: semantic vector blob rename failed", "path", blobPath, "error", err)
 		return
 	}
 	tmp := si.cachePath + ".tmp"

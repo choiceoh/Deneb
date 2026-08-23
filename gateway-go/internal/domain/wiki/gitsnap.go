@@ -37,6 +37,7 @@ const gitSnapTimeout = 30 * time.Second
 // up — the daily offsite tar takes untracked files too. `.deals.jsonl` stays
 // tracked on purpose: it is the financial audit surface, not derived state.
 const wikiGitIgnore = `.semantic-cache.json
+.semantic-cache.f32
 .diary-semantic-cache.json
 .diary-process-state.json
 .dream-last-proposal.json
