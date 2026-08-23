@@ -298,7 +298,56 @@ func TestFactPlaneRefusesALostSegmentHoldingPostRotationRevisions(t *testing.T) 
 		t.Fatal(err)
 	}
 	if _, err := NewStore(wikiDir, diaryDir); err == nil ||
-		!strings.Contains(err.Error(), "fact journal missing for snapshot revision") {
+		!strings.Contains(err.Error(), "behind snapshot watermark") {
 		t.Fatalf("lost post-rotation tail error = %v", err)
+	}
+}
+
+// The archives ARE the repair path: with no usable snapshot and no active
+// segment, the plane must still be rebuilt from them rather than coming up empty.
+func TestFactPlaneRebuildsFromArchivesWithNoSnapshotAndNoActiveSegment(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		snapshot func(t *testing.T, path string)
+	}{
+		{"snapshot removed", func(t *testing.T, path string) {
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"snapshot unreadable", func(t *testing.T, path string) {
+			if err := os.WriteFile(path, []byte("{ not json"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store, wikiDir, diaryDir := newFactTestStore(t)
+			store.factJournalRotateAt = 3
+			upsertFactSeries(t, store, "communication.language", 6)
+			revision := store.LatestFactRevision()
+			if err := store.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Remove(filepath.Join(wikiDir, factJournalFile)); err != nil {
+				t.Fatal(err)
+			}
+			tc.snapshot(t, filepath.Join(wikiDir, factStateFile))
+
+			reopened, err := NewStore(wikiDir, diaryDir)
+			if err != nil {
+				t.Fatalf("rebuild from archives: %v", err)
+			}
+			t.Cleanup(func() { _ = reopened.Close() })
+			if got := reopened.LatestFactRevision(); got != revision {
+				t.Fatalf("rebuilt revision = %d, want %d", got, revision)
+			}
+			if got := reopened.ActiveFacts("self"); len(got) != 1 || got[0].Value != "값-005" {
+				t.Fatalf("rebuilt state = %+v", got)
+			}
+			if history := reopened.FactHistory("self", "communication.language"); len(history) != 6 {
+				t.Fatalf("rebuilt history rows = %d", len(history))
+			}
+		})
 	}
 }

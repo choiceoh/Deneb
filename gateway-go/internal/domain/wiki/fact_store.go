@@ -507,26 +507,31 @@ func (s *Store) loadFactPlane() error {
 		if !os.IsNotExist(err) {
 			return fmt.Errorf("stat fact journal: %w", err)
 		}
-		// A derived snapshot without its permanent history is not safe to trust.
-		if snapshotExists && snapshotErr != nil {
-			return fmt.Errorf("fact journal missing and snapshot is unreadable: %w", snapshotErr)
+		archives, archiveErr := factJournalArchives(s.dir)
+		if archiveErr != nil && !os.IsNotExist(archiveErr) {
+			return fmt.Errorf("list fact journal archives: %w", archiveErr)
 		}
-		if snapshotRevision > 0 {
-			// Rotation renames the active segment and then creates a new one. If the
-			// create failed, history is fully intact in the archives and the missing
-			// active segment is an empty file waiting to be made — refusing to boot
-			// would strand the store over nothing.
-			if archived := newestFactArchiveRevision(s.dir); archived < snapshotRevision {
+		if len(archives) == 0 {
+			// A derived snapshot without its permanent history is not safe to trust.
+			if snapshotExists && snapshotErr != nil {
+				return fmt.Errorf("fact journal missing and snapshot is unreadable: %w", snapshotErr)
+			}
+			if snapshotRevision > 0 {
 				return fmt.Errorf("fact journal missing for snapshot revision %d", snapshotRevision)
 			}
-			slog.Warn("recreating the fact journal segment lost after rotation",
-				"revision", snapshotRevision)
-			if err := ensureFactJournal(journalPath); err != nil {
-				return err
-			}
-			return syncFactParentDir(journalPath)
+			return ensureFactJournal(journalPath)
 		}
-		return ensureFactJournal(journalPath)
+		// Rotation renames the active segment and then creates a new one. If that
+		// create failed, the archives still hold every revision and the missing
+		// active segment is an empty file waiting to be made. Recreate it and let
+		// the ordinary path below rebuild and re-verify: replaying an empty
+		// segment is a no-op, and the watermark check still refuses if the
+		// archives do not reach the snapshot.
+		slog.Warn("recreating the fact journal segment lost after rotation",
+			"snapshotRevision", snapshotRevision, "archives", len(archives))
+		if err := ensureFactJournal(journalPath); err != nil {
+			return err
+		}
 	}
 
 	if !seeded {
