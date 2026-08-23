@@ -48,6 +48,11 @@ func (s *Server) restoreAndWakeSessions(_ context.Context) {
 	if modelsPath, modelsErr := sessionModelsStorePath(); modelsErr == nil {
 		storedModels = loadSessionModels(modelsPath)
 	}
+	storedListPins := map[string]bool{}
+	if listPinsPath, listPinsErr := sessionListPinsStorePath(); listPinsErr == nil {
+		storedListPins = loadSessionListPins(listPinsPath)
+	}
+	s.restoreSessionFocus()
 	var untitled []string
 
 	var restored int
@@ -88,6 +93,7 @@ func (s *Server) restoreAndWakeSessions(_ context.Context) {
 			Channel:     channel,
 			Label:       label,
 			LabelPinned: storedPins[sessionKey],
+			Pinned:      storedListPins[sessionKey],
 			Model:       storedModels[sessionKey],
 			UpdatedAt:   updatedAt,
 		}); err != nil {

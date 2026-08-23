@@ -49,6 +49,7 @@ internal fun TopBar(
     isSpeaking: Boolean,
     actions: ChatActions,
     isChatHistoryEmpty: Boolean,
+    currentConversationId: String? = null,
     onOpenDrawer: (() -> Unit)? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
     onOpenSessionDrawer: (() -> Unit)? = null,
@@ -65,7 +66,14 @@ internal fun TopBar(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     DrawerButton(onOpenDrawer)
-                    LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty)
+                    LeadingButtons(
+                        textToSpeech,
+                        isSpeechOutputEnabled,
+                        isSpeaking,
+                        actions,
+                        isChatHistoryEmpty,
+                        currentConversationId,
+                    )
                 }
                 Box(modifier = Modifier.align(Alignment.Center)) {
                     navigationTabBar()
@@ -90,7 +98,14 @@ internal fun TopBar(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     DrawerButton(onOpenDrawer)
-                    LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty)
+                    LeadingButtons(
+                        textToSpeech,
+                        isSpeechOutputEnabled,
+                        isSpeaking,
+                        actions,
+                        isChatHistoryEmpty,
+                        currentConversationId,
+                    )
                 }
                 Row(
                     modifier = Modifier.align(Alignment.CenterEnd),
@@ -155,9 +170,11 @@ private fun LeadingButtons(
     isSpeaking: Boolean,
     actions: ChatActions,
     isChatHistoryEmpty: Boolean,
+    currentConversationId: String?,
 ) {
     val haptics = rememberHaptics()
-    if (!isChatHistoryEmpty) {
+    val onBranch = !currentConversationId.isNullOrBlank() && currentConversationId != HOME_SESSION_ID
+    if (!isChatHistoryEmpty || onBranch) {
         IconButton(
             modifier = Modifier.handCursor().size(IconTouchTarget),
             onClick = {

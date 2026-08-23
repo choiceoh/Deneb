@@ -145,7 +145,10 @@ var requiredMethods = []string{
 	"miniapp.sessions.recent",
 	"miniapp.sessions.delete",
 	"miniapp.sessions.rename",
+	"miniapp.sessions.pin",
+	"miniapp.sessions.focus",
 	"miniapp.sessions.transcript",
+	"miniapp.sessions.search",
 	// FCM device-token registration — the token store always resolves (temp
 	// state dir in tests), so these register unconditionally even though the
 	// FCM sender stays dormant without credentials.

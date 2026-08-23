@@ -140,6 +140,36 @@ func TestModelsSet_WithSessionKeyBindsSessionNotRole(t *testing.T) {
 	}
 }
 
+func TestModelsSet_EmptyIDWithSessionKeyClears(t *testing.T) {
+	var sessionKey, modelID string
+	h := modelsSet(ModelDeps{
+		SetModel: func(_ context.Context, role, id string) (string, error) {
+			t.Fatalf("SetModel must not run for a session clear, got %s/%s", role, id)
+			return id, nil
+		},
+		SetSessionModel: func(_ context.Context, key, id string) (string, error) {
+			sessionKey = key
+			modelID = id
+			return id, nil
+		},
+	})
+	req := reqWith(t, "miniapp.models.set", map[string]any{
+		"id":         "  ",
+		"sessionKey": "client:main:alpha",
+	})
+	ctx := clientauth.WithContext(context.Background(), sampleIdentity())
+	got := decodePayload(t, h(ctx, req))
+	if sessionKey != "client:main:alpha" {
+		t.Errorf("sessionKey = %q", sessionKey)
+	}
+	if modelID != "" {
+		t.Errorf("modelID = %q, want empty clear", modelID)
+	}
+	if got["current"] != "" {
+		t.Errorf("current = %v, want empty", got["current"])
+	}
+}
+
 func TestModelsSet_MissingID(t *testing.T) {
 	h := modelsSet(ModelDeps{})
 	ctx := clientauth.WithContext(context.Background(), sampleIdentity())

@@ -56,6 +56,7 @@ import deneb.composeapp.generated.resources.chat_history_title
 import deneb.composeapp.generated.resources.snackbar_conversation_deleted
 import deneb.composeapp.generated.resources.snackbar_undo
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format.char
@@ -87,6 +88,7 @@ fun DenebSessionDrawerSheet(
     hasMoreConversations: Boolean,
     currentConversationId: String?,
     pendingConversationDeletion: String?,
+    searchHits: ImmutableList<ConversationSummary> = kotlinx.collections.immutable.persistentListOf(),
     actions: ChatActions,
     onClose: () -> Unit,
 ) {
@@ -117,8 +119,21 @@ fun DenebSessionDrawerSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 40.dp, bottom = 12.dp),
                 )
+                var searchQuery by remember { mutableStateOf("") }
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { next ->
+                        searchQuery = next
+                        actions.searchConversations(next)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 28.dp, end = 28.dp, bottom = 8.dp),
+                    singleLine = true,
+                    placeholder = { Text("대화 검색", style = DenebType.hint) },
+                )
 
-                if (conversations.isEmpty()) {
+                if (conversations.isEmpty() && searchHits.isEmpty()) {
                     Text(
                         text = stringResource(Res.string.chat_history_empty),
                         style = DenebType.body,
@@ -126,9 +141,19 @@ fun DenebSessionDrawerSheet(
                         modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
                     )
                 } else {
-                    val chats = conversations.filter { !isSystemSession(it.id) && !isWorkCardSession(it.id) }
-                    val workCards = conversations.filter { isWorkCardSession(it.id) }
-                    val systemSessions = conversations.filter { isSystemSession(it.id) }
+                    val needle = searchQuery.trim()
+                    val merged = if (needle.isEmpty()) {
+                        conversations
+                    } else {
+                        val local = conversations.filter {
+                            it.title.contains(needle, ignoreCase = true) || it.id.contains(needle, ignoreCase = true)
+                        }
+                        val extra = searchHits.filter { hit -> local.none { it.id == hit.id } }
+                        (local + extra).toImmutableList()
+                    }
+                    val chats = merged.filter { !isSystemSession(it.id) && !isWorkCardSession(it.id) }
+                    val workCards = merged.filter { isWorkCardSession(it.id) }
+                    val systemSessions = merged.filter { isSystemSession(it.id) }
                     var renameTarget by remember { mutableStateOf<ConversationSummary?>(null) }
                     var workExpanded by remember {
                         mutableStateOf(currentConversationId != null && isWorkCardSession(currentConversationId))
@@ -166,6 +191,16 @@ fun DenebSessionDrawerSheet(
                                     { actions.deleteConversation(conversation.id) }
                                 },
                                 onRename = { renameTarget = conversation },
+                                onPin = if (conversation.id == HOME_SESSION_ID) {
+                                    null
+                                } else {
+                                    { actions.pinConversation(conversation.id, !conversation.pinned) }
+                                },
+                                onResetModel = if (conversation.model.isBlank()) {
+                                    null
+                                } else {
+                                    { actions.resetConversationModel(conversation.id) }
+                                },
                             )
                         }
                         // Feed-card side chats (client:main:wf-*) fold so they
@@ -192,6 +227,12 @@ fun DenebSessionDrawerSheet(
                                         },
                                         onDelete = { actions.deleteConversation(conversation.id) },
                                         onRename = { renameTarget = conversation },
+                                        onPin = { actions.pinConversation(conversation.id, !conversation.pinned) },
+                                        onResetModel = if (conversation.model.isBlank()) {
+                                            null
+                                        } else {
+                                            { actions.resetConversationModel(conversation.id) }
+                                        },
                                     )
                                 }
                             }
@@ -220,6 +261,12 @@ fun DenebSessionDrawerSheet(
                                         },
                                         onDelete = { actions.deleteConversation(conversation.id) },
                                         onRename = { renameTarget = conversation },
+                                        onPin = { actions.pinConversation(conversation.id, !conversation.pinned) },
+                                        onResetModel = if (conversation.model.isBlank()) {
+                                            null
+                                        } else {
+                                            { actions.resetConversationModel(conversation.id) }
+                                        },
                                     )
                                 }
                             }
@@ -263,6 +310,8 @@ private fun SessionItem(
     onClick: () -> Unit,
     onDelete: (() -> Unit)?,
     onRename: () -> Unit,
+    onPin: (() -> Unit)? = null,
+    onResetModel: (() -> Unit)? = null,
 ) {
     val haptics = rememberHaptics()
     Row(
@@ -309,6 +358,65 @@ private fun SessionItem(
                 style = DenebType.meta,
                 color = denebHint(),
             )
+            if (conversation.id == HOME_SESSION_ID) {
+                Text(
+                    text = "선제 보고가 모이는 업무 홈",
+                    style = DenebType.meta,
+                    color = denebHint(),
+                )
+            }
+            val modelLine = when {
+                conversation.model.isNotBlank() -> conversation.model.substringAfterLast('/')
+                conversation.snippet.isNotBlank() -> conversation.snippet
+                else -> null
+            }
+            if (modelLine != null) {
+                Text(
+                    text = modelLine,
+                    style = DenebType.meta,
+                    color = denebHint(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        if (onPin != null) {
+            Box(
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .size(44.dp)
+                    .clickable(
+                        onClickLabel = if (conversation.pinned) "고정 해제" else "위에 고정",
+                        role = Role.Button,
+                    ) { onPin() }
+                    .handCursor(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (conversation.pinned) "고정" else "핀",
+                    style = DenebType.meta,
+                    color = if (conversation.pinned) {
+                        MaterialTheme.colorScheme.onBackground
+                    } else {
+                        denebHint()
+                    },
+                )
+            }
+        }
+        if (onResetModel != null) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clickable(onClickLabel = "기본 모델로", role = Role.Button) { onResetModel() }
+                    .handCursor(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "기본",
+                    style = DenebType.meta,
+                    color = denebHint(),
+                )
+            }
         }
         // Faint × to delete (undo via snackbar), keeping the row text-first. The 44dp
         // box gives a real touch target + a TalkBack label without a Material icon.

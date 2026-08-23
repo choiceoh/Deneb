@@ -20,3 +20,23 @@ func TestSetMiniappSessionModelPatchesConversationOnly(t *testing.T) {
 		t.Fatalf("rejected bind must not write session.Model, got %q", got.Model)
 	}
 }
+
+func TestSetMiniappSessionModelClearsOverride(t *testing.T) {
+	mgr := session.NewManager()
+	ctrl := NewController(ControllerConfig{Sessions: mgr})
+	ctrl.sessions = mgr
+	model := "kimi/kimi-k2.5"
+	mgr.Patch("client:main:alpha", session.PatchFields{Model: &model})
+
+	cleared, err := ctrl.setMiniappSessionModel(context.Background(), "client:main:alpha", "")
+	if err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if cleared != "" {
+		t.Fatalf("cleared id = %q, want empty", cleared)
+	}
+	got := mgr.Get("client:main:alpha")
+	if got == nil || got.Model != "" {
+		t.Fatalf("session.Model = %+v, want empty override", got)
+	}
+}

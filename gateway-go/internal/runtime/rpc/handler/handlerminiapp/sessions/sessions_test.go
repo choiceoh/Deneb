@@ -33,6 +33,12 @@ func (f *fakeSessionsLister) Patch(key string, patch session.PatchFields) *sessi
 	if patch.Label != nil {
 		s.Label = *patch.Label
 	}
+	if patch.Pinned != nil {
+		s.Pinned = *patch.Pinned
+	}
+	if patch.Model != nil {
+		s.Model = *patch.Model
+	}
 	return s
 }
 
@@ -233,9 +239,11 @@ func terminalSample(key string) *session.Session {
 func TestSessionsDelete_RemovesSessionAndTranscript(t *testing.T) {
 	mgr := &fakeSessionsLister{out: []*session.Session{terminalSample("client:main:abc")}}
 	tr := &fakeTranscriptLoader{}
+	var forgotten string
 	deps := SessionsDeps{
 		Manager:     mgr,
 		Transcripts: func() (TranscriptLoader, error) { return tr, nil },
+		OnForgotten: func(key string) { forgotten = key },
 	}
 	resp := sessionsDelete(deps)(authedCtx(), reqWith(t, "miniapp.sessions.delete", map[string]any{
 		"sessionKey": "client:main:abc",
@@ -253,6 +261,9 @@ func TestSessionsDelete_RemovesSessionAndTranscript(t *testing.T) {
 	}
 	if len(tr.deleted) != 1 || tr.deleted[0] != "client:main:abc" {
 		t.Errorf("transcript.Delete keys = %v, want [client:main:abc]", tr.deleted)
+	}
+	if forgotten != "client:main:abc" {
+		t.Errorf("OnForgotten = %q, want client:main:abc", forgotten)
 	}
 }
 
@@ -359,7 +370,17 @@ func TestSessionsMethodsRegistersTranscriptOnlyWhenFactorySet(t *testing.T) {
 		t.Errorf("transcript should not register when factory missing")
 	}
 
-	// With Transcripts factory: both register.
+	if _, ok := got["miniapp.sessions.pin"]; !ok {
+		t.Errorf("sessions.pin missing")
+	}
+	if _, ok := got["miniapp.sessions.focus"]; !ok {
+		t.Errorf("sessions.focus missing")
+	}
+	if _, ok := got["miniapp.sessions.search"]; ok {
+		t.Errorf("search should not register when factory missing")
+	}
+
+	// With Transcripts factory: transcript + search register.
 	got = SessionsMethods(SessionsDeps{
 		Manager:     &fakeSessionsLister{},
 		Transcripts: func() (TranscriptLoader, error) { return &fakeTranscriptLoader{}, nil },
@@ -367,12 +388,16 @@ func TestSessionsMethodsRegistersTranscriptOnlyWhenFactorySet(t *testing.T) {
 	if _, ok := got["miniapp.sessions.transcript"]; !ok {
 		t.Errorf("transcript should register when factory set")
 	}
+	if _, ok := got["miniapp.sessions.search"]; !ok {
+		t.Errorf("search should register when factory set")
+	}
 }
 
 // --- transcript tests -----------------------------------------------------
 
 type fakeTranscriptLoader struct {
 	loadFn    func(key string, limit int) ([]toolport.ChatMessage, int, error)
+	searchFn  func(query string, maxResults int) ([]toolport.SearchResult, error)
 	deleted   []string // keys passed to Delete, in order
 	deleteErr error
 }
@@ -387,6 +412,13 @@ func (f *fakeTranscriptLoader) Load(key string, limit int) ([]toolport.ChatMessa
 func (f *fakeTranscriptLoader) Delete(key string) error {
 	f.deleted = append(f.deleted, key)
 	return f.deleteErr
+}
+
+func (f *fakeTranscriptLoader) Search(query string, maxResults int) ([]toolport.SearchResult, error) {
+	if f.searchFn == nil {
+		return nil, nil
+	}
+	return f.searchFn(query, maxResults)
 }
 
 func transcriptDeps(loader TranscriptLoader) SessionsDeps {

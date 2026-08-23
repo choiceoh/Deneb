@@ -39,3 +39,16 @@ func snapshotSessionModels(sessions []*session.Session) map[string]string {
 	}
 	return out
 }
+
+func dropStoredSessionModel(key string) {
+	path, err := sessionModelsStorePath()
+	if err != nil {
+		return
+	}
+	models := loadSessionModels(path)
+	if _, ok := models[key]; !ok {
+		return
+	}
+	delete(models, key)
+	_ = saveSessionModels(path, models)
+}

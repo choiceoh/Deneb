@@ -796,6 +796,10 @@ export interface SenderWikiHitOut {
   category?: string
 }
 
+export interface SessionFocusResult {
+  sessionKey?: string
+}
+
 export interface SessionRowOut {
   key?: string
   kind?: string
@@ -803,10 +807,21 @@ export interface SessionRowOut {
   channel?: string
   model?: string
   label?: string
+  pinned?: boolean
   updatedAtMs?: number
   startedAtMs?: number
   runtimeMs?: number
   totalTokens?: number
+}
+
+export interface SessionSearchHitOut {
+  sessionKey?: string
+  snippet?: string
+  label?: string
+}
+
+export interface SessionSearchResult {
+  hits?: SessionSearchHitOut[]
 }
 
 export interface SkillDetailResponse {

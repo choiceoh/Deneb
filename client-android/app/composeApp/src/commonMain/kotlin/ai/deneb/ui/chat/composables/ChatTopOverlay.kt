@@ -58,6 +58,7 @@ internal fun ChatTopOverlay(
             isSpeaking = uiState.isSpeaking,
             actions = uiState.actions,
             isChatHistoryEmpty = uiState.history.isEmpty(),
+            currentConversationId = uiState.currentConversationId,
             // The hamburger opens the session history (left drawer).
             onOpenDrawer = onOpenDrawer,
             navigationTabBar = navigationTabBar,

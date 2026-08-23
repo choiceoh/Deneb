@@ -3322,6 +3322,12 @@ class MiniappWireNullCompatibilityTest {
             field = "category",
         ),
         nullContract(
+            name = "SessionFocusResult.sessionKey",
+            serializer = SessionFocusResult.serializer(),
+            empty = SessionFocusResult(),
+            field = "sessionKey",
+        ),
+        nullContract(
             name = "SessionRowOut.key",
             serializer = SessionRowOut.serializer(),
             empty = SessionRowOut(),
@@ -3358,6 +3364,12 @@ class MiniappWireNullCompatibilityTest {
             field = "label",
         ),
         nullContract(
+            name = "SessionRowOut.pinned",
+            serializer = SessionRowOut.serializer(),
+            empty = SessionRowOut(),
+            field = "pinned",
+        ),
+        nullContract(
             name = "SessionRowOut.updatedAtMs",
             serializer = SessionRowOut.serializer(),
             empty = SessionRowOut(),
@@ -3380,6 +3392,30 @@ class MiniappWireNullCompatibilityTest {
             serializer = SessionRowOut.serializer(),
             empty = SessionRowOut(),
             field = "totalTokens",
+        ),
+        nullContract(
+            name = "SessionSearchHitOut.sessionKey",
+            serializer = SessionSearchHitOut.serializer(),
+            empty = SessionSearchHitOut(),
+            field = "sessionKey",
+        ),
+        nullContract(
+            name = "SessionSearchHitOut.snippet",
+            serializer = SessionSearchHitOut.serializer(),
+            empty = SessionSearchHitOut(),
+            field = "snippet",
+        ),
+        nullContract(
+            name = "SessionSearchHitOut.label",
+            serializer = SessionSearchHitOut.serializer(),
+            empty = SessionSearchHitOut(),
+            field = "label",
+        ),
+        nullContract(
+            name = "SessionSearchResult.hits",
+            serializer = SessionSearchResult.serializer(),
+            empty = SessionSearchResult(),
+            field = "hits",
         ),
         nullContract(
             name = "SkillDetailResponse.skill",

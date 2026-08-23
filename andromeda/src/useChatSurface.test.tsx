@@ -1,9 +1,9 @@
-import { createRef, type RefObject } from "react";
+import { createRef, useState, type RefObject } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { GatewayConfig } from "./gateway";
-import { useAttachPipeline, useComposerBehavior, useModels } from "./useChatSurface";
+import { useAttachPipeline, useComposerBehavior, useModels, useSessionDraft } from "./useChatSurface";
 
 const cfg: GatewayConfig = { url: "http://gateway.test", token: "secret" };
 
@@ -108,7 +108,7 @@ describe("useModels", () => {
   });
 
   it("persists a picker change onto the current session only", async () => {
-    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = init?.body ? (JSON.parse(String(init.body)) as { method?: string }) : {};
       if (body.method === "miniapp.models.list") {
         return rpcResponse({ current: "provider/smart", roles: [], sections: [] });
@@ -133,6 +133,32 @@ describe("useModels", () => {
       expect(setCalls).toHaveLength(1);
       const body = JSON.parse(String(setCalls[0][1]?.body)) as { params: { id: string; sessionKey: string } };
       expect(body.params).toEqual({ id: "custom/chosen", role: "main", sessionKey: "client:main:a" });
+    });
+  });
+
+  it("persists an empty id to clear the session override", async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.body ? (JSON.parse(String(init.body)) as { method?: string }) : {};
+      if (body.method === "miniapp.models.list") {
+        return rpcResponse({ current: "provider/smart", roles: [], sections: [] });
+      }
+      return rpcResponse({ ok: true, role: "main", current: "provider/smart" });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const { result } = renderHook(() => useModels(cfg, true, "client:main:a", "custom/chosen"));
+    await waitFor(() => expect(result.current.model).toBe("custom/chosen"));
+
+    await act(async () => {
+      result.current.setModel("");
+    });
+    await waitFor(() => {
+      const setCalls = fetch.mock.calls.filter(([, init]) => {
+        const body = init?.body ? (JSON.parse(String(init.body)) as { method?: string }) : {};
+        return body.method === "miniapp.models.set";
+      });
+      expect(setCalls).toHaveLength(1);
+      const body = JSON.parse(String(setCalls[0][1]?.body)) as { params: { id: string; sessionKey: string } };
+      expect(body.params).toEqual({ id: "", role: "main", sessionKey: "client:main:a" });
     });
   });
 
@@ -174,6 +200,43 @@ describe("useModels", () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
     rerender({ gateway: { url: "http://second.test", token: "second" } });
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+  });
+});
+
+describe("useSessionDraft", () => {
+  it("parks the current input and restores it when returning", () => {
+    const { result, rerender } = renderHook(
+      ({ key }) => {
+        const [input, setInput] = useState("");
+        const { clearDraft } = useSessionDraft(key, input, setInput);
+        return { input, setInput, clearDraft };
+      },
+      { initialProps: { key: "client:main:a" } },
+    );
+    act(() => result.current.setInput("hello"));
+    rerender({ key: "client:main:b" });
+    expect(result.current.input).toBe("");
+    rerender({ key: "client:main:a" });
+    expect(result.current.input).toBe("hello");
+  });
+
+  it("clears the parked draft for the active session", () => {
+    const { result, rerender } = renderHook(
+      ({ key }) => {
+        const [input, setInput] = useState("");
+        const { clearDraft } = useSessionDraft(key, input, setInput);
+        return { input, setInput, clearDraft };
+      },
+      { initialProps: { key: "client:main:a" } },
+    );
+    act(() => result.current.setInput("hello"));
+    act(() => {
+      result.current.clearDraft();
+      result.current.setInput("");
+    });
+    rerender({ key: "client:main:b" });
+    rerender({ key: "client:main:a" });
+    expect(result.current.input).toBe("");
   });
 });
 

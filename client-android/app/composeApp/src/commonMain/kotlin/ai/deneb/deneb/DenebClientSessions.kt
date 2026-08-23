@@ -45,9 +45,14 @@ internal data class RecentSessionsPage(
     // Rows the SERVER returned, before the locally-synthesized 업무 home row is
     // prepended — this, not the rendered size, is what the next offset counts.
     val serverRows: Int,
+    val focus: String = "",
 )
 
-internal suspend fun DenebGatewayClient.fetchRecentSessions(offset: Int = 0): RecentSessionsPage? {
+internal suspend fun DenebGatewayClient.fetchRecentSessions(
+    offset: Int = 0,
+    channel: String? = null,
+    excludeChannel: String? = null,
+): RecentSessionsPage? {
     // null return = RPC failed (timeout/transient/load). The caller keeps the
     // existing drawer list instead of collapsing to just the home row.
     val payload = callRpc<RecentPayload>(
@@ -55,6 +60,8 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(offset: Int = 0): Re
         buildJsonObject {
             put("limit", SESSION_PAGE)
             if (offset > 0) put("offset", offset)
+            if (!channel.isNullOrBlank()) put("channel", channel)
+            if (!excludeChannel.isNullOrBlank()) put("excludeChannel", excludeChannel)
         },
     ) ?: return null
     val recent = payload.sessions
@@ -66,6 +73,8 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(offset: Int = 0): Re
                 createdAt = s.startedAtMs?.takeIf { it > 0 } ?: s.updatedAtMs,
                 updatedAt = s.updatedAtMs,
                 title = conversationTitle(s),
+                model = s.model,
+                pinned = s.pinned,
             )
         }
     val models = payload.sessions
@@ -79,7 +88,7 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(offset: Int = 0): Re
     val total = payload.total ?: (offset + recent.size)
     // The 업무 home is pinned to the top of the FIRST page only; later pages append
     // verbatim (the server never repeats a row across offsets).
-    if (offset > 0) return RecentSessionsPage(recent, total, recent.size)
+    if (offset > 0) return RecentSessionsPage(recent, total, recent.size, payload.focus)
     val home = recent.find { it.id == "client:main" }
         ?: Conversation(
             id = "client:main",
@@ -88,7 +97,21 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(offset: Int = 0): Re
             updatedAt = kotlin.time.Clock.System.now().toEpochMilliseconds(),
             title = "업무",
         )
-    return RecentSessionsPage(listOf(home) + recent.filterNot { it.id == "client:main" }, total, recent.size)
+    return RecentSessionsPage(
+        listOf(home) + recent.filterNot { it.id == "client:main" },
+        total,
+        recent.size,
+        payload.focus,
+    )
+}
+
+internal suspend fun DenebGatewayClient.writeSessionFocus(sessionKey: String) {
+    val key = sessionKey.trim()
+    if (key.isEmpty()) return
+    callRpc<ai.deneb.deneb.generated.SessionFocusResult>(
+        "miniapp.sessions.focus",
+        buildJsonObject { put("sessionKey", key) },
+    )
 }
 
 private fun DenebGatewayClient.conversationTitle(s: SessionRowOut): String {
