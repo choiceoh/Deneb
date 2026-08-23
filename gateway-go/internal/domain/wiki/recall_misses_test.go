@@ -111,3 +111,62 @@ func TestRecallDemandTerms_DropsRecallCuesAndCategoryWords(t *testing.T) {
 		t.Errorf("terms = %v, want exactly 완도/관산포", got)
 	}
 }
+
+// A bare topic word that happens to end in a particle-like syllable must
+// survive. 도 is the crux: it is both a particle ("나도") and the final
+// syllable of place names (완도, 강원도), so it is excluded from the strip list.
+func TestStripTrailingParticles(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"완도", "완도"},    // 도 = name syllable, not a particle
+		{"강원도", "강원도"},  // administrative 도 stays intact
+		{"비금은", "비금"},   // topic particle
+		{"완도에서", "완도"},  // locative
+		{"완도의", "완도"},   // possessive
+		{"완도에서는", "완도"}, // stacked particles unwind
+		{"기아를", "기아"},   // object particle (vowel-final stem)
+		{"모듈이", "모듈"},   // subject particle (consonant-final stem)
+		{"현장으로", "현장"},  // instrumental
+		{"완도랑", "완도"},   // comitative
+		{"비금부터", "비금"},  // delimiters
+		{"완도까지", "완도"},
+		{"관산포", "관산포"}, // bare topic untouched
+		{"징코", "징코"},
+		{"금호타이어", "금호타이어"}, // ends in 어 — not a particle
+	}
+	for _, c := range cases {
+		if got := stripTrailingParticles(c.in); got != c.want {
+			t.Errorf("stripTrailingParticles(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// The demand ledger must record the topic ("비금"), not its grammatical case
+// ("비금은") — a particle-suffixed term would never substring-match a page
+// titled with the bare name.
+func TestRecallDemandTerms_StripsTrailingParticles(t *testing.T) {
+	s := missStore(t)
+	for _, q := range []string{
+		"비금은 어떻게 됐어",
+		"완도에서 진행 상황 알려줘",
+		"완도의 모듈 단가 뭐야",
+	} {
+		if err := s.RecordRecallMiss(RecallMiss{Query: q, Session: "client:main"}); err != nil {
+			t.Fatalf("record: %v", err)
+		}
+	}
+
+	got := map[string]bool{}
+	for _, term := range s.RecallDemandTerms(time.Now(), 20) {
+		got[term] = true
+	}
+	for _, want := range []string{"비금", "완도", "모듈"} {
+		if !got[want] {
+			t.Errorf("stripped topic %q missing from demand terms: %v", want, got)
+		}
+	}
+	for _, bad := range []string{"비금은", "완도에서", "완도의"} {
+		if got[bad] {
+			t.Errorf("particle-suffixed term %q leaked into demand terms: %v", bad, got)
+		}
+	}
+}

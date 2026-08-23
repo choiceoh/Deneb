@@ -166,10 +166,41 @@ var demandStopwords = map[string]bool{
 	"페이지": true, "위키": true, "문서": true, "project": true, "wiki": true,
 }
 
+// koreanTrailingParticles are the common 조사 that attach to a topic word with
+// no separator ("비금은", "완도에서", "완도의"). Ordered longest-first so a
+// multi-syllable particle ("에서", "으로") strips before any single-syllable
+// suffix it also ends in. 도 is DELIBERATELY excluded: it is a legitimate final
+// syllable of place names (완도, 강원도), and stripping it would erase the
+// wiki's top demand term.
+var koreanTrailingParticles = []string{
+	"에서", "에게", "한테", "으로", "이랑", "부터", "까지", "조차", "마저", "하고",
+	"은", "는", "이", "가", "을", "를", "의", "에", "와", "과", "랑", "로", "만",
+}
+
+// stripTrailingParticles removes trailing 조사 from a Korean term so the demand
+// ledger records the topic, not its grammatical case. The loop unwinds stacked
+// particles ("완도에서는" → 완도). Best-effort by contract: a name whose final
+// syllable coincides with a listed particle is stripped, but the list is
+// curated to exclude the ambiguous ones (도, and the vocative 아/야).
+func stripTrailingParticles(s string) string {
+	prev := ""
+	for s != prev {
+		prev = s
+		for _, p := range koreanTrailingParticles {
+			if strings.HasSuffix(s, p) {
+				s = strings.TrimSuffix(s, p)
+				break // re-scan to unwind stacked particles
+			}
+		}
+	}
+	return s
+}
+
 // demandTerms splits a question into topic-bearing terms: 2+ character tokens
-// that are not pure scaffolding. Korean particles are not stripped (no
-// morphological analyzer here) — the consumer substring-matches, so "완도군의"
-// still matches a 완도 page.
+// that are not pure scaffolding. Trailing 조사 are stripped first (비금은 →
+// 비금); there is still no full morphological analyzer, so an administrative
+// suffix (완도군) is left intact and the consumer substring-matches what
+// remains.
 func demandTerms(q string) []string {
 	fields := strings.FieldsFunc(strings.ToLower(q), func(r rune) bool {
 		return !isTermRune(r)
@@ -177,6 +208,7 @@ func demandTerms(q string) []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, f := range fields {
+		f = stripTrailingParticles(f)
 		if len([]rune(f)) < 2 || demandStopwords[f] || seen[f] {
 			continue
 		}
