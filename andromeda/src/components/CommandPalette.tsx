@@ -38,6 +38,10 @@ function matchScore(query: string, text: string): number {
 // while the wiki tag and the live query disagree.
 const NO_HITS: WikiPage[] = [];
 
+function isSyntheticFactPath(path: string): boolean {
+  return path.trim().replaceAll("\\", "/").startsWith("@facts/");
+}
+
 export function CommandPalette() {
   const {
     connected,
@@ -171,9 +175,9 @@ export function CommandPalette() {
     for (const [i, hit] of wikiHits.entries()) {
       // Fact-plane results use synthetic paths and need a read-only renderer;
       // the palette only supports page quick-open, so leave facts to 검색/위키.
-      if (hit.resultKind === "fact" || hit.readOnly) continue;
       const path = hit.path ?? hit.id;
       if (!path) continue;
+      if (hit.resultKind === "fact" || hit.readOnly || isSyntheticFactPath(path)) continue;
       push(
         {
           key: `wiki:${path}`,

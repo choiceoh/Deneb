@@ -77,7 +77,7 @@ describe("CommandPalette", () => {
     expect(value.openWiki).toHaveBeenCalledWith("프로젝트/데네브.md");
   });
 
-  it("does not quick-open synthetic fact paths as wiki pages", async () => {
+  it("does not quick-open typed or path-only synthetic facts as wiki pages", async () => {
     mocks.callRpc.mockResolvedValue({
       results: [
         {
@@ -87,12 +87,17 @@ describe("CommandPalette", () => {
           readOnly: true,
           factId: "fact-123",
         },
+        {
+          path: "@facts\\fact-legacy.md",
+          title: "Legacy synthetic fact",
+        },
       ],
     });
     const value = renderPalette();
     await userEvent.type(screen.getByRole("textbox", { name: "명령 입력" }), "alpha");
     await waitFor(() => expect(mocks.callRpc).toHaveBeenCalled());
     expect(screen.queryByText("Synthetic fact", { selector: ".cmdk-label" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Legacy synthetic fact", { selector: ".cmdk-label" })).not.toBeInTheDocument();
     expect(value.openWiki).not.toHaveBeenCalled();
   });
 

@@ -918,9 +918,8 @@ func (s *Store) appendFactMutationLocked(mutation FactMutation) error {
 		return fmt.Errorf("wiki: marshal fact mutation: %w", err)
 	}
 	path := filepath.Join(s.dir, factJournalFile)
-	record := make([]byte, len(raw)+1)
-	copy(record, raw)
-	record[len(raw)] = '\n'
+	raw = append(raw, '\n')
+	record := raw
 	appendRecord := s.factJournalAppend
 	if appendRecord == nil {
 		appendRecord = appendFactJournalRecord

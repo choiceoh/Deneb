@@ -199,10 +199,10 @@ internal suspend fun DenebGatewayClient.fetchCurrentFactPage(path: String): Curr
 }
 
 private fun currentFactReference(path: String): String? {
-    val ref = path.trim()
-    if (!ref.startsWith("@facts/") || '\\' in ref) return null
+    val ref = path.trim().replace('\\', '/').trimStart('/')
+    if (!ref.startsWith("@facts/")) return null
     val claimID = ref.removePrefix("@facts/").removeSuffix(".md")
-    return ref.takeIf { claimID.isNotBlank() && '/' !in claimID }
+    return "@facts/$claimID.md".takeIf { claimID.isNotBlank() && '/' !in claimID }
 }
 
 /** Overwrite a wiki page; non-null title/summary/tags also update frontmatter. */

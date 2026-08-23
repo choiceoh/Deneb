@@ -377,6 +377,25 @@ class MemoryWikiSearchBoundaryTest {
     }
 
     @Test
+    fun pathOnlyBackslashFactHitUsesCanonicalUncachedReference() = runTest {
+        val f = gatewayClientFixture()
+        val hit = SearchHit(
+            path = "@facts\\fact-123.md",
+            title = "Current fact",
+            snippet = "",
+            category = "fact-plane",
+        )
+        val canonicalRef = "@facts/fact-123.md"
+        f.transport.enqueueRpc(
+            json.encodeToString(WikiPagePayload(path = canonicalRef, title = "Current fact", body = "current")),
+        )
+
+        assertTrue(hit.isCurrentFactHit())
+        assertEquals("current", f.client.fetchCurrentFactPage(hit.path)?.body)
+        assertEquals(canonicalRef, f.transport.requests.single().rpcParams?.get("path")?.jsonPrimitive?.content)
+    }
+
+    @Test
     fun currentFactReadFailsClosedForOldOrMalformedReferenceWithoutMirrorFallback() = runTest {
         val f = gatewayClientFixture()
         val oldRef = "@facts/fact-old.md"
