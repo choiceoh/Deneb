@@ -380,6 +380,36 @@ func (s *Store) UpdatePage(relPath string, mutate func(current *Page) (*Page, er
 	return s.writePageLocked(relPath, next)
 }
 
+// UpdatePageMetaOnly is UpdatePage for repairs that touch frontmatter but not
+// content: it restores `updated` to whatever the page had, so a metadata sweep
+// does not re-date the page.
+//
+// `updated` is read as "when this knowledge last changed" by the stale-deadline,
+// stale-superseded, dormancy and freshness paths, and search's age factor. A
+// 2026-08-23 curation sweep that only trimmed `related` bumped 53 인물 pages to
+// today, which is how "updated within 7 days but body under 300 bytes" went
+// from 9 pages to 44 — the signal stopped meaning anything. Repairs that
+// legitimately change content must keep using UpdatePage.
+func (s *Store) UpdatePageMetaOnly(relPath string, mutate func(current *Page) (*Page, error)) error {
+	return s.UpdatePage(relPath, func(current *Page) (*Page, error) {
+		prevUpdated := ""
+		prevBody := ""
+		if current != nil {
+			prevUpdated = current.Meta.Updated
+			prevBody = current.Body
+		}
+		next, err := mutate(current)
+		if err != nil || next == nil {
+			return next, err
+		}
+		if next.Body != prevBody {
+			return nil, fmt.Errorf("wiki: UpdatePageMetaOnly %q changed the body — use UpdatePage", relPath)
+		}
+		next.Meta.Updated = prevUpdated
+		return next, nil
+	})
+}
+
 // writePageInternal writes the page file, updates the search + master index, and
 // (unless skipBacklinks) maintains bidirectional backlinks. The caller must hold
 // writeMu — every path that reaches here (writePageLocked, deletePageLocked,

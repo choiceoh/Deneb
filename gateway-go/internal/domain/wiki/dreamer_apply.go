@@ -839,6 +839,17 @@ func (wd *WikiDreamer) updateDreamPage(u wikiUpdate, code, episodeRef string) (b
 	created := false
 	err := wd.store.UpdatePage(u.Path, func(existing *Page) (*Page, error) {
 		if existing == nil {
+			// Update-on-missing writes the update's content verbatim, so an
+			// update with nothing to say creates a frontmatter-only page (three
+			// 0-byte pages on the live wiki, e.g. 인물/제용범.md). An empty page
+			// still enters FTS and the embedding set and competes for recall
+			// slots, so drop the proposal instead. The create path has a
+			// template body and is unaffected.
+			if strings.TrimSpace(u.Content) == "" {
+				wd.logger.Info("wiki-dream: update target missing and content empty; page not created",
+					"path", u.Path, "title", u.Title)
+				return nil, nil
+			}
 			page := newPageFromUpdate(u, code, episodeRef)
 			page.Body = u.Content
 			created = true
