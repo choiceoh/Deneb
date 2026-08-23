@@ -7,7 +7,7 @@
 [ADR-0004](0004-canonical-fact-plane.md)의 정본 평면은 "누가 주장했는가"로 승자를
 가른다. 그래서 **권위를 누가 발급하느냐**가 평면 전체의 신뢰를 결정한다.
 
-#4653은 모델이 부르는 `knowledge(op="assert_fact"|"forget_fact")`에 `authority`
+PR #4653은 모델이 부르는 `knowledge(op="assert_fact"|"forget_fact")`에 `authority`
 문자열을 받아서 모델이 `primary_document`를 자칭할 수 있었다. 근거 문자열은 문서가
 실재한다는 증거도, 그 문서가 그 값을 뒷받침한다는 증거도 아니다. #4659는 이 위험을
 정확히 짚었지만 **op 자체를 삭제**했고, 그 결과:
