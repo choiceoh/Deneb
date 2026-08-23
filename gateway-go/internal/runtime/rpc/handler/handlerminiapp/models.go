@@ -114,12 +114,13 @@ type ModelsListResult struct {
 
 // ModelDeps holds the lazy model operations exposed to the Mini App.
 type ModelDeps struct {
-	CurrentModel func() string
-	RoleModels   func() []RoleModel
-	ListModels   func(context.Context) ([]ModelSection, error)
-	SetModel     func(ctx context.Context, role, id string) (string, error)
-	AddModel     func(context.Context, string, string) (ModelAddResult, error)
-	DeleteModel  func(ctx context.Context, id string) (ModelDeleteResult, error)
+	CurrentModel    func() string
+	RoleModels      func() []RoleModel
+	ListModels      func(context.Context) ([]ModelSection, error)
+	SetModel        func(ctx context.Context, role, id string) (string, error)
+	SetSessionModel func(ctx context.Context, sessionKey, id string) (string, error)
+	AddModel        func(context.Context, string, string) (ModelAddResult, error)
+	DeleteModel     func(ctx context.Context, id string) (ModelDeleteResult, error)
 	// Advisories returns the model tuner's open recommendations as display
 	// lines. Optional: nil omits the field.
 	Advisories func() []string
@@ -174,8 +175,9 @@ func modelsList(deps ModelDeps) rpcutil.HandlerFunc {
 
 func modelsSet(deps ModelDeps) rpcutil.HandlerFunc {
 	type params struct {
-		ID   string `json:"id"`
-		Role string `json:"role"`
+		ID         string `json:"id"`
+		Role       string `json:"role"`
+		SessionKey string `json:"sessionKey"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if minibind.Identity(ctx) == nil {
@@ -189,6 +191,22 @@ func modelsSet(deps ModelDeps) rpcutil.HandlerFunc {
 			role := strings.TrimSpace(p.Role)
 			if role == "" {
 				role = "main"
+			}
+			sessionKey := strings.TrimSpace(p.SessionKey)
+			if sessionKey != "" {
+				if deps.SetSessionModel == nil {
+					return nil, rpcerr.Unavailable("session model switch is unavailable")
+				}
+				current, err := deps.SetSessionModel(ctx, sessionKey, id)
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{
+					"ok":         true,
+					"role":       role,
+					"current":    current,
+					"sessionKey": sessionKey,
+				}, nil
 			}
 			if deps.SetModel == nil {
 				return nil, rpcerr.Unavailable("model switch is unavailable")

@@ -89,6 +89,19 @@ func TestSnapshotSessionLabels_FiltersToRestorableLabeled(t *testing.T) {
 	}
 }
 
+func TestSnapshotSessionModels_FiltersToRestorableOverrides(t *testing.T) {
+	sessions := []*session.Session{
+		{Key: "client:main:abc", Model: "kimi/kimi-k2.5"},
+		{Key: "client:main:empty", Model: "  "},
+		{Key: "cron:job", Model: "zai/glm-main"},
+		nil,
+	}
+	got := snapshotSessionModels(sessions)
+	if len(got) != 1 || got["client:main:abc"] != "kimi/kimi-k2.5" {
+		t.Fatalf("snapshot = %v", got)
+	}
+}
+
 func TestReadTranscriptFirstExchange_ParsesUserAndAssistant(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "s.jsonl")

@@ -189,6 +189,12 @@ class DenebGatewayClient private constructor(
     internal val _denebModels = MutableStateFlow<List<ModelOption>>(emptyList())
     val denebModels: StateFlow<List<ModelOption>> = _denebModels
 
+    // Per-conversation model overrides from miniapp.sessions.recent / models.set.
+    // The chat-input switcher reads this so a picker change does not retarget
+    // every other session (or the settings-tab default).
+    internal val _sessionModels = MutableStateFlow<Map<String, String>>(emptyMap())
+    val sessionModels: StateFlow<Map<String, String>> = _sessionModels
+
     // Current model id per role (main / lightweight / fallback) for the model tab.
     internal val _denebRoleModels = MutableStateFlow<Map<String, String>>(emptyMap())
     val denebRoleModels: StateFlow<Map<String, String>> = _denebRoleModels
@@ -449,6 +455,7 @@ class DenebGatewayClient private constructor(
         scope.launch { wikiMirror.clear() }
         scope.launch { diaryMirror.clear() }
         _denebModels.value = emptyList()
+        _sessionModels.value = emptyMap()
         _denebRoleModels.value = emptyMap()
         _denebModelAdvisories.value = emptyList()
         _denebMainHasVision.value = false

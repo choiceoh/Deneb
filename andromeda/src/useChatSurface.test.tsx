@@ -92,6 +92,50 @@ describe("useModels", () => {
     expect(result.current.model).toBe("provider/smart");
   });
 
+  it("adopts a session override when the conversation changes", async () => {
+    const payload = { current: "provider/smart", roles: [], sections: [] };
+    const fetch = vi.fn(async () => rpcResponse(payload));
+    vi.stubGlobal("fetch", fetch);
+    const { result, rerender } = renderHook(
+      ({ sessionKey, sessionModel }) => useModels(cfg, true, sessionKey, sessionModel),
+      { initialProps: { sessionKey: "client:main:a", sessionModel: "provider/fast" } },
+    );
+    await waitFor(() => expect(result.current.models).toEqual(payload));
+    expect(result.current.model).toBe("provider/fast");
+
+    rerender({ sessionKey: "client:main:b", sessionModel: "" });
+    expect(result.current.model).toBe("provider/smart");
+  });
+
+  it("persists a picker change onto the current session only", async () => {
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.body ? (JSON.parse(String(init.body)) as { method?: string }) : {};
+      if (body.method === "miniapp.models.list") {
+        return rpcResponse({ current: "provider/smart", roles: [], sections: [] });
+      }
+      return rpcResponse({ ok: true, role: "main", current: "custom/chosen" });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const { result } = renderHook(() => useModels(cfg, true, "client:main:a", "provider/smart"));
+    await waitFor(() => expect(result.current.model).toBe("provider/smart"));
+
+    await act(async () => {
+      result.current.setModel("custom/chosen");
+    });
+    expect(result.current.model).toBe("custom/chosen");
+    await waitFor(() => {
+      const setCalls = fetch.mock.calls.filter(([, init]) => {
+        const body = init?.body
+          ? (JSON.parse(String(init.body)) as { method?: string; params?: { sessionKey?: string } })
+          : {};
+        return body.method === "miniapp.models.set";
+      });
+      expect(setCalls).toHaveLength(1);
+      const body = JSON.parse(String(setCalls[0][1]?.body)) as { params: { id: string; sessionKey: string } };
+      expect(body.params).toEqual({ id: "custom/chosen", role: "main", sessionKey: "client:main:a" });
+    });
+  });
+
   it("fails soft for older or unavailable gateways", async () => {
     vi.stubGlobal(
       "fetch",

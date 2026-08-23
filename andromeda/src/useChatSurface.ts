@@ -2,7 +2,7 @@ import { type ChangeEvent, type RefObject, useEffect, useRef, useState } from "r
 
 import { inferAttachmentMimeType } from "@/attachmentMime";
 import { readFileBase64, splitAttachable } from "@/attachments";
-import { type GatewayConfig, type ModelsList, listModels } from "@/gateway";
+import { type GatewayConfig, type ModelsList, listModels, setModel as persistModel } from "@/gateway";
 
 // Shared behavior of the two chat surfaces (chat tab · AI side panel). Each hook
 // here used to exist as a byte-identical copy in ChatView.tsx AND AIPanel.tsx —
@@ -11,9 +11,9 @@ import { type GatewayConfig, type ModelsList, listModels } from "@/gateway";
 // Load the model registry once connected; best-effort (older gateway / the
 // offline test path just leaves it empty). The disconnect reset is a render
 // adjustment (react.dev adjust-state pattern).
-export function useModels(cfg: GatewayConfig, connected: boolean) {
+export function useModels(cfg: GatewayConfig, connected: boolean, sessionKey = "", sessionModel = "") {
   const [models, setModels] = useState<ModelsList | null>(null);
-  const [model, setModel] = useState(""); // selected override id ("" → gateway main)
+  const [model, setModelState] = useState(""); // selected override id ("" → gateway main)
   const [prevConn, setPrevConn] = useState(connected);
   if (prevConn !== connected) {
     setPrevConn(connected);
@@ -26,7 +26,7 @@ export function useModels(cfg: GatewayConfig, connected: boolean) {
       .then((m) => {
         if (cancelled) return;
         setModels(m);
-        setModel((prev) => prev || m.current || "");
+        setModelState((prev) => prev || m.current || "");
       })
       .catch(() => {});
     return () => {
@@ -34,6 +34,20 @@ export function useModels(cfg: GatewayConfig, connected: boolean) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, cfg.url, cfg.token]);
+  useEffect(() => {
+    if (!sessionKey) return;
+    setModelState(sessionModel || models?.current || "");
+    // Adopt the new conversation's stored model (or the global default) only
+    // when the session itself changes — a registry refresh must not clobber
+    // an in-progress picker choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionKey]);
+  function setModel(id: string) {
+    setModelState(id);
+    if (connected && sessionKey && id) {
+      void persistModel(cfg, id, "main", sessionKey).catch(() => {});
+    }
+  }
   return { models, model, setModel };
 }
 

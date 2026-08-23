@@ -312,6 +312,37 @@ class AdminModelsAndClientStatusBoundaryTest {
     }
 
     @Test
+    fun serviceEntriesPreferSessionOverrideOverGlobalCurrent() {
+        val f = gatewayClientFixture()
+        f.client._denebModels.value = listOf(
+            ModelOption(id = "one", display = "One", current = false, health = ""),
+            ModelOption(id = "current", display = "Current", current = true, health = ""),
+            ModelOption(id = "three", display = "Three", current = false, health = ""),
+        )
+        f.client._sessionModels.value = mapOf("client:main:alpha" to "three")
+
+        val entries = f.client.denebServiceEntries("client:main:alpha")
+
+        assertEquals(listOf("three", "one", "current"), entries.map { it.modelId })
+    }
+
+    @Test
+    fun setSessionModelSendsSessionKeyAndDoesNotRefreshRegistry() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc("{}")
+
+        val result = f.client.setSessionModel(" client:main:alpha ", "kimi/kimi-k2.5")
+
+        assertTrue(result)
+        val params = f.transport.requests.single().requireRpc("miniapp.models.set")
+        assertEquals("kimi/kimi-k2.5", params["id"]?.jsonPrimitive?.content)
+        assertEquals("client:main:alpha", params["sessionKey"]?.jsonPrimitive?.content)
+        assertEquals(null, params["role"])
+        assertEquals("kimi/kimi-k2.5", f.client.sessionModels.value["client:main:alpha"])
+        assertEquals(1, f.transport.requests.size)
+    }
+
+    @Test
     fun refreshClientStatusMapsEntireHandshakePayload() = runTest {
         val f = gatewayClientFixture()
         f.transport.enqueueRpc(
