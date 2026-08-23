@@ -62,8 +62,19 @@ func (rt *router) applyThinking(entry modelEntry, body []byte, noEffort bool) []
 	return out
 }
 
-// reasoningStyleGLM is the z.ai / GLM-5.x native reasoning dialect (see modelEntry.Reasoning).
-const reasoningStyleGLM = "glm"
+// Native cloud reasoning dialects (see modelEntry.Reasoning).
+const (
+	reasoningStyleGLM = "glm" // z.ai / GLM-5.x
+	// reasoningStyleDeepseek is the api.deepseek.com dialect. Both API entries
+	// have declared it since they were added, but nothing implemented it — the
+	// style fell through reasoningRoute's unknown-style branch, so the caller's
+	// effort reached DeepSeek untranslated. Measured 2026-08-23 on
+	// deepseek-v4-flash: no effort field → 1,072 reasoning chars, and
+	// reasoning_effort="low" — the Deneb gateway's OpenAI-path spelling of
+	// "thinking disabled" — → 1,932 reasoning chars and finish_reason=length
+	// with EMPTY content. Only "none" actually zeroes the channel.
+	reasoningStyleDeepseek = "deepseek"
+)
 
 // applyReasoning runs the cloud-dialect reasoning router for one resolved model.
 // Unlike applyThinking (vLLM chat_template_kwargs — owned by the Deneb gateway and
@@ -92,7 +103,11 @@ func (rt *router) applyReasoning(entry modelEntry, body []byte) []byte {
 //	"high" as MAX, so the on-path must pin "high" — forwarding the gateway's "low"
 //	would silently run GLM at its deepest (max) reasoning.
 func reasoningRoute(body []byte, entry modelEntry) (out []byte, reason string, thinkingOff bool) {
-	if entry.Reasoning != reasoningStyleGLM {
+	switch entry.Reasoning {
+	case reasoningStyleGLM:
+	case reasoningStyleDeepseek:
+		return deepseekReasoningRoute(body)
+	default:
 		return body, "", false // unknown/empty style → leave the body untouched
 	}
 	// Explicit caller intent wins over Ares. The Deneb gateway translates its
@@ -126,6 +141,43 @@ func reasoningRoute(body []byte, entry modelEntry) (out []byte, reason string, t
 	b := setBodyField(body, "thinking", map[string]string{"type": "enabled"})
 	b = setBodyField(b, "reasoning_effort", "high")
 	return b, d.Reason, false
+}
+
+// deepseekReasoningRoute rewrites the effort for api.deepseek.com.
+//
+// DeepSeek's scale is none|medium|high (and it accepts "max"), but it does NOT
+// read "low" as minimal — that request came back with MORE reasoning than the
+// default and no content at all on a small budget. Callers that mean "don't
+// think" therefore have to be translated, not forwarded: the Deneb gateway
+// spells thinking-disabled as reasoning_effort="low" on the OpenAI path, and
+// the vLLM-flavored chat_template_kwargs a caller aimed at a local Qwen/DeepSeek
+// serving means nothing here either.
+//
+// This matters most on failover. A request for a local model that is down lands
+// on this entry with the local model's thinking directive attached, on the small
+// output budget its caller sized for a non-thinking helper — which is exactly
+// how the wiki query expander returned empty content on 46% of its calls while
+// the local qwen serving was down.
+func deepseekReasoningRoute(body []byte) (out []byte, reason string, thinkingOff bool) {
+	// A caller's vLLM toggle is meaningless to the cloud API and would only
+	// risk a strict-schema rejection; drop it and speak the native dialect.
+	body = deleteBodyField(body, "chat_template_kwargs")
+	if eff := strings.ToLower(strings.TrimSpace(getBodyStringField(body, "reasoning_effort"))); eff != "" {
+		switch eff {
+		case "high", "max", "medium":
+			return body, "explicit-" + eff, false
+		default:
+			// "low"/"none"/anything unrecognized = the caller wants minimal
+			// reasoning. Only "none" delivers that here.
+			return setBodyField(body, "reasoning_effort", "none"), "explicit-" + eff, true
+		}
+	}
+	if d := ares.Decide(ares.DefaultProfile(), effortRequest(body)); d.ThinkingOff {
+		return setBodyField(body, "reasoning_effort", "none"), d.Reason, true
+	}
+	// Thinking stays on by omission — the API's default — so a heavy turn is
+	// unchanged from today.
+	return body, "", false
 }
 
 // thinkingRoute classifies the request's effort and, for a model with a thinking
