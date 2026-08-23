@@ -73,8 +73,11 @@ type Store struct {
 	// factMu guards the durable current-fact snapshot and its compatibility
 	// projection directory. Fact mutations acquire writeMu first because they
 	// also rewrite the generated 사용자 page through writePageInternal.
-	factMu            sync.RWMutex
-	factState         FactSnapshot
+	factMu    sync.RWMutex
+	factState FactSnapshot
+	// Bullets the legacy cutover could not convert; see LegacyFactImportSkips.
+	// Written once during the single-threaded startup import.
+	legacyImportSkips []string
 	factNow           func() time.Time
 	factProjectionDir string
 	// factProjectionError is the last rebuild error for derived fact views.

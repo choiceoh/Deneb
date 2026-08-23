@@ -2,7 +2,6 @@ package wiki
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -46,6 +45,7 @@ func (s *Store) ImportLegacyFactFiles(workspaceDir string) (int, error) {
 	}
 
 	imported := 0
+	var skipped []string
 	for _, candidate := range candidates {
 		input := candidate.input
 		source := input.Sources[0]
@@ -54,15 +54,22 @@ func (s *Store) ImportLegacyFactFiles(workspaceDir string) (int, error) {
 		}
 		result, err := s.upsertFact(input, false)
 		if err != nil {
-			if imported > 0 {
-				if syncErr := s.syncFactDerived(); syncErr != nil {
-					return imported, errors.Join(
-						fmt.Errorf("import %s line %d: %w", candidate.label, candidate.lineNo, err),
-						fmt.Errorf("sync derived facts: %w", syncErr),
-					)
-				}
-			}
-			return imported, fmt.Errorf("import %s line %d: %w", candidate.label, candidate.lineNo, err)
+			// One unconvertible bullet must not abort the cutover.
+			//
+			// This is a best-effort read of years of hand-written prose: two bullets
+			// can legitimately describe the same subject+key with different kinds
+			// (an "identity" line and a "preference" line about the same trait), and
+			// upsertFact refuses the second. Aborting there returned an error all the
+			// way up to server init, which exits — and because the offending line is
+			// the same on every boot, the retry the caller counts on can never
+			// succeed. That is a permanent crash loop from one line of MEMORY.md
+			// (observed 2026-08-23, ~200 restarts).
+			//
+			// Nothing is lost by skipping: the row stays in the preserved
+			// *.legacy.md copy, exactly like the prose this importer already
+			// declines to promote.
+			skipped = append(skipped, fmt.Sprintf("%s line %d: %v", candidate.label, candidate.lineNo, err))
+			continue
 		}
 		if result.Committed {
 			imported++
@@ -78,7 +85,27 @@ func (s *Store) ImportLegacyFactFiles(workspaceDir string) (int, error) {
 			return imported, fmt.Errorf("preserve unmatched %s active context: %w", activeContext.label, err)
 		}
 	}
+	s.legacyImportSkips = skipped
 	return imported, nil
+}
+
+// legacyImportSkipLimit bounds how many skip reasons a caller prints at once;
+// the point is to notice the pattern, not to reprint the file.
+const legacyImportSkipLimit = 10
+
+// LegacyFactImportSkips describes bullets the last [ImportLegacyFactFiles] could
+// not convert. Reported this way rather than as an error because the caller
+// treats an error as "do not serve", and a handful of unconvertible legacy lines
+// is not a reason to refuse service.
+func (s *Store) LegacyFactImportSkips() []string {
+	if s == nil {
+		return nil
+	}
+	skips := s.legacyImportSkips
+	if len(skips) > legacyImportSkipLimit {
+		skips = skips[:legacyImportSkipLimit]
+	}
+	return append([]string(nil), skips...)
 }
 
 type legacyFactCandidate struct {
