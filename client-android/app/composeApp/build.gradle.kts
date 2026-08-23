@@ -256,9 +256,20 @@ class VersionGeneratorPlugin : Plugin<Project> {
             // would just move the conflict). See changelog.d/README.md.
             val fragmentsDir = rootProject.file("changelog.d")
             val datePrefix = Regex("""^\d{4}-\d{2}-\d{2}-.*\.md$""")
-            val fragments =
+            val allFragments =
                 (fragmentsDir.listFiles()?.toList() ?: emptyList())
-                    .filter { it.isFile && datePrefix.matches(it.name) }
+                    .filter { it.isFile && it.name.endsWith(".md") && it.name != "README.md" }
+            // A fragment without the date prefix is silently dropped and its fix never
+            // reaches the in-app patch notes (two shipped fixes were lost this way).
+            // Say so loudly at build time instead.
+            allFragments
+                .filterNot { datePrefix.matches(it.name) }
+                .forEach {
+                    logger.warn("changelog.d: ${it.name} has no YYYY-MM-DD- prefix — it will NOT ship in the app's patch notes.")
+                }
+            val fragments =
+                allFragments
+                    .filter { datePrefix.matches(it.name) }
                     // Newest first: the date-prefixed name makes a reverse sort chronological.
                     .sortedByDescending { it.name }
             val entries =
@@ -268,6 +279,10 @@ class VersionGeneratorPlugin : Plugin<Project> {
                             .readLines()
                             .map { it.trim() }
                             .filter { it.isNotEmpty() && !it.startsWith("#") }
+                            // The renderer prepends its own "· " bullet, so a line
+                            // written as Markdown ("- 고쳤습니다") rendered as "· - …".
+                            .map { it.removePrefix("- ").removePrefix("* ").trim() }
+                            .filter { it.isNotEmpty() }
                     if (highlights.isEmpty()) {
                         null
                     } else {

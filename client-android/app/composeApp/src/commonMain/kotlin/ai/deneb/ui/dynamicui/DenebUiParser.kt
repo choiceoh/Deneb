@@ -58,7 +58,7 @@ object DenebUiParser {
             return if (node != null) {
                 UiBlockResult.Ui(node, body)
             } else {
-                DenebLog.warn("DenebUi", "html parse produced no nodes | ${body.take(500)}")
+                DenebLog.warn("DenebUi", "html parse produced no nodes | ${bodyDigest(body)}")
                 UiBlockResult.Error(body)
             }
         }
@@ -76,15 +76,25 @@ object DenebUiParser {
         return try {
             parseSingleNode(body)?.let { UiBlockResult.Ui(it, body) } ?: UiBlockResult.Error(body)
         } catch (e: Exception) {
-            DenebLog.warn("DenebUi", "legacy json parse error: ${e.message} | ${body.take(500)}")
+            DenebLog.warn("DenebUi", "legacy json parse error: ${e.message} | ${bodyDigest(body)}")
             UiBlockResult.Error(body)
         }
     }
 
+    /**
+     * What a failed card looked like, without printing what it said.
+     *
+     * These warnings fire in release too, and the body is assistant output about the
+     * user's own mail, deals and people — 500 characters of it went to Logcat, where
+     * any app with log access on an older device could read it. Shape and size are
+     * what actually diagnose a parse failure.
+     */
+    private fun bodyDigest(body: String): String = "len=${body.length} head=${body.take(24).replace('\n', ' ')}"
+
     /** Try to parse a single NDJSON line, dropping lines that don't parse. */
     private fun tryParseLine(line: String): DenebUiNode? = runCatching { parseSingleNode(line) }.getOrNull()
         ?: run {
-            DenebLog.warn("DenebUi", "legacy ndjson line failed to parse | ${line.take(500)}")
+            DenebLog.warn("DenebUi", "legacy ndjson line failed to parse | ${bodyDigest(line)}")
             null
         }
 

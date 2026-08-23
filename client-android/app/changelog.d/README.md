@@ -19,6 +19,10 @@ client-android/app/changelog.d/2026-06-16-voice-row-group.md
 
 - Each **non-blank** line is one highlight bullet (a change can have several).
 - Lines starting with `#` are comments and are ignored.
+- A leading `- ` / `* ` is stripped, so a fragment can be valid Markdown; the app
+  renders its own bullet.
+- **The `YYYY-MM-DD-` prefix is required.** A file without it is skipped entirely
+  and its note never reaches the app (the build logs a warning when it happens).
 - Write the polished Korean note the user will read — same voice as before.
 
 Example (`2026-06-16-voice-row-group.md`):
