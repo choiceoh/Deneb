@@ -29,6 +29,13 @@ func (s diarySignal) preference() bool {
 	return strings.Contains(s.Reason, "선호")
 }
 
+// project reports whether the capsule carried a deal-number cue (견적/단가/
+// 카톡 보고). Callers use it to nudge the dreamer onto the same accelerated
+// cadence as 선호. Bare "프로젝트 근황" must not set this.
+func (s diarySignal) project() bool {
+	return strings.Contains(s.Reason, "프로젝트시그널")
+}
+
 var durableDiaryTerms = []string{
 	"결정", "계획", "구현", "수정", "테스트", "검증", "오류", "버그", "회상", "기억", "컴팩션", "위키", "일지",
 	"도구", "파일", "머지", "설정", "배포", "리팩토링", "분석", "정리", "요약", "추가", "개선", "완료", "실패", "차단",
@@ -154,15 +161,26 @@ func classifyDiarySignal(userMsg string, toolNames []string, assistantText strin
 	// so the dreamer aggregates a clear cue instead of inferring it from raw text,
 	// and force-record it (durable) even when the message is short.
 	pref := isPreferenceDirective(userMsg)
+	proj := isProjectDealSignal(userMsg) || isProjectDealSignal(assistantText)
 	if len(toolNames) > 0 {
 		reason := "tools"
 		if pref {
 			reason = "tools,선호"
 		}
+		if proj {
+			reason += ",프로젝트시그널"
+		}
 		return diarySignal{Level: "action", Reason: reason}
 	}
 	if pref {
-		return diarySignal{Level: "durable", Reason: "선호"}
+		reason := "선호"
+		if proj {
+			reason += ",프로젝트시그널"
+		}
+		return diarySignal{Level: "durable", Reason: reason}
+	}
+	if proj {
+		return diarySignal{Level: "durable", Reason: "프로젝트시그널"}
 	}
 	if containsDurableDiaryTerm(userMsg) || containsDurableDiaryTerm(assistantText) {
 		return diarySignal{Level: "durable", Reason: "keyword"}
@@ -208,6 +226,27 @@ var preferenceDiaryTerms = []string{
 func isPreferenceDirective(userMsg string) bool {
 	lower := strings.ToLower(strings.TrimSpace(userMsg))
 	for _, t := range preferenceDiaryTerms {
+		if strings.Contains(lower, t) {
+			return true
+		}
+	}
+	return false
+}
+
+// projectDiaryTerms are high-precision deal-number cues. Kept in lockstep
+// with wiki.projectSignalTerms — a loose "프로젝트" match would fire on
+// every status question and thrash the 30-minute dream cadence.
+var projectDiaryTerms = []string{
+	"견적", "재견적", "단가", "moq", "공급가액", "원/w", "원/wp",
+	"카톡 보고", "카톡보고",
+}
+
+func isProjectDealSignal(text string) bool {
+	lower := strings.ToLower(strings.TrimSpace(text))
+	if lower == "" {
+		return false
+	}
+	for _, t := range projectDiaryTerms {
 		if strings.Contains(lower, t) {
 			return true
 		}

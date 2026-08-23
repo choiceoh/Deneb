@@ -543,6 +543,16 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 				msg += "\n  - " + truncateOutput(f, 80)
 			}
 		}
+		if report.StaleDuesClosed > 0 || len(report.StaleDueAlert) > 0 {
+			if report.StaleDuesClosed > 0 {
+				msg += fmt.Sprintf("\n📅 지난 기한 해제 %d건:", report.StaleDuesClosed)
+			} else {
+				msg += "\n📅 지난 기한:"
+			}
+			for _, a := range report.StaleDueAlert {
+				msg += "\n  - " + truncateOutput(a, 80)
+			}
+		}
 		if len(report.RecallDemandTerms) > 0 {
 			msg += "\n❓ 답 못한 질문 주제: " + strings.Join(report.RecallDemandTerms, ", ")
 		}

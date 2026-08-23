@@ -222,6 +222,26 @@ func TestMergeUpdateContent(t *testing.T) {
 			t.Errorf("list-marker variant of an existing line must dedup, got:\n%s", merged)
 		}
 	})
+
+	t.Run("현재 상태 and 핵심 숫자 replace instead of append", func(t *testing.T) {
+		existing := "# 당진\n\n## 현재 상태\n- 어제 상태\n\n## 핵심 숫자\n- 옛 단가 100\n\n## 관련 문서\n- [[a]]\n"
+		incoming := "## 현재 상태\n- 오늘 상태\n\n## 핵심 숫자\n- 새 단가 200\n\n공사기한 연장 수용 — COD 2028.3, 준공 2028.6 확정."
+		merged := mergeUpdateContent(existing, incoming)
+		if strings.Contains(merged, "어제 상태") || strings.Contains(merged, "옛 단가") {
+			t.Fatalf("stale snapshot sections survived:\n%s", merged)
+		}
+		if strings.Count(merged, "## 현재 상태") != 1 || strings.Count(merged, "## 핵심 숫자") != 1 {
+			t.Fatalf("sections must be upserted once:\n%s", merged)
+		}
+		if !strings.Contains(merged, "오늘 상태") || !strings.Contains(merged, "새 단가 200") {
+			t.Fatalf("new snapshot missing:\n%s", merged)
+		}
+		relIdx := strings.Index(merged, "## 관련 문서")
+		newIdx := strings.Index(merged, "COD 2028.3")
+		if newIdx == -1 || relIdx == -1 || newIdx > relIdx {
+			t.Fatalf("non-snapshot prose must still land before 관련 문서:\n%s", merged)
+		}
+	})
 }
 
 func TestApplyUpdates_UpdateFallbackDedup(t *testing.T) {

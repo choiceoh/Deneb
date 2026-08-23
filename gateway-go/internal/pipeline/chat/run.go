@@ -79,6 +79,7 @@ type runDeps struct {
 	memory             MemoryDeps
 	dreamTurnFn        func(ctx context.Context) // optional; increments dream turn via autonomous
 	preferenceSignalFn func()                    // optional; notes a 선호-tagged diary capsule for accelerated dreaming
+	projectSignalFn    func()                    // optional; notes a deal-number diary capsule for the same cadence
 	// deliverablePublisher files the turn's final response as a doc_analysis
 	// work-feed card — the server-side auto safety net for the deliverable → 작업
 	// 피드 contract. Optional; nil disables (older wiring/tests).

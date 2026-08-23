@@ -85,6 +85,9 @@ func (wd *WikiDreamer) verifyPages(ctx context.Context) []verifyFinding {
 	// archive material, not working memory.
 	findings = append(findings, wd.detectStaleMailAnalyses()...)
 
+	// 5e-2: Address-book / mention stubs that never earned a recall hit.
+	findings = append(findings, wd.detectStalePersonStubs()...)
+
 	// 5f: Unrecalled-cold detection (효용 접지). Old low-importance pages that
 	// never surfaced in the recall-utility ledger are candidate dead weight the
 	// dreamer created and nobody ever used. Advisory only — no auto-fix — because
@@ -333,6 +336,57 @@ func (wd *WikiDreamer) detectStaleMailAnalyses() []verifyFinding {
 	return findings
 }
 
+const personStubArchiveAfterDays = 30
+
+func isAutoPersonStubText(s string) bool {
+	return strings.Contains(s, "주소록 기반 자동 생성") ||
+		strings.Contains(s, "드림 사이클 반복 언급으로 자동 생성")
+}
+
+// detectStalePersonStubs archives address-book / mention stubs that are 30+
+// days old and have never been recalled. Curated 인물 pages (no stub marker)
+// are left alone.
+func (wd *WikiDreamer) detectStalePersonStubs() []verifyFinding {
+	relPaths, err := wd.store.ListPages("")
+	if err != nil {
+		return nil
+	}
+	recalls := wd.store.RecallUsageScoreCounts(time.Now())
+	cutoff := time.Now().AddDate(0, 0, -personStubArchiveAfterDays).Format("2006-01-02")
+	var findings []verifyFinding
+	for _, rp := range relPaths {
+		rp = filepath.ToSlash(rp)
+		if categoryFromPath(rp) != "인물" {
+			continue
+		}
+		page, rerr := wd.store.ReadPage(rp)
+		if rerr != nil || page == nil || page.Meta.Archived {
+			continue
+		}
+		if !isAutoPersonStubText(page.Meta.Summary) && !isAutoPersonStubText(page.Body) {
+			continue
+		}
+		created := strings.TrimSpace(page.Meta.Created)
+		if created == "" || created >= cutoff {
+			continue
+		}
+		if u := recalls[rp]; u.Injects > 0 || u.Used() {
+			continue
+		}
+		title := page.Meta.Title
+		if title == "" {
+			title = strings.TrimSuffix(filepath.Base(rp), ".md")
+		}
+		findings = append(findings, verifyFinding{
+			Type:   "stale_person_stub",
+			Detail: fmt.Sprintf("인물 스텁 %q (생성 %s, 회상 0) — 아카이브", title, created),
+			PageA:  rp,
+			Fix:    &verifyFix{Kind: "archive"},
+		})
+	}
+	return findings
+}
+
 type pageRef struct {
 	path  string
 	title string
@@ -384,6 +438,14 @@ func detectDuplicates(entries map[string]IndexEntry) []verifyFinding {
 				}
 			}
 
+			// Sibling deals (kia-001 vs kia-002) share a client and often
+			// a similar title; fuzzy match would merge two live folders.
+			// Exact/normalized title equality still fires — that is the
+			// same project splintered into two spellings (영산고-태양광).
+			aName, aOK := ProjectNameOf(a.path)
+			bName, bOK := ProjectNameOf(b.path)
+			siblingDeals := aOK && bOK && aName != bName
+
 			// Compare titles. Normalized-key equality ("영산고 태양광" vs
 			// "영산고-태양광" vs "영산고태양광") is as safe to auto-merge as an exact
 			// match — punctuation/spacing variants are exactly how the same topic
@@ -396,6 +458,9 @@ func detectDuplicates(entries map[string]IndexEntry) []verifyFinding {
 					continue
 				}
 				if isSimilar(a.title, b.title) {
+					if siblingDeals {
+						continue
+					}
 					findings = append(findings, verifyFinding{
 						Type: "duplicate",
 						Detail: fmt.Sprintf("유사한 제목: \"%s\" ~ \"%s\" (거리 %d)",
@@ -409,6 +474,9 @@ func detectDuplicates(entries map[string]IndexEntry) []verifyFinding {
 
 			// Compare IDs.
 			if _, dup := seen[key]; a.id != "" && b.id != "" && !dup && isSimilar(a.id, b.id) {
+				if siblingDeals {
+					continue
+				}
 				dist := levenshtein(a.id, b.id)
 				if dist == 0 {
 					findings = append(findings, exactDupFinding(entries, a.path, b.path,

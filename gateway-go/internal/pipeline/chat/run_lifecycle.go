@@ -700,6 +700,7 @@ func maybeRecordRunDiary(deps runDeps, params RunParams, result *agent.AgentResu
 	dreamTurnFn := deps.dreamTurnFn
 	shouldIncrementDream := dreamTurnFn != nil
 	prefSignalFn := deps.preferenceSignalFn
+	projectSignalFn := deps.projectSignalFn
 	// Background work rides the server lifecycle ctx (canceled on shutdown,
 	// not on request completion).
 	bgCtx := deps.callbacks.shutdownCtx
@@ -715,6 +716,9 @@ func maybeRecordRunDiary(deps runDeps, params RunParams, result *agent.AgentResu
 		// ShouldDream check must already see the pending preference signal.
 		if signal.preference() && prefSignalFn != nil {
 			prefSignalFn()
+		}
+		if signal.project() && projectSignalFn != nil {
+			projectSignalFn()
 		}
 		if shouldIncrementDream {
 			dreamTurnFn(bgCtx)

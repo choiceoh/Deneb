@@ -112,6 +112,14 @@ type diaryProcessState struct {
 	// at or before this stamp may be dropped from MEMORY.md once they age out
 	// of the keep window (see memory_curation.go).
 	MemoryConsumedThrough string `json:"memoryConsumedThrough,omitempty"`
+	// MemoryCategoryHash is the SHA-256 of MEMORY.md's untimestamped
+	// category sections (결정사항/선호도/…). When the file has no new
+	// timestamped sections, a hash change is the only signal that the
+	// standing notes need another distillation pass. Advancing
+	// MemoryConsumedThrough to "now" would skip a later same-day stamp,
+	// so the cursor stays put and this hash carries the "already seen"
+	// mark instead.
+	MemoryCategoryHash string `json:"memoryCategoryHash,omitempty"`
 }
 
 type diaryFileState struct {
@@ -170,9 +178,9 @@ type WikiDreamer struct {
 	model  string
 	logger *slog.Logger
 
-	// cmu guards turnCount, lastDream and prefSignals: incremented from chat
-	// turns, read from the autonomous dream timer loop, reset from async dream
-	// runs — three goroutines on plain ints/time without it.
+	// cmu guards turnCount, lastDream, prefSignals and projectSignals:
+	// incremented from chat turns, read from the autonomous dream timer loop,
+	// reset from async dream runs — three goroutines on plain ints/time without it.
 	cmu       sync.Mutex
 	turnCount int
 	lastDream time.Time
@@ -183,6 +191,11 @@ type WikiDreamer struct {
 	// the capsule itself is already on disk and the regular thresholds still
 	// pick it up.
 	prefSignals int
+	// projectSignals counts deal-number diary capsules (견적/단가/카톡 보고)
+	// since the last dream. Same cadence as prefSignals: a live quote should
+	// land on the 프로젝트 page within the hour, not after the 8h batch window.
+	// Asking "프로젝트 근황" must not increment this (see diaryHasProjectSignal).
+	projectSignals int
 	// synthRetryNotBefore holds ShouldDream after a transient synthesis
 	// failure (see errSynthesisLLMCall); synthTransientFails counts the
 	// consecutive misses that escalate to a full-interval backoff. In-memory
@@ -277,6 +290,16 @@ func (wd *WikiDreamer) NotePreferenceSignal() {
 	wd.cmu.Unlock()
 }
 
+// NoteProjectSignal records that a deal-number diary capsule (견적/단가/
+// 카톡 보고) was just appended. Wired from the chat diary recorder — the
+// capsule is on disk before this is called, so an accelerated dream cycle
+// always sees the quote it fires for.
+func (wd *WikiDreamer) NoteProjectSignal() {
+	wd.cmu.Lock()
+	wd.projectSignals++
+	wd.cmu.Unlock()
+}
+
 // SetPolarisContextFn wires a closure that returns formatted recent polaris
 // compression summaries. nil-safe; passing nil disables polaris injection.
 func (wd *WikiDreamer) SetPolarisContextFn(fn func() string) {
@@ -351,6 +374,7 @@ func (wd *WikiDreamer) ShouldDream(_ context.Context) bool {
 	turns := wd.turnCount
 	last := wd.lastDream
 	prefs := wd.prefSignals
+	projects := wd.projectSignals
 	hold := wd.synthRetryNotBefore
 	wd.cmu.Unlock()
 
@@ -369,12 +393,15 @@ func (wd *WikiDreamer) ShouldDream(_ context.Context) bool {
 		wd.logger.Info("wiki-dream: time threshold reached", "elapsed", time.Since(last).Round(time.Minute))
 		return true
 	}
-	// Preference fast path: an unconsumed 신호:선호 capsule shortens the wait to
-	// wikiDreamPrefMinInterval so the 사용자 model updates soon after the user
-	// voices a standing preference (fired by the next turn or the dream timer).
-	if prefs > 0 && !last.IsZero() && time.Since(last) >= wikiDreamPrefMinInterval {
-		wd.logger.Info("wiki-dream: preference-signal threshold reached",
-			"prefSignals", prefs, "elapsed", time.Since(last).Round(time.Minute))
+	// Preference / project-signal fast path: an unconsumed 신호:선호 or
+	// deal-number capsule shortens the wait to wikiDreamPrefMinInterval so
+	// the 사용자 model or the live quote lands within the hour (fired by the
+	// next turn or the dream timer). Same floor so back-to-back signals
+	// cannot thrash cycles.
+	if (prefs > 0 || projects > 0) && !last.IsZero() && time.Since(last) >= wikiDreamPrefMinInterval {
+		wd.logger.Info("wiki-dream: accelerated-signal threshold reached",
+			"prefSignals", prefs, "projectSignals", projects,
+			"elapsed", time.Since(last).Round(time.Minute))
 		return true
 	}
 	return false
@@ -439,6 +466,8 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	}
 
 	wd.applyDreamUpdates(ctx, cycle)
+	wd.closeDreamStaleDues(cycle)
+	wd.curateOversizedDreamPages()
 	wd.captureDreamOpenLoops(ctx, cycle)
 	wd.captureDreamThemes(ctx, cycle)
 	wd.captureDreamSelfComparison(ctx, cycle)
@@ -534,13 +563,14 @@ func (wd *WikiDreamer) collectDreamSources(ctx context.Context, cycle *dreamCycl
 		wd.logger.Info("wiki-dream: MEMORY.md disk-capped", "droppedSections", dropped)
 	}
 
-	cycle.memoryScan = wd.scanWorkspaceMemory(scan.State.MemoryConsumedThrough)
+	cycle.memoryScan = wd.scanWorkspaceMemory(scan.State.MemoryConsumedThrough, scan.State.MemoryCategoryHash)
 	cycle.synthInput = scan.Content
 	if cycle.memoryScan != nil {
 		cycle.synthInput += cycle.memoryScan.Content
 		wd.logger.Info("wiki-dream: memory sections queued for distillation",
 			"sections", cycle.memoryScan.Sections,
-			"through", cycle.memoryScan.ConsumedThrough)
+			"through", cycle.memoryScan.ConsumedThrough,
+			"categoryRefresh", cycle.memoryScan.CategoryRefresh)
 	}
 	// One episode ref for the whole cycle, minted once synthInput is assembled,
 	// so every write path this cycle drives (synthesis, person seeds, project
@@ -589,6 +619,13 @@ func (wd *WikiDreamer) synthesizeDreamCycle(ctx context.Context, cycle *dreamCyc
 	updates, dropped := wd.critiqueUpdates(ctx, updates)
 	cycle.report.CritiqueDropped = dropped
 
+	gated, demandDropped := applyDemandGate(cycle.synthInput, updates)
+	if demandDropped > 0 {
+		wd.logger.Info("wiki-dream: demand gate dropped 기타 proposals",
+			"dropped", demandDropped, "kept", len(gated))
+		updates = gated
+	}
+
 	cycle.updates = updates
 	cycle.partial = partial
 	cycle.proposal = buildDreamProposalReport(cycle.scan, updates)
@@ -627,8 +664,8 @@ func (wd *WikiDreamer) finishFailedDreamSynthesis(cycle *dreamCycle) {
 }
 
 // finishTransientDreamSynthesis records the failure WITHOUT consuming the
-// cycle's triggers: turn count, pref signals and lastDream stay so the retry
-// (gated by synthRetryNotBefore) re-fires on the same accumulated demand.
+// cycle's triggers: turn count, pref/project signals and lastDream stay so
+// the retry (gated by synthRetryNotBefore) re-fires on the same demand.
 func (wd *WikiDreamer) finishTransientDreamSynthesis(cycle *dreamCycle) {
 	cycle.report.PhaseErrors = cycle.phaseErrors
 	cycle.report.DurationMs = time.Since(cycle.startedAt).Milliseconds()
@@ -845,10 +882,33 @@ func (wd *WikiDreamer) curateDreamMemory(cycle *dreamCycle, heldOffsets bool) {
 	if cycle.memoryScan == nil || heldOffsets {
 		return
 	}
-	if _, err := wd.curateWorkspaceMemory(cycle.memoryScan); err != nil {
-		cycle.addPhaseError("memory-curation: %v", err)
+	if !cycle.memoryScan.CategoryRefresh {
+		if _, err := wd.curateWorkspaceMemory(cycle.memoryScan); err != nil {
+			cycle.addPhaseError("memory-curation: %v", err)
+		}
+		if cycle.memoryScan.ConsumedThrough != "" {
+			cycle.scan.State.MemoryConsumedThrough = cycle.memoryScan.ConsumedThrough
+		}
 	}
-	cycle.scan.State.MemoryConsumedThrough = cycle.memoryScan.ConsumedThrough
+	if cycle.memoryScan.CategoryRefresh && cycle.memoryScan.CategoryHash != "" {
+		cycle.scan.State.MemoryCategoryHash = cycle.memoryScan.CategoryHash
+	}
+}
+
+func (wd *WikiDreamer) closeDreamStaleDues(cycle *dreamCycle) {
+	diary := ""
+	if cycle != nil {
+		diary = cycle.synthInput
+	}
+	res := wd.closeStaleDues(diary)
+	if res.closed == 0 && len(res.alert) == 0 {
+		return
+	}
+	cycle.report.StaleDuesClosed = res.closed
+	cycle.report.StaleDueAlert = res.alert
+	if res.closed > 0 {
+		wd.logger.Info("wiki-dream: stale dues closed", "closed", res.closed)
+	}
 }
 
 func dreamProgressCursor(scan *diaryScanResult, heldOffsets bool, now time.Time) string {

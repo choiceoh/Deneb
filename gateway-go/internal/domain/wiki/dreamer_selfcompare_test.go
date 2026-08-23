@@ -64,6 +64,23 @@ func TestParseDreamCompareVerdict_NormalizesDrift(t *testing.T) {
 	}
 }
 
+func TestRefineDreamCompareVerdict_StripsUndershootWhenProjectWritten(t *testing.T) {
+	v := dreamCompareVerdict{Winner: "previous", Weaknesses: []string{"과소제안", "라우팅오류"}}
+	got := refineDreamCompareVerdict(v, &dreamCycle{
+		proposal: dreamProposalReport{Proposed: []dreamUpdatePreview{{Path: "프로젝트/pl2-kia-epc-002/대표.md"}}},
+	})
+	if len(got.Weaknesses) != 1 || got.Weaknesses[0] != "라우팅오류" {
+		t.Fatalf("과소제안 must drop when a project page was written, got %v", got.Weaknesses)
+	}
+
+	kept := refineDreamCompareVerdict(v, &dreamCycle{
+		proposal: dreamProposalReport{Proposed: []dreamUpdatePreview{{Path: "기타/이란.md"}}},
+	})
+	if len(kept.Weaknesses) != 2 {
+		t.Fatalf("기타-only cycle must keep 과소제안, got %v", kept.Weaknesses)
+	}
+}
+
 func TestDreamCompareLedger_RoundTripAndMalformedSkip(t *testing.T) {
 	wd := newCompareDreamer(t)
 	if err := wd.appendDreamCompareEntry(dreamCompareEntry{Ts: 1, Kind: "compare", Winner: "current"}); err != nil {
