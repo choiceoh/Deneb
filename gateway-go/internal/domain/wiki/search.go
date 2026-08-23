@@ -136,7 +136,7 @@ func (s *searchDB) indexPage(relPath string, page *Page) {
 	defer s.mu.Unlock()
 	s.idx.UpsertFields(relPath, searchablePageFieldsWithBoost(page, s.fieldBoost, s.facetBoost)...)
 	if page != nil {
-		s.validity[relPath] = validityFactor(page.Meta, s.now())
+		s.validity[relPath] = validityFactor(relPath, page.Meta, s.now())
 	}
 }
 
@@ -153,7 +153,7 @@ func (s *searchDB) removePage(relPath string) {
 // living pages in recall; old "updated" stamps decay gently — operational
 // facts (ports, prices, configs) rot, and recall presenting a year-old fact
 // as current is exactly the failure this guards against.
-func validityFactor(meta Frontmatter, now time.Time) float64 {
+func validityFactor(relPath string, meta Frontmatter, now time.Time) float64 {
 	f := 1.0
 	if meta.Archived {
 		f *= 0.3
@@ -170,6 +170,12 @@ func validityFactor(meta Frontmatter, now time.Time) float64 {
 				f *= 0.85
 			}
 		}
+	}
+	// Unlinked mail analyses (프로젝트/메일분석/) are a staging bucket, not
+	// curated facts. Leave them readable but do not let 90+ orphans outrank
+	// a project's own filed analysis for the same sender/subject.
+	if IsUnlinkedMailAnalysisPath(relPath) {
+		f *= 0.25
 	}
 	return f
 }
@@ -287,7 +293,7 @@ func (s *searchDB) rebuildIndex(dir string) error {
 			return nil //nolint:nilerr // skip unparseable files
 		}
 		s.idx.UpsertFields(rel, searchablePageFieldsWithBoost(page, s.fieldBoost, s.facetBoost)...)
-		s.validity[rel] = validityFactor(page.Meta, s.now())
+		s.validity[rel] = validityFactor(rel, page.Meta, s.now())
 		return nil
 	})
 }

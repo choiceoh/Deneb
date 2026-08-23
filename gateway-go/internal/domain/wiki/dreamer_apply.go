@@ -537,6 +537,7 @@ func (wd *WikiDreamer) formatRecalledAnchors(now time.Time) string {
 // touch Body — the caller sets that (template vs raw content).
 func newPageFromUpdate(u wikiUpdate, code, episodeRef string) *Page {
 	page := NewPage(u.Title, u.Category, u.Tags)
+	page.Meta.Tags = capStringList(page.Meta.Tags, MaxTagsPerPage)
 	if code != "" {
 		page.Meta.Code = code
 	}
@@ -550,7 +551,7 @@ func newPageFromUpdate(u wikiUpdate, code, episodeRef string) *Page {
 		page.Meta.Summary = u.Summary
 	}
 	if len(u.Related) > 0 {
-		page.Meta.Related = u.Related
+		page.Meta.Related = RankRelated(u.Related, MaxRelatedPerPage)
 	}
 	if u.Type != "" {
 		page.Meta.Type = u.Type
@@ -1083,38 +1084,16 @@ func (wd *WikiDreamer) resetCounters() {
 // one matching nothing. Existing cues keep priority (stable across cycles);
 // overflow from a single update is dropped. normalizeCues owns the cap (10).
 func mergeCues(existing, added []string) []string {
-	return normalizeCues(mergeTags(existing, added))
+	return normalizeCues(mergeUnique(existing, added))
 }
 
-// mergeTags merges two tag lists, deduplicating.
-
+// mergeTags merges two tag lists, existing first, then hard-caps so a
+// dream cycle cannot turn a page into a BM25 stopword magnet.
 func mergeTags(existing, added []string) []string {
-	seen := map[string]struct{}{}
-	for _, t := range existing {
-		seen[t] = struct{}{}
-	}
-	result := append([]string{}, existing...)
-	for _, t := range added {
-		if _, ok := seen[t]; !ok {
-			result = append(result, t)
-			seen[t] = struct{}{}
-		}
-	}
-	return result
+	return capStringList(mergeUnique(existing, added), MaxTagsPerPage)
 }
 
-// mergeRelated merges two related-page lists, deduplicating (union).
+// mergeRelated merges two related-page lists and keeps the ranked top 3.
 func mergeRelated(existing, added []string) []string {
-	seen := map[string]struct{}{}
-	for _, r := range existing {
-		seen[r] = struct{}{}
-	}
-	result := append([]string{}, existing...)
-	for _, r := range added {
-		if _, ok := seen[r]; !ok {
-			result = append(result, r)
-			seen[r] = struct{}{}
-		}
-	}
-	return result
+	return RankRelated(mergeUnique(existing, added), MaxRelatedPerPage)
 }

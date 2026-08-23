@@ -208,8 +208,8 @@ func (t *wikiReviewTask) Run(ctx context.Context) error {
 		for _, p := range proposals {
 			t.logger.Info("wiki-review: domain-signal refile proposal (observe mode — no move)",
 				"from", p.From, "project", p.Project)
-			state.Observed = append(state.Observed,
-				fmt.Sprintf("%s | mail-domain %s → %s", time.Now().Format("2006-01-02 15:04"), p.From, p.Project))
+			appendObserved(state, fmt.Sprintf("%s | mail-domain %s → %s",
+				time.Now().Format("2006-01-02 15:04"), p.From, p.Project))
 		}
 		if over := len(state.Observed) - wikiReviewObservedCap; over > 0 {
 			state.Observed = state.Observed[over:]
@@ -218,10 +218,12 @@ func (t *wikiReviewTask) Run(ctx context.Context) error {
 			t.logger.Warn("wiki-review: failed to persist domain proposals", "error", err)
 		}
 	}
+	expiredQs := t.wikiStore.ExpireStaleOpenQuestions(time.Now(), wiki.OpenQuestionExpireAfterDays)
 	t.logger.Info("wiki-review cycle completed",
 		"touched", len(touched), "suspects", suspectCount, "merged", merged,
 		"autoMerge", t.autoMerge, "logSectionsRotated", rotated,
-		"dormantFlagged", len(dormant), "mailRefiled", refiled)
+		"dormantFlagged", len(dormant), "mailRefiled", refiled,
+		"questionsExpired", expiredQs)
 	return nil
 }
 
@@ -482,8 +484,7 @@ func (t *wikiReviewTask) applyVerdicts(ctx context.Context, suspects []wikiRevie
 			// Observe mode: record the would-merge for the operator's audit.
 			t.logger.Info("wiki-review: duplicate confirmed (observe mode — no merge)",
 				"page", page, "duplicateOf", dup)
-			state.Observed = append(state.Observed,
-				fmt.Sprintf("%s | %s ≒ %s", time.Now().Format("2006-01-02 15:04"), page, dup))
+			appendObserved(state, fmt.Sprintf("%s | %s ≒ %s", time.Now().Format("2006-01-02 15:04"), page, dup))
 			observed++
 			continue
 		}
@@ -511,6 +512,29 @@ func (t *wikiReviewTask) applyVerdicts(ctx context.Context, suspects []wikiRevie
 		}
 	}
 	return merged
+}
+
+// appendObserved records an observe-mode line once. The payload after " | "
+// is the identity (mail-domain PATH → PROJECT, or PAGE ≒ DUP) so the same
+// four SunKean/Barocorp proposals cannot refill the 100-line cap every 2h.
+func appendObserved(state *wikiReviewState, line string) {
+	if state == nil {
+		return
+	}
+	key := observedPayload(line)
+	for _, existing := range state.Observed {
+		if observedPayload(existing) == key {
+			return
+		}
+	}
+	state.Observed = append(state.Observed, line)
+}
+
+func observedPayload(line string) string {
+	if i := strings.Index(line, " | "); i >= 0 {
+		return line[i+3:]
+	}
+	return line
 }
 
 func (t *wikiReviewTask) loadState() *wikiReviewState {

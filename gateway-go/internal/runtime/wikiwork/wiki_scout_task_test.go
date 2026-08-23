@@ -81,6 +81,15 @@ func TestWikiScoutSelectQuestionsAppliesRetryCooldown(t *testing.T) {
 			t.Error("fresh question selected before internal research had first shot")
 		}
 	}
+
+	// Dated questions at/over the 14-day expiry are vendor-silence, not scouted.
+	expired := time.Now().AddDate(0, 0, -wikiScoutExpireAfterDays).Format("2006-01-02")
+	writeScoutRepPage(t, wikiDir, "delta", "## 미해결 질문\n- "+expired+" 만료된 질문\n")
+	for _, q := range task.selectQuestions(&wikiScoutState{Version: 1, Attempted: map[string]int64{}}, now) {
+		if strings.Contains(q.Question, "만료된") {
+			t.Error("expired question selected after 14-day silence gate")
+		}
+	}
 }
 
 // TestWikiScoutBuildPromptRendersQuestionsAndBriefSection pins the scout's write-surface contract: questions
