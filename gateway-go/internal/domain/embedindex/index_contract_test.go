@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -74,7 +75,7 @@ func (e *recordingEmbedder) snapshotCalls() [][]string {
 	return out
 }
 
-func TestIndexOptionsAndNilSafety(t *testing.T) {
+func TestIndexNilSafety(t *testing.T) {
 	if (*Index)(nil).Enabled() {
 		t.Fatal("nil index reported enabled")
 	}
@@ -86,31 +87,32 @@ func TestIndexOptionsAndNilSafety(t *testing.T) {
 	if got := (*Index)(nil).SearchVec([]float32{1}, 1); got != nil {
 		t.Fatalf("nil SearchVec = %v", got)
 	}
+}
 
-	for _, tc := range []struct {
-		name string
-		n    int
-		want int
-	}{
-		{name: "zero ignored", n: 0, want: 64},
-		{name: "negative ignored", n: -1, want: 64},
-		{name: "too large ignored", n: 257, want: 64},
-		{name: "one accepted", n: 1, want: 1},
-		{name: "maximum accepted", n: 256, want: 256},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ix := New("options", nil, "", WithBatchSize(tc.n))
-			defer ix.Close()
-			if ix.batch != tc.want {
-				t.Fatalf("batch = %d, want %d", ix.batch, tc.want)
-			}
-		})
+func TestWarmUsesDefaultEmbedBatchLimit(t *testing.T) {
+	embedder := &recordingEmbedder{healthy: true}
+	ix := New("batch-limit", embedder, "")
+	defer ix.Close()
+	items := make([]Item, 65)
+	for i := range items {
+		id := fmt.Sprintf("item-%02d", i)
+		items[i] = Item{ID: id, Hash: id, Text: "long text " + id}
+	}
+	if err := ix.Warm(context.Background(), func() []Item { return items }); err != nil {
+		t.Fatalf("Warm: %v", err)
+	}
+	calls := embedder.snapshotCalls()
+	if len(calls) != 2 {
+		t.Fatalf("embed calls = %d, want 2", len(calls))
+	}
+	if len(calls[0]) != 64 || len(calls[1]) != 1 {
+		t.Fatalf("embed batch sizes = [%d %d], want [64 1]", len(calls[0]), len(calls[1]))
 	}
 }
 
 func TestWarmLoadsOnlyChangedItemsAndSkipsShortText(t *testing.T) {
 	embedder := &recordingEmbedder{healthy: true}
-	ix := New("batch", embedder, "", WithBatchSize(2))
+	ix := New("batch", embedder, "")
 	defer ix.Close()
 	items := []Item{
 		{ID: "a", Hash: "ha", Text: "alpha long text"},
@@ -121,7 +123,7 @@ func TestWarmLoadsOnlyChangedItemsAndSkipsShortText(t *testing.T) {
 	if err := ix.Warm(context.Background(), func() []Item { return items }); err != nil {
 		t.Fatalf("first Warm: %v", err)
 	}
-	wantFirst := [][]string{{"alpha long text", "bravo long text"}, {"charlie long text"}}
+	wantFirst := [][]string{{"alpha long text", "bravo long text", "charlie long text"}}
 	if got := embedder.snapshotCalls(); !reflect.DeepEqual(got, wantFirst) {
 		t.Fatalf("embed calls = %#v, want %#v", got, wantFirst)
 	}
@@ -133,8 +135,8 @@ func TestWarmLoadsOnlyChangedItemsAndSkipsShortText(t *testing.T) {
 	if err := ix.Warm(context.Background(), func() []Item { return items }); err != nil {
 		t.Fatalf("second Warm: %v", err)
 	}
-	if got := embedder.snapshotCalls(); len(got) != 2 {
-		t.Fatalf("unchanged corpus made %d calls, want 2 total", len(got))
+	if got := embedder.snapshotCalls(); len(got) != 1 {
+		t.Fatalf("unchanged corpus made %d calls, want 1 total", len(got))
 	}
 
 	// Changing b re-embeds only b, removing c drops it, and the too-short item
@@ -148,7 +150,7 @@ func TestWarmLoadsOnlyChangedItemsAndSkipsShortText(t *testing.T) {
 		t.Fatalf("changed Warm: %v", err)
 	}
 	calls := embedder.snapshotCalls()
-	if len(calls) != 3 || !reflect.DeepEqual(calls[2], []string{"bravo changed text"}) {
+	if len(calls) != 2 || !reflect.DeepEqual(calls[1], []string{"bravo changed text"}) {
 		t.Fatalf("changed calls = %#v", calls)
 	}
 	if _, ok := ix.vecs["c"]; ok {

@@ -111,17 +111,6 @@ type Index struct {
 // Option configures an Index at construction.
 type Option func(*Index)
 
-// WithBatchSize overrides the per-request embed batch (default 64). The parallel
-// GPU embedding server fans a batch across its context pool, so larger batches no
-// longer risk the EOF the CPU server hit — but the server caps a request at 256.
-func WithBatchSize(n int) Option {
-	return func(ix *Index) {
-		if n > 0 && n <= 256 {
-			ix.batch = n
-		}
-	}
-}
-
 // WithSyncRefresh runs RefreshAsync inline (tests only, deterministic).
 func WithSyncRefresh() Option { return func(ix *Index) { ix.syncRefresh = true } }
 
