@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Stdio MCP proxy: single-symbol explore → node (gateway parity).
+"""Stdio MCP proxy: precision wrap in front of `codegraph serve --mcp`.
 
-`codegraph explore GatewayHub` camelCase-splits into Hub/GatewayTab noise.
-The runtime agent already reroutes that call to `node` and falls back on a
-miss. IDE MCP (Cursor/ZCode/Claude/Codex/Trae) had no such wrap — this
-proxy sits in front of `codegraph serve --mcp` so every coding tool gets
-the same precision. Multi-token / NL / lowercase area words pass through.
+Reroutes a single specific symbol (bare, dotted RPC, or one PascalCase
+token inside NL) from explore → node, caps uncapped explore `maxFiles`,
+and appends nearby CLAUDE/AGENTS maps. Node miss falls back to explore.
 """
 
 from __future__ import annotations
@@ -20,9 +18,16 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from codegraph_folder_docs import folder_docs  # noqa: E402
+
 NODE_MISS = "not found in the codebase"
 SYMBOL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{2,}$")
+TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+DOTTED_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$")
 EXPLORE_NAMES = {"explore", "codegraph_explore"}
+NODE_NAMES = {"node", "codegraph_node"}
+DEFAULT_EXPLORE_MAX_FILES = 6
 
 
 def single_symbol_query(query: str) -> str:
@@ -32,6 +37,19 @@ def single_symbol_query(query: str) -> str:
     if not any(c.isupper() or c == "_" for c in q):
         return ""
     return q
+
+
+def extract_explore_symbol(query: str) -> str:
+    """Bare symbol, dotted RPC/tool name, or one specific token inside NL."""
+    q = (query or "").strip()
+    if DOTTED_RE.fullmatch(q):
+        return q
+    hit = single_symbol_query(q)
+    if hit:
+        return hit
+    specific = [tok for tok in TOKEN_RE.findall(q) if single_symbol_query(tok)]
+    uniq = list(dict.fromkeys(specific))
+    return uniq[0] if len(uniq) == 1 else ""
 
 
 def sibling_node(name: str) -> str:
@@ -65,7 +83,50 @@ def explore_symbol(msg: dict) -> str:
     name, args, _ = _call_name_and_args(msg)
     if name not in EXPLORE_NAMES:
         return ""
-    return single_symbol_query(str(args.get("query") or args.get("symbol") or ""))
+    return extract_explore_symbol(str(args.get("query") or args.get("symbol") or ""))
+
+
+def cap_explore_args(args: dict) -> dict:
+    if "maxFiles" in args or "max_files" in args:
+        return args
+    return {**args, "maxFiles": DEFAULT_EXPLORE_MAX_FILES}
+
+
+def append_text(msg: dict, extra: str) -> dict:
+    if not extra:
+        return msg
+    out = dict(msg)
+    result = msg.get("result")
+    if isinstance(result, str):
+        out["result"] = result + extra
+        return out
+    if isinstance(result, dict):
+        copied = dict(result)
+        content = list(copied.get("content") or [])
+        if content and isinstance(content[0], dict) and content[0].get("type") == "text":
+            first = dict(content[0])
+            first["text"] = str(first.get("text") or "") + extra
+            content[0] = first
+            copied["content"] = content
+        else:
+            copied["content"] = content + [{"type": "text", "text": extra}]
+        out["result"] = copied
+    return out
+
+
+def enrich_result(msg: dict, root: str, query: str) -> dict:
+    if not root:
+        return msg
+    return append_text(msg, folder_docs(result_text(msg), root, query))
+
+
+def serve_root_from_argv(argv: list[str]) -> str:
+    prev = ""
+    for arg in argv:
+        if prev in ("-p", "--path") and arg:
+            return arg
+        prev = arg
+    return os.getcwd()
 
 
 def node_request(msg: dict, symbol: str, new_id: Any) -> dict:
@@ -132,27 +193,47 @@ def restore_id(msg: dict, client_id: Any) -> dict:
 class ExploreReroute:
     """Hold an explore call, try node, fall back to the original explore."""
 
+    root: str = ""
     _seq: int = 10**9
     pending: dict[Any, dict] = field(default_factory=dict)
+    queries: dict[Any, str] = field(default_factory=dict)
 
     def _alloc(self) -> str:
         self._seq += 1
         return f"deneb-cg-{self._seq}"
 
+    def _remember(self, msg_id: Any, query: str) -> None:
+        if msg_id is not None:
+            self.queries[msg_id] = query
+
+    def _finish(self, msg: dict, query: str) -> dict:
+        return enrich_result(msg, self.root, query)
+
     def on_client(self, msg: dict) -> list[dict]:
-        if not isinstance(msg, dict) or "method" not in msg:
+        if not isinstance(msg, dict) or msg.get("method") != "tools/call":
             return [msg]
+        name, args, key = _call_name_and_args(msg)
+        query = str(args.get("query") or args.get("symbol") or "")
+        if name in EXPLORE_NAMES | NODE_NAMES and "id" in msg:
+            self._remember(msg["id"], query)
         symbol = explore_symbol(msg)
-        if not symbol or "id" not in msg:
-            return [msg]
-        server_id = self._alloc()
-        self.pending[server_id] = {
-            "client_id": msg["id"],
-            "symbol": symbol,
-            "original": msg,
-            "stage": "node",
-        }
-        return [node_request(msg, symbol, server_id)]
+        if symbol and "id" in msg:
+            server_id = self._alloc()
+            self.pending[server_id] = {
+                "client_id": msg["id"],
+                "symbol": symbol,
+                "original": msg,
+                "stage": "node",
+            }
+            self._remember(server_id, symbol)
+            return [node_request(msg, symbol, server_id)]
+        if name in EXPLORE_NAMES:
+            capped = cap_explore_args(args)
+            if capped is not args:
+                params = dict(msg.get("params") or {})
+                params[key] = capped
+                return [{**msg, "params": params}]
+        return [msg]
 
     def on_server(self, msg: dict) -> tuple[list[dict], list[dict]]:
         """Return (to_client, to_server)."""
@@ -160,20 +241,22 @@ class ExploreReroute:
             return [msg], []
         pending = self.pending.get(msg.get("id"))
         if pending is None:
-            return [msg], []
+            query = self.queries.pop(msg.get("id"), "")
+            return [self._finish(msg, query)], []
         if pending["stage"] == "node":
             if not is_node_miss(msg):
                 del self.pending[msg["id"]]
                 annotated = annotate_result(restore_id(msg, pending["client_id"]), pending["symbol"])
-                return [annotated], []
+                return [self._finish(annotated, pending["symbol"])], []
             explore_id = self._alloc()
             self.pending[explore_id] = {**pending, "stage": "explore"}
+            self._remember(explore_id, pending["symbol"])
             del self.pending[msg["id"]]
             original = dict(pending["original"])
             original["id"] = explore_id
             return [], [original]
         del self.pending[msg["id"]]
-        return [restore_id(msg, pending["client_id"])], []
+        return [self._finish(restore_id(msg, pending["client_id"]), pending["symbol"])], []
 
 
 def encode_message(msg: dict) -> bytes:
@@ -227,7 +310,7 @@ def serve(child_argv: list[str]) -> int:
         stderr=sys.stderr,
     )
     assert proc.stdin is not None and proc.stdout is not None
-    hub = ExploreReroute()
+    hub = ExploreReroute(root=serve_root_from_argv(child_argv))
     hub_lock = threading.Lock()
     stdin_lock = threading.Lock()
 

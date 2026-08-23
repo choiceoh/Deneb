@@ -64,7 +64,7 @@
 | "이 함수/타입 누가 쓰나" (리팩터·시그니처 변경) | `codegraph callers SYMBOL` |
 | 이름 조각으로 정의 찾기 | `codegraph query NAME` (`--kind`로 좁히기) |
 
-원칙: **모르는 영역은 explore, 이미 이름이 있는 심볼은 node/callers/impact**. explore에 단일 PascalCase만 넣으면 camelCase 분해(`GatewayHub`→`Hub`/`GatewayTab`)로 노이즈가 섞일 수 있다 — 그 경우 node로 핀. 런타임 게이트웨이 **와** 모든 IDE MCP(`codegraph-serve.sh` 프록시)는 단일 특정 심볼 explore를 **자동으로 node 리라우트**하고, node miss면 원래 explore로 폴백한다. **크로스모듈 노이즈**(게이트웨이 질문에 client-android Kotlin·andromeda TS가 섞임)는 explore가 경로 필터가 없어 랭킹으로만 좁혀지니 — 쿼리에 모듈/파일 토큰(`gateway-go`, 파일명)을 더해 좁혀라. (런타임 에이전트의 codegraph explore/node 결과엔 검색된 파일이 속한 폴더의 **CLAUDE.md 서브트리 맵이 자동 첨부**된다 — 구조(codegraph)+폴더 의도(맵)를 한 번에. IDE 하네스는 파일 접근 시 서브트리 맵을 이미 주입하므로 별개.) 심볼 이름을 grep하려는 순간이면 CodeGraph(훅이 유도).
+원칙: **모르는 영역은 explore, 이미 이름이 있는 심볼은 node/callers/impact**. explore에 단일 PascalCase만 넣으면 camelCase 분해(`GatewayHub`→`Hub`/`GatewayTab`)로 노이즈가 섞일 수 있다 — 그 경우 node로 핀. 런타임 게이트웨이 **와** 모든 IDE MCP(`codegraph-serve.sh` 프록시)는 단일 특정 심볼(맨이름·점 RPC·NL 속 PascalCase 하나) explore를 **자동으로 node 리라우트**하고, node miss면 원래 explore로 폴백하며, 결과 옆에 가까운 CLAUDE/AGENTS 맵을 붙인다. **크로스모듈 노이즈**(게이트웨이 질문에 client-android Kotlin·andromeda TS가 섞임)는 explore가 경로 필터가 없어 랭킹으로만 좁혀지니 — 쿼리에 모듈/파일 토큰(`gateway-go`, 파일명)을 더해 좁혀라. (런타임 에이전트의 codegraph explore/node 결과엔 검색된 파일이 속한 폴더의 **CLAUDE.md 서브트리 맵이 자동 첨부**된다 — 구조(codegraph)+폴더 의도(맵)를 한 번에. IDE 하네스는 파일 접근 시 서브트리 맵을 이미 주입하므로 별개.) 심볼 이름을 grep하려는 순간이면 CodeGraph(훅이 유도).
 
 - **MCP 툴** (`CODEGRAPH_MCP_TOOLS=explore,node,search,impact,callers,callees`): 영역 조사=`explore`, 심볼 핀=`node`/`search`, 변경 영향=`impact`/`callers`.
 - **CLI**(같은 그래프, 셸에서 쓸 때):
