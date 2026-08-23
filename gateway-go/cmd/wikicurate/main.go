@@ -1,6 +1,6 @@
-// wikicurate applies the 2026-08-23 P0/P1 wiki-ledger cleanup (split
-// contaminated pages, fold duplicate counterparties, file 4 known orphan
-// mails, restore 보배 SPA, cap related/tags, expire stale open questions).
+// wikicurate applies the 2026-08-23 wiki-ledger cleanup: P0/P1 (split
+// contaminated pages, fold counterparties, file orphans, cap related/tags,
+// expire questions) and P2 (pl2-kia-epc-002 대표, fold 대표 merge remnants).
 //
 // Dry-run by default. --apply writes.
 //
@@ -68,6 +68,12 @@ func run() error {
 		return err
 	}
 	if err := cleanVaultwarden(store, now, *apply, rep); err != nil {
+		return err
+	}
+	if err := ensureKia002Rep(store, now, *apply, rep); err != nil {
+		return err
+	}
+	if err := foldRepMergeRemnants(store, *apply, rep); err != nil {
 		return err
 	}
 

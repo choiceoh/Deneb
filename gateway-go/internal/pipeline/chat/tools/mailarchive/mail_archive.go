@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/mail"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -223,6 +224,9 @@ type mailArchiveWikiHit struct {
 	Path    string  `json:"path"`
 	Snippet string  `json:"snippet,omitempty"`
 	Score   float64 `json:"score,omitempty"`
+	// Conflict is set when a related 인물 page's emails disagree with this
+	// message's From. Both sides stay; the server does not pick a winner.
+	Conflict string `json:"conflict,omitempty"`
 }
 
 type mailArchiveEventHit struct {
@@ -337,7 +341,11 @@ func relatedArchiveWiki(ctx context.Context, adapter knowledge.Adapter, msg mail
 	}
 	out := make([]mailArchiveWikiHit, 0, len(hits))
 	for _, hit := range hits {
-		out = append(out, mailArchiveWikiHit{Path: hit.Ref.ID, Snippet: hit.Snippet, Score: hit.Score})
+		row := mailArchiveWikiHit{Path: hit.Ref.ID, Snippet: hit.Snippet, Score: hit.Score}
+		if c := archiveWikiMailConflict(hit.Ref.ID, hit.Meta, hit.Snippet, msg.From); c != "" {
+			row.Conflict = c
+		}
+		out = append(out, row)
 	}
 	return out
 }
@@ -402,6 +410,62 @@ func archiveEventRelated(source, sourceLabel, title, description string, msg mai
 		}
 	}
 	return len(terms) > 0 && matches >= minArchiveRelatedMatches(len(terms))
+}
+
+// archiveWikiMailConflict reports a 담당자 mismatch when a related 인물
+// page's emails disagree with this message's From. Empty when they agree,
+// when the hit is not a person page, or when either side has no address.
+// The server never drops either side — Conflict is display-only.
+func archiveWikiMailConflict(path string, meta map[string]string, snippet, from string) string {
+	if !strings.HasPrefix(strings.ReplaceAll(path, "\\", "/"), "인물/") {
+		return ""
+	}
+	addr := ""
+	if parsed, err := mail.ParseAddress(from); err == nil && parsed.Address != "" {
+		addr = strings.ToLower(strings.TrimSpace(parsed.Address))
+	}
+	if addr == "" {
+		return ""
+	}
+	var wikiEmails []string
+	if meta != nil {
+		for _, e := range strings.Split(meta["emails"], ",") {
+			if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+				wikiEmails = append(wikiEmails, e)
+			}
+		}
+	}
+	if len(wikiEmails) == 0 {
+		for _, e := range archiveEmailRe.FindAllString(snippet, -1) {
+			wikiEmails = append(wikiEmails, strings.ToLower(e))
+		}
+	}
+	if len(wikiEmails) == 0 {
+		return ""
+	}
+	wikiDom := map[string]bool{}
+	for _, e := range wikiEmails {
+		if e == addr {
+			return ""
+		}
+		if at := strings.LastIndex(e, "@"); at >= 0 && at+1 < len(e) {
+			d := e[at+1:]
+			if !archiveFreemail[d] {
+				wikiDom[d] = true
+			}
+		}
+	}
+	if at := strings.LastIndex(addr, "@"); at >= 0 && at+1 < len(addr) && wikiDom[addr[at+1:]] {
+		return ""
+	}
+	return "불일치: 위키 " + strings.Join(wikiEmails, ", ") + " · 메일 " + addr + " — 둘 다 근거. 서버는 중재하지 않음"
+}
+
+var archiveEmailRe = regexp.MustCompile(`(?i)[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}`)
+
+var archiveFreemail = map[string]bool{
+	"gmail.com": true, "naver.com": true, "daum.net": true, "hanmail.net": true,
+	"outlook.com": true, "hotmail.com": true, "icloud.com": true, "yahoo.com": true,
 }
 
 func archiveRelatedQuery(msg mailarchive.ContextMessage) string {

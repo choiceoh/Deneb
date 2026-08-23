@@ -61,6 +61,13 @@ func (a *wikiAdapter) Recall(ctx context.Context, query string, limit int) ([]Re
 			meta["startLine"] = fmt.Sprintf("%d", h.Line)
 			meta["endLine"] = fmt.Sprintf("%d", h.EndLine)
 		}
+		// 인물 페이지의 emails는 메일 From과 비교할 식별자라 Recall Meta에
+		// 싣는다. mail_archive가 Read(회상-사용 원장) 없이 불일치를 표시하게.
+		if strings.HasPrefix(h.Path, "인물/") {
+			if page, rerr := a.store.ReadPage(h.Path); rerr == nil && page != nil && len(page.Meta.Emails) > 0 {
+				meta["emails"] = strings.Join(page.Meta.Emails, ", ")
+			}
+		}
 		out = append(out, Result{
 			Ref:     Ref{Layer: LayerWiki, ID: h.Path},
 			Snippet: h.Content,
@@ -110,6 +117,9 @@ func (a *wikiAdapter) Read(_ context.Context, id string) (*Document, error) {
 	}
 	if page.Meta.Updated != "" {
 		meta["updated"] = page.Meta.Updated
+	}
+	if len(page.Meta.Emails) > 0 {
+		meta["emails"] = strings.Join(page.Meta.Emails, ", ")
 	}
 	return &Document{
 		Ref:     Ref{Layer: LayerWiki, ID: id},

@@ -3,6 +3,7 @@ package mailtool
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -62,5 +63,56 @@ func TestEnrichArchiveMessagesCapsAndPreservesOrder(t *testing.T) {
 	}
 	if got := adapter.calls.Load(); got != int64(maxEnrichedMessages) {
 		t.Errorf("recall calls = %d, want %d (one per enriched message, capped)", got, maxEnrichedMessages)
+	}
+}
+
+type personConflictAdapter struct{}
+
+func (personConflictAdapter) Layer() knowledge.Layer { return knowledge.LayerWiki }
+
+func (personConflictAdapter) Recall(_ context.Context, _ string, _ int) ([]knowledge.Result, error) {
+	return []knowledge.Result{{
+		Ref:     knowledge.Ref{Layer: knowledge.LayerWiki, ID: "인물/이현성.md"},
+		Snippet: "기아 광주시설관리팀",
+		Score:   1,
+		Meta:    map[string]string{"emails": "2555151@kia.com"},
+	}}, nil
+}
+
+func (personConflictAdapter) Read(context.Context, string) (*knowledge.Document, error) {
+	return nil, nil
+}
+
+func TestRelatedArchiveWikiFlagsPersonConflictWithoutDroppingHit(t *testing.T) {
+	deps := MailArchiveDeps{Wiki: personConflictAdapter{}}
+	msg := mailarchive.ContextMessage{
+		From:    "이현성 <lee@other.co.kr>",
+		Subject: "광주 2공장 담당",
+	}
+	out := enrichArchiveMessage(context.Background(), deps, msg, true)
+	if len(out.RelatedWiki) != 1 {
+		t.Fatalf("related wiki = %d, want 1 (hit must stay)", len(out.RelatedWiki))
+	}
+	if out.RelatedWiki[0].Conflict == "" || !strings.Contains(out.RelatedWiki[0].Conflict, "불일치") {
+		t.Fatalf("conflict = %q, want 불일치", out.RelatedWiki[0].Conflict)
+	}
+
+	agree := mailarchive.ContextMessage{
+		From:    "이현성 <2555151@kia.com>",
+		Subject: "광주 2공장 담당",
+	}
+	ok := enrichArchiveMessage(context.Background(), deps, agree, true)
+	if len(ok.RelatedWiki) != 1 || ok.RelatedWiki[0].Conflict != "" {
+		t.Fatalf("same address must not flag: %+v", ok.RelatedWiki)
+	}
+}
+
+func TestArchiveWikiMailConflict_SameDomainAndNonPerson(t *testing.T) {
+	meta := map[string]string{"emails": "2555151@kia.com"}
+	if got := archiveWikiMailConflict("인물/이현성.md", meta, "", "jaeminkim@kia.com"); got != "" {
+		t.Fatalf("same domain: %q", got)
+	}
+	if got := archiveWikiMailConflict("프로젝트/x/대표.md", meta, "", "lee@other.co.kr"); got != "" {
+		t.Fatalf("non-person: %q", got)
 	}
 }
