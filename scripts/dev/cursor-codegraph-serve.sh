@@ -11,9 +11,15 @@
 #   2) ~/.cursor/worktrees/Deneb/active-root (written by cursor-worktree-init.sh)
 #   3) newest ~/.cursor/worktrees/Deneb/*/ that shares this repo's git common dir
 #   4) $CURSOR_CODEGRAPH_FALLBACK or cwd / first CLI arg directory
+#
+# Never bind to ~/deneb (production checkout). `codegraph upgrade` rewrites
+# .cursor/mcp.json / .mcp.json to a bare `codegraph serve --mcp --path …` —
+# restore these wrappers; do not commit the upgrade output.
 set -euo pipefail
 
 WT_BASE="${HOME}/.cursor/worktrees/Deneb"
+PROD_CHECKOUT="${HOME}/deneb"
+DEV_CHECKOUT="${HOME}/deneb-dev"
 
 resolve_cg() {
   for c in codegraph \
@@ -38,6 +44,22 @@ same_repo() {
   [[ "$a" == "$b" ]]
 }
 
+is_prod_checkout() {
+  local candidate="$1"
+  [[ -n "$candidate" && -d "$candidate" && -d "$PROD_CHECKOUT" ]] || return 1
+  local a b
+  a=$(cd "$candidate" && pwd)
+  b=$(cd "$PROD_CHECKOUT" && pwd)
+  [[ "$a" == "$b" ]]
+}
+
+usable_root() {
+  local candidate="$1" anchor="$2"
+  [[ -n "$candidate" && -d "$candidate" ]] || return 1
+  is_prod_checkout "$candidate" && return 1
+  same_repo "$candidate" "$anchor"
+}
+
 pick_root() {
   local anchor fallback candidate
   fallback="${CURSOR_CODEGRAPH_FALLBACK:-}"
@@ -51,7 +73,7 @@ pick_root() {
   anchor="$fallback"
 
   for candidate in "${CURSOR_WORKTREE:-}" "${DENEB_AGENT_ROOT:-}"; do
-    if [[ -n "$candidate" && -d "$candidate" ]] && same_repo "$candidate" "$anchor"; then
+    if usable_root "$candidate" "$anchor"; then
       printf '%s\n' "$candidate"
       return 0
     fi
@@ -62,13 +84,13 @@ pick_root() {
   if [[ -n "$sid" ]]; then
     local safe
     safe=$(printf '%s' "$sid" | tr -c 'A-Za-z0-9._-' '_' | cut -c1-80)
-    if [[ -n "$safe" && -d "$WT_BASE/$safe" ]] && same_repo "$WT_BASE/$safe" "$anchor"; then
+    if usable_root "$WT_BASE/$safe" "$anchor"; then
       printf '%s\n' "$WT_BASE/$safe"
       return 0
     fi
     if [[ -n "$safe" && -f "$WT_BASE/active-root.$safe" ]]; then
       candidate=$(head -1 "$WT_BASE/active-root.$safe" 2>/dev/null || true)
-      if [[ -n "$candidate" && -d "$candidate" ]] && same_repo "$candidate" "$anchor"; then
+      if usable_root "$candidate" "$anchor"; then
         printf '%s\n' "$candidate"
         return 0
       fi
@@ -77,7 +99,7 @@ pick_root() {
 
   if [[ -f "$WT_BASE/active-root" ]]; then
     candidate=$(head -1 "$WT_BASE/active-root" 2>/dev/null || true)
-    if [[ -n "$candidate" && -d "$candidate" ]] && same_repo "$candidate" "$anchor"; then
+    if usable_root "$candidate" "$anchor"; then
       printf '%s\n' "$candidate"
       return 0
     fi
@@ -88,17 +110,28 @@ pick_root() {
     while IFS= read -r candidate; do
       candidate=${candidate%/}
       [[ -d "$candidate" ]] || continue
-      if same_repo "$candidate" "$anchor"; then
+      if usable_root "$candidate" "$anchor"; then
         printf '%s\n' "$candidate"
         return 0
       fi
     done < <(ls -1dt "$WT_BASE"/*/ 2>/dev/null || true)
   fi
 
+  if is_prod_checkout "$fallback" && [[ -d "$DEV_CHECKOUT" ]]; then
+    printf '%s\n' "$DEV_CHECKOUT"
+    return 0
+  fi
   printf '%s\n' "$fallback"
 }
 
 # Optional first arg: fallback directory (Cursor may pass nothing).
+# `--print-root` is the test/debug hook — resolve and exit without serving.
+PRINT_ROOT=0
+if [[ "${1:-}" == "--print-root" ]]; then
+  PRINT_ROOT=1
+  shift
+fi
+
 FALLBACK_ARG=""
 if [[ -n "${1:-}" && -d "${1:-}" ]]; then
   FALLBACK_ARG="$1"
@@ -106,6 +139,10 @@ if [[ -n "${1:-}" && -d "${1:-}" ]]; then
 fi
 
 ROOT="$(pick_root ${FALLBACK_ARG:+"$FALLBACK_ARG"})"
+if [[ "$PRINT_ROOT" -eq 1 ]]; then
+  printf '%s\n' "$ROOT"
+  exit 0
+fi
 export CODEGRAPH_MCP_TOOLS="${CODEGRAPH_MCP_TOOLS:-explore,node,search,impact,callers,callees}"
 
 CG="$(resolve_cg)" || {
