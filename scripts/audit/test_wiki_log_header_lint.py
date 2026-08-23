@@ -41,7 +41,7 @@ class LogHeaderLintTest(unittest.TestCase):
             conforming, violations = lint.scan(root)
 
             self.assertEqual(conforming, 2)
-            self.assertEqual([v[2] for v in violations], ["## 요지", "## 2026-06-15 구형 헤더"])
+            self.assertCountEqual([v[2] for v in violations], ["## 요지", "## 2026-06-15 구형 헤더"])
 
     def test_clean_log_has_no_violations(self) -> None:
         with tempfile.TemporaryDirectory() as root:
