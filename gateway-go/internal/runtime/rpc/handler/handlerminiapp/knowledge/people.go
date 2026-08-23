@@ -79,8 +79,15 @@ const (
 	// peopleWikiCategory is the wiki directory that holds person pages —
 	// the same one contacts sync (wiki.EnrichContacts) maintains.
 	peopleWikiCategory = "인물"
-	// maxPeopleWikiRows bounds the wiki-only tail so a runaway 인물
-	// directory can't bloat the response (mirrors maxMemoryListLimit).
+	// maxPeopleWikiRows bounds the wiki-only TAIL of the response (the person
+	// pages no Gmail contact matched) so a runaway 인물 directory can't bloat it
+	// — mirrors maxMemoryListLimit.
+	//
+	// It is deliberately NOT a cap on how many pages are loaded. It used to
+	// break the load loop, which meant that with 306 person pages the
+	// alphabetical tail (인물/이방엽.md onward, 106 people) was invisible to
+	// people.list matching AND to person.dossier — asking for 황재훈 returned no
+	// wiki page even though the page existed.
 	maxPeopleWikiRows = 200
 )
 
@@ -268,9 +275,6 @@ func loadWikiPeople(storeFn func() (MemorySearcher, error)) []wikiPerson {
 	}
 	people := make([]wikiPerson, 0, len(relPaths))
 	for _, rel := range relPaths {
-		if len(people) >= maxPeopleWikiRows {
-			break
-		}
 		page, perr := store.ReadPage(rel)
 		if perr != nil || page == nil {
 			continue
@@ -289,7 +293,7 @@ func loadWikiPeople(storeFn func() (MemorySearcher, error)) []wikiPerson {
 			title:   title,
 			summary: strings.TrimSpace(page.Meta.Summary),
 			updated: page.Meta.Updated,
-			emails:  contactSectionEmails(page),
+			emails:  personEmails(page),
 		})
 	}
 	return people
@@ -389,6 +393,11 @@ func mergeWikiPeople(rows []PersonRow, people []wikiPerson) []PersonRow {
 		}
 		return rest[i].title < rest[j].title
 	})
+	// The cap lives here — on what the response carries, not on what matching
+	// can see.
+	if len(rest) > maxPeopleWikiRows {
+		rest = rest[:maxPeopleWikiRows]
+	}
 	for _, wp := range rest {
 		rows = append(rows, PersonRow{
 			Name:        wp.title,
@@ -397,6 +406,27 @@ func mergeWikiPeople(rows []PersonRow, people []wikiPerson) []PersonRow {
 		})
 	}
 	return rows
+}
+
+// personEmails is the page's own addresses: the "## 연락처" bullets contacts
+// sync writes, unioned with the frontmatter `emails` list. Reading only the
+// body missed 48 pages whose addresses live in frontmatter alone (the identity
+// backfill writes there), so an email lookup for those people found nothing.
+func personEmails(page *wiki.Page) []string {
+	out := contactSectionEmails(page)
+	seen := make(map[string]bool, len(out))
+	for _, e := range out {
+		seen[e] = true
+	}
+	for _, e := range page.Meta.Emails {
+		e = strings.ToLower(strings.TrimSpace(e))
+		if e == "" || seen[e] {
+			continue
+		}
+		seen[e] = true
+		out = append(out, e)
+	}
+	return out
 }
 
 // parseMessageTime accepts the Gmail-normalized ISO 8601 the rest of
