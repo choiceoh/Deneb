@@ -45,10 +45,12 @@ type critiqueVerdict struct {
 }
 
 // critiqueUpdates precision-filters freshly synthesized proposals against the
-// current index. Returns the surviving updates and the number dropped. Fail-open
+// current index. Pending user corrections (5.7) ride along as 반증 evidence:
+// a proposal that restates a fact the operator just corrected is drop material.
+// Returns the surviving updates and the number dropped. Fail-open
 // on every error path — the proposals pass through unfiltered rather than risk
 // losing a good cycle to a flaky critic.
-func (wd *WikiDreamer) critiqueUpdates(ctx context.Context, updates []wikiUpdate) ([]wikiUpdate, int) {
+func (wd *WikiDreamer) critiqueUpdates(ctx context.Context, updates []wikiUpdate, corrections []DreamCorrection) ([]wikiUpdate, int) {
 	if wd.client == nil || !critiqueNeeded(updates) {
 		return updates, 0
 	}
@@ -56,7 +58,7 @@ func (wd *WikiDreamer) critiqueUpdates(ctx context.Context, updates []wikiUpdate
 	defer cancel()
 
 	indexContent := wd.store.SnapshotIndex().Render()
-	prompt := buildCritiquePrompt(updates, indexContent)
+	prompt := buildCritiquePrompt(updates, indexContent, corrections)
 	resp, err := wd.client.Complete(ctx, wd.llmRequest(critiqueSystem, prompt, critiqueMaxTokens))
 	if err != nil {
 		wd.logger.Warn("wiki-dream: critique call failed; keeping all proposals", "error", err)
@@ -84,7 +86,9 @@ func (wd *WikiDreamer) critiqueUpdates(ctx context.Context, updates []wikiUpdate
 // buildCritiquePrompt renders the numbered proposal list + the current index and
 // asks for a keep/drop verdict per index. Only the fields that decide value are
 // shown (action/path/title/summary + a content snippet) to keep the call cheap.
-func buildCritiquePrompt(updates []wikiUpdate, indexContent string) string {
+// Pending user corrections, when present, add a 반증 block — the critic drops
+// proposals that conflict with a correction the operator just made.
+func buildCritiquePrompt(updates []wikiUpdate, indexContent string, corrections []DreamCorrection) string {
 	var sb strings.Builder
 	for i, u := range updates {
 		snippet := strings.TrimSpace(u.Content)
@@ -95,16 +99,21 @@ func buildCritiquePrompt(updates []wikiUpdate, indexContent string) string {
 		fmt.Fprintf(&sb, "[%d] action=%s path=%s title=%q summary=%q\n    content: %s\n",
 			i, u.Action, u.Path, u.Title, u.Summary, snippet)
 	}
+	correctionBlock := ""
+	if rendered := RenderDreamCorrections(corrections, 10); rendered != "" {
+		correctionBlock = "\n## 사용자 반증 (운영자가 최근 정정한 사실 — 이와 충돌하거나 정정된 내용을 재진술하는 제안은 drop)\n" + rendered + "\n"
+	}
 	return fmt.Sprintf(`아래는 위키에 적용 예정인 제안 목록입니다. 각 제안이 지식베이스에 실제 가치를 더하는지 현재 인덱스와 대조해 판정하세요.
 
 다음에 해당하면 verdict="drop":
 - 이미 인덱스에 같은 사실이 있어 중복인 것 (새 사실 추가 없이 기존 내용 재진술)
 - 일시적·잡담성이라 위키에 남길 가치가 없는 것
 - 근거가 불충분한 추측 (출처 없이 단정)
+- 사용자 반증과 충돌하는 것 (정정된 사실을 되살리거나 위반)
 그 외 실제로 새 지식을 더하면 verdict="keep".
 
 보수적으로: 애매하면 "keep". 명백히 가치 없는 것만 "drop".
-
+%s
 ## 현재 위키 인덱스
 %s
 
@@ -112,7 +121,7 @@ func buildCritiquePrompt(updates []wikiUpdate, indexContent string) string {
 %s
 
 각 제안에 대해 JSON 배열로만 응답: [{"index":0,"verdict":"keep|drop","reason":"짧은 근거"}]
-다른 텍스트 없이 배열만.`, indexContent, sb.String())
+다른 텍스트 없이 배열만.`, correctionBlock, indexContent, sb.String())
 }
 
 // parseCritiqueDrops decodes the verdict array into a drop set indexed by
