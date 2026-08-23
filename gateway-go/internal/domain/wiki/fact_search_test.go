@@ -249,8 +249,8 @@ func TestPageSearchIgnoresUntypedSupersededLinesButKeepsTypedLifecycle(t *testin
 	}
 
 	snapshot := store.RecallFactSnapshot()
-	if !containsString(snapshot.StaleValues, sharedLine) {
-		t.Fatalf("shared superseded line missing from audit snapshot: %+v", snapshot.StaleValues)
+	if containsString(snapshot.StaleValues, sharedLine) {
+		t.Fatalf("current successor line remained globally stale: %+v", snapshot.StaleValues)
 	}
 	if len(snapshot.LifecycleRules) != 1 {
 		t.Fatalf("typed lifecycle rules = %+v, want beta correction", snapshot.LifecycleRules)

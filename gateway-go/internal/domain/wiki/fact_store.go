@@ -504,18 +504,34 @@ func (s *Store) loadSupersededPageStaleValues() error {
 	if err != nil {
 		return err
 	}
-	s.factMu.Lock()
-	defer s.factMu.Unlock()
-	if s.supersededPageStale == nil {
-		s.supersededPageStale = make(map[string]string)
-	}
+	stale := make(map[string]string)
+	current := make(map[string]struct{})
 	for _, relPath := range pages {
 		page, err := s.ReadPage(relPath)
 		if err != nil || page == nil || !IsEffectivelySuperseded(relPath, page.Meta) {
 			continue
 		}
-		s.cacheSupersededPageStaleLocked(page)
+		cacheSupersededPageStaleLines(stale, page)
+
+		successorPath := normalizePagePath(page.Meta.SupersededBy)
+		successor, successorErr := s.ReadPage(successorPath)
+		if successorErr != nil || successor == nil || IsEffectivelySuperseded(successorPath, successor.Meta) {
+			continue
+		}
+		for folded := range normalizedSupersededPageLines(successor) {
+			current[folded] = struct{}{}
+		}
 	}
+	// A terminal successor is current evidence. If an older page repeats the
+	// same normalized sentence, the current copy wins globally instead of the
+	// untyped deny list rejecting its own successor.
+	for folded := range current {
+		delete(stale, folded)
+	}
+
+	s.factMu.Lock()
+	s.supersededPageStale = stale
+	s.factMu.Unlock()
 	return nil
 }
 
@@ -523,35 +539,88 @@ func (s *Store) cacheSupersededPageStale(page *Page) {
 	if s == nil || page == nil {
 		return
 	}
-	s.factMu.Lock()
-	defer s.factMu.Unlock()
-	s.cacheSupersededPageStaleLocked(page)
+	// MarkSuperseded holds writeMu, so rebuilding here observes one coherent
+	// page-lifecycle state. Supersession is rare, and a rebuild also handles a
+	// newly extended A -> B -> C chain without retaining B as current evidence.
+	if err := s.loadSupersededPageStaleValues(); err != nil {
+		slog.Warn("wiki: rebuild superseded page stale cache", "error", err)
+	}
 }
 
-func (s *Store) cacheSupersededPageStaleLocked(page *Page) {
+func cacheSupersededPageStaleLines(stale map[string]string, page *Page) {
 	if page == nil {
 		return
 	}
-	if s.supersededPageStale == nil {
-		s.supersededPageStale = make(map[string]string)
+	for _, rawLine := range strings.Split(page.Body, "\n") {
+		line, folded, ok := normalizeSupersededPageLine(rawLine)
+		if !ok {
+			continue
+		}
+		if _, exists := stale[folded]; !exists {
+			stale[folded] = line
+		}
+	}
+}
+
+func normalizedSupersededPageLines(page *Page) map[string]struct{} {
+	lines := make(map[string]struct{})
+	if page == nil {
+		return lines
 	}
 	for _, rawLine := range strings.Split(page.Body, "\n") {
-		rawLine = strings.TrimSpace(rawLine)
-		if strings.HasPrefix(rawLine, "#") {
-			continue
-		}
-		line := strings.TrimSpace(strings.TrimLeft(rawLine, "-*`> "))
-		if n := len([]rune(line)); n < 1 || n > 500 {
-			continue
-		}
-		folded := strings.ToLower(strings.Join(strings.Fields(line), " "))
-		if folded == "" {
-			continue
-		}
-		if _, exists := s.supersededPageStale[folded]; !exists {
-			s.supersededPageStale[folded] = line
+		_, folded, ok := normalizeSupersededPageLine(rawLine)
+		if ok {
+			lines[folded] = struct{}{}
 		}
 	}
+	return lines
+}
+
+func normalizeSupersededPageLine(rawLine string) (string, string, bool) {
+	rawLine = strings.TrimSpace(rawLine)
+	if rawLine == "" || strings.HasPrefix(rawLine, "#") || isMarkdownSeparatorLine(rawLine) {
+		return "", "", false
+	}
+	line := strings.TrimSpace(strings.TrimLeft(rawLine, "-*`> "))
+	if line == "" || strings.HasPrefix(line, "#") || isMarkdownTableLine(line) ||
+		isMarkdownSeparatorLine(line) || isPureWikiLinkLine(line) {
+		return "", "", false
+	}
+	if n := len([]rune(line)); n < 1 || n > 500 {
+		return "", "", false
+	}
+	folded := strings.ToLower(strings.Join(strings.Fields(line), " "))
+	if folded == "" {
+		return "", "", false
+	}
+	return line, folded, true
+}
+
+func isMarkdownTableLine(line string) bool {
+	line = strings.TrimSpace(line)
+	return strings.HasPrefix(line, "|") || strings.HasSuffix(line, "|") || strings.Count(line, "|") >= 2
+}
+
+func isMarkdownSeparatorLine(line string) bool {
+	compact := strings.Join(strings.Fields(line), "")
+	if len(compact) < 3 {
+		return false
+	}
+	marker := compact[0]
+	if marker != '-' && marker != '*' && marker != '_' {
+		return false
+	}
+	for index := 1; index < len(compact); index++ {
+		if compact[index] != marker {
+			return false
+		}
+	}
+	return true
+}
+
+func isPureWikiLinkLine(line string) bool {
+	match := wikiLinkRe.FindStringIndex(strings.TrimSpace(line))
+	return len(match) == 2 && match[0] == 0 && match[1] == len(strings.TrimSpace(line))
 }
 
 // CorrectedFactKeys is the compatibility/diagnostic view of keys that have

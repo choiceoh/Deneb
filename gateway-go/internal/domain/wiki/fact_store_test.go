@@ -995,6 +995,100 @@ func TestStaleFactValuesIncludesSupersededPageAcrossRestart(t *testing.T) {
 	}
 }
 
+func TestSupersededPageStaleCacheKeepsCurrentSuccessorEvidenceAcrossRestart(t *testing.T) {
+	store, wikiDir, diaryDir := newFactTestStore(t)
+	const (
+		oldPath           = "업무/파이프라인-구버전.md"
+		currentPath       = "업무/파이프라인-현행.md"
+		oldOnlyLine       = "이전 파이프라인 총량 OLD-1070은 폐기되었다"
+		sharedOldLine     = "공유   파이프라인 검증 기준은 승인 원장을 따른다"
+		sharedCurrentLine = "공유 파이프라인 검증 기준은 승인 원장을 따른다"
+		currentOnlyLine   = "현행 파이프라인 총량 CURRENT-1643이 정본이다"
+		tableHeader       = "| 프로젝트 | 용량 | 상태 | 비고 |"
+		tableSeparator    = "| --- | ---: | :---: | --- |"
+		pureWikiLink      = "[[업무/파이프라인-현행]]"
+	)
+
+	oldPage := NewPage("파이프라인 구버전", "업무", nil)
+	oldPage.Body = strings.Join([]string{
+		"## 이전 기준",
+		tableHeader,
+		tableSeparator,
+		"- " + pureWikiLink,
+		"---",
+		"- " + sharedOldLine,
+		"- " + oldOnlyLine,
+	}, "\n")
+	currentPage := NewPage("파이프라인 현행", "업무", nil)
+	currentPage.Body = strings.Join([]string{
+		"## 현행 기준",
+		tableHeader,
+		tableSeparator,
+		"- " + pureWikiLink,
+		sharedCurrentLine,
+		currentOnlyLine,
+	}, "\n")
+	if err := store.WritePage(oldPath, oldPage); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WritePage(currentPath, currentPage); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MarkSuperseded(oldPath, currentPath); err != nil {
+		t.Fatal(err)
+	}
+
+	check := func(label string, current *Store) {
+		t.Helper()
+		snapshot := current.RecallFactSnapshot()
+		if !containsString(snapshot.StaleValues, oldOnlyLine) {
+			t.Fatalf("%s old-only line missing from stale snapshot: %q", label, snapshot.StaleValues)
+		}
+		for _, excluded := range []string{sharedOldLine, tableHeader, tableSeparator, pureWikiLink, "---"} {
+			if containsString(snapshot.StaleValues, excluded) {
+				t.Fatalf("%s structural/current line became globally stale: %q in %q", label, excluded, snapshot.StaleValues)
+			}
+		}
+
+		currentEvidence := FactLifecycleEvidence{Ref: currentPath, Text: sharedCurrentLine + "\n" + currentOnlyLine}
+		oldEvidence := FactLifecycleEvidence{Ref: "knowledge:legacy-pipeline", Text: oldOnlyLine}
+		if !current.FactLifecycleEvidenceAllowed(currentEvidence, snapshot) {
+			t.Fatalf("%s current successor evidence was denied", label)
+		}
+		if current.FactLifecycleEvidenceAllowed(oldEvidence, snapshot) {
+			t.Fatalf("%s old-only evidence was allowed", label)
+		}
+		allowed := current.FactLifecycleEvidencesAllowed([]FactLifecycleEvidence{currentEvidence, oldEvidence}, snapshot)
+		if len(allowed) != 2 || !allowed[0] || allowed[1] {
+			t.Fatalf("%s batch lifecycle decisions = %v, want [true false]", label, allowed)
+		}
+
+		report, err := current.SearchWithOptions(context.Background(), "CURRENT-1643", 5, QueryOptions{
+			Mode: SearchModeBM25, SkipRerank: true, ExcludeFactResults: true,
+		})
+		if err != nil || !searchResultsContainPath(report.Results, currentPath) {
+			t.Fatalf("%s current successor search = %+v, err=%v", label, report.Results, err)
+		}
+		oldReport, err := current.SearchWithOptions(context.Background(), "OLD-1070", 5, QueryOptions{
+			Mode: SearchModeBM25, SkipRerank: true, ExcludeFactResults: true,
+		})
+		if err != nil || searchResultsContainPath(oldReport.Results, oldPath) {
+			t.Fatalf("%s superseded old page search = %+v, err=%v", label, oldReport.Results, err)
+		}
+	}
+
+	check("live", store)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	check("reopen", reopened)
+}
+
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
