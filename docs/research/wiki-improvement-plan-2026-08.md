@@ -370,11 +370,25 @@
 
 ## 12. 잔여 (다음 사이클)
 
-- **W8**: 신원키(이메일·전화) 기반 중복 **페이지** 검출(이영민/이영민-차장 류 — CJK 제목거리로는 영구 미감지), summary 규약, 공인 `kind: public`.
-- **W9**: 벤치 확장암 패리티(qwen vs 프로덕션 dsv4-nothink), 골드 repoint 도구, 골드셋 백업 편입, analysis-xl 재측정.
-- **W11**: `embedindex`(mail 89MB·diary 75MB)에 같은 blob 포맷 포팅, 부팅 병렬 로드.
-- **W13/W14**: `route_followed` 추종률, `rawQuery`(client 세션 한정·절단 — 원장이 gitignore라 이제 안전).
-- **W15**: Trust Inbox 'wiki-maint' 카드, 챗 `wiki_move` 툴.
+> **후속 구현 (2026-08-23 야간, PR 5건 착지).** §12에 적혀 있던 자동 항목은 아래 표로 소진됐고, 남은 것은 운영자 결정과 P3 이하 항목뿐이다.
+
+| 항목 | PR | 무엇이 바뀌었나 |
+|---|---|---|
+| W9 | [#4638](https://github.com/choiceoh/Deneb/pull/4638) | 골드셋(`wiki-qa-gold*.jsonl`) 백업 편입(글롭 타깃 지원) · `scripts/audit/gold_repoint.py` — git rename 체인/유일 basename/유일 title/프로젝트 폴더 title 4단계, 모호하면 보고만. 라이브 적용 **repointed 14 · unresolved 0** |
+| W15 | [#4639](https://github.com/choiceoh/Deneb/pull/4639) | `Store.HomonymPersonPages` + wiki-maint Trust Inbox **동명이인 카드**(증거만, apply 액션 없음, 결정 키 `homonym:` 네임스페이스) |
+| W11 | [#4640](https://github.com/choiceoh/Deneb/pull/4640) | 벡터 blob 포맷을 `pkg/vectorutil`로 단일화하고 **embedindex 캐시 v3**(매니페스트+`.f32`)로 이식 — mail 89MB·diary 76MB·workfeed 5MB 대상. blob 먼저 쓰고 매니페스트 나중, blob 유실/절단 시 캐시 전량 폐기 후 재임베딩 |
+| W8 | [#4641](https://github.com/choiceoh/Deneb/pull/4641) | `DuplicatePersonGroups` — 직급·괄호 수식어를 벗긴 기본 이름으로 인물 페이지 중복 검출, `person-duplicate` advisory(Fix 없음). 라이브 3그룹(이영민 3장·박상수 2장·선향란 2장) |
+| W13 | [#4642](https://github.com/choiceoh/Deneb/pull/4642) | `RecordRoutingOutcome` — 라우팅 힌트가 가리킨 도구를 그 턴이 실제로 불렀는지 대조해 `followed` 로깅(consume-once, 힌트 없는 턴은 슬롯 비움) |
+
+**측정(골드 repoint 후 재실측).** main gold 198케이스 **p@1 83.8 · r@8 96.4 · mrr 0.890**, 커버리지 98.6%, 종합 **92.9** (repoint 전 83.2/95.9/92.6). 벤치는 규칙대로 단일 순차 실행.
+
+**남은 것**
+
+- **W8**: summary 규약, 공인 `kind: public`. 중복 인물 그룹의 실제 병합은 운영자 판단(#4641은 탐지까지).
+- **W9**: 벤치 확장암 패리티(qwen vs 프로덕션 dsv4-nothink), analysis-xl 재측정. 나이틀리 로그에서 확인된 부작용: 확장 모델이 **씽킹으로 출력 예산을 소진해 빈 응답**을 내는 사례가 반복된다(`expansion skipped (finish_reason=length)`) — 확장 경로 MaxTokens/씽킹 설정 점검 필요.
+- **W11**: 부팅 병렬 로드(blob 전환으로 파싱이 memcpy가 됐으므로 실측 후 필요할 때만), `filestore/semindex`(40MB)는 별도 구현이라 미이식.
+- **W13/W14**: `rawQuery`(client 세션 한정·절단), `followed` 로그가 쌓인 뒤 힌트 문구 튜닝.
+- **W15**: 인물 중복 카드(#4641 finding의 카드 표면), 챗 `wiki_move` 툴.
 - **운영자 결정 대기**(§8): ISW 페이지 복원, 모닝레터 3장, 날짜형 로그 정책, pl2-kia-epc-002 정본 코드, pl1-cny-dev-001 client, 추적 중인 `.bak`·`.wiki.db` `git rm --cached`.
 
 ---
@@ -385,4 +399,5 @@
 |---|---|---|
 | 2026-08-23 | Claude (Fable 5) | 초안 — 10영역 조사 + 3렌즈 검증 결과를 17항목(W1~W17)으로 정리; 같은 날 랜딩된 #4583/#4587/#4588/#4589/#4593·wikicurate 2회·무장 드롭인 반영; kia-002 자식 페이지 id 충돌 응급조치 기록 |
 | 2026-08-23 | ZCode (GLM-5.3) | 1차 상태 갱신 — 초안 직후 저녁까지 착지된 W1·W2(1단계)·W3·W5(수리 포함)·W6 가드·W8-1·W9(나이틀리)·W10(계약)·W11-4를 #4600·#4603·#4601·#4605·#4606·#4615·#4608·#4611로 표기(§0 상태 칼럼·각 절 상태줄·§2 표·§7~8 갱신). 회상 재측정 #4596·멀티턴 재작성 #4604·드리머 5.7/5.8/후속 #4594·#4598·#4612 반영. 원문 진단·증거는 스냅샷 그대로 유지 |
+| 2026-08-23 | Claude (Fable 5) | 3차 — 후속 구현 5건 착지(#4638 골드 백업·repoint · #4639 동명이인 카드 · #4640 embedindex blob · #4641 인물 중복 탐지 · #4642 라우팅 준수율). §12를 후속 결과표 + 잔여로 재작성, 골드 repoint 후 재실측(92.9) 기록 |
 | 2026-08-23 | Claude (Fable 5) | 2차 — W4·W7·W12·W13·W14·W15·W16·W17 및 W8/W10/W11 잔여까지 전량 구현·랜딩(PR 14건). §11 구현 결과·§12 잔여 신설, Status를 implemented로 |
