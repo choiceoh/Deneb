@@ -627,10 +627,12 @@ JSON 배열만 반환. 다른 텍스트 없이.
 			Detail: fmt.Sprintf("%s → %s (%s)", r.CurrentCategory, r.CorrectCategory, r.Reason),
 			PageA:  r.Path,
 		}
-		// Attach an auto-applicable move ONLY when the LLM is highly confident
-		// and the target is a real, different category — a low-confidence guess
+		// Attach an auto-applicable move ONLY when the LLM is highly confident,
+		// the page it names actually exists, its location is a topic decision
+		// (not a layout contract), and the target is a real, different category.
+		// A low-confidence guess — or any verdict about a layout-managed path —
 		// stays advisory and never moves a real page.
-		if strings.EqualFold(strings.TrimSpace(r.Confidence), "high") {
+		if strings.EqualFold(strings.TrimSpace(r.Confidence), "high") && wd.moveAllowedFor(entries, r.Path) {
 			if np := recategorizedPath(r.Path, r.CorrectCategory); np != "" {
 				f.Fix = &verifyFix{Kind: "move", NewPath: np}
 			}
@@ -639,6 +641,39 @@ JSON 배열만 반환. 다른 텍스트 없이.
 	}
 
 	return findings
+}
+
+// moveAllowedFor decides whether a misclassification verdict about relPath may
+// carry an auto-applied move. Three deterministic refusals, each from a way the
+// unguarded path damaged the live wiki in 2026-08:
+//
+//   - the page must exist in the snapshot the prompt was built from. The model
+//     returned already-moved paths (프로젝트/거래/김운.md, moved days earlier),
+//     which failed with ENOENT every cycle and would have relocated a real page
+//     had the name been recycled;
+//   - its location must not be layout-managed (IsLayoutManagedPath) — the deal
+//     ledger and project slots are placed by code, not by topic;
+//   - a `deal` page is a ledger wherever it currently sits, so a topic verdict
+//     never relocates one (인물/거래/*, 업무/거래/* are prior damage of exactly
+//     this kind and must not be re-shuffled).
+//
+// Refusals are logged at Debug: they are the normal case for a noisy verdict
+// list, and the finding still surfaces to the operator as advisory.
+func (wd *WikiDreamer) moveAllowedFor(entries map[string]IndexEntry, relPath string) bool {
+	entry, ok := entries[relPath]
+	if !ok {
+		wd.logger.Warn("wiki-verify: misclassification names an unknown page, move refused", "path", relPath)
+		return false
+	}
+	if IsLayoutManagedPath(relPath) {
+		wd.logger.Debug("wiki-verify: move refused (layout-managed path)", "path", relPath)
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(entry.Type), "deal") {
+		wd.logger.Debug("wiki-verify: move refused (deal ledger page)", "path", relPath)
+		return false
+	}
+	return true
 }
 
 func hasTemplateThinkingOff(extra jsonObject) bool {

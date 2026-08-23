@@ -27,6 +27,14 @@ import (
 // backlog that outpaces the cap is precisely how the duplicate pile formed.
 const maxAutoVerifyFixes = 15
 
+// maxAutoMovesPerCycle caps the misclassification moves separately from the
+// shared fix budget. Merges and archivals are content decisions with their own
+// guards; a move is a location decision made by an LLM over the whole index,
+// and when it goes wrong it goes wrong in bulk — 2026-08-17 spent the entire
+// 15-fix budget relocating deal ledgers in one cycle. A small cap keeps any
+// future misfire to a handful of reversible pages per cycle.
+const maxAutoMovesPerCycle = 3
+
 // applyVerifyFixes auto-applies the high-confidence findings (those carrying a
 // Fix) and returns the count applied. Findings without a Fix are ignored here —
 // they remain in the report as advisory items. record, when non-nil, is invoked
@@ -34,6 +42,7 @@ const maxAutoVerifyFixes = 15
 // counters, 5.6); it must never panic or block.
 func (wd *WikiDreamer) applyVerifyFixes(findings []verifyFinding, record func(f verifyFinding)) int {
 	applied := 0
+	moves := 0
 	for _, f := range findings {
 		if f.Fix == nil {
 			continue
@@ -45,13 +54,23 @@ func (wd *WikiDreamer) applyVerifyFixes(findings []verifyFinding, record func(f 
 		}
 		switch f.Fix.Kind {
 		case "move":
+			if moves >= maxAutoMovesPerCycle {
+				wd.logger.Info("wiki-verify: auto-move cap reached, deferring the rest to next cycle",
+					"cap", maxAutoMovesPerCycle)
+				continue
+			}
 			if err := wd.store.MovePage(f.PageA, f.Fix.NewPath); err != nil {
 				wd.logger.Warn("wiki-verify: auto-move failed",
 					"from", f.PageA, "to", f.Fix.NewPath, "error", err)
 				continue
 			}
+			moves++
+			// The verdict's reason is the only record of WHY a page moved:
+			// findings carrying a Fix are excluded from the advisory ledger and
+			// the operator notification, so without it a relocation is
+			// unauditable after the fact.
 			wd.logger.Info("wiki-verify: auto-moved misclassified page",
-				"from", f.PageA, "to", f.Fix.NewPath)
+				"from", f.PageA, "to", f.Fix.NewPath, "reason", f.Detail)
 			if record != nil {
 				record(f)
 			}
@@ -189,6 +208,18 @@ func recategorizedPath(path, newCat string) string {
 	}
 	cur, rest, ok := strings.Cut(path, "/")
 	if !ok || cur == newCat {
+		return ""
+	}
+	// Category swaps move flat pages only. Preserving the sub-folder used to
+	// mint category/sub-folder combinations nothing else writes or reads
+	// (기타/거래/, 인물/거래/, 기타/<projectCode>/) — the 2026-08 ledger split.
+	// A page that lives in a slot is placed by layout, not by category.
+	if strings.Contains(rest, "/") {
+		return ""
+	}
+	// 프로젝트/ is folder-structured (프로젝트/<code>/대표.md): a page cannot be
+	// promoted into it by renaming its leading segment.
+	if newCat == projectCategoryPrefix {
 		return ""
 	}
 	return newCat + "/" + rest
