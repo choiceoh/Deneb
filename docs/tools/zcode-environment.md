@@ -119,7 +119,7 @@ After cleanup (post-precision excludes): ~**54.6K nodes**; audit/dev script cons
 Precision notes (Deneb):
 
 - CLI/MCP `query`/`node`/`callers` pin exact symbols; `explore` may camelCase-split (`GatewayHub` → `Hub`/`GatewayTab`) — prefer `node` for a single known symbol.
-- MCP exposes `explore,node,search,impact,callers,callees` via `CODEGRAPH_MCP_TOOLS`. `codegraph_mcp_proxy.py` reroutes a single-symbol explore to node (miss → original explore).
+- MCP exposes `explore,node,search,impact,callers,callees` via `CODEGRAPH_MCP_TOOLS`. `codegraph_mcp_proxy.py` reroutes a single-symbol explore (bare name, dotted RPC, or one PascalCase token in NL) to node, caps uncapped `maxFiles` at 6, and appends nearby CLAUDE/AGENTS maps. Node miss falls back to explore. `python3 scripts/dev/codegraph_doctor.py` reports CLI / root / index / MCP wrapper health.
 - `codegraph.json` excludes audit/dev scripts and generated/resource noise; re-index after changes.
 - Runtime: CodeGraph **1.5.0+** (`npm i -g @colbymchenry/codegraph@1.5.0`). `codegraph upgrade` rewrites MCP configs — `codegraph_mcp_restore.py` (SessionStart) rewrites Cursor / Claude / ZCode / Codex / Trae / VS Code wrappers if the upgrade fingerprint is present. Serve wrappers evict a stale-version daemon and bind `codegraph_root.py`'s worktree pin (never the production checkout).
 
