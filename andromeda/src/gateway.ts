@@ -199,6 +199,7 @@ export interface SessionRow {
   channel?: string;
   model?: string;
   label?: string;
+  pinned?: boolean;
   updatedAtMs?: number;
   startedAtMs?: number;
   runtimeMs?: number;
@@ -225,6 +226,7 @@ export interface TranscriptMsg {
 export interface RecentSessionsPage {
   sessions: SessionRow[];
   total: number;
+  focus?: string;
 }
 
 export const recentSessions = (
@@ -232,16 +234,19 @@ export const recentSessions = (
   limit = 20,
   channel?: string,
   offset = 0,
+  excludeChannel?: string,
 ): Promise<RecentSessionsPage> =>
-  callRpc<{ sessions: SessionRow[]; count: number; total?: number }>(cfg, "miniapp.sessions.recent", {
+  callRpc<{ sessions: SessionRow[]; count: number; total?: number; focus?: string }>(cfg, "miniapp.sessions.recent", {
     limit,
     ...(offset > 0 ? { offset } : {}),
     ...(channel ? { channel } : {}),
+    ...(excludeChannel ? { excludeChannel } : {}),
   }).then((r) => ({
     sessions: r.sessions ?? [],
     // An older gateway has no `total` — fall back to what it returned so the
     // drawer just stops offering more instead of paging into nothing.
     total: r.total ?? (r.sessions ?? []).length,
+    ...(r.focus ? { focus: r.focus } : {}),
   }));
 
 // The gateway caps limit at 200 server-side; total lets the drawer show a
@@ -272,6 +277,27 @@ export const renameSession = (cfg: GatewayConfig, sessionKey: string, label: str
 // deletes its transcript so the row can't resurrect on the next restart.
 export const deleteSession = (cfg: GatewayConfig, sessionKey: string) =>
   callRpc<{ deleted: boolean }>(cfg, "miniapp.sessions.delete", { sessionKey }).then((r) => Boolean(r.deleted));
+
+export const pinSession = (cfg: GatewayConfig, sessionKey: string, pinned: boolean) =>
+  callRpc<{ ok: boolean; pinned: boolean }>(cfg, "miniapp.sessions.pin", { sessionKey, pinned }).then((r) =>
+    Boolean(r.ok),
+  );
+
+export const focusSession = (cfg: GatewayConfig, sessionKey?: string) =>
+  callRpc<{ sessionKey?: string }>(cfg, "miniapp.sessions.focus", sessionKey ? { sessionKey } : {}).then(
+    (r) => r.sessionKey ?? "",
+  );
+
+export interface SessionSearchHit {
+  sessionKey: string;
+  snippet?: string;
+  label?: string;
+}
+
+export const searchSessions = (cfg: GatewayConfig, query: string, maxResults = 20) =>
+  callRpc<{ hits?: SessionSearchHit[] }>(cfg, "miniapp.sessions.search", { query, maxResults }).then(
+    (r) => r.hits ?? [],
+  );
 
 // --- Native durable sync (miniapp.sync.pull) — catch-up for missed proactive
 // events. The live `events` SSE push is best-effort, so a work-feed card created

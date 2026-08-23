@@ -27,6 +27,9 @@ data class Conversation(
     val title: String = "",
     val type: String = TYPE_CHAT,
     val shellTranscript: List<TerminalLine> = emptyList(),
+    val model: String = "",
+    val pinned: Boolean = false,
+    val snippet: String = "",
 ) {
     companion object {
         const val TYPE_CHAT = "chat"

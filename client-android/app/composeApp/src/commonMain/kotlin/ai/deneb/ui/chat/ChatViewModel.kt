@@ -89,6 +89,9 @@ class ChatViewModel(
         loadConversation = ::loadConversation,
         deleteConversation = ::deleteConversation,
         renameConversation = ::renameConversation,
+        pinConversation = ::pinConversation,
+        resetConversationModel = ::resetConversationModel,
+        searchConversations = ::searchConversations,
         clearUnreadHeartbeat = ::clearUnreadHeartbeat,
         clearUnreadWorkReport = ::clearUnreadWorkReport,
         openWorkReport = ::openWorkReport,
@@ -227,7 +230,7 @@ class ChatViewModel(
         if (conversations !== cachedConversationsRef) {
             cachedConversationsRef = conversations
             cachedSummaries = conversations
-                .sortedByDescending { it.updatedAt }
+                .sortedWith(compareByDescending<Conversation> { it.pinned }.thenByDescending { it.updatedAt })
                 .map {
                     val isHeartbeat = it.type == Conversation.TYPE_HEARTBEAT
                     ConversationSummary(
@@ -235,6 +238,9 @@ class ChatViewModel(
                         title = if (isHeartbeat) "" else it.title.ifEmpty { getString(Res.string.conversation_untitled) },
                         updatedAt = it.updatedAt,
                         isHeartbeat = isHeartbeat,
+                        model = it.model,
+                        pinned = it.pinned,
+                        snippet = it.snippet,
                     )
                 }
                 .toImmutableList()
@@ -634,9 +640,45 @@ class ChatViewModel(
                 error = null,
                 isLoading = false,
                 lastSteerNote = null,
-                failedInput = foldIntoInput(null, it.pendingQuestions),
+                failedInput = null,
                 pendingQuestions = persistentListOf(),
+                sessionSearchHits = persistentListOf(),
             )
+        }
+    }
+
+    private fun pinConversation(id: String, pinned: Boolean) {
+        if (id.isBlank()) return
+        viewModelScope.launch(backgroundDispatcher + teardownHandler) {
+            dataRepository.pinConversation(id, pinned)
+        }
+    }
+
+    private fun resetConversationModel(id: String) {
+        if (id.isBlank()) return
+        viewModelScope.launch(backgroundDispatcher + teardownHandler) {
+            dataRepository.resetConversationModel(id)
+        }
+    }
+
+    private fun searchConversations(query: String) {
+        val q = query.trim()
+        if (q.isEmpty()) {
+            _state.update { it.copy(sessionSearchHits = persistentListOf()) }
+            return
+        }
+        viewModelScope.launch(backgroundDispatcher + teardownHandler) {
+            val hits = dataRepository.searchConversations(q).map { conv ->
+                ConversationSummary(
+                    id = conv.id,
+                    title = conv.title.ifEmpty { conv.id },
+                    updatedAt = conv.updatedAt,
+                    model = conv.model,
+                    pinned = conv.pinned,
+                    snippet = conv.snippet,
+                )
+            }.toImmutableList()
+            _state.update { it.copy(sessionSearchHits = hits) }
         }
     }
 
@@ -846,8 +888,9 @@ class ChatViewModel(
                 error = null,
                 isLoading = false,
                 lastSteerNote = null,
-                failedInput = foldIntoInput(null, it.pendingQuestions),
+                failedInput = null,
                 pendingQuestions = persistentListOf(),
+                sessionSearchHits = persistentListOf(),
             )
         }
     }

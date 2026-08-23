@@ -11,6 +11,7 @@ type sessionRowOut struct {
 	Channel     string `json:"channel,omitempty"`
 	Model       string `json:"model,omitempty"`
 	Label       string `json:"label,omitempty"`
+	Pinned      bool   `json:"pinned,omitempty"`
 	UpdatedAtMs int64  `json:"updatedAtMs,omitempty"`
 	StartedAtMs *int64 `json:"startedAtMs,omitempty"`
 	RuntimeMs   *int64 `json:"runtimeMs,omitempty"`
@@ -39,10 +40,36 @@ type transcriptMsgOut struct {
 	TimestampMs int64                     `json:"timestampMs,omitempty"`
 }
 
+// sessionSearchHitOut is one conversation that matched a user drawer search.
+//
+//deneb:wire
+type sessionSearchHitOut struct {
+	SessionKey string `json:"sessionKey"`
+	Snippet    string `json:"snippet,omitempty"`
+	Label      string `json:"label,omitempty"`
+}
+
+// sessionSearchResult is the miniapp.sessions.search payload.
+//
+//deneb:wire
+type sessionSearchResult struct {
+	Hits []sessionSearchHitOut `json:"hits"`
+}
+
+// sessionFocusResult is the miniapp.sessions.focus payload.
+//
+//deneb:wire
+type sessionFocusResult struct {
+	SessionKey string `json:"sessionKey"`
+}
+
 // Exported aliases let the owning sessions package project into the stable
 // unexported wire names without duplicating the client contract.
 type (
 	SessionRowOut           = sessionRowOut
 	TranscriptAttachmentOut = transcriptAttachmentOut
 	TranscriptMsgOut        = transcriptMsgOut
+	SessionSearchHitOut     = sessionSearchHitOut
+	SessionSearchResult     = sessionSearchResult
+	SessionFocusResult      = sessionFocusResult
 )

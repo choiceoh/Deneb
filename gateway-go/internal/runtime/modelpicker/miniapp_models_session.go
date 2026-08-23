@@ -46,12 +46,19 @@ func (s *Controller) setMiniappSessionModel(ctx context.Context, sessionKey, req
 	if key == "" {
 		return "", rpcerr.MissingParam("sessionKey")
 	}
+	if s.sessions == nil {
+		return "", rpcerr.Unavailable("session manager is not ready")
+	}
+	// Empty id clears the per-conversation override so the next turn
+	// follows the global role default again.
+	if strings.TrimSpace(requested) == "" {
+		empty := ""
+		s.sessions.Patch(key, session.PatchFields{Model: &empty})
+		return "", nil
+	}
 	modelID, err := s.resolveAllowedMiniappModel(ctx, requested)
 	if err != nil {
 		return "", err
-	}
-	if s.sessions == nil {
-		return "", rpcerr.Unavailable("session manager is not ready")
 	}
 	s.sessions.Patch(key, session.PatchFields{Model: &modelID})
 	return modelID, nil

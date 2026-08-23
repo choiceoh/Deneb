@@ -216,6 +216,7 @@ internal fun ChatModeScreen(
                             hasMoreConversations = uiState.hasMoreConversations,
                             currentConversationId = uiState.currentConversationId,
                             pendingConversationDeletion = uiState.pendingConversationDeletion,
+                            searchHits = uiState.sessionSearchHits,
                             actions = uiState.actions,
                             onClose = { drawerScope.launch { drawerState.close() } },
                         )

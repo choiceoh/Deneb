@@ -13,7 +13,7 @@ import { type GatewayConfig, type ModelsList, listModels, setModel as persistMod
 // adjustment (react.dev adjust-state pattern).
 export function useModels(cfg: GatewayConfig, connected: boolean, sessionKey = "", sessionModel = "") {
   const [models, setModels] = useState<ModelsList | null>(null);
-  const [model, setModelState] = useState(""); // selected override id ("" → gateway main)
+  const [model, setModelState] = useState(sessionModel); // selected override id ("" → gateway main)
   const [prevConn, setPrevConn] = useState(connected);
   if (prevConn !== connected) {
     setPrevConn(connected);
@@ -34,21 +34,39 @@ export function useModels(cfg: GatewayConfig, connected: boolean, sessionKey = "
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, cfg.url, cfg.token]);
-  useEffect(() => {
-    if (!sessionKey) return;
-    setModelState(sessionModel || models?.current || "");
+  const [prevSession, setPrevSession] = useState(sessionKey);
+  if (prevSession !== sessionKey) {
+    setPrevSession(sessionKey);
     // Adopt the new conversation's stored model (or the global default) only
     // when the session itself changes — a registry refresh must not clobber
     // an in-progress picker choice.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionKey]);
+    if (sessionKey) setModelState(sessionModel || models?.current || "");
+  }
   function setModel(id: string) {
     setModelState(id);
-    if (connected && sessionKey && id) {
+    if (connected && sessionKey) {
       void persistModel(cfg, id, "main", sessionKey).catch(() => {});
     }
   }
   return { models, model, setModel };
+}
+
+// Per-conversation composer text. Switching sessions parks the current box
+// under the old key and restores whatever that conversation left behind.
+export function useSessionDraft(sessionKey: string, input: string, setInput: (value: string) => void) {
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [boundKey, setBoundKey] = useState(sessionKey);
+  if (boundKey !== sessionKey) {
+    const next = { ...drafts, [boundKey]: input };
+    setDrafts(next);
+    setBoundKey(sessionKey);
+    const restored = next[sessionKey] ?? "";
+    if (restored !== input) setInput(restored);
+  }
+  function clearDraft() {
+    setDrafts((prev) => ({ ...prev, [sessionKey]: "" }));
+  }
+  return { clearDraft };
 }
 
 // Composer textarea behavior:

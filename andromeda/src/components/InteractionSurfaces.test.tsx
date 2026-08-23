@@ -1,6 +1,6 @@
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { ModelsList, SessionRow } from "@/gateway";
@@ -331,6 +331,39 @@ describe("SessionDrawer", () => {
     for (const button of screen.getAllByRole("button", { name: /첫 대화|client:main:b|대화 삭제/ })) {
       expect(button).toBeDisabled();
     }
+  });
+
+  it("marks the 업무 home and omits its delete control", () => {
+    renderDrawer({
+      sessions: [{ key: "client:main", label: "업무" }],
+      currentKey: "client:main",
+    });
+    expect(screen.getByText("선제 보고가 모이는 업무 홈")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /대화 삭제/ })).not.toBeInTheDocument();
+  });
+
+  it("routes pin and model-reset actions", async () => {
+    const onPin = vi.fn();
+    const onResetModel = vi.fn();
+    renderDrawer({
+      onPin,
+      onResetModel,
+      sessions: [{ key: "client:main:a", label: "첫 대화", model: "gpt-5", pinned: false }],
+    });
+    await userEvent.click(screen.getByRole("button", { name: "위에 고정: 첫 대화" }));
+    await userEvent.click(screen.getByRole("button", { name: "기본 모델로: 첫 대화" }));
+    expect(onPin).toHaveBeenCalledWith("client:main:a", true);
+    expect(onResetModel).toHaveBeenCalledWith("client:main:a");
+  });
+
+  it("merges remote search hits into the drawer list", async () => {
+    const onSearch = vi
+      .fn()
+      .mockResolvedValue([{ sessionKey: "client:main:hit", label: "Remote hit", snippet: "body" }]);
+    renderDrawer({ onSearch });
+    await userEvent.type(screen.getByRole("textbox", { name: "대화 검색" }), "Remote");
+    await waitFor(() => expect(onSearch).toHaveBeenCalledWith("Remote"));
+    expect(screen.getByText("Remote hit")).toBeInTheDocument();
   });
 });
 

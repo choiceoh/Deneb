@@ -3467,6 +3467,19 @@ class MiniappWireValueContractTest {
             invalidValue = JsonObject(emptyMap()),
         ),
         wireContract(
+            name = "SessionFocusResult",
+            serializer = SessionFocusResult.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "sessionKey",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "sessionKey",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
             name = "SessionRowOut",
             serializer = SessionRowOut.serializer(),
             fields = listOf(
@@ -3501,6 +3514,11 @@ class MiniappWireValueContractTest {
                     expectation = Expectation.Exact,
                 ),
                 fieldValue(
+                    name = "pinned",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
                     name = "updatedAtMs",
                     value = JsonPrimitive(Long.MAX_VALUE),
                     expectation = Expectation.Exact,
@@ -3523,6 +3541,42 @@ class MiniappWireValueContractTest {
             ),
             invalidField = "key",
             invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "SessionSearchHitOut",
+            serializer = SessionSearchHitOut.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "sessionKey",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "snippet",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "label",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "sessionKey",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "SessionSearchResult",
+            serializer = SessionSearchResult.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "hits",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+            ),
+            invalidField = "hits",
+            invalidValue = JsonObject(mapOf("not" to JsonPrimitive("a-list"))),
         ),
         wireContract(
             name = "SkillDetailResponse",

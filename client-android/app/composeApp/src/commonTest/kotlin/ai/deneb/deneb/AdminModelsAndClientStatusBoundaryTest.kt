@@ -343,6 +343,21 @@ class AdminModelsAndClientStatusBoundaryTest {
     }
 
     @Test
+    fun setSessionModelEmptyIdClearsOverride() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc("{}")
+        f.client._sessionModels.value = mapOf("client:main:alpha" to "kimi/kimi-k2.5")
+
+        val result = f.client.setSessionModel("client:main:alpha", "  ")
+
+        assertTrue(result)
+        val params = f.transport.requests.single().requireRpc("miniapp.models.set")
+        assertEquals("", params["id"]?.jsonPrimitive?.content)
+        assertEquals("client:main:alpha", params["sessionKey"]?.jsonPrimitive?.content)
+        assertFalse(f.client.sessionModels.value.containsKey("client:main:alpha"))
+    }
+
+    @Test
     fun refreshClientStatusMapsEntireHandshakePayload() = runTest {
         val f = gatewayClientFixture()
         f.transport.enqueueRpc(

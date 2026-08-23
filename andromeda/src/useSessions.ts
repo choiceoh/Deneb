@@ -6,14 +6,20 @@ import {
   type SessionRow,
   type TranscriptMsg,
   deleteSession,
+  focusSession,
+  pinSession,
   recentSessions,
   renameSession as renameSessionRpc,
+  searchSessions,
   sessionTranscript,
+  setModel as persistModel,
 } from "@/gateway";
 import { type ChatTurn } from "@/hooks";
 import { errText } from "@/format";
+import { getString, setString } from "@/storage";
 
 const MAIN_SESSION = "client:main";
+const LAST_SESSION_KEY = "andromeda.chat.lastSession";
 // One drawer page. SESSION_MAX_PAGE mirrors the gateway's per-response cap
 // (maxSessionsLimit in handlerminiapp/sessions), which is why a window wider
 // than one page is assembled from several offset fetches.
@@ -40,7 +46,16 @@ export function useSessions(
   const channel = opts?.channel;
   const keep = (s: SessionRow[]) => (filter ? s.filter((r) => r.key.startsWith(filter)) : s);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
-  const [sessionKey, setSessionKey] = useState(mainKey);
+  const [sessionKey, setSessionKey] = useState(() => {
+    if (!opts?.newKey) return mainKey;
+    const stored = getString(LAST_SESSION_KEY).trim();
+    return stored || mainKey;
+  });
+  const persistKey = (key: string) => {
+    setSessionKey(key);
+    if (opts?.newKey) setString(LAST_SESSION_KEY, key);
+    void focusSession(cfg, key).catch(() => {});
+  };
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [sessionErr, setSessionErr] = useState("");
   // Older messages the initial transcript load left behind (server returns the
@@ -73,20 +88,23 @@ export function useSessions(
   // Fetch the first `count` rows as server-capped pages, so a window wider than
   // one page still comes back whole. Returns raw rows (the namespace filter is
   // applied by the caller) plus the size of the whole scoped set.
-  async function fetchWindow(count: number): Promise<{ rows: SessionRow[]; total: number }> {
+  async function fetchWindow(count: number): Promise<{ rows: SessionRow[]; total: number; focus?: string }> {
     const rows: SessionRow[] = [];
     let total = 0;
+    let focus: string | undefined;
     for (let offset = 0; offset < count; offset += SESSION_MAX_PAGE) {
       const page = await recentSessions(cfg, Math.min(SESSION_MAX_PAGE, count - offset), channel, offset);
+      if (offset === 0) focus = page.focus;
       total = page.total;
       rows.push(...page.sessions);
       if (page.sessions.length === 0 || rows.length >= total) break;
     }
-    return { rows, total };
+    return { rows, total, focus };
   }
 
-  function applyPage(page: { rows: SessionRow[]; total: number }) {
-    setSessions(keep(page.rows));
+  function applyPage(page: { rows: SessionRow[]; total: number; focus?: string }) {
+    const rows = [...keep(page.rows)].sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
+    setSessions(rows);
     setFetchedCount(page.rows.length);
     setSessionTotal(page.total);
   }
@@ -133,6 +151,10 @@ export function useSessions(
           if (cancelled) return;
           landed = true;
           applyPage(page);
+          if (opts?.newKey && page.focus && sessionKey === mainKey && page.focus.startsWith("client:main:")) {
+            persistKey(page.focus);
+            void loadTranscript(page.focus).catch(() => {});
+          }
           // Only clear what this loader put up — a transcript/delete error the
           // user has not seen yet must not be wiped by a background refresh.
           if (loadFailed) {
@@ -165,6 +187,14 @@ export function useSessions(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, cfg.url, cfg.token]);
 
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (!connected || restoredRef.current || !opts?.newKey || sessionKey === mainKey) return;
+    restoredRef.current = true;
+    void loadTranscript(sessionKey).catch((e) => setSessionErr(errText(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected]);
+
   async function refreshSessions(count = loadedCount) {
     try {
       applyPage(await fetchWindow(count));
@@ -182,6 +212,41 @@ export function useSessions(
     const next = loadedCount + SESSION_PAGE;
     setLoadedCount(next);
     await refreshSessions(next);
+  }
+
+  async function pinConversation(key: string, pinned: boolean) {
+    try {
+      await pinSession(cfg, key, pinned);
+      setSessions((prev) =>
+        [...prev.map((s) => (s.key === key ? { ...s, pinned } : s))].sort(
+          (a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)),
+        ),
+      );
+      setSessionErr("");
+    } catch (e) {
+      setSessionErr(errText(e));
+    }
+  }
+
+  async function searchConversationHits(query: string) {
+    const q = query.trim();
+    if (!q) return [];
+    try {
+      return await searchSessions(cfg, q);
+    } catch (e) {
+      setSessionErr(errText(e));
+      return [];
+    }
+  }
+
+  async function resetConversationModel(key: string) {
+    try {
+      await persistModel(cfg, "", "main", key);
+      setSessions((prev) => prev.map((s) => (s.key === key ? { ...s, model: "" } : s)));
+      setSessionErr("");
+    } catch (e) {
+      setSessionErr(errText(e));
+    }
   }
 
   async function renameSession(key: string, label: string) {
@@ -207,7 +272,7 @@ export function useSessions(
     setSessionsOpen(false);
     // mint a fresh key when the caller provides one (채팅 탭 → 새 대화마다 새
     // client:main:<id>), else reuse the single main session (work panel → client:main).
-    setSessionKey(opts?.newKey ? opts.newKey() : mainKey);
+    persistKey(opts?.newKey ? opts.newKey() : mainKey);
     setHiddenHistory(null);
     chat.clear();
   }
@@ -235,7 +300,7 @@ export function useSessions(
   async function selectSession(key: string) {
     if (busy) return;
     setSessionsOpen(false);
-    setSessionKey(key);
+    persistKey(key);
     try {
       await loadTranscript(key);
     } catch (e) {
@@ -279,6 +344,9 @@ export function useSessions(
     selectSession,
     removeSession,
     renameSession,
+    pinConversation,
+    searchConversationHits,
+    resetConversationModel,
     canLoadMoreSessions,
     loadMoreSessions,
     newChat,

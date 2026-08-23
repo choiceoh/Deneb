@@ -35,6 +35,7 @@ internal data class RecentPayload(
     // Size of the whole scoped set, not this page. Null on a gateway older than
     // the paging change — callers fall back to the page they received.
     val total: Int? = null,
+    val focus: String = "",
 )
 
 @Serializable

@@ -282,6 +282,9 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 				}
 				return s.toolDeps.Sessions.Transcript, nil
 			},
+			OnForgotten: s.forgetSessionExtras,
+			Focus:       s.currentSessionFocus,
+			SetFocus:    s.setSessionFocus,
 		},
 		Contacts: minimodule.ContactsDeps{
 			Store: func() (*contacts.Store, error) {

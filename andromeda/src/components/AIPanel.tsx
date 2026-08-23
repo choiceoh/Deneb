@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { type GatewayConfig } from "@/gateway";
 import { useChat } from "@/hooks";
 import { parseUiSubmission } from "@/markdown/denebUiParse";
-import { useAttachPipeline, useComposerBehavior, useModels } from "@/useChatSurface";
+import { useAttachPipeline, useComposerBehavior, useModels, useSessionDraft } from "@/useChatSurface";
 import { useFileDrop } from "@/useFileDrop";
 import { useSessions } from "@/useSessions";
 import { useStickyScroll } from "@/useStickyScroll";
@@ -98,11 +98,15 @@ export function AIPanel({
     selectSession,
     removeSession,
     renameSession,
+    pinConversation,
+    searchConversationHits,
+    resetConversationModel,
     canLoadMoreSessions,
     loadMoreSessions,
     newChat,
     loadOlderTurns,
   } = useSessions(cfg, connected, busy || attaching, { clear, setTurns });
+  const { clearDraft } = useSessionDraft(sessionKey, input, setInput);
   const sessionModel = sessions.find((s) => s.key === sessionKey)?.model ?? "";
   const { models, model, setModel } = useModels(cfg, connected, sessionKey, sessionModel);
   // Follow the newest message while it streams, unless the user scrolled up to read.
@@ -131,6 +135,7 @@ export function AIPanel({
       return;
     }
     if (!msg) return;
+    clearDraft();
     setInput("");
     pin(); // a fresh send always rides down to the latest
     void send(msg, { workspaceContext: aiText, activeResource, model: model || undefined, sessionKey });
@@ -263,6 +268,12 @@ export function AIPanel({
           onDelete={removeSession}
           onNew={newChat}
           onRename={(key, label) => void renameSession(key, label)}
+          onPin={(key, pinned) => void pinConversation(key, pinned)}
+          onResetModel={(key) => {
+            void resetConversationModel(key);
+            if (key === sessionKey) setModel("");
+          }}
+          onSearch={searchConversationHits}
           canLoadMore={canLoadMoreSessions}
           onLoadMore={() => void loadMoreSessions()}
         />

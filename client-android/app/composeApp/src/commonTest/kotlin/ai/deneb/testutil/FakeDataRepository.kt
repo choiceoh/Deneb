@@ -121,6 +121,26 @@ class FakeDataRepository : DataRepository {
         return true
     }
 
+    override suspend fun pinConversation(id: String, pinned: Boolean) {
+        savedConversations.update { list ->
+            list.map { if (it.id == id) it.copy(pinned = pinned) else it }
+        }
+    }
+
+    override suspend fun resetConversationModel(id: String) {
+        savedConversations.update { list ->
+            list.map { if (it.id == id) it.copy(model = "") else it }
+        }
+    }
+
+    override suspend fun searchConversations(query: String): List<Conversation> {
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+        return savedConversations.value.filter {
+            it.title.contains(q, ignoreCase = true) || it.id.contains(q, ignoreCase = true)
+        }
+    }
+
     /**
      * Default false so existing queue-while-loading tests keep the after-turn
      * path. Set true to exercise mid-turn steer.
