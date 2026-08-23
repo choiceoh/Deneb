@@ -1,8 +1,10 @@
 package ai.deneb.deneb
 
 import ai.deneb.data.SynchronousLock
+import ai.deneb.getBackgroundDispatcher
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
@@ -188,8 +190,9 @@ internal class WikiMirrorStore(
     }
 
     /** Drop hot pages immediately on credential switch (non-suspend). Disk wipe
-     *  follows via [clear]; reads are owner-guarded in [loadLocked] meanwhile. */
-    fun evictMemoryForCredentialSwitch() = withStateLock {
+     *  follows via [clear]; reads are owner-guarded in [loadLocked] meanwhile.
+     *  Touches memory only — no disk, so it does not need the dispatcher hop. */
+    fun evictMemoryForCredentialSwitch() = stateLock.withLock {
         evictMemoryLocked()
     }
 
@@ -207,7 +210,17 @@ internal class WikiMirrorStore(
         }
     }
 
-    private fun <T> withStateLock(action: () -> T): T = stateLock.withLock(action)
+    /**
+     * Runs a mirror body off the caller's thread.
+     *
+     * Every entry point goes through here, and the first one after process start
+     * pays for [loadLocked]: the meta file plus up to 16 shard files, read with
+     * blocking IO and JSON-decoded — a few MB. Online that cost is normally paid by
+     * the background warm after a sync pull, but offline (or before the first pull)
+     * the first caller is a screen's LaunchedEffect on the main thread, which is
+     * where a cold start would stall.
+     */
+    private suspend fun <T> withStateLock(action: () -> T): T = withContext(getBackgroundDispatcher()) { stateLock.withLock(action) }
 
     private fun clearDiskLocked() {
         runCatching { files.delete(META_FILE) }

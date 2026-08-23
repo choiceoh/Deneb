@@ -87,7 +87,14 @@ internal fun SkillsTab(client: DenebGatewayClient, onOpenSkill: (String) -> Unit
         if (fetched == null) lifecycleFailed = true
     }
 
-    LaunchedEffect(Unit) { loadFailed = !client.refreshSkills() }
+    // `loaded` separates "nothing to show" from "not fetched yet": denebSkills starts
+    // empty and nothing pre-warms it, so the empty state used to flash on every open
+    // before the first fetch returned.
+    var loaded by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        loadFailed = !client.refreshSkills()
+        loaded = true
+    }
     LaunchedEffect(showLifecycle) {
         if (showLifecycle && lifecyclePayload == null) loadLifecycle()
     }
@@ -102,6 +109,8 @@ internal fun SkillsTab(client: DenebGatewayClient, onOpenSkill: (String) -> Unit
                         onRetry = { scope.launch { loadFailed = !client.refreshSkills() } },
                     )
                 }
+
+                skills.isEmpty() && !loaded -> DenebLoading()
 
                 skills.isEmpty() -> EmptyTab("사용할 수 있는 스킬이 없습니다.")
 

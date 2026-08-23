@@ -91,6 +91,10 @@ fun DenebApprovalDetailScreen(
     var loadFailed by remember(docId) { mutableStateOf(false) }
     var acting by remember(docId) { mutableStateOf(false) }
     var pendingAct by remember(docId) { mutableStateOf<String?>(null) }
+    // Approvals are irreversible on the groupware side, so a failed 결재 must keep
+    // the row and say so. It used to just close the dialog: indistinguishable from
+    // success until the list refreshed and the document was still pending.
+    var actError by remember(docId) { mutableStateOf<String?>(null) }
     var lineOpen by remember(docId) { mutableStateOf(false) }
     var attachOpen by remember(docId) { mutableStateOf(false) }
 
@@ -350,14 +354,20 @@ fun DenebApprovalDetailScreen(
             onDismissRequest = { if (!acting) pendingAct = null },
             title = { Text("${label}할까요?") },
             text = {
-                Text(
-                    buildString {
-                        append(
-                            title.ifBlank { body?.title.orEmpty() }.ifBlank { "이 결재 문서" },
-                        )
-                        append("\n그룹웨어에 즉시 반영됩니다.")
-                    },
-                )
+                Column {
+                    Text(
+                        buildString {
+                            append(
+                                title.ifBlank { body?.title.orEmpty() }.ifBlank { "이 결재 문서" },
+                            )
+                            append("\n그룹웨어에 즉시 반영됩니다.")
+                        },
+                    )
+                    actError?.let { message ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(message, style = DenebType.meta, color = MaterialTheme.colorScheme.error)
+                    }
+                }
             },
             confirmButton = {
                 TextButton(
@@ -365,10 +375,15 @@ fun DenebApprovalDetailScreen(
                     onClick = {
                         scope.launch {
                             acting = true
+                            actError = null
                             val ok = client.actApproval(docId, decision)?.ok == true
                             acting = false
-                            pendingAct = null
-                            if (ok) onActed()
+                            if (ok) {
+                                pendingAct = null
+                                onActed()
+                            } else {
+                                actError = "처리하지 못했습니다. 연결을 확인하고 다시 시도해 주세요."
+                            }
                         }
                     },
                 ) { Text(label) }

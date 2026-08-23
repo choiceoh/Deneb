@@ -10,6 +10,7 @@ import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebPressable
 import ai.deneb.ui.denebSharedBounds
+import ai.deneb.ui.rememberToday
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -70,14 +71,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
-import kotlinx.datetime.todayIn
-import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -103,7 +103,11 @@ fun DenebCalendarScreen(
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     val tz = remember { TimeZone.currentSystemDefault() }
-    val today = remember { Clock.System.todayIn(tz) }
+    // Not remember{}: the calendar is an always-alive tab, so a captured date froze
+    // on the day the app was opened — the "오늘" ring, the day header and the
+    // overdue-todo rollup all kept describing yesterday. (The feed already solved
+    // this; rememberToday is that solution, shared.)
+    val today = rememberToday(tz)
     // The grid is a finite, lazy pager of months centered on the current month:
     // page `startIndex` is today's month and each step is ±1 month. This makes
     // paging a real swipe — the grid tracks the finger and springs to the next
@@ -162,6 +166,18 @@ fun DenebCalendarScreen(
     // To-dos load once and refresh on pull-to-refresh / toggle, independent of the
     // month so paging never drops them.
     LaunchedEffect(Unit) { loadTodos() }
+
+    // Refetch when the data changed under us: an add/edit/delete on a pushed route,
+    // or a calendar.changed sync event. The tab stays composed through both, so
+    // nothing else would.
+    val calendarVersion by client.calendarVersion.collectAsStateWithLifecycle()
+    LaunchedEffect(calendarVersion) {
+        if (calendarVersion == 0) return@LaunchedEffect
+        cache.clear()
+        failed.clear()
+        loadMonth(monthForPage(pagerState.currentPage), force = true)
+        loadTodos()
+    }
 
     // Optimistic toggle: flip locally so the checkbox responds instantly, then
     // persist and re-fetch to settle completion state.

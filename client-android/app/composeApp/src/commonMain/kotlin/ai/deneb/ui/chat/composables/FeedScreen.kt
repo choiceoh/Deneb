@@ -17,6 +17,7 @@ import ai.deneb.ui.denebBannerExit
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.MarkdownContent
+import ai.deneb.ui.rememberToday
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,7 +58,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -68,8 +68,6 @@ import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.todayIn
-import kotlin.time.Clock
 import kotlin.time.Instant
 
 private const val EmptyFeedLookbackDays = 31
@@ -159,19 +157,7 @@ internal fun FeedScreen(
             // from items, the empty response would remove the date bar and trap the user
             // on today with no way to request yesterday.
             val tz = remember { TimeZone.currentSystemDefault() }
-            // remember{} runs once; Android keeps the app in memory across midnight, so a
-            // plain `today` would freeze on the day the feed first opened and show
-            // yesterday's cards under "오늘" (desktop/andromeda recomputes, so it doesn't).
-            // Refresh at each local midnight — and immediately if we already crossed one
-            // while backgrounded (the wait goes non-positive → coerced to 1s).
-            var today by remember { mutableStateOf(Clock.System.todayIn(tz)) }
-            LaunchedEffect(tz) {
-                while (true) {
-                    val waitMs = dayStartMs(today.plus(1, DateTimeUnit.DAY), tz) - Clock.System.now().toEpochMilliseconds()
-                    delay(waitMs.coerceAtLeast(1_000L))
-                    today = Clock.System.todayIn(tz)
-                }
-            }
+            val today = rememberToday(tz)
             val dates = remember(laneItems) { laneItems.map { localDateOf(it.createdAtMs) } }
             val initialDate = remember(initialOpenItemId, initialOpenItemCreatedAtMs, today) {
                 if (initialOpenItemId.isNullOrBlank() || initialOpenItemCreatedAtMs <= 0L) {
