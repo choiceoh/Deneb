@@ -44,6 +44,13 @@ var DefaultTargets = []string{
 	"network",
 	"contacts.json",
 	"kv.json",
+	// The recall gold sets: the ground truth every retrieval measurement is
+	// scored against. They live outside the repo on purpose (business data),
+	// which left them as a single unbacked copy — losing them would cost the
+	// only reference the search quality bench has, and they are hand-curated
+	// over months. Glob because new sets get added (meeting, facet, traffic…);
+	// the ".bak-*" copies are deliberately out of pattern.
+	"wiki-qa-gold*.jsonl",
 }
 
 // runTimeout bounds one backup cycle end to end (archive + ship + prune).
@@ -246,7 +253,7 @@ func writeArchive(w io.Writer, stateDir string, targets []string) error {
 	gz := gzip.NewWriter(w)
 	tw := tar.NewWriter(gz)
 
-	for _, target := range targets {
+	for _, target := range expandTargets(stateDir, targets) {
 		root := filepath.Join(stateDir, target)
 		info, err := os.Lstat(root)
 		if err != nil {
@@ -346,4 +353,29 @@ func isRegenerableCache(name string) bool {
 		}
 	}
 	return false
+}
+
+// expandTargets resolves glob patterns in the target list to the state-dir
+// entries they match, leaving plain names untouched. A pattern that matches
+// nothing simply contributes nothing — same as a missing store.
+func expandTargets(stateDir string, targets []string) []string {
+	out := make([]string, 0, len(targets))
+	for _, target := range targets {
+		if !strings.ContainsAny(target, "*?[") {
+			out = append(out, target)
+			continue
+		}
+		matches, err := filepath.Glob(filepath.Join(stateDir, target))
+		if err != nil {
+			continue // malformed pattern: skip rather than abort the backup
+		}
+		for _, m := range matches {
+			rel, rerr := filepath.Rel(stateDir, m)
+			if rerr != nil {
+				continue
+			}
+			out = append(out, filepath.ToSlash(rel))
+		}
+	}
+	return out
 }
