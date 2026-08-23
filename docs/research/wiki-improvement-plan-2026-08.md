@@ -1,13 +1,15 @@
 # 위키 개선 방안 2026-08
 
-**Status:** proposal backlog (ideation → adopted → implemented 어휘는 `improvement-ideas.md`와 동일)
+**Status:** proposal backlog · 1차 갱신 2026-08-23 저녁 — W-가드 레인 착지 상태 반영 (ideation → adopted → implemented 어휘는 `improvement-ideas.md`와 동일)
 **Audience:** Deneb 운영자 + 차기 AI 세션(구현 레인)
 **Scope:** 위키 서브시스템 전체 — 저장소(`domain/wiki`)·자율 유지보수(dreamer / verify / review / research / scout / digest)·회상(recall)·계측(bench·원장)·클라이언트 표면. 검색 엔진 재작성·Graphify 투자·위키 UI 신설은 범위 밖(§9).
 **Methodology (2026-08-23):** 코드(`gateway-go/internal/domain/wiki` 22K LOC 외) + 라이브 위키(`~/.deneb/wiki`, 읽기 전용) + 14일 게이트웨이 저널 + 위키 git 스냅샷 이력 + 프로덕션 패리티 `make recall-health` 실측(8m17s)을 10개 영역 조사 에이전트가 병렬로 훑고, 73개 발견을 3렌즈(증거 재검증·이력/중복·리스크) 패널이 건별 판정했다. **오늘 하루 동안 다른 레인이 위키 PR 5건을 랜딩하고 `wikicurate --apply`를 2회 적용했으므로(§2), 이 문서는 그 이후(12:16 KST) 상태를 기준선으로 잔여 항목만 제안한다.**
 
 > **읽는 법.** 항목은 `W<번호>`로 식별한다(구현 PR 제목·커밋에 인용). 각 항목은 **무엇을 → 왜(증거) → 어디서(파일·함수) → 검증 → 롤백** 순. 우선순위 P0~P3 · 작업량 S/M/L · RSI 단계(P1 절차 외부화 / P2 slow loop / P3 verifier 공진화 / P4 도구 번들 / P5 복리화) 태그. **이 문서는 작성 시점 스냅샷**이다 — 현행 동작의 단일 진실원은 루트 `CLAUDE.md` + `docs/agent-rules/wiki-layout.md` + 모듈 `CLAUDE.md`.
 
-관련 문서: [improvement-ideas](improvement-ideas.md) (전 영역 백로그 — 본 문서는 그 위키 전용 보강) · [wiki-retrieval-improvement-cycle-2026-07](wiki-retrieval-improvement-cycle-2026-07.md) (회상 레버 기각 기록) · [recursive-self-improvement-roadmap](recursive-self-improvement-roadmap.md) · `docs/agent-rules/wiki-layout.md`.
+> **상태 갱신 (2026-08-23 저녁).** 초안(12:16 KST) 직후 같은 날 저녁까지 **W1·W2(1단계)·W3·W5(수리 포함)·W6 가드·W8-1·W9(나이틀리)·W10(계약)·W11-4가 전부 착지**했다(#4600·#4603·#4601·#4605·#4606·#4615·#4608·#4611 — §2). 회상 레인에서는 [#4596](https://github.com/choiceoh/Deneb/pull/4596) 재측정(골드 정리 후 main P@1 91.9 · r@8 97.5)과 [#4604](https://github.com/choiceoh/Deneb/pull/4604) 멀티턴 재작성이, 드리머 레인에서는 improvement-ideas 5.7·5.8·후속(#4594·#4598·#4612)이 뒤를 이었다. 착지 범위와 잔여는 §0 표의 '상태' 칼럼과 각 W 절 머릿의 상태줄로 구분한다 — 상태줄이 없는 절(W4·W7·W12~W17)은 미착지.
+
+관련 문서: [improvement-ideas](improvement-ideas.md) (전 영역 백로그 — 본 문서는 그 위키 전용 보강) · [wiki-retrieval-improvement-cycle-2026-07](wiki-retrieval-improvement-cycle-2026-07.md) (회상 레버 기각 기록) · [wiki-retrieval-baseline-2026-08-23](wiki-retrieval-baseline-2026-08-23.md) (같은 날 재측정 — 골드 정리·멀티턴 재작성 착지) · [recursive-self-improvement-roadmap](recursive-self-improvement-roadmap.md) · `docs/agent-rules/wiki-layout.md`.
 
 ---
 
@@ -15,25 +17,25 @@
 
 **핵심 진단 한 문장:** 위키는 "페이지가 모자라서"가 아니라 **LLM 판정이 위키를 바꾸기 직전의 결정적 전제조건(게이트)이 없어서** 스스로를 오염시킨다 — verify 자동이동이 거래 원장을 네 폴더로 찢고, 드리머 update가 페이지 정체성(id/summary)을 덮어쓰고, 그 id를 verify가 '동일 ID 중복'으로 자동 병합해 대표페이지가 사라지며, supersede 오용이 살아있는 로그를 30일 뒤 아카이브한다. 오늘 데이터는 손으로 고쳤지만(§2) 메커니즘은 전부 코드에 남아 있다 — **P0은 전부 재발 차단 가드**다.
 
-| # | 항목 | P | 작업량 | RSI |
-|---|---|---|---|---|
-| W1 | verify 오분류 자동이동 레이아웃 가드 (서브폴더 민팅·원장·프로젝트 슬롯·존재하지 않는 경로 금지) | **P0** | S | P3 |
-| W2 | 드리머 정체성 불변식 — id/summary fill-only, 리타겟 시 본문만 append, 대표 전용 필드는 대표에만 | **P0** | M | P3 |
-| W3 | verify '동일 ID' 자동 병합 조건 강화 + `FoldDuplicate` 슬롯/코드/타입 백스톱 | **P0** | S | P3 |
-| W4 | 리타겟(`retargetDreamUpdate`) 수용 조건 — 카테고리·페이지 종류 일치 + 제목 토큰 겹침 | P1 | M | P3 |
-| W5 | `MarkSuperseded` 전제조건 + `detectStaleSuperseded` 슬롯 스킵 + ymn 로그 등 데이터 수리 (08-30 전) | **P0** | M | P3 |
-| W6 | 메일 재분류 신호 정밀도 — 메일↔메일 엣지 비소유·자사명 클라이언트 키 차단·tri-state 모호성·archived 필터·스냅샷/캡 (무장 이후 긴급) | P1 | S | P3 |
-| W7 | 거래 원장 위치 결정(A/B) + 17장 복귀 + `cmd/wikicurate` '조직→인물' 규칙 수정 + 골드 26경로 선repoint | P1 | S–M | n/a |
-| W8 | 인물 코퍼스 정책 — dossier 200행 캡 버그·스텁 전용 강등·본문 동명이인 가드·신원키 중복 검출·스텁 related 스킵·summary 규약·효용 분모 | P1 | M | P5 |
-| W9 | 계측 복구 — nightly recall-health가 한 번도 안 돌았음(go 미발견·tee 마스킹)·벤치 확장암 비패리티·골드 repoint 도구·골드 백업 | P1 | S | P3 |
-| W10 | 본문 [[위키링크]] 복구(33% 깨짐) + `PreserveUpdated` 메타-전용 쓰기 계약(선행) + 빈 본문 생성 가드 | P1 | M | P3 |
-| W11 | 저장/성능 — 벡터 캐시 181MB JSON→바이너리+비동기 로드(부팅 −2.7s), 위키 git ignore/gc, 백업에서 재생성 캐시 제외, by-hash refresh | P2 | M | n/a |
-| W12 | 프로덕션 쿼리확장 관측성·예산 가드(4s 천장 vs 1.5s 프리플라이트) | P2 | M | P5 |
-| W13 | 회상 라우팅 계측(`route_followed`) + 수요 원장 트리거 | P2 | M | P5 |
-| W14 | cite v2 + 원문 질의(privacy 게이트) → traffic gold 증식 | P2 | M | P5 |
-| W15 | 표면 — Trust Inbox 'wiki-maint' 카드(모호 클래스만)·`get_page` 메타/출처·챗 `wiki_move` 툴·죽은 `wiki.*` RPC 정리 | P2 | M | P5/P4 |
-| W16 | 린트 패밀리 3레인(CI fixture 린트 · verify advisory · 쓰기 가드) + `wiki-layout.md` 드리프트 패치 | P2 | M | P1/P3 |
-| W17 | P3 묶음 — 로그 헤더 문법/회전 경계, 날짜형 로그 페이지 정책, inert 규칙 주석, 공인 인물 태그, 프로젝트 화면 stage/질문 칩, cues 수치 갱신 | P3 | S | — |
+| # | 항목 | P | 작업량 | RSI | 상태 (08-23 저녁) |
+|---|---|---|---|---|---|
+| W1 | verify 오분류 자동이동 레이아웃 가드 (서브폴더 민팅·원장·프로젝트 슬롯·존재하지 않는 경로 금지) | **P0** | S | P3 | 착지 [#4600](https://github.com/choiceoh/Deneb/pull/4600) — 잔여: 입력 필터(4)·프롬프트 가이드(5) |
+| W2 | 드리머 정체성 불변식 — id/summary fill-only, 리타겟 시 본문만 append, 대표 전용 필드는 대표에만 | **P0** | M | P3 | 1단계 착지 [#4603](https://github.com/choiceoh/Deneb/pull/4603) — 잔여: DeriveID(3)·id_mismatch(4)·수리(5) |
+| W3 | verify '동일 ID' 자동 병합 조건 강화 + `FoldDuplicate` 슬롯/코드/타입 백스톱 | **P0** | S | P3 | 착지 [#4601](https://github.com/choiceoh/Deneb/pull/4601) — 잔여: type 백스톱(iv) |
+| W4 | 리타겟(`retargetDreamUpdate`) 수용 조건 — 카테고리·페이지 종류 일치 + 제목 토큰 겹침 | P1 | M | P3 | — |
+| W5 | `MarkSuperseded` 전제조건 + `detectStaleSuperseded` 슬롯 스킵 + ymn 로그 등 데이터 수리 (08-30 전) | **P0** | M | P3 | 착지 [#4605](https://github.com/choiceoh/Deneb/pull/4605)(수리 포함) — 잔여: 주제 앵커·연대순·강등 UX |
+| W6 | 메일 재분류 신호 정밀도 — 메일↔메일 엣지 비소유·자사명 클라이언트 키 차단·tri-state 모호성·archived 필터·스냅샷/캡 (무장 이후 긴급) | P1 | S | P3 | 가드 착지 [#4606](https://github.com/choiceoh/Deneb/pull/4606) — 잔여: 스냅샷·관찰 원장 구조화·refile dry-run |
+| W7 | 거래 원장 위치 결정(A/B) + 17장 복귀 + `cmd/wikicurate` '조직→인물' 규칙 수정 + 골드 26경로 선repoint | P1 | S–M | n/a | — (운영자 결정 §8-1 대기; 선행 W1 가드는 착지, 골드 repoint는 #4596에서 36경로 착지) |
+| W8 | 인물 코퍼스 정책 — dossier 200행 캡 버그·스텁 전용 강등·본문 동명이인 가드·신원키 중복 검출·스텁 related 스킵·summary 규약·효용 분모 | P1 | M | P5 | 1 착지 [#4615](https://github.com/choiceoh/Deneb/pull/4615) — 2~6 잔여 |
+| W9 | 계측 복구 — nightly recall-health가 한 번도 안 돌았음(go 미발견·tee 마스킹)·벤치 확장암 비패리티·골드 repoint 도구·골드 백업 | P1 | S | P3 | 나이틀리 착지 [#4608](https://github.com/choiceoh/Deneb/pull/4608) — 잔여: 확장암 패리티·골드 도구·골드 백업 |
+| W10 | 본문 [[위키링크]] 복구(33% 깨짐) + `PreserveUpdated` 메타-전용 쓰기 계약(선행) + 빈 본문 생성 가드 | P1 | M | P3 | 계약·빈 본문 가드 착지 [#4608](https://github.com/choiceoh/Deneb/pull/4608) — 잔여: 위키링크 복구 |
+| W11 | 저장/성능 — 벡터 캐시 181MB JSON→바이너리+비동기 로드(부팅 −2.7s), 위키 git ignore/gc, 백업에서 재생성 캐시 제외, by-hash refresh | P2 | M | n/a | 4 착지 [#4611](https://github.com/choiceoh/Deneb/pull/4611) — 1~3 잔여 |
+| W12 | 프로덕션 쿼리확장 관측성·예산 가드(4s 천장 vs 1.5s 프리플라이트) | P2 | M | P5 | — |
+| W13 | 회상 라우팅 계측(`route_followed`) + 수요 원장 트리거 | P2 | M | P5 | — |
+| W14 | cite v2 + 원문 질의(privacy 게이트) → traffic gold 증식 | P2 | M | P5 | — |
+| W15 | 표면 — Trust Inbox 'wiki-maint' 카드(모호 클래스만)·`get_page` 메타/출처·챗 `wiki_move` 툴·죽은 `wiki.*` RPC 정리 | P2 | M | P5/P4 | — |
+| W16 | 린트 패밀리 3레인(CI fixture 린트 · verify advisory · 쓰기 가드) + `wiki-layout.md` 드리프트 패치 | P2 | M | P1/P3 | — |
+| W17 | P3 묶음 — 로그 헤더 문법/회전 경계, 날짜형 로그 페이지 정책, inert 규칙 주석, 공인 인물 태그, 프로젝트 화면 stage/질문 칩, cues 수치 갱신 | P3 | S | — | — |
 
 ---
 
@@ -65,6 +67,8 @@
 | 골드 부패 | hard 10/27 · multiturn 8/16 · typed 5/78 dead | main gold 26경로가 `프로젝트/거래/` 아래 → W7 전 repoint 필수 |
 | 프리플라이트 | 87회 중 wiki=0(deadline) 15회 | 13회는 17:00 cron(email-analysis-full); client 2회 |
 
+> **재측정 (2026-08-23 오후, [#4596](https://github.com/choiceoh/Deneb/pull/4596)).** 위 표는 12:16 KST 스냅샷이다. 같은 날 오후 재측정에서 'hard 셋 병목'의 대부분이 **죽은 골드**였음이 확인됐고 — 골드 36경로 repoint 후 main(197케이스)은 **P@1 91.9 · r@8 97.5**, multiturn 실패는 지칭 해결 문제로 판명돼 [#4604](https://github.com/choiceoh/Deneb/pull/4604)의 프리플라이트 콘텍스트 재작성으로 착지(재작성 시 r@8 100%), backfill 쿼리 확장은 구조적으로 발동하지 않는 것으로 판명·weak-primary RRF는 측정 후 기각됐다. 상세는 [wiki-retrieval-baseline-2026-08-23](wiki-retrieval-baseline-2026-08-23.md).
+
 ### 1.4 테스트 커버리지
 
 `domain/wiki` 80.7% · `wikiwork` 61.9% · `chat/recall` 82.2% · `wikitool` 69.4% · `domain/knowledge` 77.7%.
@@ -80,7 +84,19 @@
 | [#4588](https://github.com/choiceoh/Deneb/pull/4588) | 드리머 쓰기 계약 — 수요 게이트(`dreamer_demand.go`), 7일+ due 자동 해제(`dreamer_due.go`), stage/program persist, 형제 딜(`siblingDeals`) 제목거리 병합 금지, 인물 마커 스텁 30일+무회상 archive(5e-2), MEMORY 카테고리 증류, 30KB+ 페이지 큐레이션 | main · 배포됨 |
 | [#4589](https://github.com/choiceoh/Deneb/pull/4589) | 죽은 miniapp 메서드 정리(`memory.search_status`/`search_doctor` 포함) | main · 배포됨 |
 | [#4593](https://github.com/choiceoh/Deneb/pull/4593) | 회상·`mail_archive`에서 wiki↔mail 인물 불일치를 중재 없이 표시; wikicurate P2(kia-002 대표 신설, 대표 '병합된 중복 문서' 잔재 접기) | main · 배포됨 |
-| [#4592](https://github.com/choiceoh/Deneb/pull/4592) | 회상 수요 원장 조사(助詞) 탈락 | 오픈 |
+| [#4592](https://github.com/choiceoh/Deneb/pull/4592) | 회상 수요 원장 조사(助詞) 탈락 | main · 배포됨 |
+| [#4594](https://github.com/choiceoh/Deneb/pull/4594) | (improvement-ideas 5.7) 드리머 반증 증거 큐 — 다이제스트/dream 카드 '틀린 기억' 정정을 비평 프롬프트 반증 블록으로 주입 | main · 배포됨 |
+| [#4598](https://github.com/choiceoh/Deneb/pull/4598) | (improvement-ideas 5.8) 드리머 변경 기록 + 선택적 되돌리기 — `.dream-cycle-changes.jsonl` + RevertDreamCycle/RevertDreamPages + workfeed 되돌리기 액션 | main · 배포됨 |
+| [#4600](https://github.com/choiceoh/Deneb/pull/4600) | **W1** — `IsLayoutManagedPath` + `moveAllowedFor`(스냅샷 존재·레이아웃·deal 타입) + `recategorizedPath` 서브폴더/프로젝트 목적지 거부 + move 전용 캡 3·이동 로그에 LLM 사유. 판정은 advisory로 잔존 | main · 배포됨 |
+| [#4601](https://github.com/choiceoh/Deneb/pull/4601) | **W3** — id 동일+제목 정규화 동일만 merge Fix(제목 상이는 'id 충돌 수리 대상' advisory) + `refuseLayoutSlotFold`(같은 폴더 슬롯·다른 코드 대표 쌍 거부 — 메일 Message-ID 가드와 같은 마지막 관문) | main · 배포됨 |
+| [#4603](https://github.com/choiceoh/Deneb/pull/4603) | **W2 1단계** — `retargetedFrom` 기록, id 항상 fill-only, 리타겟 시 summary/type/confidence/due/resource도 fill-only, 대표 전용 필드(client/sites/kinds/stage/program)는 대표에만, wikitool 레이아웃 슬롯 제목 유지 | main · 배포됨 |
+| [#4604](https://github.com/choiceoh/Deneb/pull/4604) | (회상, W 백로그 밖 — #4596 후속) 멀티턴 재작성 — 지시어 마커+신호어 과소 턴에서 직전 사용자 턴 꼬리를 질의에 붙여 자립화 | main · 배포됨 |
+| [#4605](https://github.com/choiceoh/Deneb/pull/4605) | **W5** — `supersedePrecondition`(대표·로그·메일분석·거래원장이 OLD 쪽이면 거부) + `detectStaleSuperseded` 동일 술어 스킵 + **데이터 수리 라이브 적용**(ymn·kia-002 로그, sunkean·nde-sun 메일 2통 — `updated` 보존) | main · 배포됨 |
+| [#4606](https://github.com/choiceoh/Deneb/pull/4606) | **W6 가드** — 신호1 대표엣지(`IsProjectRepPage`) 한정, tri-state(모호 판정의 도메인 폴백 차단), archived/superseded 후보 제외, 도메인 캡 3, `ownCompanyKeys` 자사명 client 키 차단 | main · 배포됨 |
+| [#4608](https://github.com/choiceoh/Deneb/pull/4608) | **W9(나이틀리)+W10(계약)** — recall-health go 툴체인 탐색·`set -o pipefail`·`RECALL_HEALTH score=` 자기검증(nightly-drift `shell: bash`), `UpdatePageMetaOnly`(본문 불변·`updated` 보존 — `PruneDeadRelatedLinks` 전환), update-on-missing 빈 content 0B 생성 거부 | main · 배포됨 |
+| [#4611](https://github.com/choiceoh/Deneb/pull/4611) | **W11-4** — by-hash refresh: 이동 페이지 임베딩 재사용(사라진 경로의 hash→벡터 맵에서 이관 — 재임베딩·캐시 전체 재기록 없음) | main · 배포됨 |
+| [#4612](https://github.com/choiceoh/Deneb/pull/4612) | (드리머 자가개선) 품질 원장 `.dream-quality.jsonl`·합성 인덱스 상한 120·비평-수요 접지·사용자 모델 모순 advisory·수요 인지 케이던스 단축 | main · 배포됨 |
+| [#4615](https://github.com/choiceoh/Deneb/pull/4615) | **W8-1** — `loadWikiPeople` 전량 로드+응답 tail 200 캡(201번째 이후 106명 매칭 복구), 이메일 본문 ∪ 프론트매터 `emails` | main · 배포됨 |
 | `wikicurate --apply` ×2 (11:57 b838e60 527파일 · 12:16 b079854) | G2/스코폴라민 분리·맥코넬→페인스타인·vaultwarden id 수리·고아 메일 4통 파일링·기타/거래 비움·보배 SPA 복귀·related/tags 캡 194장·질문 시효 29장·kia-002 대표.md 신설·대표 6장 잔재 폴드. **단** 회사 원장 10장을 `인물/&lt;회사&gt;.md`로 이동(W7), ISW 페이지 미복원, 원장 `sunkean`·메일 2통 archived+superseded 유지(W5), 인물 53장 `updated` bump(W10) | 라이브 적용 |
 | 운영자 드롭인 | `DENEB_MAIL_RECLASS_DOMAIN=1` (12:09:57), `DENEB_WIKI_QUERY_EXPANSION=backfill` | 라이브 |
 | 본 세션 응급조치 | `프로젝트/pl2-kia-epc-002/기아-al광주-2공장-태양광-모듈-입찰.md`의 `id: pl2-kia-epc-002`(08-21 드리머가 덮어쓴 값)를 원래 `기아-al광주-태양광-모듈-입찰`로 복구 — 12:16 신설 대표.md와 id가 충돌해 다음 verify(~17:00)가 '동일한 ID' 자동 병합으로 대표를 다시 접을 상태였음(W3 메커니즘). 데이터 1줄, 백업 보관 | 라이브 적용 |
@@ -92,6 +108,8 @@
 ## 3. P0: 재발 차단 가드 (LLM 판정 적용 전 결정적 전제조건)
 
 ### W1. verify 오분류 자동이동 레이아웃 가드 (P0 · S · RSI P3)
+
+**착지 (2026-08-23, [#4600](https://github.com/choiceoh/Deneb/pull/4600)).** 하위 1·2·3(캡·사유 로그) 완료 — 자동이동은 flat 비-레이아웃 페이지로 좁혀지고 이동 로그에 LLM 사유가 남는다. 잔여: 4(LLM 입력 필터 — 토큰 ~70% 절감), 5(프롬프트 가이드). 원장 17장 데이터 수리는 W7 §8-1 결정 후.
 
 **무엇.** `verify.go:detectMisclassifications`(5b)가 인덱스 전 항목(1,169행)을 LLM에 주고 `confidence=high`면 `verify_apply.go:recategorizedPath`로 `Fix{move}`를 붙이는데, 이 함수는 **경로의 첫 세그먼트만 바꾸고 서브폴더를 보존**한다(`newCat + "/" + rest`, 테스트 `verify_apply_test.go`가 `프로젝트/거래/x.md → 업무/거래/x.md`를 기대값으로 고정). 레이아웃 소유 경로(`프로젝트/거래/` 원장, 프로젝트 코드폴더 슬롯, 메일분석/자료)·`type: deal`·LLM이 반환한 경로의 스냅샷 존재 여부를 전혀 검사하지 않는다.
 
@@ -111,6 +129,8 @@
 
 ### W2. 드리머 정체성 불변식: id/summary/title 덮어쓰기 차단 (P0 · M · RSI P3)
 
+**착지 — 1단계 (2026-08-23, [#4603](https://github.com/choiceoh/Deneb/pull/4603)).** 하위 1 완료(`retargetedFrom`·id 항상 fill-only·리타겟 시 summary/type/confidence/due/resource fill-only·대표 전용 필드는 대표에만). 2는 부분 — wikitool은 **레이아웃 슬롯 페이지**만 제목 유지(일반 편집 대상의 제목 갱신은 기존 계약 유지). 잔여: 3(`DeriveID` 경로 파생)·4(`id_mismatch` advisory)·5(잔여 데이터 수리 — pl1-gsn 대표·skn 로그 id 등).
+
 **무엇.** `dreamer_apply.go:mergeDreamUpdate`는 리다이렉트 여부와 무관하게 모든 update에서 `existing.Meta.ID/Summary/Resource/Type/Confidence/Due`를 LLM 값으로 **무조건 교체**하고(본문은 append), Sites/Kinds/Client를 대상이 대표인지 확인 없이 기록한다. `wikitool/wiki.go:updateWikiWritePage`는 더 강해 **Title까지 무조건 교체**(title이 필수 인자라 LLM이 매번 새 제목을 넘김).
 
 **왜.** G2 페이지 오염(07-30 `dream:` a9aba64: id memomind-one→dating-app-scopolamine-threat + summary·resource 교체 + 스코폴라민 섹션 append), 모닝레터-08-14(08-17 create가 08-14로 리다이렉트돼 id/summary 교체), pl1-gsn 대표(id=pl2-gsn-dev-001), kia 자식 페이지(id=pl2-kia-epc-002 + client/sites/kinds 스탬프), wiki-research가 완도 로그를 '솔리스 인수 업무 분장'으로 개명. 30일간 기존 페이지 id 교체 **24건**(dream 21·wiki-research 1·wikicurate 수리 2) — vaultwarden 하나가 vaultwarden→…→isw-family로 표류. id는 `similar.go:matchByID`(리다이렉트 1순위)·verify 동일-ID 병합·`link_prune` 5단계·`graph_query` byID/findSeed·graphify 노드 id·index.md 첫 칼럼·검색 부스트 필드로 **정체성 키로 소비**되는데 생산 측 규칙은 프롬프트 한 줄('짧은 kebab-case 식별자')뿐이고 전체 인덱스가 프롬프트에 주입돼 타 페이지 id 복사를 유도한다(맥코넬 id=feinstein-casualty, 모닝레터-08-19 id=topsolar-projects-2026-08-19는 create 시점 필드 교차).
@@ -127,6 +147,8 @@
 
 ### W3. verify '동일 ID' 자동 병합 증폭기 차단 (P0 · S · RSI P3)
 
+**착지 (2026-08-23, [#4601](https://github.com/choiceoh/Deneb/pull/4601)).** id 동일만으로는 Fix를 주지 않고(정규화 제목까지 같아야 exact, 아니면 '동일한 ID(제목 상이)' advisory), `FoldDuplicate`에 `refuseLayoutSlotFold`(같은 폴더 in-folder 쌍·다른 코드 폴더의 대표 쌍) 백스톱. 잔여: (iv) `type` 백스톱 — 정확일치 병합의 type 일치 조건(메일 Message-ID·슬롯 가드가 대부분 흡수하지만 명시적 검사는 없음). 근본 원인 차단은 W2(#4603 착지).
+
 **무엇.** `verify.go:detectDuplicates`는 제목 정규화 동일 **또는 id 완전 동일**이면 `exactDupFinding(Fix merge)`를 내고 `applyVerifyFixes`가 사이클당 15건까지 `FoldDuplicate`(본문을 '## 병합된 중복 문서' 아래 append 후 원본 삭제)를 자동 적용한다. `FoldDuplicate`의 유일한 백스톱은 메일분석 Message-ID 가드뿐.
 
 **왜.** W2의 id 덮어쓰기와 한 사이클 안에서 연쇄('update(id 스탬프) → verify(동일 ID) → fold'): 14일 auto-merge 8건 중 5건 — wdo 08-13 대표←로그, dsv 08-17·nde-sun 08-22 대표←로그(로그 삭제 후 재생성), vaultwarden←ISW(ISW 지식은 git에만 잔존), **pl2-kia-epc-001 대표←pl2-kia-epc-002 대표**(08-20 23:28 — 002 대표 소실의 원인; 이후 드리머가 002 대표 재생성을 자식 페이지로 리다이렉트). 12:16 wikicurate가 신설한 002 대표와 자식 페이지가 다시 동일 id였고(본 세션 응급조치로 해소), `pl2-skn-epc-001/로그.md`는 지금도 id==대표 code라 대표에 id=code가 스탬프되는 순간 접힌다. #4588의 `siblingDeals` 가드는 **다른 코드 폴더 대표 쌍**만 막는다 — 같은 폴더 대표↔로그·카테고리 교차·비프로젝트 동일 id는 미커버.
@@ -138,6 +160,8 @@
 **하지 말 것.** '유사한 ID'(dist≤1/2)까지 auto-merge로 넓히지 말 것(pl2-kia-epc-001/002·kum-001을 묶음) · G2/vaultwarden/맥코넬 분리 재제안 금지(적용됨).
 
 ### W5. `MarkSuperseded` 전제조건 + stale-superseded 슬롯 스킵 + 데이터 수리 (P0 · M · RSI P3)
+
+**착지 (2026-08-23, [#4605](https://github.com/choiceoh/Deneb/pull/4605)).** (1) 데이터 수리 **라이브 적용 완료**(ymn·kia-002 로그 superseded_by 제거, sunkean·nde-sun 메일 2통 superseded_by+archived 제거 — `updated` 보존), (2) 전제조건은 레이아웃 술어(대표·로그·메일분석·거래원장 = OLD 금지) 하드 거부(섀도 없이 바로 — 거부 대상이 결정적이고 에러에 사유 포함), (3) `detectStaleSuperseded` 동일 술어 스킵. 잔여: 주제 앵커·연대순 전제조건, 거부 시 related 강등 UX(호출자).
 
 **무엇.** `store_merge.go:MarkSuperseded`는 경로 빈값/동일 여부만 확인하고 `superseded_by`를 쓴다. 호출자 4곳(wiki 챗툴 `markSupersededPages`·knowledge 어댑터·드리머 `markDreamSuperseded`·merge)이 전부 LLM 입력이라 '같은 주제의 낡은 값 대체'가 아닌 관계(사업 승계, 거래처 원장→프로젝트 대표, 메일분석→대표, **로그→자기 대표**)도 그대로 기록되고, `verify.go:detectStaleSuperseded`(30일)가 이를 장기 방치로 보고 **아카이브해 회상에서 제거**한다(validityFactor 0.3×0.15=0.045). 부산8호 M4 하드필터 사건(메모리 `wiki-migration-completed-20260808`)과 동형.
 
@@ -157,6 +181,8 @@
 
 ### W6. 메일 재분류 신호 정밀도: 무장 이후 긴급 (P1 · S · RSI P3)
 
+**가드 착지 (2026-08-23, [#4606](https://github.com/choiceoh/Deneb/pull/4606)).** 신호1 대표엣지 한정·자사명 client 키 차단(`ownCompanyKeys`)·tri-state(모호→도메인 폴백 차단)·archived/superseded 후보 제외·도메인 캡 3 완료. 잔여: 사이클 첫 이동 전 `SnapshotGit`·log.md `signal=` 기록·관찰 원장 구조화(`ObservedRefiles`)·메일 보존 시계 `Created` 기준·`wikicurate refile --dry-run`·오배정 14건 수리(§8-5 운영자 확인).
+
 - **신호1(related)이 메일↔메일 엣지를 소유 증거로 취급:** `mail_reclassify.go:reclassifyTarget`은 related에 `ProjectNameOf`만 적용해 `프로젝트/&lt;proj&gt;/메일분석/<다른 메일>.md` 엣지도 소유로 센다(분석기의 RELATED_PROJECTS는 대표 후보만 검증). 14일 signal=related 이동 9건 전부 대표 엣지 0·메일 엣지 1~2 → '[탑선] Teaser·NDA'×3→충남 영농형, '[SKI E&S] O&M' 스레드가 두 프로젝트로 분할 등. 11:57 캡이 183c80f6a의 엣지를 1개로 만들어 '광주 남구 안전관리대행'이 태안 소원면 프로젝트로 이동 대기(5장). → **`IsProjectRepPage(r)`인 엣지만 신호1**; 메일엣지는 비소유.
 - **신호2(title)의 거래처 키가 자사명:** `project_anchor.go:uniqueProjectIn`은 own-key 없으면 client-key 단일 프로젝트로 확정 — 활성 프로젝트 중 pl1-cny-dev-001만 `client: 탑솔라`라 `[탑솔라(주)]` 제목이 own-key를 못 찾을 때마다 충남 영농형으로(7건 중 5건 오배정: 임동중흥·안성스타필드×2·선그로우 견적·기아 이천덕평). 도메인 경로엔 `topsolar.kr` 블록리스트가 있으나 제목 경로엔 없음. → `ownCompanyKeys={탑솔라,탑솔라주,topsolar}` 단일 정본(블록리스트 옆)으로 client 후보 스킵; pl1-cny 대표 client 값 정정(운영자 확인); 오배정 5건 수리(안성스타필드 2통→pl2-asf-epc-001, 나머지 버킷 복귀).
 - **무장됐는데 가드가 없다:** `DENEB_MAIL_RECLASS_DOMAIN=1`이 12:09에 켜졌지만 (a) 신호1 '≥2 프로젝트 모호' `""` 반환이 그대로 도메인 신호로 떨어짐(tri-state 필요), (b) 후보가 archived/superseded를 안 거름(08-18 아카이브된 sunkean 2통도 계속 제안됐음), (c) 도메인 이동 전 git 스냅샷·전용 캡 없음(중복 병합 경로만 SnapshotGit). 현재 도메인 후보 0건이라 즉시 피해는 없지만 신규 미연결 메일마다 커진다 → **메일 레인 1순위 PR**: tri-state(`target, signal, ambiguous`)·archived/superseded 스킵·`mailDomainMaxMovesPerCycle=3`·사이클 첫 이동 전 `SnapshotGit`·log.md 이동 엔트리에 `signal=`. 관찰 원장은 #4583 dedup 위에 count/first/last 구조화(`ObservedRefiles map`)·Info 로그 첫 회만·버킷에서 사라진 키 자동 정리.
@@ -168,6 +194,8 @@
 
 ### W8. 인물 코퍼스 정책 (P1 · M · RSI P5)
 
+**1 착지 (2026-08-23, [#4615](https://github.com/choiceoh/Deneb/pull/4615)).** 캡을 응답 tail 행 수로 이동해 306장 전량 로드(201번째 이후 106명 매칭 복구) + 이메일 본문 '## 연락처' ∪ 프론트매터 `emails`. 잔여: 2~6(스텁 강등·동명이인 가드·신원키 중복 검출·스텁 related 스킵·summary 규약·효용 분모).
+
 1. **기능 버그(S):** `handlerminiapp/knowledge/people.go:loadWikiPeople`이 `ListPages(인물)` 사전순 순회 중 `maxPeopleWikiRows=200`에서 break → 306장 중 **201번째(인물/이방엽.md)부터 106명이 people.list·person.dossier(#4578) 매칭에서 보이지 않음**; 이메일도 본문 '## 연락처' 라인만 읽어(`contactSectionEmails`) fm emails만 있는 페이지 39장은 매칭 불가. → 캡은 응답 tail 행 수에만, emails는 `Meta.Emails ∪ contactSectionEmails`. 테스트 '201번째 페이지 매칭'.
 2. **스텁 강등:** 검색 `validityFactor`는 archived/superseded/나이만 보고 importance·type·본문 길이로 강등하지 않아 306장 전부 임베딩+summary('탑솔라 소속' 104·'탑솔라그룹 소속' 75) 2.5× 부스트 → 프로브 '탑솔라 회사 개요' 4~8위가 스텁, 프리플라이트 8슬롯을 잠식. #4588의 5e-2는 마커 스텁(~45, 드림 시드)만 archive하고 contacts-sync 스텁 234장은 미대상. → **`archived` 오버로딩 대신 전용 강등**: `isPersonStub(page)`(템플릿·마커 제거 후 산문 <20룬 ∧ pid 없음 ∧ org.json 미포함 ∧ 30d 회상 0) → validityFactor에 stub 팩터(또는 `stub: true` 마커) + 승격 규칙(드리머/메일분석이 담당·관계를 채우거나 pid/org 배정·회상 hit 시 해제) + 시딩은 '강등 상태로 시작'(레지스트리는 contacts 스토어 2,709건이 담당). archived는 회상 증거에 '⚠ 보관됨' 경고를 붙여 연락처 질문에 부적합. 검증: 위키 사본에서 typed(인물 21)·bm25(pid 12)·main 골드 전후 비교 무손실 + 프로브 4~8위 스텁 소멸. 267장 쓰기는 `updated` 보존(W10)·by-hash refresh(W11) 뒤 단일 스냅샷 배치로.
 3. **본문 동명이인 가드:** `person_emails.go:identityEmails`는 ≥2 회사 도메인이면 fm emails를 쓰지 않지만, 같은 동기화의 `contacts.go:mergeContactsByName→enrichPersonPage`는 이름만으로 전화·이메일을 합쳐 본문에 쓴다(김성환: topsolar+bmenergy 전화·이메일 한 페이지, 후보 15건). → ambiguous면 소속 일치 연락처만 렌더, 없으면 `homonym_pending: true` 마커 + verify finding `homonym`(Trust Inbox 카드 1회, W15) — 분리/병합 적용은 운영자 승인(메모리 `person-homonym-conflation`: 자동분리 금지).
@@ -178,12 +206,16 @@
 
 ### W9. 계측 복구: verifier가 실제로 돌게 (P1 · S · RSI P3)
 
+**첫 bullet 착지 (2026-08-23, [#4608](https://github.com/choiceoh/Deneb/pull/4608)).** 나이틀리 recall-health가 실제로 돈다 — go 툴체인 탐색(없으면 명시적 실패)·`set -o pipefail`·`RECALL_HEALTH score=` 라인 자기검증. 잔여: 확장암 비패리티(재측정 #4596에서 '구조적으로 미발동' 판명 — 관측성 요구는 W12와 합류)·`gold_repoint.py` 도구화·골드 백업·analysis-xl 기준선. 단 골드 36경로는 #4596에서 수동 repoint·main 재측정까지 착지.
+
 - **nightly recall-health 0회 실행:** `.github/workflows/nightly-drift.yml`의 잡이 `scripts/dev/recall-health.sh | tee -a $GITHUB_STEP_SUMMARY`라 srv4 러너 PATH(~/go-sdk/go/bin 없음)에서 `go: 명령어를 찾을 수 없음`으로 즉사해도 tee의 exit 0으로 녹색(07-20 첫 런부터 45회 동일). → 스크립트 상단 go PATH 주입(또는 setup-go), 스텝 `shell: bash` + pipefail, 끝에 `RECALL_HEALTH score=` 라인 자기검증(없으면 exit 1 — advisory 잡이라도 '안 돌았는데 녹색' 금지), health-v3 패턴으로 −2pp 이상 하락 시 추적 이슈 갱신(페이징 아님).
 - **벤치 확장암 비패리티:** `recall-health.sh`는 expander를 `qwen3.6-35b-a3b`(웜홀)로 고정하고 '프로덕션 tiny 미러'라 주석했지만 프로덕션 tiny는 `dsv4-nothink`; 웜홀 qwen은 `enable_thinking=false`를 무시해 오늘 10/10 실패 → 사실상 OFF 측정. → recall-bench에 `expansion: attempted/ok/failed` 요약 + ok==0이면 'EXPANSION ARM DEAD — not parity' 경고(nightly는 exit 1); 기본 모델은 **공유 dsv4 금지**(07-21 프로덕션 헬퍼 경합 사건) — 비공유 암 또는 '비패리티 명시'.
 - **골드 부패·백업:** 11개 골드 파일 중 hard 10/27·multiturn 8/16·a1sim 8/16·typed 5/78·bm25 2/24·main 1/161·traffic 1/7 dead(코드폴더 개명 전 경로); `cmd/recall-bench` `deadGoldCases/mismatchedGoldCases`는 stderr 경고뿐. 골드는 `~/.deneb` 루트라 **백업 `DefaultTargets` 밖**(단일 사본). → `scripts/audit/gold_repoint.py`(위키 git `--follow --name-status`로 dead 경로 자동 재지정, .bak 보존), nightly에 11셋 dead-count + `--content` 병행 채점, 골드를 백업 대상에 추가(또는 레포 인접 저장소 — 레포 안은 업무 데이터라 금지).
 - **analysis-xl 450 현재값 미측정**(오늘 8분 런만) — 마지막 정직값 73.1/90.2; nightly 복구 후 첫 값이 새 기준선.
 
 ### W10. 본문 위키링크 복구 + `PreserveUpdated` 계약 + 빈 본문 가드 (P1 · M · RSI P3)
+
+**계약·빈 본문 가드 착지 (2026-08-23, [#4608](https://github.com/choiceoh/Deneb/pull/4608)).** `UpdatePageMetaOnly`(본문 변경 시 에러, `updated` 보존 — `PruneDeadRelatedLinks`가 전환해 사용 중) + update-on-missing의 빈 content 0B 생성 거부. 잔여: [[위키링크]] 복구(`PruneDeadWikiLinks`·`dead_link` advisory·~150장 재작성)·`createDreamPage` 최소 길이 게이트·`empty_page` advisory·기존 0B 3건 수리·`wiki_updated_churn_lint`.
 
 - **[[링크]] 33% 깨짐:** `ExtractWikiLinks`는 graph/snapshot/project_refs에서만 소비되고 죽은 링크 복구는 `link_prune.go:PruneDeadRelatedLinks`(related 전용)뿐; 149 부재(07-19 fleet rename 전 경로 62·코드폴더 내 삭제/개명 36·타 카테고리 26·bare 17·메일 8) + malformed 1(`[[신호:action/tools#watch]]`) + Go resolver가 못 푸는 basename-only 20. 08-08 대정비 메모리도 '본문 링크는 안 고치므로 sed 스윕 별도'로 인지한 갭. → `Store.PruneDeadWikiLinks`(link_prune 사다리 재사용: 정확경로→레거시→유일 basename→유일 제목→유일 ID → 정식 경로로 재작성; 모호/부재는 advisory) + verify finding `dead_link` + wikitool write/ingest 시 타깃 검증 경고. ~150장 본문 재작성은 아래 계약 뒤에.
 - **`PreserveUpdated` 계약(선행):** 메타만 고치는 쓰기(related 캡·superseded 제거·id=code·MarkSuperseded)가 `updated`를 갱신해 'updated≤7d·본문<300B' 9→44로 늘었고 stale/신선도 신호가 내용 변경과 분리됨. → `UpdatePage` 옵션(또는 body hash 불변+Updated 미지정이면 보존); MarkSuperseded·캡 스윕·PruneDead*·wikicurate가 사용; CI 린트 `wiki_updated_churn_lint.py`(git diff에서 updated만 바뀐 커밋 비율). 다수 수리(W5·W7·W8·W10)의 **공통 선행 조건**.
@@ -194,6 +226,8 @@
 ## 5. P2
 
 ### W11. 저장/성능/운영 (P2 · M)
+
+**4 착지 (2026-08-23, [#4611](https://github.com/choiceoh/Deneb/pull/4611)).** by-hash refresh — refresh가 사라진 경로의 캐시 벡터를 hash→벡터 맵으로 모으고 새 경로의 해시가 일치하면 이관(이동 시 재임베딩·캐시 전체 재기록 없음). W7·W8·W10 대량 수리의 선행 조건이 충족됐다. 잔여: 1(캐시 포맷·비동기 로드)·2(git ignore/gc)·3(백업 캐시 제외).
 
 1. **벡터 캐시:** `.semantic-cache.json` 181MB는 stale 키가 아니라 **포맷**(6,887 벡터 × 2048d를 십진 텍스트 12.6B/float로) — float32 56MB·float16 28MB(실벡터 1,180개 프로브: float16 max|Δcos| 3.5e-5, top-8 overlap 1.0). `semantic.go:SetEmbedder→loadCache`가 부팅 경로에서 **동기**(61회 부팅 중앙값 2.79s = mailstore→autonomous 3.76s의 74%; 14일 재시작 62회=랜딩 케이던스; 부팅 직후 RSS HWM 1.87GB), `saveCache`는 변경마다 전체 181MB 재직렬화(marshal 0.87s + fsync + rename). `Store.Forget`은 writeMu 아래서 이 저장을 동기 호출(잠재 1s+ 정지). → 스키마 v4: 매니페스트 JSON + `.semantic-cache.f16`(또는 float32 — 벤치 바이트 동일성 우선이면 먼저 float32) 플랫 바이너리, `loadCache` 지연/병렬(4개 캐시 181+89+75+5MB errgroup, 또는 warm 고루틴으로), v3 리더 1릴리스 유지. 기대: 부팅 −2.7s, 파일 −85%, 일시 heap 335MB→~60MB. 같은 wire 형태의 embedindex(mail/diary/workfeed)는 후속. **SQLite 경로는 금지**(go.mod에 드라이버 없음·4월 `.wiki.db` 폐기 전례·CGO/arm64 표면).
 2. **위키 git:** loose 39MB/2,328(08-10 이후 ~120/일) vs pack 6.8MB, gc는 auto 6,700에서만; 60커밋 loose의 절반이 파생 파일(log.md 12.2MB·index.md 7.2MB·.recall-hits 2.2MB·.deals 1.0MB). `gitsnap.go:wikiGitIgnore`는 5줄뿐이고 `ensureGitRepo`는 `.gitignore`를 1회만 쓴다. → ignore에 `.recall-hits.jsonl`·`.verify-findings.json`·`.dream-selfcompare.jsonl`·`.dream-fact-ledger.jsonl`(#4587)·`.wiki.db*` 추가 + 라이브 .gitignore 조정(reconcile), `gc.auto 512`+`autoDetach false`(30s 스냅샷 타임아웃 안). `.deals.jsonl`·index.md·log.md는 추적 유지(되돌리기 힌트·감사 원장). 일회성 `git rm --cached`(.wiki.db/-shm/-wal·원장 3종·`.bak` 12개)는 **운영자 git 조작**.
@@ -241,6 +275,8 @@
 
 **Now (1주, 가드 레인 — 모두 S/M, 데이터 손실 차단):**
 
+> **진척 (2026-08-23 저녁): 1~6 전부 같은 날 착지**(#4600·#4601·#4603·#4605·#4606·#4608·#4611 — 각 절 상태줄 참조). Now 잔여는 W2 2단계·W5 주제 앵커/강등 UX·W6 스냅샷·W9 확장암·골드 도구·W10 링크 복구뿐이며, **현재 최우선 블로커는 Next 7(W7 운영자 결정 §8-1)** — W11.4 선행이 이미 충족됐다. Next 8의 W8-1도 #4615로 착지.
+
 1. W1 (verify 자동이동 가드) — 하루 3사이클마다 재발 가능, 가장 먼저.
 2. W3 (동일 ID 병합 조건 + FoldDuplicate 백스톱) + W2 1단계(id/summary fill-only, 리타겟 필드) — 같은 PR 가능(`dreamer_apply.go` #4588 리베이스).
 3. W5 데이터 수리(ymn 로그 08-30 전) + `MarkSuperseded` 섀도 가드 + stale 슬롯 스킵.
@@ -264,10 +300,10 @@
 
 ## 8. 운영자 결정 필요 (구현 레인이 막히는 지점)
 
-1. **거래 원장 위치** — (A, 권고) 프로젝트/거래 단일 정본 복귀 + wikicurate '조직→인물' 규칙 제거 vs (B) 인물/업무 원장 인정 + 소비자 전수 개정 (W7).
+1. **거래 원장 위치** — (A, 권고) 프로젝트/거래 단일 정본 복귀 + wikicurate '조직→인물' 규칙 제거 vs (B) 인물/업무 원장 인정 + 소비자 전수 개정 (W7). *갱신: 선행인 W1 가드는 #4600 착지, 골드 26경로 repoint는 #4596에서 36경로 착지 — 결정만 남음.*
 2. **pl2-kia-epc-002 정본 코드** — 폴더 pl2-kia-epc-002(2팀 EPC) vs 자식 페이지 code pl3-kia-mod-001(3팀 모듈 입찰): 별개 딜이면 자식을 pl3 폴더로 분리할지.
 3. **`기타/isw-가족-소유.md` 복원 여부**(세계정세류 기타 페이지 가치) · **모닝레터 3장 삭제** · **날짜형 로그 페이지 정책**.
-4. **verify 5b(LLM 오분류) 존치** — 14일간 정당 이동 0·실패 4·토큰 1,169행/사이클: W1 가드+입력 필터 후 1~2주 관찰 → 완전 advisory화 검토.
+4. **verify 5b(LLM 오분류) 존치** — 14일간 정당 이동 0·실패 4·토큰 1,169행/사이클: W1 가드+입력 필터 후 1~2주 관찰 → 완전 advisory화 검토. *갱신: W1 가드 #4600 착지(입력 필터 잔여) — 08-23 저녁부터 관찰 시계 진행 중.*
 5. **pl1-cny-dev-001 대표 `client: 탑솔라`의 올바른 값**(영농조합법인? 공란?) 및 오배정 5통 정답 프로젝트.
 6. **일회성 git 조작**(운영자): `.wiki.db/-shm/-wal`·드리머 원장 3종·`.bak` 12개 `git rm --cached`; 회사 표기 분기(선그로우 3표기·기아 4페이지·현대≈현대에너지솔루션) 정본 표기.
 7. **id 계약** — LLM 계약에서 id를 완전히 제거(100% 경로 파생)할지 fill-only로 남길지 (W2.3).
@@ -312,3 +348,4 @@
 | 날짜 | 작성자 | 내용 |
 |---|---|---|
 | 2026-08-23 | Claude (Fable 5) | 초안 — 10영역 조사 + 3렌즈 검증 결과를 17항목(W1~W17)으로 정리; 같은 날 랜딩된 #4583/#4587/#4588/#4589/#4593·wikicurate 2회·무장 드롭인 반영; kia-002 자식 페이지 id 충돌 응급조치 기록 |
+| 2026-08-23 | ZCode (GLM-5.3) | 1차 상태 갱신 — 초안 직후 저녁까지 착지된 W1·W2(1단계)·W3·W5(수리 포함)·W6 가드·W8-1·W9(나이틀리)·W10(계약)·W11-4를 #4600·#4603·#4601·#4605·#4606·#4615·#4608·#4611로 표기(§0 상태 칼럼·각 절 상태줄·§2 표·§7~8 갱신). 회상 재측정 #4596·멀티턴 재작성 #4604·드리머 5.7/5.8/후속 #4594·#4598·#4612 반영. 원문 진단·증거는 스냅샷 그대로 유지 |
