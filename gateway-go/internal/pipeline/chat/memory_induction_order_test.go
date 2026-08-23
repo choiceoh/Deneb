@@ -288,6 +288,26 @@ func TestMemoryInductionTrustedMainSessionCommitsCanonicalFact(t *testing.T) {
 	}
 }
 
+func TestMemoryInductionExplicitIntoleranceCommitsCanonicalAllergy(t *testing.T) {
+	store := newMemoryInductionTestStore(t)
+	message := "기억해줘. 나는 우유를 못 먹어"
+	maybeRunMemoryInduction(
+		runDeps{memory: MemoryDeps{Wiki: store}, workspaceDir: t.TempDir()},
+		RunParams{
+			SessionKey: trustedMemoryInductionSessionKey, Message: message,
+			GateUntrustedTools: true, TrustedDirectUserInput: true,
+		},
+		&agent.AgentResult{}, discardLogger(),
+	)
+	barrier := memoryInductionTurns.reserve(time.Now())
+	barrier.wait()
+	barrier.finish()
+	active := store.ActiveFacts("self")
+	if len(active) != 1 || active[0].Key != "health.allergy" || active[0].Kind != wiki.FactKindIdentity || active[0].Value != message {
+		t.Fatalf("active facts = %+v, want canonical health.allergy identity", active)
+	}
+}
+
 func TestMemoryInductionEnglishCommandsCommitCanonicalFacts(t *testing.T) {
 	tests := []struct {
 		message string

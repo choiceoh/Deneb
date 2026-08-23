@@ -72,8 +72,9 @@ var (
 	reportedContentFrameRe         = regexp.MustCompile(`(?i)(?:라고|다고)\s*(?:들었|말했|전했|생각|알고|기억|적혀|쓰여|써\s*있|기재|작성)`)
 	profilePayloadFrameRe          = regexp.MustCompile(`(?i)(?:번역(?:해|할)|요약(?:해|할)|검토(?:해|할)|설명(?:해|할)|문장|문구|메일|이메일|문서|페이지|파일|원문|\btranslate\b|\bsummarize\b|\bemail\b|\bdocument\b|\bsentence\b|\bpage\b|\bfile\b)`)
 	temporaryProfileScopeRe        = regexp.MustCompile(`(?i)(?:오늘만|이번만|이번에만|이번에는|이번엔|다음에만|지금만|지금은|(?:(?:오늘|내일|모레)(?:\s*(?:하루|동안))?(?:에)?\s*만)|(?:이번\s*(?:주|달|개월|분기|해|연도)(?:\s*(?:에|동안))?\s*만)|(?:(?:한|두|세|\d+)\s*(?:시간|일|주|달|개월)|일주일|한달|한\s*달)(?:\s*동안)?\s*만|(?:이|이번|다음)\s*(?:답변|메시지|질문|요청|턴|대화|회의|세션)(?:에|에서|에는)?\s*만|(?:[\p{L}\p{N}_-]+(?:\s+[\p{L}\p{N}_-]+){0,3})(?:에서만|에게만|한테만|때만|경우에만))`)
-	selfIdentityCueRe              = regexp.MustCompile(`(?i)(?:비건|채식|채식주의|알레르기)`)
+	selfIdentityCueRe              = regexp.MustCompile(`(?i)(?:비건|채식|채식주의|알레르기|못\s*먹)`)
 	directSelfIdentityRe           = regexp.MustCompile(`(?i)^\s*(?:(?:나는|저는|제가)\s+(?:(?:비건|채식(?:주의자)?)(?:이야|입니다|이에요|예요|야)?|(?:[\p{L}\p{N}_-]{1,16}\s+)?알레르기(?:가|는)?\s*(?:있어|있어요|있습니다)?)|(?:내|나의)\s+(?:(?:식단|식습관)(?:은|는|이|가)?\s*(?:비건|채식(?:주의)?)|알레르기(?:는|가)?\s+.{1,24}))\s*[.!?。！？]*\s*$`)
+	directSelfIntoleranceRe        = regexp.MustCompile(`(?i)^\s*(?:나는|저는|제가)\s+[\p{L}\p{N}_-]{1,16}(?:을|를)\s+못\s*먹(?:어|어요|습니다)?\s*[.!?。！？]*\s*$`)
 	directSelfCommunicationRe      = regexp.MustCompile(`(?i)^\s*(?:(?:나는|저는|제가)\s+(?:(?:(?:답변|응답|말투|언어)(?:은|는|을|를)?\s+(?:간결하게?|짧게|짧고\s*간결하게|장황하게?|길게|길고\s*상세하게|상세하게|자세하게|한국어(?:로)?|영어(?:로)?|한글(?:로)?)(?:\s*(?:원해|선호해|좋아해))?)|(?:(?:간결한|짧은|긴|상세한|자세한)\s+(?:답변|응답)(?:을|를)?\s*(?:원해|선호해|좋아해)))|(?:내|나의)\s+(?:답변|응답|말투|언어)(?:은|는|을|를)?\s+(?:간결하게?|짧게|짧고\s*간결하게|장황하게?|길게|길고\s*상세하게|상세하게|자세하게|한국어(?:로)?|영어(?:로)?|한글(?:로)?)(?:\s*(?:원해|선호해|좋아해))?|i\s+(?:prefer|want|like)\s+(?:my\s+)?(?:answers?|responses?|reply|replies|language)\s+.{1,24}|my\s+(?:answers?|responses?|reply|replies|language)\s+.{1,24})\s*[.!?。！？]*\s*$`)
 	directSelfGenericPreferenceRe  = regexp.MustCompile(`(?i)^\s*(?:나는|저는|제가)\s+(.{1,40}?)(?:을|를|은|는)?\s*(?:(?:정말|아주|별로|전혀|꽤|많이)\s*)?(?:좋아\s*하지\s*않(?:아|아요)?|안\s*좋아(?:해|해요)?|좋아(?:해|해요|한다)|싫어(?:해|해요|한다)|선호(?:해|해요|한다))\s*[.!?。！？]*\s*$`)
 	directSelfLongTermGoalRe       = regexp.MustCompile(`(?i)^\s*(?:내|나의)\s*장기\s*목표(?:는|은|이|가)?\s+.{1,40}\s*[.!?。！？]*\s*$`)
@@ -404,6 +405,9 @@ func isDirectSelfProfileAssertion(body string) bool {
 		return false
 	}
 	if _, _, ok := englishSelfProfileAssertion(body); ok {
+		return true
+	}
+	if directSelfIntoleranceRe.MatchString(body) {
 		return true
 	}
 	if !directSelfProfileStartRe.MatchString(body) || !directSelfProfileFrameRe.MatchString(body) {

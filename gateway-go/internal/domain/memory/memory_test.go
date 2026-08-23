@@ -260,6 +260,11 @@ func TestInduceFromTurnRequiresDirectProfileMutationIntent(t *testing.T) {
 			"기억해줘. 나는 철수도 비건이라고 생각해",
 			"기억해줘. 저는 친구를 채식주의자로 알고 있어요",
 			"기억해줘. 나는 철수의 땅콩 알레르기가 심해",
+			"기억해줘. 나는 철수가 우유를 못 먹어",
+			"기억해줘. 나는 오늘 우유를 못 먹어",
+			"기억해줘. 나는 지금 우유를 못 먹어",
+			"기억해줘. 나는 당분간 우유를 못 먹어",
+			"기억해줘. 나는 이번주 우유를 못 먹어",
 			"기억해줘. 나는 친구 철수가 커피를 좋아한다고 생각해",
 			"기억해줘. 나는 철수도 커피를 좋아한다고 생각해",
 			"기억해줘. 나는 보고서를 길게 원해",
@@ -331,6 +336,7 @@ func TestInduceFromTurnRequiresDirectProfileMutationIntent(t *testing.T) {
 			"기억해줘. 나는 커피를 많이 좋아해",
 			"내 호칭은 만수로 기억해줘",
 			"앞으로 나를 만수라고 불러줘",
+			"기억해줘. 나는 우유를 못 먹어",
 		}
 		for _, message := range messages {
 			induced := InduceFromTurn(message)
@@ -341,6 +347,10 @@ func TestInduceFromTurnRequiresDirectProfileMutationIntent(t *testing.T) {
 		address := InduceFromTurn(`내 호칭은 "대장"으로 기억해줘`)
 		if address == nil || address.Route != RouteMemory || address.Candidate.FactKey != "identity.address" {
 			t.Fatalf("address command = %+v, want memory identity.address", address)
+		}
+		intolerance := InduceFromTurn("기억해줘. 나는 우유를 못 먹어")
+		if intolerance == nil || intolerance.Route != RouteMemory || intolerance.Candidate.FactKey != "health.allergy" || intolerance.Candidate.FactKind != "identity" {
+			t.Fatalf("intolerance command = %+v, want memory health.allergy identity", intolerance)
 		}
 	})
 
