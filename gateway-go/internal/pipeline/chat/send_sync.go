@@ -87,11 +87,11 @@ func (r *SyncResult) BestText() string {
 	return toolwire.SubstituteMarketLetterTokens(r.BestTextRaw())
 }
 
-func (r *SyncResult) fillEmptyStopFallback() bool {
+func (r *SyncResult) fillEmptyStopFallback(activities []agent.ToolActivity) bool {
 	if r == nil || r.BestText() != "" {
 		return false
 	}
-	msg := fallbackForStopReason(r.StopReason)
+	msg := enrichStopFallback(fallbackForStopReason(r.StopReason), activities)
 	if msg == "" {
 		return false
 	}
@@ -348,7 +348,11 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 		StopReason:      result.StopReason,
 		Thinking:        reasoning,
 	}
-	res.synthesizedFallback = res.fillEmptyStopFallback()
+	var activities []agent.ToolActivity
+	if result.AgentResult != nil {
+		activities = result.AgentResult.ToolActivities
+	}
+	res.synthesizedFallback = res.fillEmptyStopFallback(activities)
 	// Accidental empty completion — end_turn after tool activity with zero
 	// text and no silent token. fillEmptyStopFallback deliberately leaves
 	// end_turn alone (NO_REPLY silence must survive), and that narrow rule

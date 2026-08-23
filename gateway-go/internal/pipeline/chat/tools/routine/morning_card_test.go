@@ -151,6 +151,94 @@ func TestComposeMorningLetterCardIsDeliveryReadyAndSchemaValid(t *testing.T) {
 	}
 }
 
+func TestComposeMorningLetterCardTodayFocusAndQuoteGroups(t *testing.T) {
+	now := time.Date(2026, 7, 18, 8, 0, 0, 0, kstLocation)
+	env := morningCardFixture()
+	env.Sections.Email.Messages = []emailEntry{
+		{From: "김부장", Subject: "기아 AL 광주 1차 견적"},
+		{From: "김부장", Subject: "기아 AL 광주 재견적"},
+		{From: "김부장", Subject: "기아 AL 이천 가견적"},
+		{From: "영업", Subject: "주간 회의 안내"},
+	}
+	msg := composeMorningLetterCard(env, now)
+	fences := denebui.ExtractFences(msg)
+	if len(fences) != 1 {
+		t.Fatalf("fences=%d", len(fences))
+	}
+	issues, err := denebui.Validate(fences[0])
+	if err != nil || len(issues) != 0 {
+		t.Fatalf("card invalid: err=%v issues=%v", err, issues)
+	}
+	for _, want := range []string{
+		"오늘 전무 할 일",
+		"진코 선입금 상계 — 기한 초과",
+		"07/18 09:00 — 현장 점검",
+		"지출품의 — 4시간째 방치",
+		"견적 묶음 · 광주 · 2건",
+		"기아 AL 광주 재견적",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("card missing %q", want)
+		}
+	}
+	if strings.Contains(msg, "견적 묶음 · 이천") {
+		t.Error("single-site quote must not get its own bundle card")
+	}
+	if !strings.Contains(msg, "새 메일 신호") {
+		t.Error("raw email list must stay even when quotes are grouped")
+	}
+}
+
+func TestCollectMorningTodayFocusSkipsTomorrowAndDistantDeadlines(t *testing.T) {
+	now := time.Date(2026, 8, 24, 8, 0, 0, 0, kstLocation)
+	got := collectMorningTodayFocus(
+		calendarData{OK: true, Events: []string{"08/24 09:00 — 오전 회의", "08/25 10:00 — 내일 일"}},
+		deadlineData{Items: []deadlineEntry{
+			{Title: "기아 광주 재견적", DaysLeft: 0},
+			{Title: "부가세", DaysLeft: 3},
+		}},
+		groupwarePendingData{Items: []groupwarePendingEntry{
+			{Title: "신선 결재", EscalationLevel: 0},
+			{Title: "방치 품의", EscalationLevel: 1, StaleLabel: "어제부터"},
+		}},
+		now,
+	)
+	joined := strings.Join(got, "\n")
+	for _, want := range []string{"기아 광주 재견적", "08/24 09:00 — 오전 회의", "방치 품의"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %q in %q", want, joined)
+		}
+	}
+	for _, unwanted := range []string{"부가세", "내일 일", "신선 결재"} {
+		if strings.Contains(joined, unwanted) {
+			t.Errorf("unexpected %q in %q", unwanted, joined)
+		}
+	}
+	if len(got) > morningTodayFocusMax {
+		t.Fatalf("len=%d, want <= %d", len(got), morningTodayFocusMax)
+	}
+}
+
+func TestGroupMorningQuoteMailsRequiresTwoPerSite(t *testing.T) {
+	groups := groupMorningQuoteMails([]emailEntry{
+		{From: "A", Subject: "기아 AL 광주 견적"},
+		{From: "A", Subject: "기아 AL 광주 재산정"},
+		{From: "A", Subject: "기아 AL 이천 견적"},
+		{From: "A", Subject: "주간 보고"},
+	})
+	if len(groups) != 1 || groups[0].Site != "광주" || len(groups[0].Items) != 2 {
+		t.Fatalf("got %+v", groups)
+	}
+}
+
+func TestWriteMorningWeatherShowsUnknownCondition(t *testing.T) {
+	var b strings.Builder
+	writeMorningWeather(&b, weatherData{OK: true, TempC: "23", FeelsLikeC: "27", Humidity: "96"}, "")
+	if !strings.Contains(b.String(), "상태 미확인") {
+		t.Fatalf("empty condition should surface: %s", b.String())
+	}
+}
+
 func TestComposeMorningLetterCardAllFailuresStillReturnsMinimumCard(t *testing.T) {
 	now := time.Date(2026, 7, 18, 8, 0, 0, 0, kstLocation)
 	msg := composeMorningLetterCard(morningLetterEnvelope{

@@ -309,16 +309,7 @@ func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeRes
 		return nil, fmt.Errorf("metadata fetch: %w", metaErr)
 	}
 
-	result := &YouTubeResult{
-		Title:       meta.Title,
-		Channel:     meta.Channel,
-		DurationSec: meta.Duration,
-		Duration:    formatDuration(meta.Duration),
-		UploadDate:  meta.UploadDate,
-		ViewCount:   meta.ViewCount,
-		Description: truncateString(meta.Description, 1000),
-		URL:         videoURL,
-	}
+	result := youtubeResultFromMeta(meta, videoURL)
 
 	if err != nil {
 		// No captions (or YouTube blocked them) — fall back to transcribing the
@@ -337,6 +328,53 @@ func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeRes
 	result.Transcript = transcript
 	result.Language = lang
 	return result, nil
+}
+
+// ExtractYouTubeAudioTranscript downloads audio and transcribes it via the
+// local ASR sidecar. Call this on the parent turn deadline — not the 90s
+// caption budget — when captions/live streams came back empty. A 59-minute
+// talk otherwise dies inside extractYouTube's caption timeout before ASR starts.
+func ExtractYouTubeAudioTranscript(ctx context.Context, videoURL string) (*YouTubeResult, error) {
+	if !asrUsable(ctx) {
+		return nil, fmt.Errorf("audio ASR unavailable")
+	}
+	ytdlpPath, err := probeYtDlp(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tmpDir, err := os.MkdirTemp("", "deneb-yt-asr-*")
+	if err != nil {
+		return nil, fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	meta, err := fetchYouTubeMetadata(ctx, ytdlpPath, videoURL)
+	if err != nil {
+		return nil, fmt.Errorf("metadata fetch: %w", err)
+	}
+	result := youtubeResultFromMeta(meta, videoURL)
+	t, lang := transcriptViaASR(ctx, ytdlpPath, videoURL, tmpDir, 0, 0, meta.Duration)
+	if t == "" {
+		result.Transcript = noTranscriptMarker
+		return result, nil
+	}
+	result.Transcript = t
+	result.Language = lang
+	return result, nil
+}
+
+func youtubeResultFromMeta(meta *ytMetadata, videoURL string) *YouTubeResult {
+	return &YouTubeResult{
+		Title:       meta.Title,
+		Channel:     meta.Channel,
+		DurationSec: meta.Duration,
+		Duration:    formatDuration(meta.Duration),
+		UploadDate:  meta.UploadDate,
+		ViewCount:   meta.ViewCount,
+		Description: truncateString(meta.Description, 1000),
+		URL:         videoURL,
+		IsLive:      meta.IsLive || meta.WasLive,
+	}
 }
 
 // minNativeBudget is the floor below which the native attempt is skipped when a
@@ -569,6 +607,8 @@ type ytMetadata struct {
 	UploadDate  string `json:"upload_date"`
 	ViewCount   int64  `json:"view_count"`
 	Description string `json:"description"`
+	IsLive      bool   `json:"is_live"`
+	WasLive     bool   `json:"was_live"`
 }
 
 // fetchYouTubeMetadata calls yt-dlp --dump-json to get video metadata.

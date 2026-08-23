@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -350,5 +351,27 @@ func TestPersistSynthesizedSyncFallbackAppendsTerminalAssistantRow(t *testing.T)
 	}
 	if messages[0].Role != "assistant" || messages[0].TextContent() != fallbackForStopReason("timeout") {
 		t.Fatalf("terminal row = role %q text %q", messages[0].Role, messages[0].TextContent())
+	}
+}
+
+func TestPersistTimeoutRemnantKeepsToolWorkInTranscript(t *testing.T) {
+	store := transcriptstore.NewMemoryTranscriptStore()
+	activities := []agent.ToolActivity{{Name: "watch"}, {Name: "web"}}
+	msg := enrichStopFallback(fallbackForStopReason("timeout"), activities)
+	persistTimeoutRemnant(
+		runDeps{transcript: store},
+		"client:watch-timeout",
+		&agent.AgentResult{StopReason: "timeout", ToolActivities: activities},
+		msg,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	messages, total, err := store.Load("client:watch-timeout", 0)
+	testutil.NoError(t, err)
+	if total != 1 || len(messages) != 1 {
+		t.Fatalf("persisted = %d/%d", len(messages), total)
+	}
+	text := messages[0].TextContent()
+	if messages[0].Role != "user" || !strings.Contains(text, "[SYSTEM:") || !strings.Contains(text, "Tools used: watch, web") {
+		t.Fatalf("remnant = role %q text %q", messages[0].Role, text)
 	}
 }

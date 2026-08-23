@@ -1,6 +1,11 @@
 package artifact
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
+)
 
 func TestNormalizeWatchDetail(t *testing.T) {
 	tests := []struct {
@@ -31,5 +36,15 @@ func TestNormalizeWatchDetail(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("normalizeWatchDetail(%q) = %q, want %q", tt.in, got, tt.want)
 		}
+	}
+}
+
+func TestFormatWatchNoTranscriptExplainsLive(t *testing.T) {
+	got := formatWatchNoTranscript(&media.WatchResult{Title: "대화", Channel: "DW", IsLive: true})
+	if !strings.Contains(got, "라이브라 자막 트랙이 없습니다") {
+		t.Fatalf("live notice missing: %s", got)
+	}
+	if !strings.Contains(got, "대화") {
+		t.Fatalf("title missing: %s", got)
 	}
 }

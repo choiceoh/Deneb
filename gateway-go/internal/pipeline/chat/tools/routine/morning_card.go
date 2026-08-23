@@ -104,6 +104,7 @@ func composeMorningLetterCardWithNarrative(env morningLetterEnvelope, narrative 
 	fmt.Fprintf(&b, "  <text style=\"headline\">%s</text>\n", morningRaw(env.Date))
 	fmt.Fprintf(&b, "  <text style=\"caption\">%s</text>\n", morningRaw(summary))
 	b.WriteString("  <hr/>\n")
+	writeMorningTodayFocus(&b, sections.Calendar, sections.Deadlines, sections.GroupwarePending, now)
 	writeMorningWeather(&b, sections.Weather, narrative.WeatherNote)
 	writeMorningMarket(&b, sections.Exchange, sections.Copper, now)
 	writeMorningCalendar(&b, sections.Calendar)
@@ -114,6 +115,7 @@ func composeMorningLetterCardWithNarrative(env morningLetterEnvelope, narrative 
 		writeMorningProjects(&b, sections.ProjectSignals)
 		writeMorningEmail(&b, sections.Email)
 	}
+	writeMorningQuoteGroups(&b, sections.Email)
 	writeMorningQuestions(&b, sections.OpenQuestions)
 	writeMorningPending(&b, sections.GroupwarePending)
 	writeMorningCC(&b, sections.GroupwareCC)
@@ -264,6 +266,9 @@ func writeMorningWeather(b *strings.Builder, weather weatherData, modelNote stri
 	detail := modelNote
 	if detail == "" {
 		detail = strings.TrimSpace(weather.Condition)
+		if detail == "" {
+			detail = "상태 미확인"
+		}
 		if weather.Humidity != "" {
 			detail += " · 습도 " + weather.Humidity + "%"
 		}
