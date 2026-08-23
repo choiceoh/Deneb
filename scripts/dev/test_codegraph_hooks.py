@@ -385,6 +385,47 @@ class ReminderTests(unittest.TestCase):
         self.assertEqual(json.loads(stdout)["hookSpecificOutput"]["permissionDecision"], "allow")
 
 
+class CursorCodegraphServeTests(unittest.TestCase):
+    def test_mcp_wrappers_keep_worktree_binding_and_tool_surface(self) -> None:
+        cursor = json.loads((REPO_ROOT / ".cursor/mcp.json").read_text(encoding="utf-8"))
+        repo = json.loads((REPO_ROOT / ".mcp.json").read_text(encoding="utf-8"))
+        cursor_cg = cursor["mcpServers"]["codegraph"]
+        repo_cg = repo["mcpServers"]["codegraph"]
+        self.assertEqual(cursor_cg["command"], "bash")
+        self.assertIn("cursor-codegraph-serve.sh", cursor_cg["args"][0])
+        self.assertEqual(
+            cursor_cg["env"]["CODEGRAPH_MCP_TOOLS"],
+            "explore,node,search,impact,callers,callees",
+        )
+        self.assertNotIn("--path", cursor_cg["args"])
+        self.assertEqual(repo_cg["command"], "bash")
+        self.assertIn("codegraph-serve.sh", repo_cg["args"][0])
+
+    def test_print_root_refuses_production_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            prod = home / "deneb"
+            dev = home / "deneb-dev"
+            prod.mkdir()
+            dev.mkdir()
+            script = REPO_ROOT / "scripts/dev/cursor-codegraph-serve.sh"
+            env = os.environ.copy()
+            env["HOME"] = str(home)
+            env["CURSOR_CODEGRAPH_FALLBACK"] = str(prod)
+            env.pop("CURSOR_WORKTREE", None)
+            env.pop("DENEB_AGENT_ROOT", None)
+            env.pop("CURSOR_SESSION_ID", None)
+            proc = subprocess.run(
+                ["bash", str(script), "--print-root"],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=env,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(proc.stdout.strip(), str(dev))
+
+
 class HookEntryPointTests(unittest.TestCase):
     def test_malformed_json_never_breaks_nudge_or_reminder(self) -> None:
         for module in (nudge, remind):

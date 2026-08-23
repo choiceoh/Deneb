@@ -85,7 +85,7 @@ Removes worktrees whose branch is merged into `main` or older than N days (defau
 ### Prerequisites
 
 ```bash
-npm i -g @colbymchenry/codegraph     # install (v1.4.1+)
+npm i -g @colbymchenry/codegraph     # install (v1.5.0+)
 codegraph init                        # build index (~10s, ~55K nodes)
 ```
 
@@ -115,7 +115,7 @@ Precision notes (Deneb):
 - CLI/MCP `query`/`node`/`callers` pin exact symbols; `explore` may camelCase-split (`GatewayHub` → `Hub`/`GatewayTab`) — prefer `node` for a single known symbol.
 - MCP exposes `explore,node,search,impact,callers,callees` via `CODEGRAPH_MCP_TOOLS` in `codegraph-serve.sh` / `cursor-codegraph-serve.sh`.
 - `codegraph.json` excludes audit/dev scripts and generated/resource noise; re-index after changes.
-- Runtime: CodeGraph **1.4.1+** (`npm i -g @colbymchenry/codegraph@1.4.1`).
+- Runtime: CodeGraph **1.5.0+** (`npm i -g @colbymchenry/codegraph@1.5.0`). `codegraph upgrade` rewrites MCP configs — restore `scripts/dev/cursor-codegraph-serve.sh` / `codegraph-serve.sh` afterwards.
 
 ### Auto-sync
 
