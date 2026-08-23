@@ -216,6 +216,7 @@ actual fun DenebWebView(
                             state.commitNavigation(url)
                         }
                     }
+                    if (state.loadError != null) return
                     injectSiteQuirk(view, url)
                     injectTranslateScript(view)
                     holder.translateBridge?.resumeForDocument()
@@ -226,9 +227,6 @@ actual fun DenebWebView(
                     )
                 }
 
-                // SPA soft-nav often updates history without a full reload. Hint the
-                // injected translator so it re-collects when JS history hooks miss.
-                // Without this a failed load is a blank screen with no reason.
                 // Main frame only: every ad-blocked subresource also reports an
                 // error, and surfacing those would cry wolf on every page.
                 override fun onReceivedError(
@@ -238,15 +236,43 @@ actual fun DenebWebView(
                 ) {
                     if (!request.isForMainFrame) return
                     resumeBrowserTranslation(holder, state, view)
-                    state.loadError = browserPageErrorMessage(error.errorCode, error.description?.toString())
+                    // onReceivedSslError may have already set a more specific reason.
+                    if (state.loadError == null) {
+                        state.markMainFrameFailed(
+                            browserPageErrorMessage(error.errorCode, error.description?.toString()),
+                        )
+                    } else {
+                        state.loading = false
+                        state.progress = 100
+                    }
+                }
+
+                override fun onReceivedHttpError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    errorResponse: WebResourceResponse,
+                ) {
+                    if (!request.isForMainFrame) return
+                    val message = browserHttpErrorMessage(errorResponse.statusCode) ?: return
+                    resumeBrowserTranslation(holder, state, view)
+                    state.markMainFrameFailed(message)
                 }
 
                 // Always cancel: no "proceed anyway" on a device holding
-                // business mail and groupware sessions.
+                // business mail and groupware sessions. Iframe/image cert
+                // failures must not paint the whole page as failed.
                 override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
                     handler.cancel()
+                    val failing = error.url.orEmpty()
+                    if (
+                        !browserSslErrorAffectsPage(view.url.orEmpty(), failing) &&
+                        !browserSslErrorAffectsPage(state.currentUrl, failing) &&
+                        !browserSslErrorAffectsPage(state.url, failing)
+                    ) {
+                        return
+                    }
                     resumeBrowserTranslation(holder, state, view)
-                    state.loadError = browserSslErrorMessage(error.primaryError)
+                    state.markMainFrameFailed(browserSslErrorMessage(error.primaryError))
                 }
 
                 override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {

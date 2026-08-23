@@ -324,12 +324,24 @@ class DenebWebViewState(
         rendererGeneration++
     }
 
+    /** Main-frame failure: keep the Korean reason through onPageFinished. */
+    internal fun markMainFrameFailed(message: String) {
+        loadError = message
+        loading = false
+        progress = 100
+    }
+
     internal fun markRendererRecoveryStarted(url: String) {
         if (!canBookmarkUrl(url)) return
         rendererRecoveryUrl = url.trim()
         currentUrl = url
-        rendererRecoveryPending = false
-        loadError = null
+        // onPageFinished of a failed load also lands here with the same
+        // bookmarkable URL. Clearing loadError then hid the Korean reason
+        // and left only Chromium's English "Webpage not available".
+        if (rendererRecoveryPending) {
+            rendererRecoveryPending = false
+            loadError = null
+        }
     }
 }
 

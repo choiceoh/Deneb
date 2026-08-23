@@ -502,6 +502,20 @@ private fun BrowserPopupBar(
     HorizontalDivider(color = denebHairline())
 }
 
+/** Covers Chromium's English error document with a Korean reason and retry. */
+@Composable
+internal fun BrowserPageErrorPane(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(color = MaterialTheme.colorScheme.background, modifier = modifier) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            DenebError(text = message, onRetry = onRetry)
+        }
+    }
+}
+
 /**
  * Stateless browser chrome, separated from the stateful shell so renderPreviews can
  * exercise the look with mock state. Safari-style: NO top header — the page fills the
@@ -514,8 +528,9 @@ private fun BrowserPopupBar(
  * Design system: Material IconButtons with functional icons, skinned with Deneb colors
  * — the translate toggle lights the warm insight accent when ON (DeepL-backed
  * translation), inactive actions use the muted hint color. [content] is the page
- * area (the real WebView, or a stub) and takes the weight, so it fills above the
- * bottom bar.
+ * area (the real WebView, or a stub) and fills the weighted slot above the
+ * bottom bar. A main-frame failure covers that slot so Chromium's English
+ * error document never shows through.
  */
 @Composable
 fun DenebBrowserChrome(
@@ -569,14 +584,32 @@ fun DenebBrowserChrome(
                     },
                 )
             }
-            // Page fills the top — no top header.
-            content()
-            if (state.popupActive && state.popupLoading) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            } else if (!state.popupActive && state.loading) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), progress = { state.progress / 100f })
+            val pageError = if (state.popupActive) state.popupError else state.loadError
+            // Cover Chromium's English error document; a bottom strip left
+            // "Webpage not available" filling the page underneath.
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                Column(Modifier.fillMaxSize()) {
+                    content()
+                }
+                pageError?.let { message ->
+                    BrowserPageErrorPane(
+                        message = message,
+                        onRetry = {
+                            haptics.tap()
+                            state.retry()
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
-            if (state.translateEnabled && !state.popupActive) {
+            if (pageError == null) {
+                if (state.popupActive && state.popupLoading) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else if (!state.popupActive && state.loading) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), progress = { state.progress / 100f })
+                }
+            }
+            if (state.translateEnabled && !state.popupActive && pageError == null) {
                 val translation = state.translationProgress
                 Row(
                     modifier = Modifier
@@ -605,26 +638,6 @@ fun DenebBrowserChrome(
                             trackColor = denebInsight().copy(alpha = 0.18f),
                         )
                     }
-                }
-            }
-            // A failed load leaves the WebView blank; say why instead of showing
-            // an empty page with no explanation.
-            val pageError = if (state.popupActive) state.popupError else state.loadError
-            pageError?.let { message ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.errorContainer)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = state::retry) { Text("재시도") }
                 }
             }
             HorizontalDivider(color = denebHairline())
