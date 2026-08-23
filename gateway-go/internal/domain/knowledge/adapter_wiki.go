@@ -291,13 +291,6 @@ func (a *wikiAdapter) RecordFact(_ context.Context, opts FactRecordOptions) (Fac
 	if err != nil {
 		return FactMutationResult{}, err
 	}
-	if err := validateFactEvidence(authority, opts.Sources); err != nil {
-		return FactMutationResult{}, err
-	}
-	if authority == wiki.FactAuthorityPrimaryDoc &&
-		(kind == wiki.FactKindAmount || kind == wiki.FactKindDeadline || kind == wiki.FactKindContract) && basisAt.IsZero() {
-		return FactMutationResult{}, fmt.Errorf("basis_at is required for primary_document %s facts", kind)
-	}
 	actor := strings.TrimSpace(opts.Actor)
 	if actor == "" {
 		actor = "knowledge-tool"
@@ -313,9 +306,6 @@ func (a *wikiAdapter) RecordFact(_ context.Context, opts FactRecordOptions) (Fac
 func (a *wikiAdapter) ForgetFact(_ context.Context, opts FactForgetOptions) (FactMutationResult, error) {
 	authority, err := parseFactAuthority(opts.Authority)
 	if err != nil {
-		return FactMutationResult{}, err
-	}
-	if err := validateFactEvidence(authority, opts.Sources); err != nil {
 		return FactMutationResult{}, err
 	}
 	actor := strings.TrimSpace(opts.Actor)
@@ -381,27 +371,18 @@ func parseFactAuthority(raw string) (wiki.FactAuthority, error) {
 		// Only the trusted direct-message induction path writes this authority
 		// straight to the fact Store; the knowledge adapter is model-callable.
 		return "", fmt.Errorf("fact authority %q is reserved for trusted direct-message induction", raw)
-	case wiki.FactAuthorityPrimaryDoc:
-		return wiki.FactAuthorityPrimaryDoc, nil
-	case wiki.FactAuthorityRuntime:
-		return wiki.FactAuthorityRuntime, nil
+	case wiki.FactAuthorityPrimaryDoc, wiki.FactAuthorityRuntime:
+		// A model-supplied source_refs string is not proof that a document or
+		// runtime observation exists, much less that it supports the asserted
+		// value. Privileged ingestion paths call the Store directly after they
+		// authenticate their source; this model-callable adapter must not mint a
+		// higher authority from an unverified string.
+		return "", fmt.Errorf("fact authority %q is reserved for trusted ingestion", raw)
 	case wiki.FactAuthorityInference:
 		return wiki.FactAuthorityInference, nil
 	default:
 		return "", fmt.Errorf("unknown fact authority %q", raw)
 	}
-}
-
-func validateFactEvidence(authority wiki.FactAuthority, sources []string) error {
-	if authority != wiki.FactAuthorityPrimaryDoc && authority != wiki.FactAuthorityRuntime {
-		return nil
-	}
-	for _, source := range sources {
-		if strings.TrimSpace(source) != "" {
-			return nil
-		}
-	}
-	return fmt.Errorf("source_refs is required for authority=%s", authority)
 }
 
 func parseFactBasisAt(raw string) (time.Time, error) {

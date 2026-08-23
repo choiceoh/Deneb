@@ -472,9 +472,9 @@ func preserveLegacyProjection(path string) (factProjectionExpectation, error) {
 
 // preserveManualFactPage copies a pre-cutover wiki page byte-for-byte before
 // the fact plane claims its reserved path. The .legacy suffix intentionally
-// leaves the backup outside ListPages' .md corpus. An existing backup is never
-// guessed to be equivalent: while the live page is still manual, replacement
-// fails closed so no operator content is silently overwritten.
+// leaves the backup outside ListPages' .md corpus. A durable byte-identical
+// backup from an interrupted prior attempt is reusable; mismatched or
+// non-regular backups fail closed so no operator content is silently lost.
 func preserveManualFactPage(path string) error {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -488,10 +488,27 @@ func preserveManualFactPage(path string) error {
 	}
 
 	legacy := path + factProfileLegacySuffix
-	if _, err := os.Lstat(legacy); err == nil {
-		return fmt.Errorf("preserve manual wiki fact projection: backup already exists: %s", filepath.Base(legacy))
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("inspect manual wiki fact projection backup: %w", err)
+	if legacyInfo, statErr := os.Lstat(legacy); statErr == nil {
+		if !legacyInfo.Mode().IsRegular() {
+			return fmt.Errorf("preserve manual wiki fact projection: backup is not a regular file: %s", filepath.Base(legacy))
+		}
+		backup, readErr := os.ReadFile(legacy)
+		if readErr != nil {
+			return fmt.Errorf("read manual wiki fact projection backup: %w", readErr)
+		}
+		if !bytes.Equal(backup, raw) {
+			return fmt.Errorf("preserve manual wiki fact projection: live page differs from existing backup: %s", filepath.Base(legacy))
+		}
+		current, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return fmt.Errorf("verify preserved wiki fact projection: %w", readErr)
+		}
+		if !bytes.Equal(current, raw) {
+			return fmt.Errorf("verify preserved wiki fact projection: source changed during backup reuse")
+		}
+		return nil
+	} else if !os.IsNotExist(statErr) {
+		return fmt.Errorf("inspect manual wiki fact projection backup: %w", statErr)
 	}
 	mode := os.FileMode(0o600)
 	if info, statErr := os.Stat(path); statErr != nil {

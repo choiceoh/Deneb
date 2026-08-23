@@ -14,6 +14,21 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
+type provenanceSyncStreamStub struct {
+	req chatport.SyncRequest
+}
+
+func (s *provenanceSyncStreamStub) ChatReady() bool { return true }
+
+func (s *provenanceSyncStreamStub) RunSyncStream(
+	_ context.Context,
+	req chatport.SyncRequest,
+	_ func(string),
+) (*chatport.SyncResult, error) {
+	s.req = req
+	return &chatport.SyncResult{BestText: "ok", Model: "test"}, nil
+}
+
 // parseSSEEvents splits an SSE body into (event, dataJSON) pairs, skipping
 // comment (keepalive) lines. Mirrors the minimal parser the native client uses.
 func parseSSEEvents(t *testing.T, body string) []struct{ Event, Data string } {
@@ -269,6 +284,26 @@ func TestHandleMiniappChatStream_GuardPaths(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "chat handler not ready") {
 		t.Errorf("nil chat handler: body = %q, want 'chat handler not ready'", rec.Body.String())
+	}
+}
+
+func TestHandleMiniappChatStreamMarksAuthenticatedDirectUserInput(t *testing.T) {
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
+	token, err := clientauth.Generate()
+	if err != nil {
+		t.Fatalf("generate client token: %v", err)
+	}
+	stub := &provenanceSyncStreamStub{}
+	s := New(Config{ChatHandler: stub})
+	rec := postMiniappChatStream(t, s, token, map[string]any{
+		"sessionKey": "client:main",
+		"message":    "remember this",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("stream status = %d, body=%q", rec.Code, rec.Body.String())
+	}
+	if !stub.req.TrustedDirectUserInput || !stub.req.GateUntrustedTools {
+		t.Fatalf("stream provenance = trusted:%v gate:%v, want both true", stub.req.TrustedDirectUserInput, stub.req.GateUntrustedTools)
 	}
 }
 

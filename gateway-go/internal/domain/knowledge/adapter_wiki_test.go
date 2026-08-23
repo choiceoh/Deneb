@@ -180,7 +180,7 @@ func TestWikiAdapterFactContractPreservesAuditAndDefaultsFactsToSelf(t *testing.
 	}
 	created, err := facts.RecordFact(ctx, FactRecordOptions{
 		Key: "communication.response_length", Value: "짧게 답변",
-		Kind: "preference", Authority: "primary_document",
+		Kind: "preference", Authority: "agent_confirmed",
 		Sources: []string{"doc:preferences-v2"}, BasisAt: "2026-08-23T01:02:03Z",
 		Reason: "문서 정정",
 	})
@@ -221,7 +221,7 @@ func TestWikiAdapterFactContractPreservesAuditAndDefaultsFactsToSelf(t *testing.
 	}
 
 	forgotten, err := facts.ForgetFact(ctx, FactForgetOptions{
-		Key: "communication.response_length", Authority: "primary_document",
+		Key: "communication.response_length", Authority: "agent_confirmed",
 		Sources: []string{"session:client:main#22"}, Reason: "사용자 삭제 요청",
 	})
 	if err != nil || !forgotten.Committed || forgotten.Status != "tombstoned" {
@@ -251,11 +251,8 @@ func TestWikiAdapterRejectsInvalidFactFieldsBeforeCommit(t *testing.T) {
 		{opts: FactRecordOptions{Key: "x", Value: "y", Authority: "direct_user"}, want: "reserved"},
 		{opts: FactRecordOptions{Key: "x", Value: "y", Authority: "legacy_import"}, want: "unknown fact authority"},
 		{opts: FactRecordOptions{Key: "x", Value: "y", BasisAt: "23/08/2026"}, want: "basis_at must be"},
-		{opts: FactRecordOptions{Key: "x", Value: "y", Authority: "primary_document"}, want: "source_refs is required"},
-		{
-			opts: FactRecordOptions{Key: "x", Value: "y", Kind: "amount", Authority: "primary_document", Sources: []string{"doc:q"}},
-			want: "basis_at is required",
-		},
+		{opts: FactRecordOptions{Key: "x", Value: "y", Authority: "primary_document", Sources: []string{"doc:q"}}, want: "reserved for trusted ingestion"},
+		{opts: FactRecordOptions{Key: "x", Value: "y", Authority: "runtime_observation", Sources: []string{"runtime:probe"}}, want: "reserved for trusted ingestion"},
 	}
 	for _, tc := range tests {
 		if _, err := facts.RecordFact(context.Background(), tc.opts); err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -263,12 +260,41 @@ func TestWikiAdapterRejectsInvalidFactFieldsBeforeCommit(t *testing.T) {
 		}
 	}
 	if _, err := facts.ForgetFact(context.Background(), FactForgetOptions{
-		Key: "x", Authority: "runtime_observation",
-	}); err == nil || !strings.Contains(err.Error(), "source_refs is required") {
-		t.Errorf("ForgetFact missing evidence error = %v", err)
+		Key: "x", Authority: "runtime_observation", Sources: []string{"runtime:probe"},
+	}); err == nil || !strings.Contains(err.Error(), "reserved for trusted ingestion") {
+		t.Errorf("ForgetFact privileged authority error = %v", err)
 	}
 	if got := store.LatestFactRevision(); got != 0 {
 		t.Fatalf("invalid fields advanced fact revision to %d", got)
+	}
+}
+
+func TestWikiAdapterCannotMintPrivilegedAuthorityFromSourceRef(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	t.Cleanup(func() { _ = store.Close() })
+	if _, err := store.UpsertFact(wiki.FactInput{
+		Subject: "project:alpha", Key: "quote.amount", Value: "1000",
+		Kind: wiki.FactKindAmount, Authority: wiki.FactAuthorityDirectUser,
+		Actor: "trusted-direct-message",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	revision := store.LatestFactRevision()
+	facts := NewWikiAdapter(store).(FactWriter)
+	_, err := facts.RecordFact(context.Background(), FactRecordOptions{
+		Subject: "project:alpha", Key: "quote.amount", Value: "9999", Kind: "amount",
+		Authority: "primary_document", Sources: []string{"w:project/alpha"}, BasisAt: "2026-08-23",
+	})
+	if err == nil || !strings.Contains(err.Error(), "reserved for trusted ingestion") {
+		t.Fatalf("spoofed primary authority error = %v", err)
+	}
+	if got := store.LatestFactRevision(); got != revision {
+		t.Fatalf("rejected privileged assertion advanced revision from %d to %d", revision, got)
+	}
+	active := store.ActiveFacts("project:alpha")
+	if len(active) != 1 || active[0].Value != "1000" || active[0].Authority != wiki.FactAuthorityDirectUser {
+		t.Fatalf("direct-user fact was overwritten: %+v", active)
 	}
 }
 

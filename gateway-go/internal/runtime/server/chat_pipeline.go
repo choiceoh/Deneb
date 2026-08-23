@@ -86,7 +86,15 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 	}
 
 	// Wiki knowledge base.
-	if wikiCfg := wiki.ConfigFromEnv(); wikiCfg.Enabled {
+	wikiCfg := wiki.ConfigFromEnv()
+	if !wikiCfg.Enabled {
+		// Revision zero is the explicit legacy/no-fact-plane epoch. Approve it so
+		// restart-survival snapshots keep their frozen context bytes when the wiki
+		// feature is disabled; leaving the default false silently sanitizes and then
+		// refuses to persist Tier1/context snapshots on every restart.
+		chat.SetFactDerivedRevision(0)
+	}
+	if wikiCfg.Enabled {
 		wikiMemoryInitMu.Lock()
 		defer wikiMemoryInitMu.Unlock()
 		wikiStore, err := wiki.NewStore(wikiCfg.Dir, wikiCfg.DiaryDir)

@@ -76,7 +76,7 @@ func TestSubjectAwareCurrentFactsForgetDoesNotLeakFromDiary(t *testing.T) {
 	})
 	result, err := store.TombstoneFact(wiki.FactTombstoneInput{
 		Subject: "project:alpha", Key: "contract.deadline",
-		Authority: wiki.FactAuthorityAgent, Reason: "contract cancelled", At: base.Add(time.Hour),
+		Authority: wiki.FactAuthorityDirectUser, Reason: "contract cancelled", At: base.Add(time.Hour),
 	})
 	if err != nil || !result.Committed || result.Status != wiki.FactStatusTombstoned {
 		t.Fatalf("TombstoneFact = %+v, err=%v", result, err)

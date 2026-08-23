@@ -3,6 +3,7 @@ package wiki
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/memory"
@@ -81,6 +82,107 @@ func TestLegacyFactMigrationCanonicalLabelsShareLiveIdentity(t *testing.T) {
 				t.Fatalf("active facts retained parallel legacy identity: %+v", active)
 			}
 		})
+	}
+}
+
+func TestLegacyFactMigrationKeepsUnmatchedMarkdownInActiveTier1AcrossCutover(t *testing.T) {
+	root := t.TempDir()
+	wikiDir, diaryDir, workspace := filepath.Join(root, "wiki"), filepath.Join(root, "diary"), filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	memoryRaw := `# MEMORY
+
+승인자가 확인하기 전에는 운영 배포를 시작하지 않는다.
+
+1. 계약 검토를 먼저 수행한다.
+2. 승인 기록을 남긴다.
+
+* 별표 목록도 지속 컨텍스트다.
+
+- 답변은 짧게 유지한다.
+`
+	userRaw := `# USER
+
+평일 오전에는 집중 업무를 우선한다.
+`
+	if err := os.WriteFile(filepath.Join(workspace, "MEMORY.md"), []byte(memoryRaw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "USER.md"), []byte(userRaw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if imported, importErr := store.ImportLegacyFactFiles(workspace); importErr != nil || imported != 1 {
+		t.Fatalf("imported=%d err=%v", imported, importErr)
+	}
+	if imported, retryErr := store.ImportLegacyFactFiles(workspace); retryErr != nil || imported != 0 {
+		t.Fatalf("idempotent retry imported=%d err=%v", imported, retryErr)
+	}
+	assertActive := func(label string, current *Store) {
+		t.Helper()
+		pages := make(map[string]*Page)
+		for _, result := range current.Tier1Pages(0.9) {
+			pages[result.Path] = result.Page
+		}
+		memoryPage := pages[legacyActiveContextPagePath("MEMORY.md")]
+		if memoryPage == nil {
+			t.Fatalf("%s legacy MEMORY is absent from Tier1: %+v", label, pages)
+		}
+		for _, want := range []string{
+			"승인자가 확인하기 전에는 운영 배포를 시작하지 않는다.",
+			"1. 계약 검토를 먼저 수행한다.",
+			"2. 승인 기록을 남긴다.",
+			"* 별표 목록도 지속 컨텍스트다.",
+		} {
+			if !strings.Contains(memoryPage.Body, want) {
+				t.Fatalf("%s legacy MEMORY missing %q:\n%s", label, want, memoryPage.Body)
+			}
+		}
+		if strings.Contains(memoryPage.Body, "답변은 짧게 유지한다") {
+			t.Fatalf("%s imported fact row was duplicated into legacy active context:\n%s", label, memoryPage.Body)
+		}
+		userPage := pages[legacyActiveContextPagePath("USER.md")]
+		if userPage == nil || !strings.Contains(userPage.Body, "평일 오전에는 집중 업무를 우선한다") {
+			t.Fatalf("%s legacy USER is absent from Tier1: %+v", label, userPage)
+		}
+	}
+	assertActive("before workspace projection", store)
+	if err := store.SetFactProjectionDir(workspace); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"MEMORY.md", "USER.md"} {
+		raw, readErr := os.ReadFile(filepath.Join(workspace, name))
+		if readErr != nil || !bytesContainGeneratedMarker(raw) {
+			t.Fatalf("%s projection=%q err=%v", name, raw, readErr)
+		}
+	}
+	if err := store.UpdatePage(legacyActiveContextPagePath("MEMORY.md"), func(current *Page) (*Page, error) {
+		if current == nil {
+			return nil, os.ErrNotExist
+		}
+		current.Body += "\n사용자가 cutover 뒤 추가한 메모.\n"
+		return current, nil
+	}); err != nil {
+		t.Fatalf("ordinary legacy context edit: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	assertActive("after restart", reopened)
+	edited, err := reopened.ReadPage(legacyActiveContextPagePath("MEMORY.md"))
+	if err != nil || !strings.Contains(edited.Body, "사용자가 cutover 뒤 추가한 메모") {
+		t.Fatalf("ordinary legacy context edit did not survive restart: page=%+v err=%v", edited, err)
 	}
 }
 

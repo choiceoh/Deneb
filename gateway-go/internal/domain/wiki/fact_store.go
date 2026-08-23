@@ -829,12 +829,13 @@ func (s *Store) resolveFactTombstoneLocked(input FactTombstoneInput, now time.Ti
 	}
 	claim.ID = newFactOperationID(revision, identity, "<tombstone>", claim.RecordedAtMs)
 	resolution := "tombstoned"
-	if incomingRank < requiredRank && input.Authority != FactAuthorityAgent && input.Authority != FactAuthorityDirectUser {
-		// Inferred/legacy or domain-mismatched observational deletes are retained
-		// for audit but cannot retire a stronger live claim. agent_confirmed is an
-		// explicit lifecycle tool action (not an inferred belief), so autonomous
-		// agents may soft-delete while the retired claim's stronger authority
-		// remains in history as the resurrection barrier.
+	if incomingRank < requiredRank && input.Authority != FactAuthorityDirectUser {
+		// Lower-authority deletes are retained for audit but cannot retire a
+		// stronger live claim. In particular, an agent_confirmed tool call must not
+		// erase a direct-user fact merely because it is an explicit lifecycle action.
+		// DirectUser is the sole exception: it is minted only by the trusted privacy
+		// forget path, where an explicit user deletion must override document/runtime
+		// authority regardless of rank.
 		claim.Status = FactStatusSuperseded
 		resolution = "ignored_lower_authority"
 	} else {
@@ -1029,9 +1030,10 @@ func (s *Store) validateFactMutationLocked(mutation FactMutation) error {
 	if err := validateFactRuneLimit("mutation reason", mutation.Reason, factAuditMaxRunes); err != nil {
 		return err
 	}
-	if mutation.Identity == "" || mutation.Identity != factIdentity(claim.Subject, claim.Key) {
+	if mutation.Identity == "" || !factMutationIdentityMatchesClaim(mutation.Identity, *claim) {
 		return fmt.Errorf("claim identity mismatch %q", mutation.Identity)
 	}
+	canonicalIdentity := factIdentity(claim.Subject, claim.Key)
 	if claim.Subject != normalizeFactSubject(claim.Subject) || claim.Key != normalizeFactKey(claim.Key) {
 		return fmt.Errorf("claim identity is not canonical")
 	}
@@ -1063,7 +1065,7 @@ func (s *Store) validateFactMutationLocked(mutation FactMutation) error {
 	if !isKnownFactStatus(claim.Status) {
 		return fmt.Errorf("unknown fact status %q", claim.Status)
 	}
-	canonicalKind, err := factKindForIdentity(claim.Kind, s.factState.Facts[mutation.Identity])
+	canonicalKind, err := factKindForIdentity(claim.Kind, s.factState.Facts[canonicalIdentity])
 	if err != nil {
 		return err
 	}
@@ -1095,7 +1097,6 @@ func (s *Store) validateFactMutationLocked(mutation FactMutation) error {
 			}
 		}
 	}
-	claims := s.factState.Facts[mutation.Identity]
 	for claimID, status := range mutation.StatusUpdates {
 		if !isKnownFactStatus(status) {
 			return fmt.Errorf("status update for %q has unknown status %q", claimID, status)
@@ -1106,18 +1107,41 @@ func (s *Store) validateFactMutationLocked(mutation FactMutation) error {
 		if mutation.Op != "tombstone" && status != FactStatusSuperseded && status != FactStatusConflicted {
 			return fmt.Errorf("assertion update for %q has status %q", claimID, status)
 		}
-		found := false
-		for i := range claims {
-			if claims[i].ID == claimID {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if _, found := s.factStatusUpdateIdentityLocked(mutation, claimID); !found {
 			return fmt.Errorf("status update references unknown claim %q", claimID)
 		}
 	}
 	return nil
+}
+
+// factStatusUpdateIdentityLocked resolves the canonical bucket containing an
+// older claim named by mutation.StatusUpdates. New length-prefixed identities
+// may update only their own tuple. A schema-v1 delimiter identity may also name
+// a prior claim from another tuple that collided into the same legacy history.
+// Validation accepts that historical row so startup remains possible; apply
+// ignores the cross-tuple status change because it was an artifact of the old
+// ambiguous key, while the immutable journal retains the original audit event.
+func (s *Store) factStatusUpdateIdentityLocked(mutation FactMutation, claimID string) (string, bool) {
+	canonicalIdentity := factIdentity(mutation.Claim.Subject, mutation.Claim.Key)
+	for _, claim := range s.factState.Facts[canonicalIdentity] {
+		if claim.ID == claimID {
+			return canonicalIdentity, true
+		}
+	}
+	if mutation.Identity != legacyFactIdentity(mutation.Claim.Subject, mutation.Claim.Key) {
+		return "", false
+	}
+	for _, identity := range sortedFactIdentities(s.factState.Facts) {
+		if identity == canonicalIdentity {
+			continue
+		}
+		for _, claim := range s.factState.Facts[identity] {
+			if claim.ID == claimID && legacyFactIdentity(claim.Subject, claim.Key) == mutation.Identity {
+				return identity, true
+			}
+		}
+	}
+	return "", false
 }
 
 func (s *Store) applyFactMutationLocked(mutation FactMutation) error {
@@ -1127,21 +1151,43 @@ func (s *Store) applyFactMutationLocked(mutation FactMutation) error {
 	if s.factState.Facts == nil {
 		s.factState.Facts = make(map[string][]FactClaim)
 	}
-	claims := append([]FactClaim(nil), s.factState.Facts[mutation.Identity]...)
-	for claimID, status := range mutation.StatusUpdates {
+	// The journal identity is part of the immutable operation-ID input. Keep it
+	// untouched for verification, but always store state under the canonical
+	// tuple key so legacy delimiter collisions cannot merge two claim histories
+	// during replay.
+	canonicalIdentity := factIdentity(mutation.Claim.Subject, mutation.Claim.Key)
+	statusClaimIDs := make([]string, 0, len(mutation.StatusUpdates))
+	for claimID := range mutation.StatusUpdates {
+		statusClaimIDs = append(statusClaimIDs, claimID)
+	}
+	sort.Strings(statusClaimIDs)
+	for _, claimID := range statusClaimIDs {
+		identity, found := s.factStatusUpdateIdentityLocked(mutation, claimID)
+		if !found {
+			return fmt.Errorf("status update references unknown claim %q", claimID)
+		}
+		if identity != canonicalIdentity {
+			// Schema-v1 considered distinct tuples equal when their colon-joined
+			// identities collided. Do not carry that accidental supersession into
+			// the length-prefixed state; the old mutation remains in the journal.
+			continue
+		}
+		claims := append([]FactClaim(nil), s.factState.Facts[identity]...)
 		for i := range claims {
 			if claims[i].ID == claimID {
-				claims[i].Status = status
+				claims[i].Status = mutation.StatusUpdates[claimID]
 				break
 			}
 		}
+		s.factState.Facts[identity] = claims
 	}
 	if mutation.Claim != nil {
+		claims := append([]FactClaim(nil), s.factState.Facts[canonicalIdentity]...)
 		claims = append(claims, cloneFactClaim(*mutation.Claim))
+		s.factState.Facts[canonicalIdentity] = claims
 	}
 	s.factState.SchemaVersion = factSchemaVersion
 	s.factState.Revision = mutation.Revision
-	s.factState.Facts[mutation.Identity] = claims
 	return nil
 }
 

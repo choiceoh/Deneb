@@ -151,4 +151,11 @@ type Params struct {
 	// Per-run, never persisted — prompt-cache neutral. See
 	// untrusted_tool_gate.go.
 	GateUntrustedTools bool
+
+	// TrustedDirectUserInput is a server-owned provenance marker for a message
+	// that entered through an authenticated native interactive chat surface.
+	// It must never be copied from model-controlled input, session relays,
+	// captures, or autonomous runs. The fact plane uses it in addition to the
+	// exact home-session and promptware gates before granting mutation authority.
+	TrustedDirectUserInput bool
 }

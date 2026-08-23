@@ -68,9 +68,14 @@ type Handler struct {
 	auditSystemPrompt    func(sessionKey string, prompt []byte)
 
 	// Extracted components.
-	abort                *AbortTracker
-	pending              *PendingQueue
-	mergeWindow          *MergeWindowTracker
+	abort       *AbortTracker
+	pending     *PendingQueue
+	mergeWindow *MergeWindowTracker
+	// syncAdmissionTails is a per-session FIFO for synchronous native runs that
+	// cannot fold into the active turn. It preserves ingress order before prompt
+	// preparation and final abort-tracker registration.
+	syncAdmissionMu      sync.Mutex
+	syncAdmissionTails   map[string]chan struct{}
 	subagent             *SubagentNotifier
 	subagentCleanupUnsub func()
 	steer                *SteerQueue // mid-run /steer notes for the main agent
@@ -465,7 +470,7 @@ func (h *Handler) Close() {
 // /steer path, which operates on a child-session run-id rather than on
 // the caller's own running turn.
 func (h *Handler) EnqueueSteer(sessionKey, note string) bool {
-	if h.steer == nil {
+	if h.steer == nil || steerRequiresOwnTurn(note) {
 		return false
 	}
 	return h.steer.Enqueue(sessionKey, note)

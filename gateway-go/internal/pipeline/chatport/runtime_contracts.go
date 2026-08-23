@@ -96,6 +96,10 @@ type SyncRequest struct {
 	SkipRecall          bool
 	FeedContext         string
 	GateUntrustedTools  bool
+	// TrustedDirectUserInput is set only by authenticated native interactive
+	// chat ingress. Internal relays, captures, and autonomous callers leave it
+	// false so they cannot acquire durable fact-mutation authority.
+	TrustedDirectUserInput bool
 
 	BeforeToolCall func(name, toolCallID string, input []byte) (block bool, blockReason string)
 	OnToolResult   func(name, toolUseID, result string, isErr bool)

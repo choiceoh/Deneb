@@ -55,6 +55,22 @@ type mockFactWriter struct {
 
 type panicAdapter struct{ mockAdapter }
 
+type mutatingRecallGuardAdapter struct {
+	Adapter
+	guard      RecallResultGuard
+	afterFirst func()
+	calls      int
+}
+
+func (a *mutatingRecallGuardAdapter) FilterRecallResults(query string, results []Result) []Result {
+	a.calls++
+	filtered := a.guard.FilterRecallResults(query, results)
+	if a.calls == 1 && a.afterFirst != nil {
+		a.afterFirst()
+	}
+	return filtered
+}
+
 func (p *panicAdapter) Recall(context.Context, string, int) ([]Result, error) {
 	panic("broken connector")
 }
@@ -185,7 +201,7 @@ func TestRouterRecallAppliesCanonicalFactGuardAcrossFiles(t *testing.T) {
 		t.Fatalf("federated lifecycle result violated current-only contract:\n%s", joined)
 	}
 	if _, err := store.TombstoneFact(wiki.FactTombstoneInput{
-		Subject: "project:alpha", Key: "quote.amount", Authority: wiki.FactAuthorityAgent,
+		Subject: "project:alpha", Key: "quote.amount", Authority: wiki.FactAuthorityDirectUser,
 		Reason: "cancelled", At: base.Add(2 * time.Hour),
 	}); err != nil {
 		t.Fatal(err)
@@ -198,6 +214,49 @@ func TestRouterRecallAppliesCanonicalFactGuardAcrossFiles(t *testing.T) {
 	for _, hit := range packet.Results {
 		if strings.Contains(hit.Snippet+"\n"+hit.Context, "8120만원") || strings.Contains(hit.Snippet+"\n"+hit.Context, "9350만원") {
 			t.Fatalf("tombstoned value re-entered federated recall: %+v", hit)
+		}
+	}
+}
+
+func TestRouterRecallRevalidatesCanonicalFactsAtExposureBoundary(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	t.Cleanup(func() { _ = store.Close() })
+	base := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
+	if _, err := store.UpsertFact(wiki.FactInput{
+		Subject: "project:alpha", Key: "quote.amount", Value: "8120만원",
+		Kind: wiki.FactKindAmount, Authority: wiki.FactAuthorityPrimaryDoc,
+		Sources: []string{"doc:alpha"}, BasisAt: base, At: base,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	baseAdapter := NewWikiAdapter(store)
+	guarded := &mutatingRecallGuardAdapter{
+		Adapter: baseAdapter,
+		guard:   baseAdapter.(RecallResultGuard),
+		afterFirst: func() {
+			if _, err := store.UpsertFact(wiki.FactInput{
+				Subject: "project:alpha", Key: "quote.amount", Value: "9350만원",
+				Kind: wiki.FactKindAmount, Authority: wiki.FactAuthorityPrimaryDoc,
+				Sources: []string{"doc:alpha"}, BasisAt: base.Add(time.Hour), At: base.Add(time.Hour),
+			}); err != nil {
+				t.Fatalf("concurrent correction: %v", err)
+			}
+		},
+	}
+	files := &mockAdapter{layer: LayerFiles, results: []Result{{
+		Ref:     Ref{Layer: LayerFiles, ID: "/old-contract.pdf"},
+		Snippet: "alpha 견적 금액 8120만원", Score: 0.99,
+	}}}
+
+	packet := New(guarded, files).RecallPacket(context.Background(), "alpha 견적 금액", 10, RecallOptions{})
+	if guarded.calls != 2 {
+		t.Fatalf("lifecycle guard calls=%d, want pre-fusion plus exposure-boundary revalidation", guarded.calls)
+	}
+	for _, hit := range packet.Results {
+		if strings.Contains(hit.Snippet+"\n"+hit.Context, "8120만원") || hit.Meta["factPlane"] == "current" {
+			t.Fatalf("pre-correction evidence escaped the final guard: %+v", hit)
 		}
 	}
 }
@@ -260,7 +319,7 @@ func TestRouterFactGuardScopesSharedShortValuesAcrossFilesAndRestart(t *testing.
 	assertFiles("corrected", store, false)
 	if _, err := store.TombstoneFact(wiki.FactTombstoneInput{
 		Subject: "project:beta", Key: "quote.amount",
-		Authority: wiki.FactAuthorityAgent, At: base.Add(2 * time.Hour),
+		Authority: wiki.FactAuthorityDirectUser, At: base.Add(2 * time.Hour),
 	}); err != nil {
 		t.Fatal(err)
 	}

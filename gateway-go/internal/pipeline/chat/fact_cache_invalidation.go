@@ -49,3 +49,18 @@ func clearLiveFactDerivedCaches() {
 	clearAllTier1Wiki()
 	prompt.ClearAllContextSnapshots()
 }
+
+// loadFactAwareContextFiles serializes the live disk read with projection
+// invalidation. During a degraded projection window it keeps stable rule and
+// persona files but excludes stale generated USER.md/MEMORY.md before the
+// session snapshot can freeze them again.
+func loadFactAwareContextFiles(workspaceDir, sessionKey string) []prompt.ContextFile {
+	factDerivedCacheMu.Lock()
+	defer factDerivedCacheMu.Unlock()
+
+	options := []prompt.LoadContextOption{prompt.WithSessionSnapshot(sessionKey)}
+	if !promptSnapshots.factDerivedContextAllowed() {
+		options = append(options, prompt.WithoutFactDerivedFiles())
+	}
+	return prompt.LoadContextFiles(workspaceDir, options...)
+}

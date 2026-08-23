@@ -297,10 +297,11 @@ drain:
 // triggerRun starts a run for an idle parent session.
 func (sn *SubagentNotifier) triggerRun(parentKey, notification string) {
 	params := RunParams{
-		SessionKey:  parentKey,
-		Message:     notification,
-		ClientRunID: shortid.New("subnotify"),
-		Delivery:    sn.delivery(parentKey),
+		SessionKey:    parentKey,
+		Message:       notification,
+		ClientRunID:   shortid.New("subnotify"),
+		Delivery:      sn.delivery(parentKey),
+		EphemeralUser: true,
 	}
 
 	if sn.hasActiveRun(parentKey) {

@@ -1130,7 +1130,8 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 			SkipRecall:          p.SkipRecall,
 			FeedContext:         feedCtx,
 			// Block irreversible tools (exec, gmail send) if promptware enters the turn.
-			GateUntrustedTools: true,
+			GateUntrustedTools:     true,
+			TrustedDirectUserInput: true,
 		})
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)

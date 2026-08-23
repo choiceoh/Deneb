@@ -356,7 +356,27 @@ func isKnownFactStatus(status FactStatus) bool {
 }
 
 func factIdentity(subject, key string) string {
+	subject = normalizeFactSubject(subject)
+	key = normalizeFactKey(key)
+	// Both tuple members may contain ':', so delimiter concatenation is not an
+	// identity encoding: ("project:alpha", "quote.amount") and
+	// ("project", "alpha:quote.amount") used to share one history. Byte-length
+	// prefixes keep the key compact and unambiguous without changing the journal
+	// schema. The claim still carries the readable subject/key pair.
+	return fmt.Sprintf("%d:%s%d:%s", len(subject), subject, len(key), key)
+}
+
+// legacyFactIdentity is the schema-v1 encoding written before factIdentity
+// became an unambiguous tuple. Journal replay accepts it so existing operation
+// IDs remain verifiable, then applyFactMutationLocked rekeys the state by the
+// claim's canonical subject/key pair. New mutations never use this encoding.
+func legacyFactIdentity(subject, key string) string {
 	return normalizeFactSubject(subject) + ":" + normalizeFactKey(key)
+}
+
+func factMutationIdentityMatchesClaim(identity string, claim FactClaim) bool {
+	return identity == factIdentity(claim.Subject, claim.Key) ||
+		identity == legacyFactIdentity(claim.Subject, claim.Key)
 }
 
 func normalizeFactSources(sources []string) []string {

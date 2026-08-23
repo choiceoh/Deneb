@@ -73,6 +73,9 @@ func TestChatCompletionsHappyPath(t *testing.T) {
 	if chat.last.SoftDeadline != chatport.InteractiveTurnSoftDeadline {
 		t.Fatalf("soft deadline=%s want %s", chat.last.SoftDeadline, chatport.InteractiveTurnSoftDeadline)
 	}
+	if !chat.last.TrustedDirectUserInput {
+		t.Fatal("authenticated wearer utterance must preserve interactive provenance for auto-steer")
+	}
 }
 
 func TestChatCompletionsUnauthorizedAndDisabled(t *testing.T) {

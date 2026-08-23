@@ -371,7 +371,7 @@ func TestFactPlaneStrongTombstoneSurvivesWeakDeleteAndRestart(t *testing.T) {
 	}
 }
 
-func TestFactPlaneAgentTombstoneCanSoftDeleteDirectUserFact(t *testing.T) {
+func TestFactPlaneAgentTombstoneCannotDeleteDirectUserFactButExplicitUserCan(t *testing.T) {
 	store, _, _ := newFactTestStore(t)
 	base := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
 	const key = "communication.language"
@@ -394,15 +394,29 @@ func TestFactPlaneAgentTombstoneCanSoftDeleteDirectUserFact(t *testing.T) {
 		Subject: "self", Key: key, Authority: FactAuthorityAgent,
 		Reason: "explicit knowledge forget tool action", At: base.Add(2 * time.Hour),
 	})
-	if err != nil || agentDelete.Resolution != "tombstoned" || agentDelete.Status != FactStatusTombstoned {
+	if err != nil || agentDelete.Resolution != "ignored_lower_authority" || agentDelete.Status != FactStatusSuperseded {
 		t.Fatalf("agent delete=%+v err=%v", agentDelete, err)
 	}
+	if got := store.ActiveFacts("self"); len(got) != 1 || got[0].Value != "항상 한국어로 답변" {
+		t.Fatalf("agent delete changed direct-user fact: %+v", got)
+	}
+	history := store.FactHistory("self", key)
+	if len(history) != 3 || history[2].ID != agentDelete.ClaimID || history[2].Status != FactStatusSuperseded {
+		t.Fatalf("agent delete audit history=%+v", history)
+	}
+	userDelete, err := store.TombstoneFact(FactTombstoneInput{
+		Subject: "self", Key: key, Authority: FactAuthorityDirectUser,
+		Reason: "explicit user privacy forget", At: base.Add(3 * time.Hour),
+	})
+	if err != nil || userDelete.Resolution != "tombstoned" || userDelete.Status != FactStatusTombstoned {
+		t.Fatalf("direct-user delete=%+v err=%v", userDelete, err)
+	}
 	if got := store.ActiveFacts("self"); len(got) != 0 {
-		t.Fatalf("agent soft delete left active fact: %+v", got)
+		t.Fatalf("explicit user delete left active fact: %+v", got)
 	}
 	blocked, err := store.UpsertFact(FactInput{
 		Subject: "self", Key: key, Value: "영어로 답변",
-		Kind: FactKindPreference, Authority: FactAuthorityInference, At: base.Add(3 * time.Hour),
+		Kind: FactKindPreference, Authority: FactAuthorityInference, At: base.Add(4 * time.Hour),
 	})
 	if err != nil || blocked.Resolution != "blocked_by_tombstone" {
 		t.Fatalf("retired direct authority did not remain a barrier: %+v err=%v", blocked, err)
@@ -811,7 +825,7 @@ func TestFactWikiProjectionExistingBackupFailsClosedWithoutReplacingManualPage(t
 		Subject: "self", Key: "communication.response_length", Value: "답변은 간결하게",
 		Kind: FactKindPreference, Authority: FactAuthorityDirectUser,
 	})
-	if err != nil || !result.Committed || !strings.Contains(result.ProjectionError, "backup already exists") {
+	if err != nil || !result.Committed || !strings.Contains(result.ProjectionError, "differs from existing backup") {
 		t.Fatalf("UpsertFact = %+v, err=%v", result, err)
 	}
 	current, err := os.ReadFile(projectionPath)
@@ -825,6 +839,95 @@ func TestFactWikiProjectionExistingBackupFailsClosedWithoutReplacingManualPage(t
 	active := store.ActiveFacts("self")
 	if len(active) != 1 || active[0].Value != "답변은 간결하게" {
 		t.Fatalf("canonical facts unavailable after fail-closed projection: %+v", active)
+	}
+}
+
+func TestFactWikiProjectionReusesIdenticalBackupAfterInterruptedReplacement(t *testing.T) {
+	root := t.TempDir()
+	wikiDir, diaryDir := filepath.Join(root, "wiki"), filepath.Join(root, "diary")
+	projectionPath := filepath.Join(wikiDir, filepath.FromSlash(factProfilePagePath))
+	if err := os.MkdirAll(filepath.Dir(projectionPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manual := []byte("# 수동 현행 사실\n\n중단 뒤에도 보존되어야 한다.\n")
+	if err := os.WriteFile(projectionPath, manual, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	injected := fmt.Errorf("injected replacement failure after backup")
+	store, err := NewStoreWithSearchOptions(wikiDir, diaryDir, SearchOptions{
+		factPageWrite: func(string, *Page) error { return injected },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := store.UpsertFact(FactInput{
+		Subject: "self", Key: "communication.response_length", Value: "답변은 간결하게",
+		Kind: FactKindPreference, Authority: FactAuthorityDirectUser,
+	})
+	if err != nil || !result.Committed || !strings.Contains(result.ProjectionError, injected.Error()) {
+		t.Fatalf("interrupted UpsertFact=%+v err=%v", result, err)
+	}
+	legacyPath := projectionPath + factProfileLegacySuffix
+	backup, err := os.ReadFile(legacyPath)
+	if err != nil || !bytes.Equal(backup, manual) {
+		t.Fatalf("durable backup=%q err=%v", backup, err)
+	}
+	current, err := os.ReadFile(projectionPath)
+	if err != nil || !bytes.Equal(current, manual) {
+		t.Fatalf("manual source changed before retry: %q err=%v", current, err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatalf("reopen with identical backup: %v", err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	status := reopened.FactProjectionStatus()
+	if status.Degraded || status.Revision != result.Revision || status.ProjectionError != "" {
+		t.Fatalf("reopened projection status=%+v", status)
+	}
+	generated, err := os.ReadFile(projectionPath)
+	if err != nil || !bytesContainGeneratedMarker(generated) || !strings.Contains(string(generated), "답변은 간결하게") {
+		t.Fatalf("repaired projection=%q err=%v", generated, err)
+	}
+	backup, err = os.ReadFile(legacyPath)
+	if err != nil || !bytes.Equal(backup, manual) {
+		t.Fatalf("retry changed backup=%q err=%v", backup, err)
+	}
+}
+
+func TestFactWikiProjectionNonRegularBackupFailsClosed(t *testing.T) {
+	root := t.TempDir()
+	wikiDir, diaryDir := filepath.Join(root, "wiki"), filepath.Join(root, "diary")
+	projectionPath := filepath.Join(wikiDir, filepath.FromSlash(factProfilePagePath))
+	if err := os.MkdirAll(filepath.Dir(projectionPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manual := []byte("# 수동 페이지\n\n보존 대상\n")
+	if err := os.WriteFile(projectionPath, manual, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(projectionPath+factProfileLegacySuffix, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	result, err := store.UpsertFact(FactInput{
+		Subject: "self", Key: "communication.response_length", Value: "답변은 간결하게",
+		Kind: FactKindPreference, Authority: FactAuthorityDirectUser,
+	})
+	if err != nil || !result.Committed || !strings.Contains(result.ProjectionError, "backup is not a regular file") {
+		t.Fatalf("UpsertFact=%+v err=%v", result, err)
+	}
+	current, err := os.ReadFile(projectionPath)
+	if err != nil || !bytes.Equal(current, manual) || bytesContainGeneratedMarker(current) {
+		t.Fatalf("manual page was replaced: %q err=%v", current, err)
 	}
 }
 

@@ -32,6 +32,16 @@ func TestChatPortRejectsTypedNilHandler(t *testing.T) {
 	}
 }
 
+func TestSyncOptionsFromPortPreservesDirectUserProvenance(t *testing.T) {
+	options := syncOptionsFromPort(chatport.SyncRequest{
+		GateUntrustedTools:     true,
+		TrustedDirectUserInput: true,
+	})
+	if !options.GateUntrustedTools || !options.TrustedDirectUserInput {
+		t.Fatalf("sync options = gate:%v trusted:%v, want both true", options.GateUntrustedTools, options.TrustedDirectUserInput)
+	}
+}
+
 func TestBeginDrainMarksHandlerUnreadyAndRejectsNewSyncRuns(t *testing.T) {
 	h := &Handler{abort: NewAbortTracker()}
 	t.Cleanup(h.abort.Close)
