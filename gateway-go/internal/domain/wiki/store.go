@@ -92,6 +92,18 @@ type Store struct {
 	factJournalAppend          func(string, []byte) (factJournalAppendOutcome, error)
 	factJournalPoisoned        string
 	factJournalFailureObserver func(error)
+	// factJournalRotateAt is a test seam for the rotation threshold. Production
+	// leaves it zero and uses factJournalRotateRecords.
+	factJournalRotateAt int
+	// factJournalRecords counts records in the ACTIVE journal segment only.
+	// Rotation archives that segment and resets the counter, which is what keeps
+	// startup replay proportional to recent history instead of all history.
+	// Guarded by factMu.
+	factJournalRecords int
+	// factClaimIDs indexes every retained claim ID so validation can reject a
+	// duplicate in O(1). Replay used to scan the whole snapshot per mutation,
+	// making a cold start quadratic in journal length. Guarded by factMu.
+	factClaimIDs map[string]struct{}
 	// factPageWrite is a test seam for the generated wiki projection. Production
 	// leaves it nil and writes through writePageLocked.
 	factPageWrite func(string, *Page) error
