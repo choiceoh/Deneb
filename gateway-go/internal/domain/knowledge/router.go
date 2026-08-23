@@ -248,6 +248,13 @@ func (r *Router) RecallPacket(ctx context.Context, query string, limit int, opti
 	if len(all) > limit {
 		all = all[:limit]
 	}
+	// Revalidate the exact bounded payload at the exposure boundary. A fact
+	// correction may commit after the pre-fusion guard but while quotas/RRF and
+	// sorting are running; returning fewer rows is safer than exposing the old
+	// synthetic claim or a stale connector row from that earlier revision.
+	for _, guard := range r.recallGuards {
+		all = guard.FilterRecallResults(query, all)
+	}
 
 	filesDegraded := ""
 	for _, n := range notes {

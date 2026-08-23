@@ -8,9 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 )
 
 const wikiCutoverFailureChildEnv = "DENEB_TEST_WIKI_CUTOVER_FAILURE_CHILD"
+
+const wikiDisabledRevisionChildEnv = "DENEB_TEST_WIKI_DISABLED_REVISION_CHILD"
 
 // TestServerNewFailsClosedOnWikiCutoverFailure uses child processes because the
 // domain wiki config intentionally caches its first environment read. Each case
@@ -131,6 +135,53 @@ func TestServerNewWikiCutoverFailureChild(t *testing.T) {
 		if fragment != "" && !strings.Contains(err.Error(), fragment) {
 			t.Fatalf("New error %q does not contain stage %q", err, fragment)
 		}
+	}
+}
+
+func TestServerNewWikiDisabledApprovesPromptSnapshotRevisionZero(t *testing.T) {
+	homeDir := t.TempDir()
+	stateDir := filepath.Join(homeDir, "state")
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const snapshot = `{"client:main:wiki-disabled":{"contextFiles":[{"Path":"MEMORY.md","Content":"frozen legacy memory"}],"factRevision":0}}`
+	if err := os.WriteFile(filepath.Join(stateDir, "prompt_snapshots.json"), []byte(snapshot), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestServerNewWikiDisabledApprovesPromptSnapshotRevisionZeroChild$")
+	cmd.Env = append(
+		envWithout(
+			"HOME",
+			"DENEB_CONFIG_PATH",
+			"DENEB_PROFILE",
+			"DENEB_STATE_DIR",
+			"DENEB_WIKI_ENABLED",
+			wikiDisabledRevisionChildEnv,
+		),
+		"HOME="+homeDir,
+		"DENEB_STATE_DIR="+stateDir,
+		"DENEB_WIKI_ENABLED=false",
+		wikiDisabledRevisionChildEnv+"=1",
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("child process failed: %v\n%s", err, output)
+	}
+}
+
+func TestServerNewWikiDisabledApprovesPromptSnapshotRevisionZeroChild(t *testing.T) {
+	if os.Getenv(wikiDisabledRevisionChildEnv) != "1" {
+		t.Skip("child-process assertion")
+	}
+
+	server, err := New(":0", WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))))
+	if err != nil {
+		t.Fatalf("New with wiki disabled: %v", err)
+	}
+	defer server.Close(t.Context())
+
+	if restored := chat.LoadPromptSnapshots(func(string) bool { return true }); restored != 1 {
+		t.Fatalf("restored prompt snapshots = %d, want 1 at approved revision zero", restored)
 	}
 }
 

@@ -11,11 +11,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/memory"
 )
 
+const legacyActiveContextMarker = "<!-- deneb:generated-legacy-active-context"
+
 // ImportLegacyFactFiles converts bullet-sized MEMORY.md/USER.md entries into
 // legacy-authority facts before those files become generated compatibility
 // views. It is idempotent by source+value. Bullet rows and induction-metadata
-// prose become facts; unrelated prose remains available in the preserved
-// *.legacy.md copy rather than being promoted without an identity contract.
+// prose become facts; unmatched prose remains an ordinary, high-importance wiki
+// page so it stays in the Tier1 prompt after MEMORY.md/USER.md are replaced. The
+// full original bytes are still preserved separately as *.legacy.md.
 func (s *Store) ImportLegacyFactFiles(workspaceDir string) (int, error) {
 	if s == nil {
 		return 0, fmt.Errorf("wiki: nil store")
@@ -26,16 +29,20 @@ func (s *Store) ImportLegacyFactFiles(workspaceDir string) (int, error) {
 	}
 	files := []string{"MEMORY.md", "USER.md"}
 	var candidates []legacyFactCandidate
+	var activeContexts []legacyActiveContext
 	for _, name := range files {
 		path := filepath.Join(workspaceDir, name)
-		fileCandidates, err := readLegacyFactFile(path, name)
+		legacyFile, err := readLegacyFactFileWithContext(path, name)
 		if err != nil {
 			return 0, err
 		}
 		// Preserve file and line order. legacy_import uses an explicit latest-row
 		// policy, so earlier values become superseded deny history while the last
 		// row is the one current cutover baseline (never a peer conflict).
-		candidates = append(candidates, fileCandidates...)
+		candidates = append(candidates, legacyFile.candidates...)
+		if legacyFile.activeContext != "" {
+			activeContexts = append(activeContexts, legacyActiveContext{label: name, content: legacyFile.activeContext})
+		}
 	}
 
 	imported := 0
@@ -66,6 +73,11 @@ func (s *Store) ImportLegacyFactFiles(workspaceDir string) (int, error) {
 			return imported, err
 		}
 	}
+	for _, activeContext := range activeContexts {
+		if err := s.preserveLegacyActiveContext(activeContext); err != nil {
+			return imported, fmt.Errorf("preserve unmatched %s active context: %w", activeContext.label, err)
+		}
+	}
 	return imported, nil
 }
 
@@ -75,16 +87,31 @@ type legacyFactCandidate struct {
 	lineNo int
 }
 
+type legacyFactFileRead struct {
+	candidates    []legacyFactCandidate
+	activeContext string
+}
+
+type legacyActiveContext struct {
+	label   string
+	content string
+}
+
 func readLegacyFactFile(path, label string) ([]legacyFactCandidate, error) {
+	legacyFile, err := readLegacyFactFileWithContext(path, label)
+	return legacyFile.candidates, err
+}
+
+func readLegacyFactFileWithContext(path, label string) (legacyFactFileRead, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return legacyFactFileRead{}, nil
 		}
-		return nil, err
+		return legacyFactFileRead{}, err
 	}
 	if bytesContainGeneratedMarker(raw) {
-		return nil, nil
+		return legacyFactFileRead{}, nil
 	}
 
 	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
@@ -94,16 +121,18 @@ func readLegacyFactFile(path, label string) ([]legacyFactCandidate, error) {
 		lines = append(lines, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return legacyFactFileRead{}, err
 	}
 
 	section := ""
 	var candidates []legacyFactCandidate
+	retained := make([]string, 0, len(lines))
 	for i := 0; i < len(lines); i++ {
 		lineNo := i + 1
 		line := strings.TrimSpace(lines[i])
 		if strings.HasPrefix(line, "#") {
 			section = strings.TrimSpace(strings.TrimLeft(line, "#"))
+			retained = append(retained, lines[i])
 			continue
 		}
 		if meta, ok := parseLegacyInductionMeta(line); ok {
@@ -138,6 +167,7 @@ func readLegacyFactFile(path, label string) ([]legacyFactCandidate, error) {
 			continue
 		}
 		if !strings.HasPrefix(line, "- ") {
+			retained = append(retained, lines[i])
 			continue
 		}
 		value := strings.TrimSpace(strings.TrimPrefix(line, "- "))
@@ -146,7 +176,69 @@ func readLegacyFactFile(path, label string) ([]legacyFactCandidate, error) {
 		}
 		candidates = append(candidates, makeLegacyFactCandidate(value, section, label, lineNo, "self", ""))
 	}
-	return candidates, nil
+	activeContext := strings.TrimSpace(strings.Join(retained, "\n"))
+	if !legacyContextHasNonHeadingContent(activeContext) {
+		activeContext = ""
+	}
+	return legacyFactFileRead{candidates: candidates, activeContext: activeContext}, nil
+}
+
+func legacyContextHasNonHeadingContent(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "#") {
+			return true
+		}
+	}
+	return false
+}
+
+func legacyActiveContextPagePath(label string) string {
+	switch strings.ToUpper(strings.TrimSpace(label)) {
+	case "MEMORY.MD":
+		return "사용자/legacy-memory-context.md"
+	case "USER.MD":
+		return "사용자/legacy-user-context.md"
+	default:
+		return ""
+	}
+}
+
+func (s *Store) preserveLegacyActiveContext(context legacyActiveContext) error {
+	path := legacyActiveContextPagePath(context.label)
+	if path == "" || strings.TrimSpace(context.content) == "" {
+		return nil
+	}
+	id := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	marker := fmt.Sprintf("%s source=%s; migration-copy -->", legacyActiveContextMarker, context.label)
+	page := NewPage("Legacy "+context.label+" active context", "사용자", []string{"legacy", "migration"})
+	page.Meta.ID = id
+	page.Meta.Importance = 1
+	page.Meta.Type = "reference"
+	page.Meta.Summary = "Fact identity가 없는 기존 컨텍스트의 cutover 보존본"
+	page.Meta.Sources = []string{"workspace:" + legacyProjectionName(context.label)}
+	page.Body = marker + "\n# Legacy " + context.label + " active context\n\n" +
+		"> 기존 파일에서 fact-sized 행만 제외한 보존 컨텍스트다. 충돌 시 append-only fact plane의 현행 사실이 우선한다.\n\n" +
+		strings.TrimSpace(context.content) + "\n"
+
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	current, err := s.ReadPage(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if current != nil {
+		if !strings.HasPrefix(strings.TrimSpace(current.Body), legacyActiveContextMarker) {
+			return fmt.Errorf("reserved legacy context path already contains a manual page: %s", path)
+		}
+		if current.Body != page.Body {
+			return fmt.Errorf("existing generated legacy context differs from %s", context.label)
+		}
+		if current.Meta.ID == page.Meta.ID && current.Meta.Importance == page.Meta.Importance && current.Meta.Type == page.Meta.Type {
+			return nil
+		}
+	}
+	return s.writePageLocked(path, page)
 }
 
 type legacyInductionMeta struct {

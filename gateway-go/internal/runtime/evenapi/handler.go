@@ -258,10 +258,11 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		defer h.activeTurn.Add(-1)
 		defer cancel()
 		res, err := h.chat.RunSync(runCtx, chatport.SyncRequest{
-			SessionKey:   h.session,
-			Message:      utterance,
-			SystemPrompt: glassesSystemHint,
-			SoftDeadline: chatport.InteractiveTurnSoftDeadline,
+			SessionKey:             h.session,
+			Message:                utterance,
+			SystemPrompt:           glassesSystemHint,
+			SoftDeadline:           chatport.InteractiveTurnSoftDeadline,
+			TrustedDirectUserInput: true,
 			Delivery: &chatport.DeliveryContext{
 				Channel: "client",
 				To:      h.session,

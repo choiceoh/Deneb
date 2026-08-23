@@ -315,14 +315,16 @@ internal data class CurrentFactDetail(
     val body: String,
 )
 
+internal const val CURRENT_FACT_PROFILE_PATH = "사용자/현행-사실.md"
+
 /** Synthetic fact references are virtual, read-only projections over the
  *  canonical fact journal. Match path variants defensively so a hand-built
  *  route cannot bypass the native client's cache/write boundary. */
 internal fun isSyntheticFactPath(path: String): Boolean {
     val normalized = path.trim().replace('\\', '/').trimStart('/')
     return normalized.startsWith("@facts/") ||
-        normalized == "사용자/현행-사실" ||
-        normalized == "사용자/현행-사실.md"
+        normalized == CURRENT_FACT_PROFILE_PATH.removeSuffix(".md") ||
+        normalized == CURRENT_FACT_PROFILE_PATH
 }
 
 /** Older gateways may identify a fact through only one of these fields. */

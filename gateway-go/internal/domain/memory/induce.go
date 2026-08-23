@@ -24,6 +24,14 @@ func InduceFromTurn(userMessage string) *Induced {
 	}
 	c := ClassifyHeuristics(msg)
 	c.SubjectID = NormalizeSubject(c.SubjectID)
+	// Profile cues are deliberately recall-friendly and may occur inside quoted
+	// mail, translation, or code payloads. Only a top-level self-directed
+	// assertion/correction/forget command may reach the canonical memory sink.
+	// Third-party profile observations retain their propose-only ledger route.
+	if c.Target == TargetProfile && c.SubjectID == SubjectSelf && !HasDirectProfileMutationIntent(msg) {
+		c.Target = TargetEpisodic
+		c.Forget = false
+	}
 	return &Induced{
 		Candidate: c,
 		Route:     RouteFor(c.Target, c.SubjectID),

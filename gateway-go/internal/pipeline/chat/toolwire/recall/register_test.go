@@ -27,13 +27,13 @@ type knowledgeRegistrationCapture struct {
 
 func (r *knowledgeRegistrationCapture) RegisterTool(def toolport.ToolDef) { r.def = def }
 
-func TestRegisterKnowledgeToolPublishesFactAuthorityBoundary(t *testing.T) {
+func TestRegisterKnowledgeToolPublishesReadOnlyFactBoundary(t *testing.T) {
 	registry := &knowledgeRegistrationCapture{}
 	RegisterKnowledgeTool(registry, knowledge.New(&knowledgeRegistrationAdapter{}))
 	if registry.def.Name != "knowledge" || registry.def.Fn == nil {
 		t.Fatalf("registered definition = %+v", registry.def)
 	}
-	for _, want := range []string{"assert_fact", "forget_fact", "facts", "direct_user", "금지", "최대 50건"} {
+	for _, want := range []string{"facts", "직접 사용자 발화", "내부 ingestion", "최대 50건"} {
 		if !strings.Contains(registry.def.Description, want) {
 			t.Errorf("description missing %q: %s", want, registry.def.Description)
 		}
@@ -44,28 +44,18 @@ func TestRegisterKnowledgeToolPublishesFactAuthorityBoundary(t *testing.T) {
 		t.Fatalf("properties = %#v", registry.def.InputSchema["properties"])
 	}
 	op := schemaProperty(t, properties, "op")
-	for _, want := range []string{"assert_fact", "forget_fact", "facts"} {
+	for _, want := range []string{"recall", "read", "record", "facts"} {
 		if !containsSchemaString(op["enum"], want) {
 			t.Errorf("op enum missing %q: %#v", want, op["enum"])
 		}
 	}
-	authority := schemaProperty(t, properties, "authority")
-	if containsSchemaString(authority["enum"], "direct_user") {
-		t.Fatalf("model-callable authority enum exposes direct_user: %#v", authority["enum"])
-	}
-	for _, want := range []string{"primary_document", "runtime_observation", "agent_confirmed", "inference"} {
-		if !containsSchemaString(authority["enum"], want) {
-			t.Errorf("authority enum missing %q: %#v", want, authority["enum"])
+	for _, forbidden := range []string{"assert_fact", "forget_fact"} {
+		if containsSchemaString(op["enum"], forbidden) {
+			t.Fatalf("model-callable op enum exposes mutation %q: %#v", forbidden, op["enum"])
 		}
-	}
-	if authority["default"] != "agent_confirmed" {
-		t.Errorf("authority default = %#v", authority["default"])
 	}
 	if got := schemaProperty(t, properties, "subject")["default"]; got != "self" {
 		t.Errorf("subject default = %#v", got)
-	}
-	if got := schemaProperty(t, properties, "fact_kind")["default"]; got != "generic" {
-		t.Errorf("fact_kind default = %#v", got)
 	}
 	limit := schemaProperty(t, properties, "limit")
 	if got := limit["maximum"]; got != 50 {
@@ -74,15 +64,10 @@ func TestRegisterKnowledgeToolPublishesFactAuthorityBoundary(t *testing.T) {
 	if description, _ := limit["description"].(string); !strings.Contains(description, "facts 이력은 최신 N개") {
 		t.Errorf("limit description does not document bounded fact history: %q", description)
 	}
-	sourceRefs := schemaProperty(t, properties, "source_refs")
-	if got := sourceRefs["maxItems"]; got != 16 {
-		t.Errorf("source_refs maxItems = %#v", got)
-	}
-	if description, _ := sourceRefs["description"].(string); !strings.Contains(description, "필수") {
-		t.Errorf("source_refs description does not document authority requirement: %q", description)
-	}
-	if description, _ := schemaProperty(t, properties, "basis_at")["description"].(string); !strings.Contains(description, "필수") {
-		t.Errorf("basis_at description does not document dated-primary requirement: %q", description)
+	for _, forbidden := range []string{"value", "fact_kind", "authority", "source_refs", "basis_at", "reason"} {
+		if _, exposed := properties[forbidden]; exposed {
+			t.Fatalf("model schema exposes fact mutation field %q", forbidden)
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ package ai.deneb.ui.chat
 
 import ai.deneb.data.Conversation
 import ai.deneb.data.DataRepository
+import ai.deneb.data.SynchronousLock
 import ai.deneb.data.TaskScheduler
 import ai.deneb.data.UiSubmission
 import ai.deneb.data.isStageableExtension
@@ -38,6 +39,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -51,6 +53,8 @@ import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.CoroutineContext
@@ -64,6 +68,65 @@ import kotlin.time.Duration.Companion.seconds
 // (imperceptible). Other combine inputs (isLoading, …) stay unsampled, so stream start/end and
 // the streaming caret still flip instantly.
 private const val STREAM_HISTORY_SAMPLE_MS = 64L
+
+private enum class FollowUpPhase {
+    STEER_WAITING,
+    STEER_IN_FLIGHT,
+    QUEUED,
+    CLAIMED,
+}
+
+private enum class SteerCompletion {
+    ACCEPTED,
+    QUEUED,
+    STALE,
+}
+
+private data class TrackedFollowUp(
+    val id: Long,
+    val pending: PendingQuestion,
+    val generation: Long,
+    val conversationId: String?,
+    val phase: FollowUpPhase,
+)
+
+private data class CancelledSteerEntry(
+    val steerId: Long?,
+    val text: String,
+    val restore: Boolean?,
+)
+
+private data class CancelledSteerBatch(
+    val entries: List<CancelledSteerEntry>,
+)
+
+private data class CancelledBatchFlush(
+    val ready: Boolean,
+    val text: String? = null,
+)
+
+private sealed interface AskAdmission {
+    data class Direct(val job: Job) : AskAdmission
+    data class Steer(val tracked: TrackedFollowUp) : AskAdmission
+    data object None : AskAdmission
+}
+
+/**
+ * Applies [transform] only while [condition] still holds at the compare-and-set.
+ *
+ * The transform may race another state transition, so retry from the new snapshot
+ * instead of overwriting it with a value derived from stale state.
+ */
+internal fun <T> MutableStateFlow<T>.compareAndUpdateIf(
+    condition: (T) -> Boolean,
+    transform: (T) -> T,
+): Boolean {
+    while (true) {
+        val current = value
+        if (!condition(current)) return false
+        if (compareAndSet(current, transform(current))) return true
+    }
+}
 
 class ChatViewModel(
     private val dataRepository: DataRepository,
@@ -120,6 +183,16 @@ class ChatViewModel(
     // kills the app — crash reporter build 614, stop tapped mid-stream. See
     // httpTeardownTolerantHandler.
     private val teardownHandler = httpTeardownTolerantHandler("ChatViewModel")
+    private val steerMutex = Mutex()
+    private val steerStateLock = SynchronousLock()
+    private var steerGeneration = 0L
+    private var nextFollowUpId = 0L
+    private var awaitingSuccessfulHandoff = false
+    private val trackedFollowUps = mutableListOf<TrackedFollowUp>()
+    private val cancelledSteerBatches = mutableMapOf<Long, CancelledSteerBatch>()
+    internal var beforeSteerLaunch: (() -> Unit)? = null
+    internal var beforeQueuedTurnStart: ((ChatUiState) -> Unit)? = null
+    internal var afterSuccessfulHandoffClaim: (() -> Unit)? = null
     private var currentJob: Job? = null
     private var pendingConversationDeleteJob: Job? = null
     private val _state = MutableStateFlow(
@@ -286,113 +359,142 @@ class ChatViewModel(
         question: String?,
         uiSubmission: UiSubmission?,
         restoreText: String? = null,
-        // Attachment snapshot carried by a drained queue entry. null = direct send
-        // (consume the files staged in the UI); non-null (possibly empty) = queued
-        // send whose attachments were captured at queue time, so it never absorbs
-        // files the user staged for a LATER message.
-        presetFiles: ImmutableList<PlatformFile>? = null,
     ) {
-        // A send while a reply is still streaming: text-only typed follow-ups
-        // try mid-turn steer first. If the gateway declines (or the send has
-        // files / is programmatic), it QUEUES and fires when this turn completes
-        // (see drainPendingQuestion). Retries (question == null) and UI-card
-        // submissions belong to the CURRENT turn and must not replay after it.
-        if (_state.value.isLoading) {
-            if (question != null && uiSubmission == null) {
+        val admission = steerStateLock.withLock {
+            if (_state.value.isLoading) {
+                // A send while a reply is still streaming: text-only typed
+                // follow-ups try mid-turn steer first. Files and programmatic
+                // prompts occupy the same ordered after-turn ledger.
+                if (question == null || uiSubmission != null) return@withLock AskAdmission.None
                 val userTyped = restoreText != null
                 val staged = if (userTyped) _state.value.files else persistentListOf()
-                // Text-only typed follow-up: try mid-turn steer first. Files and
-                // programmatic prompts stay on the after-turn queue.
-                val canSteer = userTyped && staged.isEmpty() && (presetFiles == null || presetFiles.isEmpty())
+                val canSteer = userTyped && staged.isEmpty()
                 if (canSteer) {
-                    viewModelScope.launch(backgroundDispatcher + teardownHandler) {
-                        val ok = try {
-                            dataRepository.steer(question)
-                        } catch (exception: Exception) {
-                            if (exception is CancellationException) throw exception
-                            false
-                        }
-                        if (ok) {
-                            _state.update { it.copy(lastSteerNote = question) }
-                            return@launch
-                        }
-                        if (_state.value.isLoading) {
-                            _state.update {
-                                it.copy(
-                                    pendingQuestions = (
-                                        it.pendingQuestions + PendingQuestion(
-                                            text = question,
-                                            restoreToInput = true,
-                                        )
-                                        ).toImmutableList(),
-                                )
-                            }
-                        } else {
-                            askInternal(question, null, restoreText = question)
-                        }
-                    }
-                    return
+                    AskAdmission.Steer(trackSteerLocked(question))
+                } else {
+                    trackQueuedFollowUpLocked(question, userTyped)
+                    AskAdmission.None
                 }
+            } else {
+                // Loading admission, attachment capture, state claim, and lazy Job
+                // installation are one transition. A success/cancel boundary can
+                // therefore linearize only before or after this direct turn.
+                val files = _state.value.files
                 _state.update {
-                    val entry = PendingQuestion(
-                        text = question,
-                        restoreToInput = userTyped,
-                        files = if (userTyped) it.files else persistentListOf(),
-                    )
                     it.copy(
-                        pendingQuestions = (it.pendingQuestions + entry).toImmutableList(),
-                        // The staged files now belong to the queued message.
-                        files = if (userTyped) persistentListOf() else it.files,
+                        isLoading = true,
+                        error = null,
+                        failedInput = null,
+                        stoppedMessageId = null,
+                        stoppedBeforeAnswer = false,
+                        files = persistentListOf(),
                     )
                 }
+                val job = createTurnJob(
+                    question = question,
+                    files = files,
+                    uiSubmission = uiSubmission,
+                    restoreText = restoreText,
+                    start = CoroutineStart.LAZY,
+                ).also { currentJob = it }
+                AskAdmission.Direct(job)
             }
-            return
         }
 
-        // Capture files before launching coroutine to avoid race with files being cleared
-        val files = presetFiles ?: _state.value.files
+        // Never acquire steerMutex or start coroutine bodies under steerStateLock:
+        // RPC completion uses steerMutex -> steerStateLock ordering.
+        when (admission) {
+            is AskAdmission.Direct -> admission.job.start()
 
-        currentJob = viewModelScope.launch(backgroundDispatcher + teardownHandler) {
-            _state.update {
-                it.copy(
-                    isLoading = true,
-                    error = null,
-                    failedInput = null,
-                    stoppedMessageId = null,
-                    stoppedBeforeAnswer = false,
-                    // Only a direct send consumes the staged files; a drained queue
-                    // entry carries its own snapshot, so anything staged since then
-                    // stays with the user's next draft.
-                    files = if (presetFiles == null) persistentListOf() else it.files,
-                )
+            is AskAdmission.Steer -> {
+                beforeSteerLaunch?.invoke()
+                launchSteer(admission.tracked)
             }
-            try {
-                val delivered = dataRepository.ask(question, files, uiSubmission)
 
-                if (delivered) {
-                    _state.update {
-                        it.copy(isLoading = false, lastSteerNote = null)
+            AskAdmission.None -> Unit
+        }
+    }
+
+    private fun launchSteer(tracked: TrackedFollowUp) {
+        viewModelScope.launch(teardownHandler, start = CoroutineStart.UNDISPATCHED) {
+            var changedHead = false
+            var queuedFallback = false
+            steerMutex.withLock {
+                // Once an earlier typed follow-up has fallen back to the after-turn
+                // queue, all later submissions remain behind it after FIFO admission.
+                if (queueTrackedSteerBehindPending(tracked)) {
+                    changedHead = true
+                    queuedFallback = true
+                    return@withLock
+                }
+                if (!markTrackedSteerInFlight(tracked)) return@withLock
+                val ok = try {
+                    withContext(backgroundDispatcher) {
+                        dataRepository.steer(tracked.pending.text)
                     }
-                    drainPendingQuestion()
-                } else {
-                    // The gateway client surfaces turn failures as an ⚠️ bubble and
-                    // returns normally — treat that as a failed turn all the same:
-                    // never auto-send the queue after a failure. Unlike the exception
-                    // path below, the sent text is already in the transcript (user
-                    // bubble + error bubble), so only the queue folds into the input.
+                } catch (exception: Exception) {
+                    false
+                }
+                when (completeTrackedSteer(tracked, ok)) {
+                    SteerCompletion.ACCEPTED -> changedHead = true
+
+                    SteerCompletion.QUEUED -> {
+                        changedHead = true
+                        queuedFallback = true
+                    }
+
+                    SteerCompletion.STALE -> resolveCancelledSteer(tracked, restore = !ok)
+                }
+            }
+            val resumedHandoff = changedHead && resumeSuccessfulHandoffIfNeeded()
+            if (queuedFallback && !resumedHandoff) startNextQueuedIfIdle()
+        }
+    }
+
+    private fun createTurnJob(
+        question: String?,
+        files: ImmutableList<PlatformFile>,
+        uiSubmission: UiSubmission?,
+        restoreText: String?,
+        claimedFollowUp: TrackedFollowUp? = null,
+        start: CoroutineStart = CoroutineStart.DEFAULT,
+    ): Job = viewModelScope.launch(backgroundDispatcher + teardownHandler, start = start) {
+        if (claimedFollowUp != null && !beginClaimedTurn(claimedFollowUp)) return@launch
+        try {
+            val delivered = dataRepository.ask(question, files, uiSubmission)
+
+            if (delivered) {
+                // All typed follow-ups admitted before this completion already
+                // own earlier FIFO mutex slots. Resolve them before choosing the
+                // ledger head, so a later attachment can never overtake an
+                // earlier in-flight steer.
+                val next = steerMutex.withLock { claimNextQueuedAfterSuccess() }
+                afterSuccessfulHandoffClaim?.invoke()
+                next?.let(::startQueuedTurn)
+            } else {
+                // The gateway client surfaces turn failures as an ⚠️ bubble and
+                // returns normally — treat that as a failed turn all the same:
+                // never auto-send the queue after a failure. Unlike the exception
+                // path below, the sent text is already in the transcript (user
+                // bubble + error bubble), so only the queue folds into the input.
+                steerStateLock.withLock {
+                    val flush = snapshotFollowUpsForRestoreLocked(leadingText = null)
                     _state.update {
                         it.copy(
                             isLoading = false,
                             lastSteerNote = null,
-                            failedInput = foldIntoInput(null, it.pendingQuestions),
+                            failedInput = if (flush.ready) flush.text else null,
                             pendingQuestions = persistentListOf(),
                         )
                     }
                 }
-            } catch (exception: Exception) {
-                // CancellationException must be re-thrown to properly propagate coroutine cancellation
-                if (exception is CancellationException) throw exception
+            }
+        } catch (exception: Exception) {
+            // CancellationException must be re-thrown to properly propagate coroutine cancellation
+            if (exception is CancellationException) throw exception
 
+            steerStateLock.withLock {
+                val flush = snapshotFollowUpsForRestoreLocked(leadingText = restoreText)
                 _state.update {
                     // Never auto-send queued messages after a FAILED turn — fold them
                     // back into the input (with the failed text) so the user decides.
@@ -400,7 +502,7 @@ class ChatViewModel(
                         error = exception.toUiError(),
                         isLoading = false,
                         lastSteerNote = null,
-                        failedInput = foldIntoInput(restoreText, it.pendingQuestions),
+                        failedInput = if (flush.ready) flush.text else null,
                         pendingQuestions = persistentListOf(),
                     )
                 }
@@ -408,33 +510,259 @@ class ChatViewModel(
         }
     }
 
-    // Fires the next queued message once the running turn has completed
-    // successfully. Success-path only: an errored/stopped turn folds the queue
-    // back into the input instead (the user may want to rephrase).
-    private fun drainPendingQuestion() {
-        val next = _state.value.pendingQuestions.firstOrNull() ?: return
-        clearAnswerVariants() // a queued NEW question, same as ask()
-        _state.update { it.copy(pendingQuestions = it.pendingQuestions.drop(1).toImmutableList()) }
-        // A drained programmatic prompt keeps its no-restore semantics: if THIS
-        // turn fails, its text must not land in the input box either.
-        askInternal(
-            next.text,
-            null,
-            restoreText = if (next.restoreToInput) next.text else null,
-            presetFiles = next.files,
+    private fun beginClaimedTurn(claimed: TrackedFollowUp): Boolean = steerStateLock.withLock {
+        if (steerGeneration != claimed.generation || dataRepository.currentConversationId.value != claimed.conversationId) {
+            return@withLock false
+        }
+        val index = trackedFollowUps.indexOfFirst { it.id == claimed.id && it.phase == FollowUpPhase.CLAIMED }
+        if (index < 0) return@withLock false
+        trackedFollowUps.removeAt(index)
+        true
+    }
+
+    private fun startQueuedTurn(job: Job) {
+        // Test hook for the exact dequeue/launch cancellation boundary. The Job is
+        // already installed as currentJob and its ledger slot remains CLAIMED, so
+        // cancel() can both stop it and restore its text before start() is attempted.
+        beforeQueuedTurnStart?.invoke(_state.value)
+        job.start()
+    }
+
+    private fun trackSteerLocked(question: String): TrackedFollowUp {
+        val tracked = TrackedFollowUp(
+            id = nextFollowUpId++,
+            pending = PendingQuestion(text = question, restoreToInput = true),
+            generation = steerGeneration,
+            conversationId = dataRepository.currentConversationId.value,
+            phase = FollowUpPhase.STEER_WAITING,
         )
+        trackedFollowUps += tracked
+        return tracked
+    }
+
+    private fun trackQueuedFollowUpLocked(question: String, restoreToInput: Boolean) {
+        val files = if (restoreToInput) _state.value.files else persistentListOf()
+        trackedFollowUps += TrackedFollowUp(
+            id = nextFollowUpId++,
+            pending = PendingQuestion(
+                text = question,
+                restoreToInput = restoreToInput,
+                files = files,
+            ),
+            generation = steerGeneration,
+            conversationId = dataRepository.currentConversationId.value,
+            phase = FollowUpPhase.QUEUED,
+        )
+        _state.update {
+            it.copy(
+                pendingQuestions = queuedPendingLocked(),
+                files = if (restoreToInput) persistentListOf() else it.files,
+            )
+        }
+    }
+
+    private fun queueTrackedSteerBehindPending(tracked: TrackedFollowUp): Boolean = steerStateLock.withLock {
+        if (steerGeneration != tracked.generation || dataRepository.currentConversationId.value != tracked.conversationId) {
+            return@withLock true
+        }
+        val index = trackedFollowUps.indexOfFirst { it.id == tracked.id }
+        if (index < 0) return@withLock true
+        if (trackedFollowUps.none { it.phase == FollowUpPhase.QUEUED }) return@withLock false
+        trackedFollowUps[index] = trackedFollowUps[index].copy(phase = FollowUpPhase.QUEUED)
+        _state.update { it.copy(pendingQuestions = queuedPendingLocked()) }
+        true
+    }
+
+    private fun markTrackedSteerInFlight(tracked: TrackedFollowUp): Boolean = steerStateLock.withLock {
+        if (steerGeneration != tracked.generation || dataRepository.currentConversationId.value != tracked.conversationId) {
+            return@withLock false
+        }
+        val index = trackedFollowUps.indexOfFirst { it.id == tracked.id }
+        if (index < 0) return@withLock false
+        trackedFollowUps[index] = trackedFollowUps[index].copy(phase = FollowUpPhase.STEER_IN_FLIGHT)
+        true
+    }
+
+    private fun completeTrackedSteer(tracked: TrackedFollowUp, accepted: Boolean): SteerCompletion = steerStateLock.withLock {
+        if (steerGeneration != tracked.generation || dataRepository.currentConversationId.value != tracked.conversationId) {
+            return@withLock SteerCompletion.STALE
+        }
+        val index = trackedFollowUps.indexOfFirst { it.id == tracked.id }
+        if (index < 0) return@withLock SteerCompletion.STALE
+        if (accepted) {
+            trackedFollowUps.removeAt(index)
+            // Removal and the visible acknowledgement share the cancel lock: a
+            // stop can win before both or after both, never between them.
+            _state.update { it.copy(lastSteerNote = tracked.pending.text) }
+            SteerCompletion.ACCEPTED
+        } else {
+            // Keep the monotonic slot and change only its phase. This is the
+            // tracked -> pending commit, so cancel cannot observe a gap.
+            trackedFollowUps[index] = trackedFollowUps[index].copy(phase = FollowUpPhase.QUEUED)
+            _state.update { it.copy(pendingQuestions = queuedPendingLocked()) }
+            SteerCompletion.QUEUED
+        }
+    }
+
+    private fun resolveCancelledSteer(tracked: TrackedFollowUp, restore: Boolean) {
+        steerStateLock.withLock {
+            val batch = cancelledSteerBatches[tracked.generation] ?: return@withLock
+            val index = batch.entries.indexOfFirst { it.steerId == tracked.id }
+            if (index < 0 || batch.entries[index].restore != null) return@withLock
+            val entries = batch.entries.toMutableList().apply {
+                this[index] = this[index].copy(restore = restore)
+            }
+            cancelledSteerBatches[tracked.generation] = batch.copy(entries = entries)
+            val flush = flushCancelledBatchesLocked()
+            if (flush.ready) _state.update { it.copy(failedInput = flush.text) }
+        }
+    }
+
+    private fun cancelledRestoreText(entries: List<CancelledSteerEntry>): String? = entries
+        .filter { it.restore == true }
+        .joinToString("\n\n") { it.text }
+        .ifBlank { null }
+
+    private fun flushCancelledBatchesLocked(): CancelledBatchFlush {
+        if (cancelledSteerBatches.isEmpty() || cancelledSteerBatches.values.any { batch -> batch.entries.any { it.restore == null } }) {
+            return CancelledBatchFlush(ready = false)
+        }
+        val text = cancelledSteerBatches.toSortedMap().values
+            .flatMap { it.entries }
+            .let(::cancelledRestoreText)
+        cancelledSteerBatches.clear()
+        return CancelledBatchFlush(ready = true, text = text)
+    }
+
+    private fun snapshotFollowUpsForRestoreLocked(leadingText: String?): CancelledBatchFlush {
+        val snapshotGeneration = steerGeneration
+        steerGeneration++
+        awaitingSuccessfulHandoff = false
+        val entries = buildList {
+            if (leadingText != null) {
+                add(CancelledSteerEntry(steerId = null, text = leadingText, restore = true))
+            }
+            trackedFollowUps.sortedBy { it.id }.forEach {
+                add(
+                    CancelledSteerEntry(
+                        steerId = it.id,
+                        text = it.pending.text,
+                        restore = when (it.phase) {
+                            FollowUpPhase.STEER_WAITING -> true
+
+                            FollowUpPhase.STEER_IN_FLIGHT -> null
+
+                            FollowUpPhase.QUEUED,
+                            FollowUpPhase.CLAIMED,
+                            -> it.pending.restoreToInput
+                        },
+                    ),
+                )
+            }
+        }
+        trackedFollowUps.clear()
+        if (entries.isNotEmpty()) {
+            cancelledSteerBatches[snapshotGeneration] = CancelledSteerBatch(entries)
+        }
+        return flushCancelledBatchesLocked()
+    }
+
+    private fun queuedPendingLocked() = trackedFollowUps
+        .asSequence()
+        .filter { it.phase == FollowUpPhase.QUEUED }
+        .sortedBy { it.id }
+        .map { it.pending }
+        .toList()
+        .toImmutableList()
+
+    private fun invalidateTrackedSteersForSessionBoundary() {
+        steerStateLock.withLock {
+            steerGeneration++
+            awaitingSuccessfulHandoff = false
+            trackedFollowUps.clear()
+            cancelledSteerBatches.clear()
+        }
+    }
+
+    private fun claimNextQueuedAfterSuccess(): Job? = steerStateLock.withLock {
+        awaitingSuccessfulHandoff = true
+        advanceSuccessfulHandoffLocked()
+    }
+
+    private fun resumeSuccessfulHandoffIfNeeded(): Boolean {
+        var job: Job? = null
+        val active = steerStateLock.withLock {
+            if (!awaitingSuccessfulHandoff) return@withLock false
+            job = advanceSuccessfulHandoffLocked()
+            true
+        }
+        job?.let(::startQueuedTurn)
+        return active
+    }
+
+    private fun advanceSuccessfulHandoffLocked(): Job? {
+        val headIndex = trackedFollowUps.indices.minByOrNull { trackedFollowUps[it].id }
+        if (headIndex == null) {
+            awaitingSuccessfulHandoff = false
+            _state.update { it.copy(isLoading = false, lastSteerNote = null) }
+            return null
+        }
+        if (trackedFollowUps[headIndex].phase != FollowUpPhase.QUEUED) {
+            // Admission reserved a ledger slot but has not yet acquired
+            // steerMutex. Keep loading claimed; its resolution resumes this handoff.
+            return null
+        }
+        awaitingSuccessfulHandoff = false
+        return installQueuedTurnLocked(headIndex)
+    }
+
+    private fun installQueuedTurnLocked(index: Int): Job {
+        val claimed = trackedFollowUps[index].copy(phase = FollowUpPhase.CLAIMED)
+        trackedFollowUps[index] = claimed
+        // Dequeue and claim the next turn before state observers can see idle.
+        // A later submit therefore cannot overtake this ingress slot.
+        _state.update {
+            it.copy(
+                isLoading = true,
+                error = null,
+                failedInput = null,
+                lastSteerNote = null,
+                stoppedMessageId = null,
+                stoppedBeforeAnswer = false,
+                pendingQuestions = queuedPendingLocked(),
+            )
+        }
+        clearAnswerVariants()
+        return createTurnJob(
+            question = claimed.pending.text,
+            files = claimed.pending.files,
+            uiSubmission = null,
+            restoreText = if (claimed.pending.restoreToInput) claimed.pending.text else null,
+            claimedFollowUp = claimed,
+            start = CoroutineStart.LAZY,
+        ).also { currentJob = it }
+    }
+
+    private fun startNextQueuedIfIdle() {
+        val job = steerStateLock.withLock {
+            if (_state.value.isLoading) return@withLock null
+            val index = nextQueuedIndexLocked() ?: return@withLock null
+            installQueuedTurnLocked(index)
+        } ?: return
+        startQueuedTurn(job)
+    }
+
+    private fun nextQueuedIndexLocked(): Int? {
+        val headIndex = trackedFollowUps.indices.minByOrNull { trackedFollowUps[it].id } ?: return null
+        return headIndex.takeIf { trackedFollowUps[it].phase == FollowUpPhase.QUEUED }
     }
 
     private fun cancelPendingQuestions() {
-        _state.update { it.copy(pendingQuestions = persistentListOf()) }
+        steerStateLock.withLock {
+            trackedFollowUps.removeAll { it.phase == FollowUpPhase.QUEUED }
+            _state.update { it.copy(pendingQuestions = queuedPendingLocked()) }
+        }
     }
-
-    // Joins the failed text and the user-typed queued messages into one
-    // input-restore blob (blank → null so the restore effect stays quiet).
-    // Programmatic queue entries are dropped — their text must never surface
-    // verbatim in the input box.
-    private fun foldIntoInput(restoreText: String?, queued: List<PendingQuestion>): String? = (listOfNotNull(restoreText) + queued.filter { it.restoreToInput }.map { it.text })
-        .joinToString("\n\n").ifBlank { null }
 
     private fun clearHistory() {
         clearAnswerVariants()
@@ -519,8 +847,35 @@ class ChatViewModel(
     }
 
     private fun cancel() {
-        currentJob?.cancel()
-        currentJob = null
+        // Tag 중단됨 only on the answer that was actually streaming. Cancelling
+        // mid-thinking leaves no new tokens — lastRenderedAssistant() would be the
+        // previous complete reply, which must not be marked stopped.
+        val history = dataRepository.chatHistory.value
+        val beforeAnswer = history.hasUnansweredUserTurn()
+        val stoppedId = if (beforeAnswer) null else history.lastRenderedAssistant()?.id
+        val jobToCancel = steerStateLock.withLock {
+            // Job ownership and the ledger generation move together. Otherwise a
+            // success handoff can install B after cancel() already cleared A but
+            // before the cancel snapshot, leaving B neither cancelled nor tracked.
+            val capturedJob = currentJob
+            currentJob = null
+            val flush = snapshotFollowUpsForRestoreLocked(leadingText = null)
+            _state.update {
+                // Snapshot and clear the unified queue in one emission. When any
+                // generation still has an unresolved RPC, failedInput is published
+                // once after all retained cancel batches can be merged in order.
+                it.copy(
+                    isLoading = false,
+                    lastSteerNote = null,
+                    stoppedMessageId = stoppedId,
+                    stoppedBeforeAnswer = beforeAnswer,
+                    failedInput = if (flush.ready) flush.text else null,
+                    pendingQuestions = persistentListOf(),
+                )
+            }
+            capturedJob
+        }
+        jobToCancel?.cancel()
         // Cancelling the local job only detaches the UI. The gateway runs the turn
         // off the request context on purpose (so a backgrounded phone does not kill
         // it), so without this the model kept generating after the stop and its
@@ -529,24 +884,6 @@ class ChatViewModel(
         // wait on the network.
         viewModelScope.launch(backgroundDispatcher + teardownHandler) {
             dataRepository.abortTurn()
-        }
-        // Tag 중단됨 only on the answer that was actually streaming. Cancelling
-        // mid-thinking leaves no new tokens — lastRenderedAssistant() would be the
-        // previous complete reply, which must not be marked stopped.
-        val history = dataRepository.chatHistory.value
-        val beforeAnswer = history.hasUnansweredUserTurn()
-        val stoppedId = if (beforeAnswer) null else history.lastRenderedAssistant()?.id
-        _state.update {
-            // A stop also cancels the auto-send of queued messages (the user pulled
-            // the brake) — fold them back into the input instead of firing them.
-            it.copy(
-                isLoading = false,
-                lastSteerNote = null,
-                stoppedMessageId = stoppedId,
-                stoppedBeforeAnswer = beforeAnswer,
-                failedInput = foldIntoInput(null, it.pendingQuestions),
-                pendingQuestions = persistentListOf(),
-            )
         }
     }
 
@@ -632,6 +969,7 @@ class ChatViewModel(
     }
 
     private fun loadConversation(id: String) {
+        invalidateTrackedSteersForSessionBoundary()
         currentJob?.cancel()
         currentJob = null
         clearAnswerVariants() // variants are per-live-answer, never cross sessions
@@ -883,6 +1221,7 @@ class ChatViewModel(
     }
 
     private fun startNewChat() {
+        invalidateTrackedSteersForSessionBoundary()
         currentJob?.cancel()
         currentJob = null
         clearAnswerVariants()

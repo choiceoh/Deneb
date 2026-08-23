@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
 // SyncResult holds the outcome of a synchronous agent run.
@@ -218,6 +220,12 @@ type SyncOptions struct {
 	// interactive native-client transports. Propagated to
 	// RunParams.GateUntrustedTools.
 	GateUntrustedTools bool
+
+	// TrustedDirectUserInput is a server-owned provenance marker set only by
+	// authenticated native interactive chat ingress. It is deliberately
+	// separate from GateUntrustedTools: capture and other untrusted-content
+	// runs enable that defensive gate but are not direct-user commands.
+	TrustedDirectUserInput bool
 }
 
 // prepareSyncRun builds RunParams and runDeps from the common sync arguments.
@@ -275,6 +283,7 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 		params.OnProgress = opts.OnProgress
 		params.SoftDeadline = opts.SoftDeadline
 		params.GateUntrustedTools = opts.GateUntrustedTools
+		params.TrustedDirectUserInput = opts.TrustedDirectUserInput
 	}
 
 	deps := h.buildRunDeps()
@@ -407,6 +416,14 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	if res, handled := h.trySlashSync(sessionKey, message, opts); handled {
 		return res, nil
 	}
+	ticket := h.reserveSyncAdmission(sessionKey)
+	defer ticket.release()
+	if err := ticket.wait(ctx); err != nil {
+		return nil, err
+	}
+	// Serialize the steer-vs-own-turn decision as part of the same ingress FIFO
+	// as full synchronous runs. If an earlier message must wait for its own turn,
+	// a later short message must not jump ahead by steering into the active run.
 	if res, handled := h.trySteerIntoActiveRun(sessionKey, message, opts); handled {
 		return res, nil
 	}
@@ -427,7 +444,7 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	// (miniapp.chat.send, cron single-run, heartbeat, boot, mail-qa, BTW) is
 	// invisible in ~/.deneb/agent-logs and to the modeltuner's AggregateByModel.
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
-	return h.withAdmittedSyncRunLifecycle(ctx, sessionKey, params.ClientRunID,
+	return h.withAdmittedSyncRunLifecycleReleasingTicket(ctx, sessionKey, params.ClientRunID, ticket,
 		isAutomationRun(params),
 		func(runCtx context.Context) (*SyncResult, error) {
 			result, err := executeAgentRun(runCtx, params, deps, nil, nil, h.logger, runLog)
@@ -452,6 +469,78 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 		})
 }
 
+type syncAdmissionTicket struct {
+	handler     *Handler
+	session     string
+	previous    <-chan struct{}
+	complete    chan struct{}
+	releaseOnce sync.Once
+}
+
+func (h *Handler) reserveSyncAdmission(sessionKey string) *syncAdmissionTicket {
+	h.syncAdmissionMu.Lock()
+	defer h.syncAdmissionMu.Unlock()
+	if h.syncAdmissionTails == nil {
+		h.syncAdmissionTails = make(map[string]chan struct{})
+	}
+	previous := h.syncAdmissionTails[sessionKey]
+	if previous == nil {
+		ready := make(chan struct{})
+		close(ready)
+		previous = ready
+	}
+	complete := make(chan struct{})
+	h.syncAdmissionTails[sessionKey] = complete
+	return &syncAdmissionTicket{handler: h, session: sessionKey, previous: previous, complete: complete}
+}
+
+func (t *syncAdmissionTicket) wait(ctx context.Context) error {
+	if t == nil {
+		return nil
+	}
+	select {
+	case <-t.previous:
+		return nil
+	case <-ctx.Done():
+		if cause := context.Cause(ctx); cause != nil {
+			return cause
+		}
+		return ctx.Err()
+	}
+}
+
+func (t *syncAdmissionTicket) release() {
+	if t == nil || t.handler == nil {
+		return
+	}
+	t.releaseOnce.Do(func() {
+		finish := func() {
+			close(t.complete)
+			t.handler.syncAdmissionMu.Lock()
+			if t.handler.syncAdmissionTails[t.session] == t.complete {
+				delete(t.handler.syncAdmissionTails, t.session)
+			}
+			t.handler.syncAdmissionMu.Unlock()
+		}
+		select {
+		case <-t.previous:
+			finish()
+		default:
+			// A canceled middle request must not open a shortcut around its
+			// predecessor. Bridge the chain after returning cancellation to the
+			// caller, then release the next ticket only when the predecessor ends.
+			logger := t.handler.logger
+			if logger == nil {
+				logger = slog.Default()
+			}
+			safego.GoWithSlog(logger, "sync-admission-release", func() {
+				<-t.previous
+				finish()
+			})
+		}
+	})
+}
+
 // withSyncRunLifecycle makes a synchronous run a first-class member of the
 // session lifecycle, exactly as startAsyncRun does for the async path. Without
 // it, a native run (miniapp.chat.send/stream is the native client's ONLY entry,
@@ -474,18 +563,32 @@ func (h *Handler) withSyncRunLifecycle(
 	ctx context.Context, sessionKey, clientRunID string, automation bool,
 	fn func(context.Context) (*SyncResult, error),
 ) (*SyncResult, error) {
-	return h.withSyncRunLifecycleAdmission(ctx, sessionKey, clientRunID, false, automation, fn)
+	return h.withSyncRunLifecycleAdmission(ctx, sessionKey, clientRunID, false, nil, automation, fn)
 }
 
 func (h *Handler) withAdmittedSyncRunLifecycle(
 	ctx context.Context, sessionKey, clientRunID string, automation bool,
 	fn func(context.Context) (*SyncResult, error),
 ) (*SyncResult, error) {
-	return h.withSyncRunLifecycleAdmission(ctx, sessionKey, clientRunID, true, automation, fn)
+	return h.withSyncRunLifecycleAdmission(ctx, sessionKey, clientRunID, true, nil, automation, fn)
+}
+
+func (h *Handler) withAdmittedSyncRunLifecycleReleasingTicket(
+	ctx context.Context,
+	sessionKey, clientRunID string,
+	ticket *syncAdmissionTicket,
+	automation bool,
+	fn func(context.Context) (*SyncResult, error),
+) (*SyncResult, error) {
+	var onRegistered func()
+	if ticket != nil {
+		onRegistered = ticket.release
+	}
+	return h.withSyncRunLifecycleAdmission(ctx, sessionKey, clientRunID, true, onRegistered, automation, fn)
 }
 
 func (h *Handler) withSyncRunLifecycleAdmission(
-	ctx context.Context, sessionKey, clientRunID string, admitted, automation bool,
+	ctx context.Context, sessionKey, clientRunID string, admitted bool, onRegistered func(), automation bool,
 	fn func(context.Context) (*SyncResult, error),
 ) (*SyncResult, error) {
 	runCtx, cancel := context.WithCancelCause(ctx)
@@ -500,12 +603,23 @@ func (h *Handler) withSyncRunLifecycleAdmission(
 	}
 	var registered bool
 	if admitted {
-		registered = h.abort.RegisterAdmitted(clientRunID, entry)
+		var registerErr error
+		registered, registerErr = h.registerAdmittedSyncWhenSessionIdle(ctx, clientRunID, entry)
+		if registerErr != nil {
+			return nil, registerErr
+		}
 	} else {
 		registered = h.abort.TryRegister(clientRunID, entry)
 	}
 	if !registered {
 		return nil, ErrRuntimeDraining
+	}
+	// The ingress ticket protects the steer-vs-own-turn decision and the final
+	// registration, not the whole model run. Once this run is visible in the
+	// abort tracker, later short inputs may safely steer into it; later own-turn
+	// inputs will reserve their own ticket and wait for this run to become idle.
+	if onRegistered != nil {
+		onRegistered()
 	}
 	// The abort tracker answers cancellation/steer questions, while the session
 	// lifecycle backs transcript.turnRunning and reconnect recovery. Sync runs
@@ -536,6 +650,47 @@ func (h *Handler) withSyncRunLifecycleAdmission(
 	res, err := fn(runCtx)
 	h.finishSyncSessionLifecycle(runCtx, sessionKey, res, err)
 	return res, err
+}
+
+// registerAdmittedSyncWhenSessionIdle closes the final idle-check/register
+// gap for synchronous requests. The earlier admitSyncWhenSessionIdle call is a
+// cheap wait before prompt preparation, but two idle callers can pass it at
+// once. Rechecking and RegisterAdmitted under the same per-session decision
+// lock ensures only one becomes active; the other waits for the registered run
+// (and any queued continuation) to finish.
+func (h *Handler) registerAdmittedSyncWhenSessionIdle(
+	ctx context.Context,
+	clientRunID string,
+	entry *AbortEntry,
+) (bool, error) {
+	if h == nil || h.abort == nil || entry == nil {
+		return false, ErrRuntimeDraining
+	}
+	if h.mergeWindow == nil {
+		return h.abort.RegisterAdmitted(clientRunID, entry), nil
+	}
+	for {
+		sessLock := h.mergeWindow.SessionLock(entry.SessionKey)
+		sessLock.Lock()
+		if !h.abort.HasActiveRun(entry.SessionKey) {
+			registered := h.abort.RegisterAdmitted(clientRunID, entry)
+			sessLock.Unlock()
+			if !registered {
+				return false, ErrRuntimeDraining
+			}
+			return true, nil
+		}
+		sessLock.Unlock()
+
+		select {
+		case <-ctx.Done():
+			if cause := context.Cause(ctx); cause != nil {
+				return false, cause
+			}
+			return false, ctx.Err()
+		case <-time.After(syncSessionIdlePoll):
+		}
+	}
 }
 
 func (h *Handler) finishSyncSessionLifecycle(runCtx context.Context, sessionKey string, res *SyncResult, runErr error) {
@@ -642,7 +797,7 @@ func isNativeClientDelivery(d *DeliveryContext) bool {
 // session's next run (the steer hook drains before every LLM call) — deferred,
 // never lost.
 func (h *Handler) trySteerIntoActiveRun(sessionKey, message string, opts *SyncOptions) (*SyncResult, bool) {
-	if opts == nil || len(opts.Messages) > 0 || opts.EphemeralUser {
+	if opts == nil || !opts.TrustedDirectUserInput || len(opts.Messages) > 0 || opts.EphemeralUser {
 		return nil, false
 	}
 	// AutoDeliveredOutput marks runs whose reply the completion layer delivers
@@ -667,7 +822,11 @@ func (h *Handler) trySteerIntoActiveRun(sessionKey, message string, opts *SyncOp
 	if !h.abort.HasActiveInteractiveRun(sessionKey) {
 		return nil, false
 	}
-	if !h.steer.Enqueue(sessionKey, trimmed) {
+	// A profile assertion/correction/forget needs its own ordered turn so its
+	// deterministic induction runs on the exact user message. Folding it into
+	// the active model turn would persist the transcript correction but induce
+	// only the older RunParams.Message when that turn finishes.
+	if !h.EnqueueSteer(sessionKey, trimmed) {
 		return nil, false
 	}
 	if h.transcript != nil {
@@ -751,6 +910,12 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		}
 		return res, nil
 	}
+	ticket := h.reserveSyncAdmission(sessionKey)
+	defer ticket.release()
+	if err := ticket.wait(ctx); err != nil {
+		return nil, err
+	}
+	// Keep streaming ingress on the same ordered steer decision as SendSync.
 	if res, handled := h.trySteerIntoActiveRun(sessionKey, message, opts); handled {
 		if onDelta != nil && res.Text != "" {
 			onDelta(res.Text)
@@ -787,7 +952,7 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		sinks.OnThinking = opts.OnThinking
 		sinks.OnReasoning = opts.OnReasoning
 	}
-	return h.withAdmittedSyncRunLifecycle(ctx, sessionKey, params.ClientRunID,
+	return h.withAdmittedSyncRunLifecycleReleasingTicket(ctx, sessionKey, params.ClientRunID, ticket,
 		isAutomationRun(params),
 		func(runCtx context.Context) (*SyncResult, error) {
 			result, err := executeAgentRunWithDelta(runCtx, params, deps, sinks, h.logger)

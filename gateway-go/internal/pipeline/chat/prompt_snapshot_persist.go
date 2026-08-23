@@ -100,6 +100,11 @@ type promptSnapshotPersister struct {
 	// freshly assembled Tier1/context snapshot must not be stamped with the new
 	// revision and later resurrect stale projection bytes after restart.
 	factDerivedApproved bool
+	// factDerivedManaged distinguishes the zero-value test/standalone state from
+	// an initialized fact plane. Before initialization, ordinary context loading
+	// remains backward-compatible; after startup or the first invalidation,
+	// factDerivedApproved also governs live USER.md/MEMORY.md admission.
+	factDerivedManaged bool
 	// factInvalidationPending carries a correction across the startup window
 	// where the on-disk mirror exists but load() has not populated store yet.
 	// Without it, clear-before-load sees an empty map and the later async restore
@@ -213,7 +218,14 @@ func (p *promptSnapshotPersister) setFactRevision(revision uint64) {
 	}
 	p.factRevision = revision
 	p.factDerivedApproved = true
+	p.factDerivedManaged = true
 	p.mu.Unlock()
+}
+
+func (p *promptSnapshotPersister) factDerivedContextAllowed() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return !p.factDerivedManaged || p.factDerivedApproved
 }
 
 func (p *promptSnapshotPersister) recordAtGeneration(sessionKey, tier1 string, ctxFiles []prompt.ContextFile, topic *prompt.TopicKnowledge, generation uint64) {
@@ -373,6 +385,7 @@ func (p *promptSnapshotPersister) clearFactDerivedAtRevision(revision uint64, pr
 	p.mu.Lock()
 	p.factRevision = revision
 	p.factDerivedApproved = projectionHealthy
+	p.factDerivedManaged = true
 	changed := p.invalidateFactDerivedLocked()
 	p.mu.Unlock()
 	if changed {
@@ -383,6 +396,7 @@ func (p *promptSnapshotPersister) clearFactDerivedAtRevision(revision uint64, pr
 func (p *promptSnapshotPersister) disableFactDerived() {
 	p.mu.Lock()
 	p.factDerivedApproved = false
+	p.factDerivedManaged = true
 	changed := p.invalidateFactDerivedLocked()
 	p.mu.Unlock()
 	if changed {

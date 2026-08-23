@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -315,6 +316,267 @@ func TestAdmitSyncWhenSessionIdle_RespectsContextCancel(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
 		t.Fatalf("waited %v after cancel, expected fast return", elapsed)
+	}
+}
+
+func TestRegisterAdmittedSyncWhenSessionIdleSerializesConcurrentIdleCallers(t *testing.T) {
+	h := newSteerTestHandler()
+	h.mergeWindow = NewMergeWindowTracker()
+	for range 2 {
+		if !h.abort.AcquireAdmission() {
+			t.Fatal("failed to reserve sync admission")
+		}
+		defer h.abort.ReleaseAdmission()
+	}
+
+	type outcome struct {
+		id  string
+		ok  bool
+		err error
+	}
+	results := make(chan outcome, 2)
+	start := make(chan struct{})
+	for _, id := range []string{"sync-a", "sync-b"} {
+		go func() {
+			<-start
+			ok, err := h.registerAdmittedSyncWhenSessionIdle(context.Background(), id, &AbortEntry{
+				SessionKey: "client:main", ClientRun: id, CancelFn: func(error) {}, ExpiresAt: time.Now().Add(time.Hour),
+			})
+			results <- outcome{id: id, ok: ok, err: err}
+		}()
+	}
+	close(start)
+
+	first := <-results
+	if first.err != nil || !first.ok {
+		t.Fatalf("first registration = %+v", first)
+	}
+	select {
+	case second := <-results:
+		t.Fatalf("second same-session sync registered concurrently: first=%+v second=%+v", first, second)
+	case <-time.After(75 * time.Millisecond):
+	}
+
+	sessLock := h.mergeWindow.SessionLock("client:main")
+	sessLock.Lock()
+	h.abort.Cleanup(first.id)
+	sessLock.Unlock()
+	second := <-results
+	if second.err != nil || !second.ok || second.id == first.id {
+		t.Fatalf("second registration after cleanup = %+v, first=%+v", second, first)
+	}
+	h.abort.Cleanup(second.id)
+}
+
+func TestSyncAdmissionTicketsPreserveIngressOrderBeforeRegistration(t *testing.T) {
+	h := newSteerTestHandler()
+	h.mergeWindow = NewMergeWindowTracker()
+	for range 2 {
+		if !h.abort.AcquireAdmission() {
+			t.Fatal("failed to reserve sync admission")
+		}
+		defer h.abort.ReleaseAdmission()
+	}
+
+	firstTicket := h.reserveSyncAdmission("client:main")
+	secondTicket := h.reserveSyncAdmission("client:main")
+	t.Cleanup(func() {
+		// Tests normally release both below. Keep cleanup safe for an early fatal.
+		select {
+		case <-firstTicket.complete:
+		default:
+			firstTicket.release()
+		}
+		select {
+		case <-secondTicket.complete:
+		default:
+			secondTicket.release()
+		}
+	})
+
+	type outcome struct {
+		id  string
+		ok  bool
+		err error
+	}
+	results := make(chan outcome, 2)
+	register := func(id string, ticket *syncAdmissionTicket) {
+		if err := ticket.wait(context.Background()); err != nil {
+			results <- outcome{id: id, err: err}
+			return
+		}
+		ok, err := h.registerAdmittedSyncWhenSessionIdle(context.Background(), id, &AbortEntry{
+			SessionKey: "client:main", ClientRun: id, CancelFn: func(error) {}, ExpiresAt: time.Now().Add(time.Hour),
+		})
+		results <- outcome{id: id, ok: ok, err: err}
+	}
+
+	// Let the later request reach its ticket first. It must stay behind the
+	// earlier ticket instead of winning the final RegisterAdmitted race.
+	go register("sync-b", secondTicket)
+	select {
+	case got := <-results:
+		t.Fatalf("later ingress bypassed its predecessor: %+v", got)
+	case <-time.After(50 * time.Millisecond):
+	}
+	go register("sync-a", firstTicket)
+	first := <-results
+	if first.id != "sync-a" || first.err != nil || !first.ok {
+		t.Fatalf("first registration = %+v, want sync-a", first)
+	}
+
+	sessLock := h.mergeWindow.SessionLock("client:main")
+	sessLock.Lock()
+	h.abort.Cleanup(first.id)
+	sessLock.Unlock()
+	firstTicket.release()
+	second := <-results
+	if second.id != "sync-b" || second.err != nil || !second.ok {
+		t.Fatalf("second registration = %+v, want sync-b", second)
+	}
+	h.abort.Cleanup(second.id)
+	secondTicket.release()
+}
+
+func TestSyncAdmissionCanceledMiddleTicketKeepsPredecessorBarrier(t *testing.T) {
+	h := newSteerTestHandler()
+	first := h.reserveSyncAdmission("client:main")
+	middle := h.reserveSyncAdmission("client:main")
+	last := h.reserveSyncAdmission("client:main")
+	t.Cleanup(func() {
+		first.release()
+		middle.release()
+		last.release()
+	})
+
+	middle.release() // models ticket.wait returning on cancellation
+	lastReady := make(chan struct{})
+	go func() {
+		_ = last.wait(context.Background())
+		close(lastReady)
+	}()
+	select {
+	case <-lastReady:
+		t.Fatal("canceled middle ticket opened a shortcut around its predecessor")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	first.release()
+	select {
+	case <-lastReady:
+	case <-time.After(time.Second):
+		t.Fatal("last ticket did not advance after predecessor release")
+	}
+}
+
+func TestSyncAdmissionTicketKeepsLaterSteerBehindEarlierOwnTurn(t *testing.T) {
+	h := newSteerTestHandler()
+	markActiveRun(h, "client:main")
+	first := h.reserveSyncAdmission("client:main")
+	second := h.reserveSyncAdmission("client:main")
+	t.Cleanup(func() {
+		first.release()
+		second.release()
+	})
+	if err := first.wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if res, handled := h.trySteerIntoActiveRun("client:main", "아니, 짧게 답해줘", &SyncOptions{TrustedDirectUserInput: true}); handled || res != nil {
+		t.Fatalf("earlier memory correction steered: handled=%v res=%+v", handled, res)
+	}
+
+	type outcome struct {
+		res     *SyncResult
+		handled bool
+	}
+	later := make(chan outcome, 1)
+	go func() {
+		if err := second.wait(context.Background()); err != nil {
+			later <- outcome{}
+			return
+		}
+		res, handled := h.trySteerIntoActiveRun("client:main", "그 부분만 다시 봐줘", &SyncOptions{TrustedDirectUserInput: true})
+		later <- outcome{res: res, handled: handled}
+	}()
+	select {
+	case got := <-later:
+		t.Fatalf("later steer bypassed earlier own turn: %+v", got)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	// Model the active turn finishing and the earlier correction taking its own
+	// ordered turn. Only after that predecessor releases may the later request
+	// make its steer/own-turn decision; with no active run it becomes its own turn.
+	h.abort.Cleanup("active-client:main")
+	first.release()
+	select {
+	case got := <-later:
+		if got.handled || got.res != nil {
+			t.Fatalf("later request steered ahead of its own turn: %+v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("later request did not advance after predecessor release")
+	}
+	if notes := h.steer.Drain("client:main"); len(notes) != 0 {
+		t.Fatalf("later request leaked into steer queue: %v", notes)
+	}
+	second.release()
+}
+
+func TestSendSyncReleasesAdmissionTicketAfterRegistrationSoFollowUpCanSteer(t *testing.T) {
+	firstRequestStarted := make(chan struct{})
+	releaseFirstRequest := make(chan struct{})
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requestCount.Add(1) == 1 {
+			close(firstRequestStarted)
+			<-releaseFirstRequest
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, sseResponse("sync reply", "end_turn"))
+	}))
+	defer server.Close()
+
+	h := newSyncTestHandler(server, transcriptstore.NewMemoryTranscriptStore())
+	defer h.Close()
+	opts := &SyncOptions{TrustedDirectUserInput: true}
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := h.SendSync(context.Background(), "client:main", "첫 요청을 처리해줘", "", opts)
+		firstDone <- err
+	}()
+	select {
+	case <-firstRequestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first sync request did not start")
+	}
+
+	secondDone := make(chan struct {
+		res *SyncResult
+		err error
+	}, 1)
+	go func() {
+		res, err := h.SendSync(context.Background(), "client:main", "그 부분만 다시 봐줘", "", opts)
+		secondDone <- struct {
+			res *SyncResult
+			err error
+		}{res: res, err: err}
+	}()
+	select {
+	case got := <-secondDone:
+		if got.err != nil || got.res == nil || got.res.StopReason != "steered" {
+			t.Fatalf("follow-up = res %+v err %v, want immediate steer", got.res, got.err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("follow-up waited behind the whole active sync run")
+	}
+	if got := requestCount.Load(); got != 1 {
+		t.Fatalf("LLM requests = %d, want only the active run", got)
+	}
+	close(releaseFirstRequest)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first SendSync: %v", err)
 	}
 }
 

@@ -231,6 +231,9 @@ func TestReclaimOnIdleStartsRunForIdleParent(t *testing.T) {
 	if !strings.Contains(started[0].Message, "result X") {
 		t.Errorf("triggered run message = %q, want it to carry the notification", started[0].Message)
 	}
+	if !started[0].EphemeralUser {
+		t.Fatal("subagent completion notification must be system-origin ephemeral input")
+	}
 }
 
 // A parent that already has a new active run (e.g. a drained pending message)
