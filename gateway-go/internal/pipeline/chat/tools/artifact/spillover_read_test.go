@@ -25,7 +25,7 @@ func spillFixture(t *testing.T, n int) (toolport.ToolFunc, context.Context, stri
 		t.Fatalf("store: %v", err)
 	}
 	ctx := toolport.WithSessionKey(context.Background(), "client:test")
-	return ToolSpilloverRead(store), ctx, id
+	return ToolSpilloverRead(store, nil), ctx, id
 }
 
 func callSpill(ctx context.Context, t *testing.T, fn toolport.ToolFunc, params map[string]any) string {
@@ -98,12 +98,12 @@ func TestSpilloverRead_CharBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
-	fn := ToolSpilloverRead(store)
+	fn := ToolSpilloverRead(store, nil)
 	ctx := toolport.WithSessionKey(context.Background(), "client:test")
 
 	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "limit": 100})
-	if len(out) > spillPageMaxChars+2000 {
-		t.Errorf("page exceeded char budget: %d chars", len(out))
+	if n := pageBodyLen(out); n > spillPageMaxChars {
+		t.Errorf("page body exceeded char budget: %d chars", n)
 	}
 	if !strings.Contains(out, "[계속:") {
 		t.Errorf("char-budget stop must still emit continuation hint")
@@ -118,4 +118,125 @@ func TestSpilloverRead_SessionScoped(t *testing.T) {
 	if _, err := fn(other, raw); err == nil {
 		t.Fatal("expected cross-session access to be refused")
 	}
+}
+
+// A single line larger than the page budget must be clipped. The budget check
+// only bites once something is buffered, so an oversized first line would go
+// out whole, blow the tool-output cap, and be re-spilled — handing the model a
+// new pointer instead of a page, and chaining spills on every retry.
+func TestSpillPageClipsOversizedSingleLine(t *testing.T) {
+	store := agent.NewSpilloverStore(t.TempDir())
+	huge := strings.Repeat("j", spillPageMaxChars*5)
+	id, err := store.Store("client:test", "exec", huge+"\nsecond line\n")
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	ctx := toolport.WithSessionKey(context.Background(), "client:test")
+	fn := ToolSpilloverRead(store, nil)
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id})
+
+	if n := pageBodyLen(out); n > spillPageMaxChars {
+		t.Errorf("page body is %d chars — oversized line escaped the budget", n)
+	}
+	if !strings.Contains(out, "잘렸습니다") {
+		t.Errorf("clipped line must say so:\n%s", out[:min(600, len(out))])
+	}
+}
+
+// The exact-budget boundary: a first line of precisely spillPageMaxChars bytes
+// is not oversized by itself, but the newline it is emitted with pushes the
+// entry one byte over — and the budget check only bites once something is
+// already buffered, so nothing else stops it.
+func TestSpillPageClipsLineAtExactlyTheBudget(t *testing.T) {
+	store := agent.NewSpilloverStore(t.TempDir())
+	exact := strings.Repeat("e", spillPageMaxChars)
+	id, err := store.Store("client:test", "exec", exact+"\nsecond line\n")
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	ctx := toolport.WithSessionKey(context.Background(), "client:test")
+	fn := ToolSpilloverRead(store, nil)
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id})
+
+	if n := pageBodyLen(out); n > spillPageMaxChars {
+		t.Errorf("page body is %d chars — the boundary line escaped the budget", n)
+	}
+}
+
+// grep must clip an oversized match, not skip it. Skipping made the page
+// renderer's "search inside this line with grep" hint a dead end: the only
+// route into a long line's content refused to emit any of it.
+func TestSpillGrepClipsRatherThanSkipsOversizedMatch(t *testing.T) {
+	store := agent.NewSpilloverStore(t.TempDir())
+	huge := "NEEDLE" + strings.Repeat("q", spillPageMaxChars*4)
+	id, err := store.Store("client:test", "exec", huge+"\n")
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	ctx := toolport.WithSessionKey(context.Background(), "client:test")
+	fn := ToolSpilloverRead(store, nil)
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "grep": "NEEDLE"})
+
+	if !strings.Contains(out, "NEEDLE") {
+		t.Fatalf("oversized match was skipped — the recovery path is a dead end:\n%s", out)
+	}
+	if !strings.Contains(out, "생략]") {
+		t.Errorf("clipped match must say what was dropped:\n%s", out[:min(500, len(out))])
+	}
+	if n := pageBodyLen(out); n > spillPageMaxChars {
+		t.Errorf("grep body is %d chars — clip did not bound the match", n)
+	}
+}
+
+// A match sitting past the kept prefix must still be visible. Head-truncating
+// while matching the full line reported a hit whose text the model could not
+// see — and searching inside a long line is the whole reason this path exists.
+func TestSpillGrepShowsMatchesPastTheHead(t *testing.T) {
+	store := agent.NewSpilloverStore(t.TempDir())
+	// The needle sits far past spillGrepLineMaxChars.
+	line := strings.Repeat("q", spillGrepLineMaxChars*3) + "NEEDLE" + strings.Repeat("z", 5000)
+	id, err := store.Store("client:test", "exec", line+"\n")
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	ctx := toolport.WithSessionKey(context.Background(), "client:test")
+	fn := ToolSpilloverRead(store, nil)
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "grep": "NEEDLE"})
+
+	if !strings.Contains(out, "NEEDLE") {
+		t.Fatalf("match past the head was reported but not shown:\n%s", out[:min(600, len(out))])
+	}
+	if !strings.Contains(out, "앞 ") {
+		t.Errorf("window must say how much was dropped before the match:\n%s", out[:min(600, len(out))])
+	}
+	if n := pageBodyLen(out); n > spillPageMaxChars {
+		t.Errorf("grep body is %d chars — window did not bound the match", n)
+	}
+}
+
+// pageBodyLen measures the rendered lines only — the header line and the
+// trailing continuation hint are frame, not payload, and the budget the clip
+// logic protects is the payload's.
+//
+// The previous assertions allowed len(out) up to spillPageMaxChars+2000, which
+// is far more slack than any real overshoot: a clip notice a few hundred bytes
+// over budget passed cleanly. Measuring the body against the exact constant is
+// what makes these tests able to fail.
+func pageBodyLen(out string) int {
+	body := out
+	if i := strings.Index(body, "\n"); i >= 0 {
+		body = body[i+1:] // drop the header line
+	}
+	// The delimiter starts with the body's OWN trailing newline, which the
+	// production char counter counts. Dropping it here made the measurement one
+	// byte short of `chars` — enough to hide exactly the missing-newline
+	// reservation these assertions exist to catch.
+	if i := strings.LastIndex(body, "\n\n[계속: "); i >= 0 {
+		body = body[:i+1]
+	}
+	return len(body)
 }

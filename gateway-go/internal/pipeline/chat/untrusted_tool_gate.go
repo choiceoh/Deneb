@@ -15,6 +15,8 @@
 package chat
 
 import (
+	"context"
+	"encoding/json"
 	"log/slog"
 	"strings"
 	"sync/atomic"
@@ -102,13 +104,15 @@ func (g *untrustedToolGate) observeToolResult(name, _ /*toolUseID*/, result stri
 		g.markTainted("external-origin:" + name)
 		return
 	}
-	// code_action dials back into the registry without surfacing nested tool
-	// results to OnToolResult; external reads inside the script mark the turn
-	// context instead (ToolRegistry.Execute). Taint when the wrapper completes.
-	if name == "code_action" {
-		if tc := g.turnCtx.Load(); tc != nil && tc.ExternalOriginTouched() {
-			g.markTainted("external-origin:code_action")
-		}
+	// Some tools only reveal their external origin during execution, so the
+	// name alone cannot classify them: code_action dials back into the registry
+	// without surfacing nested tool results here, and read_spillover reaches
+	// into a blob whose origin tool is recorded on the spill rather than on
+	// this call. Both mark the turn context in ToolRegistry.Execute, so honor
+	// that flag whatever the tool is named — the flag is only ever set by an
+	// external-origin read, and taint is sticky either way.
+	if tc := g.turnCtx.Load(); tc != nil && tc.ExternalOriginTouched() {
+		g.markTainted("external-origin:" + name)
 	}
 }
 
@@ -185,12 +189,9 @@ func isIrreversibleTool(name string, _ []byte) bool {
 // would over-block common turns. Recalled memory is covered separately: the gate
 // already seeds taint from prep.RecallMemory.
 func readsExternalOrigin(name string) bool {
-	switch name {
-	case "web", "browse", "browser", "research_panel", "watch", "mail_archive", "ocr":
-		return true
-	default:
-		return false
-	}
+	// One list, shared with the spillover store so a spill's stored provenance
+	// and a live read's taint can never disagree (agent.IsExternalOriginTool).
+	return agent.IsExternalOriginTool(name)
 }
 
 // wireUntrustedToolGate installs the untrusted-origin tool gate on the hook
@@ -208,4 +209,33 @@ func wireUntrustedToolGate(hc *agent.HookCompositor, params RunParams, prep prep
 	hc.OnToolResult(gate.observeToolResult)
 	hc.OnBeforeToolCall(gate.beforeToolCall)
 	return gate
+}
+
+// spilledFromExternalOrigin reports whether a read_spillover call is reaching
+// back into content that an external-origin tool produced.
+//
+// The spill outlives the run that created it (see server_spillover_lifecycle.go),
+// so a blob fetched by `web` on turn N is still readable on turn N+5 — carrying
+// the same attacker-authored text, but no longer inside the turn that `web`
+// tainted. Without this, the irreversible-tool gate would see a bare
+// `read_spillover` and stay disengaged, which is precisely the cross-turn
+// sleeper class readsExternalOrigin exists to stop. Taint follows the content,
+// not the tool name that happens to deliver it.
+//
+// The flag is set at spill time (capToolOutput), not derived from the tool
+// name: code_action reads mail or web pages through its bridge and spills them
+// under its own name, so a name lookup would call that content operator-owned.
+// Spills from genuinely operator-owned tools (exec, read, grep) do not taint —
+// the same narrowness readsExternalOrigin applies to live reads.
+func (r *ToolRegistry) spilledFromExternalOrigin(ctx context.Context, name string, input json.RawMessage) bool {
+	if name != "read_spillover" || r.spillStore == nil {
+		return false
+	}
+	var p struct {
+		SpillID string `json:"spill_id"`
+	}
+	if err := json.Unmarshal(input, &p); err != nil || p.SpillID == "" {
+		return false
+	}
+	return r.spillStore.IsExternalOrigin(p.SpillID, toolport.SessionKeyFromContext(ctx))
 }

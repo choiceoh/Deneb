@@ -26,6 +26,9 @@ type RuntimeOpsDeps struct {
 	Browser        tooldeps.BrowserDeps
 	WikiStore      *wiki.Store
 	SpilloverStore tooldeps.SpilloverStore
+	// SpilloverAsk answers read_spillover(question=) via the local model; nil
+	// leaves that tool paging-only.
+	SpilloverAsk tooldeps.LocalAIFunc
 }
 
 // RuntimeOpsToolSet contains the already-wired executors whose registration
@@ -64,7 +67,7 @@ func RuntimeOpsToolSetFromDeps(deps RuntimeOpsDeps) RuntimeOpsToolSet {
 		Solarflow: hostops.ToolSolarflow(),
 	}
 	if deps.SpilloverStore != nil {
-		set.SpilloverRead = media.SpilloverReadTool(deps.SpilloverStore)
+		set.SpilloverRead = media.SpilloverReadTool(deps.SpilloverStore, deps.SpilloverAsk)
 	}
 	return set
 }
@@ -156,7 +159,7 @@ func RegisterRuntimeOpsTools(registry toolport.ToolRegistrar, set RuntimeOpsTool
 	if set.SpilloverRead != nil {
 		registry.RegisterTool(toolport.ToolDef{
 			Name:        "read_spillover",
-			Description: "Read a previous large tool result by spill ID, paged — offset/limit line window (default 400 lines) or grep to jump to matching lines. Use when a tool result was too large and was replaced with a preview; follow the [계속: offset=N] tail hint to page",
+			Description: "Read a previous large tool result by spill ID. question=\"…\" answers from the blob without paging it into context (local model reads it, returns the answer + [L번호] citations) — prefer this over paging when you want a fact, not the text. Otherwise page: offset/limit line window (default 400 lines), or grep to jump to matching lines. Follow the [계속: offset=N] tail hint to page",
 			InputSchema: schema.ReadSpilloverToolSchema(),
 			Fn:          set.SpilloverRead,
 		})

@@ -78,6 +78,10 @@ func ReadSpilloverToolSchema() map[string]any {
 				"type":        "integer",
 				"description": "시작 줄 번호 (1-기반, 기본 1). 이전 페이지 꼬리의 [계속: offset=N] 안내를 그대로 사용",
 			},
+			"question": map[string]any{
+				"type":        "string",
+				"description": "이 블롭에 대해 답을 얻고 싶은 질문. 지정하면 원문을 컨텍스트로 가져오지 않고 로컬 모델이 구간별로 읽어 답변 + 근거 줄번호([L번호])만 반환한다. 페이지를 여러 번 넘겨 읽는 대신 이걸 먼저 쓰고, 인용 확인이 필요할 때 offset으로 그 줄을 열어라",
+			},
 			"spill_id": map[string]any{
 				"type":        "string",
 				"description": "The spillover reference ID (e.g., sp_abc123) from a previous large tool result",

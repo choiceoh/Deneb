@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Paging bounds. Content landed in spillover precisely because it blew the
@@ -20,19 +22,26 @@ const (
 	spillPageDefaultLines = 400
 	spillPageMaxChars     = 20000
 	spillGrepMaxMatches   = 200
+	// spillGrepLineMaxChars bounds ONE grep match so a single pathological line
+	// cannot consume the whole result.
+	spillGrepLineMaxChars = 4000
 )
 
 // ToolSpilloverRead returns a ToolFunc that reads a previously spilled large
-// tool result by its spill ID — paged (offset/limit lines) or filtered (grep),
-// never the whole blob at once. Access is session-scoped: the caller must
-// belong to the same session.
-func ToolSpilloverRead(store tooldeps.SpilloverStore) toolport.ToolFunc {
+// tool result by its spill ID — paged (offset/limit lines), filtered (grep),
+// or answered (question), never the whole blob at once. Access is
+// session-scoped: the caller must belong to the same session.
+//
+// ask is the local-model delegate behind the question path; nil (or a failing
+// hub) leaves the tool paging-only.
+func ToolSpilloverRead(store tooldeps.SpilloverStore, ask tooldeps.LocalAIFunc) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			SpillID string `json:"spill_id"`
-			Offset  int    `json:"offset"`
-			Limit   int    `json:"limit"`
-			Grep    string `json:"grep"`
+			SpillID  string `json:"spill_id"`
+			Offset   int    `json:"offset"`
+			Limit    int    `json:"limit"`
+			Grep     string `json:"grep"`
+			Question string `json:"question"`
 		}
 		if err := jsonutil.UnmarshalInto("read_spillover params", input, &p); err != nil {
 			return "", err
@@ -48,6 +57,16 @@ func ToolSpilloverRead(store tooldeps.SpilloverStore) toolport.ToolFunc {
 		}
 
 		lines := strings.Split(content, "\n")
+		if q := strings.TrimSpace(p.Question); q != "" && ask != nil {
+			if answer, ok := spillAsk(ctx, ask, p.SpillID, content, lines, q); ok {
+				return answer, nil
+			}
+			// Delegation unavailable or empty — fall through to paging rather
+			// than failing the call, and say so instead of silently returning
+			// page 1 as if it answered the question.
+			page := spillPage(p.SpillID, lines, len(content), p.Offset, p.Limit)
+			return "[question 위임 실패 — 로컬 모델 응답 없음. 아래는 원문 페이지이니 grep/offset으로 직접 찾으세요]\n" + page, nil
+		}
 		if strings.TrimSpace(p.Grep) != "" {
 			return spillGrep(p.SpillID, lines, p.Grep), nil
 		}
@@ -75,12 +94,37 @@ func spillPage(spillID string, lines []string, totalChars, offset, limit int) st
 	chars := 0
 	last := offset - 1 // last line actually included (1-based)
 	for i := offset - 1; i < totalLines && i < offset-1+limit; i++ {
-		if chars+len(lines[i])+1 > spillPageMaxChars && chars > 0 {
+		line := lines[i]
+		// One line can exceed the entire page budget — minified JSON, base64,
+		// compact command output. The budget check below only bites once
+		// something is already buffered, so an oversized FIRST line would be
+		// emitted whole, blow the tool-output cap, and be re-spilled into a
+		// fresh pointer: the model would get a new handle instead of a page,
+		// and repeating the read would chain spills indefinitely.
+		// +1 for the newline the line is emitted with: a line of exactly
+		// spillPageMaxChars is not oversized by itself, but the entry that
+		// carries it is, and the budget check below only bites once something
+		// is already buffered.
+		if len(line)+1 > spillPageMaxChars {
+			// Size the cut from the ACTUAL notice, not a guessed headroom
+			// constant: the notice is Korean, so its byte length is roughly
+			// three times its visible length and a fixed guess silently
+			// overshoots the page budget it exists to protect.
+			notice := fmt.Sprintf(" …[이 줄은 %d자라 잘렸습니다 — grep=\"패턴\"으로 이 줄 안을 검색할 수 있습니다(역시 앞부분만 표시). 줄 전체를 그대로 받는 경로는 없습니다]", len(line))
+			// -1 for the newline this line is emitted with, so the whole
+			// emitted entry — not just its text — fits the page budget.
+			keep := spillPageMaxChars - len(notice) - 1
+			if keep < 0 {
+				keep = 0
+			}
+			line = textutil.TruncateBytes(line, keep) + notice
+		}
+		if chars+len(line)+1 > spillPageMaxChars && chars > 0 {
 			break // char budget hit — stop before overflowing the page
 		}
-		b.WriteString(lines[i])
+		b.WriteString(line)
 		b.WriteByte('\n')
-		chars += len(lines[i]) + 1
+		chars += len(line) + 1
 		last = i + 1
 	}
 
@@ -90,6 +134,42 @@ func spillPage(spillID string, lines []string, totalChars, offset, limit int) st
 		out += fmt.Sprintf("\n[계속: read_spillover(spill_id=%q, offset=%d) · 검색은 grep=\"패턴\"]", spillID, last+1)
 	}
 	return strings.TrimRight(out, "\n")
+}
+
+// grepWindow returns a bounded slice of line centred on loc (the match), with
+// markers showing how much was dropped on each side. Bounds are backed off to
+// rune boundaries so a multi-byte character never splits into U+FFFD.
+func grepWindow(line string, loc []int) string {
+	start := 0
+	if loc != nil {
+		start = loc[0] - spillGrepLineMaxChars/2
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + spillGrepLineMaxChars
+	if end > len(line) {
+		end = len(line)
+		if start = end - spillGrepLineMaxChars; start < 0 {
+			start = 0
+		}
+	}
+	for start > 0 && !utf8.RuneStart(line[start]) {
+		start--
+	}
+	for end < len(line) && !utf8.RuneStart(line[end]) {
+		end++
+	}
+
+	var b strings.Builder
+	if start > 0 {
+		fmt.Fprintf(&b, "…[앞 %d자 생략]", start)
+	}
+	b.WriteString(line[start:end])
+	if end < len(line) {
+		fmt.Fprintf(&b, "…[뒤 %d자 생략]", len(line)-end)
+	}
+	return b.String()
 }
 
 // spillGrep renders regex-matching lines with their line numbers so the model
@@ -107,12 +187,26 @@ func spillGrep(spillID string, lines []string, pattern string) string {
 			continue
 		}
 		matched++
-		if shown >= spillGrepMaxMatches || chars+len(line) > spillPageMaxChars {
+		if shown >= spillGrepMaxMatches {
 			continue // keep counting total matches, stop emitting
 		}
-		fmt.Fprintf(&b, "%d: %s\n", i+1, line)
+		// Clip rather than skip. Skipping an oversized match made the page
+		// renderer's "grep으로 찾으세요" hint a dead end: the only route into a
+		// long line's content refused to emit it.
+		shownLine := line
+		if len(shownLine) > spillGrepLineMaxChars {
+			// Window around the MATCH, not the head. Head-truncating while
+			// matching the full line reports a hit whose text the model cannot
+			// see — and searching inside a long line is the whole reason this
+			// path exists.
+			shownLine = grepWindow(line, re.FindStringIndex(line))
+		}
+		if chars+len(shownLine) > spillPageMaxChars && shown > 0 {
+			continue // page budget spent — keep counting, stop emitting
+		}
+		fmt.Fprintf(&b, "%d: %s\n", i+1, shownLine)
 		shown++
-		chars += len(line) + 8
+		chars += len(shownLine) + 8
 	}
 	if matched == 0 {
 		return fmt.Sprintf("[%s: 총 %d줄] %q 매치 없음.", spillID, len(lines), pattern)

@@ -51,18 +51,28 @@ func (s *Server) initSpilloverLifecycle(store *agent.SpilloverStore) {
 	})
 }
 
-// shouldReleaseSpillover mirrors shouldReleaseCheckpoints: only terminal
-// status transitions, /reset (empty NewStatus), or full session deletion
-// trigger cleanup. See server_checkpoint_lifecycle.go for the full rationale.
+// shouldReleaseSpillover fires only when the session itself ends: /reset
+// (empty NewStatus) or full deletion, which also covers GC eviction
+// (domain/session/manager.go emits EventDeleted for evicted sessions).
+//
+// It deliberately does NOT mirror shouldReleaseCheckpoints on terminal status.
+// A terminal status is a *run* outcome (DONE/FAILED/KILLED/TIMEOUT) that every
+// ordinary turn reaches while the session lives on. Releasing there deleted a
+// spill as soon as its producing turn finished, while compaction kept telling
+// the model the full output was "still available via read_spillover(…)" —
+// so every such pointer dangled from the next turn onward. Checkpoints can
+// afford run-scoped release; spill handles cannot, because they are quoted
+// back to the model in surviving history.
+//
+// Disk is still bounded: a session that ends releases here, and one that
+// disappears without an event is collected by the TTL sweep, which skips only
+// sessions the manager still reports as live (ai/agent/spillover.go).
 func shouldReleaseSpillover(e session.Event) bool {
 	switch e.Kind {
 	case session.EventDeleted:
 		return true
 	case session.EventStatusChanged:
-		if e.NewStatus == "" {
-			return true
-		}
-		return session.IsTerminal(e.NewStatus)
+		return e.NewStatus == "" // /reset
 	case session.EventCreated:
 		return false
 	}

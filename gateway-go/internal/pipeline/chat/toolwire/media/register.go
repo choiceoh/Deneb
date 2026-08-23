@@ -11,11 +11,13 @@ import (
 )
 
 // SpilloverReadTool returns the read_spillover executor for large tool results.
-func SpilloverReadTool(spill tooldeps.SpilloverStore) toolport.ToolFunc {
+// ask is the optional local-model delegate behind read_spillover(question=);
+// nil leaves the tool paging-only.
+func SpilloverReadTool(spill tooldeps.SpilloverStore, ask tooldeps.LocalAIFunc) toolport.ToolFunc {
 	if spill == nil {
 		return nil
 	}
-	return artifact.ToolSpilloverRead(spill)
+	return artifact.ToolSpilloverRead(spill, ask)
 }
 
 // RegisterExtractionTools registers document/audio extraction tools over files

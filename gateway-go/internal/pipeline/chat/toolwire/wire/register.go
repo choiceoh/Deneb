@@ -29,6 +29,7 @@ func RegisterCoreTools(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolD
 		Browser:        deps.Browser,
 		WikiStore:      deps.Wiki.Store,
 		SpilloverStore: deps.SpilloverStore,
+		SpilloverAsk:   deps.SpilloverAsk,
 	})
 	ops.RegisterProcessTools(registry, &deps.Process)
 	webtools.Register(registry, deps.SpilloverStore)
