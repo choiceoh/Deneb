@@ -331,6 +331,7 @@ func addFile(tw *tar.Writer, path, name string, fi os.FileInfo) error {
 // (minutes, search degrades to BM25 meanwhile) instead of reading a cache.
 var regenerableCaches = []string{
 	".semantic-cache.json",
+	".semantic-cache.f32",
 	".diary-semantic-cache.json",
 	"semantic-index.json",
 	"workfeed.semantic.json",
