@@ -48,7 +48,7 @@
 | 19 | Skill SKILL.md schema lint + CI | P3 | S |
 | 20 | 대용량 파일 전송 처리 (다운로드 링크 폴백) | P3 | M |
 | 21 | Trust Inbox: 자율 변경 통합 승인 대기열 (안드로이드 워크피드) — ✅ 구현됨 | P1 | M |
-| 22 | 개인 MCP 브로커 — tailnet 경유 읽기 전용 노출 | P2 | M |
+| 22 | 개인 MCP 브로커 — tailnet 경유 읽기 전용 노출 — ✅ 구현됨 | P2 | M |
 | 23 | 인물·거래 도시에 (Business Dossier) — ✅ 구현됨 | P2 | M |
 | 24 | 주간 기억 다이제스트 + dreamer 피드백 루프 — ✅ 구현됨 | P2 | S |
 
@@ -434,7 +434,7 @@
 
 ---
 
-### 5.5 개인 MCP 브로커 (외부 에이전트에 내 도구 제공) — **P2 / M · ideation**
+### 5.5 개인 MCP 브로커 (외부 에이전트에 내 도구 제공) — **P2 / M · implemented 2026-08-23**
 
 **무엇.** 게이트웨이 MCP 엔드포인트(`POST /mcp`, 2026-07-28 전용 — #4562)를 tailnet(Tailscale) 등 사설망 경유로 외부 MCP 클라이언트에 개방. 어디서든 내 위키·일정·일기 검색 도구 호출.
 
@@ -450,6 +450,8 @@
 - `integration` 빈 스킬 카테고리의 첫 주민(외부 MCP 연동 스킬) 후보.
 
 **⚠️ §8과의 긴장 (명시적 요건).** §8 "External-facing API 금지 — loopback이 정답"과 충돌한다. 본 제안은 (a) 게이트웨이 바인드 변경 없음 (b) tailnet 단말 한정 (c) 읽기 전용 — §8의 취지(attack surface 최소)를 준수하는 좁은 예외다. 채택 시 §8 해당 항목에 스코프를 명시해 개정하는 것을 전제로 하며, 운영자 판단 필요.
+
+**구현 (2026-08-23).** 1단계 완료 — `DENEB_MCP_TOKEN` 전용 토큰(`mcpapi.WithDedicatedToken`, 상수시간 비교, 클라이언트 토큰과 공존·독립 폐기), §8 스코프 명시 개정, 운영자 가이드 `docs/tools/mcp-broker.md`(토큰 발급·tailscale serve 노출·클라 설정·가드레일). 2단계(tailnet serve 활성화)는 운영자 절차.
 
 **왜.** MCP 2.0 서버·양클라 채택(#4561) 직후라 한계 비용이 가장 낮은 시점. 개인 지식 자산을 도구 번들로 제공하는 RSI P4 표면.
 
@@ -507,7 +509,7 @@
 - 6.1 Live-test 시간 단축
 - 4.8 인물·거래 도시에 Business Dossier (implemented 2026-08-23)
 - 4.9 주간 기억 다이제스트 + dreamer 피드백 (implemented 2026-08-23)
-- 5.5 개인 MCP 브로커 (ideation — §8 개정 전제)
+- 5.5 개인 MCP 브로커 (implemented 2026-08-23 — §8 개정 완료)
 
 ### Later — 분기 단위 (P3)
 
@@ -529,7 +531,7 @@
 
 - ❌ **Multi-user / multi-tenant.** CLAUDE.md philosophy 위반. 단일 사용자 가정이 코드 단순성의 핵심.
 - ❌ **추가 메시징 surface (Telegram/Slack/Discord 등).** 네이티브 클라이언트 단일 표면 원칙 (PR 1922). Surface 추가 = 광범위 회귀 위험.
-- ❌ **External-facing API.** Gateway 는 loopback bind 가 정답. 외부 노출은 attack surface 만 늘림.
+- ❌ **External-facing API — 단, 5.5의 좁은 예외 제외 (2026-08-23 개정).** Gateway 는 loopback bind 유지가 원칙. 예외: `/mcp` 표면을 tailnet 경유로 열 때 — (a) 게이트웨이 바인드 변경 없음 (`tailscale serve` 가 loopback 을 프록시) (b) tailnet 단말 한정 (funnel 금지) (c) 읽기 전용 allowlist (d) 전용 토큰 `DENEB_MCP_TOKEN` 분리. 이 스코프 밖 노출은 여전히 금지.
 - ❌ **새 LLM provider 추가 (Claude/OpenAI/local 외).** 현재 3개 라인 유지보수도 충분. Provider 다양성보다 deep quality.
 - ❌ **i18n.** Korean-first 원칙. 영어/타국어 추가 = string 관리 비용.
 - ❌ **Plugin marketplace.** Skills 는 in-repo 로 충분. 외부 plugin 은 security review 비용 폭증.
@@ -546,6 +548,7 @@
 | 2026-08-23 | ZCode (GLM-5.3) | 4.7 Trust Inbox 구현 — 자기교정 감시 태스크(신규 후보 승인/거절 카드) + dream 카드 확인 액션 + 안드로이드 알림 tray 승인/거절 버튼. 기존 auto-apply 표면(meta·graduation·evolve verdict) 카드는 이미 존재해 재활용 |
 | 2026-08-23 | ZCode (GLM-5.3) | 4.9 주간 기억 다이제스트 구현 — DreamReport 롤업(`dream-reports.jsonl`) + 주간 다이제스트 카드(확인/틀린 기억 알리기 → 정정 턴) |
 | 2026-08-23 | ZCode (GLM-5.3) | 4.8 Business Dossier 구현 — `miniapp.person.dossier` RPC(메일 롤업 + phoneledger 통화·알림 + 위키 전문검색 조인) + 안드로이드 사람 화면·안드로메다 PersonCard 도시에 섹션 |
+| 2026-08-23 | ZCode (GLM-5.3) | 5.5 개인 MCP 브로커 구현 — `DENEB_MCP_TOKEN` 전용 토큰 분리(상수시간 비교, 클라이언트 토큰 공존) + §8 스코프 명시 개정 + `docs/tools/mcp-broker.md` 가이드. tailnet serve 노출은 운영자 절차로 가이드 |
 
 ---
 
