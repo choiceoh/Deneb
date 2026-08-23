@@ -469,9 +469,9 @@ func maskQuotedProfilePayloads(message string) string {
 // "## 사용자 모델" was filed as identity against a preference key.
 func FactKindForKey(key string) (string, bool) {
 	trimmed := strings.ToLower(strings.TrimSpace(key))
-	for _, axis := range profileFactAxes {
-		if axis.key == trimmed {
-			return axis.kind, true
+	for _, axis := range factAxes {
+		if axis.Key == trimmed {
+			return axis.Kind, true
 		}
 	}
 	return "", false

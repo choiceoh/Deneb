@@ -27,6 +27,25 @@ func TestDirectGrammarCatalogIsWellFormed(t *testing.T) {
 	}
 }
 
+// The catalog defines key and kind as a pair; deriving the kind elsewhere (a
+// section heading, say) is what took the gateway down on 2026-08-23 (#4662).
+// FactKindForKey must answer from the catalog for every published axis so a data
+// edit cannot reopen that gap.
+func TestFactKindForKeyAnswersFromTheCatalog(t *testing.T) {
+	for _, axis := range factAxes {
+		kind, found := FactKindForKey(axis.Key)
+		if !found || kind != axis.Kind {
+			t.Errorf("FactKindForKey(%q) = %q/%v, want %q", axis.Key, kind, found, axis.Kind)
+		}
+		if kind, found := FactKindForKey("  " + strings.ToUpper(axis.Key) + " "); !found || kind != axis.Kind {
+			t.Errorf("FactKindForKey is not normalization-stable for %q: %q/%v", axis.Key, kind, found)
+		}
+	}
+	if kind, found := FactKindForKey("나회의화요일오전에만잡아줘"); found {
+		t.Errorf("a generic fallback key is not an axis: %q", kind)
+	}
+}
+
 func TestLoadDirectGrammarRejectsBrokenCatalogs(t *testing.T) {
 	cases := []struct {
 		name string
