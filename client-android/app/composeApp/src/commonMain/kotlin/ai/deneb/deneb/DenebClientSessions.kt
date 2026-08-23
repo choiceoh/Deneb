@@ -305,7 +305,12 @@ internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(
                 }
 
                 TurnProbe.StillRunning -> {
-                    confirmedRunning = true
+                    // Extend the window only while the gateway actually says the run
+                    // is live. "User row, no answer" also describes a turn that DIED
+                    // — gateway restart, drain, provider error — and treating that as
+                    // proof of life kept the client polling for the full 30-minute
+                    // ceiling on a turn nobody was working on.
+                    if (payload.turnRunning) confirmedRunning = true
                     misses = 0
                     candidate = null
                     candidateTail = null

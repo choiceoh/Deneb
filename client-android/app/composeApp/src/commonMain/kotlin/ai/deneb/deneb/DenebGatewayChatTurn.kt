@@ -108,6 +108,18 @@ internal suspend fun DenebGatewayClient.askGateway(
         settleChatPlaceholder(assistantId, accumulated.toString())
         askActive = false
         throw cancel
+    } catch (refused: GatewayStreamRefusedException) {
+        // The turn never started: the connect failed, or the gateway refused before
+        // any event. There is no detached run to poll for, so recovering would spend
+        // the whole 90s budget showing "답변 이어받는 중…" and then report the wrong
+        // reason — the observed offline-send behaviour. Fail now, in Korean.
+        DenebLog.warn("chat", "stream refused: $refused")
+        GatewayReply(gatewayFailureText(refused), ok = false)
+    } catch (streamError: GatewayStreamErrorException) {
+        // The gateway itself said this turn failed. Its message IS the outcome; the
+        // old path discarded it and reported a recovery failure instead.
+        DenebLog.warn("chat", "stream error: ${streamError.gatewayMessage}")
+        GatewayReply("⚠️ ${streamError.gatewayMessage}", ok = false)
     } catch (_: Exception) {
         // A half-open mobile socket can die after the gateway accepted the turn.
         // The detached server run keeps producing the answer; poll the canonical

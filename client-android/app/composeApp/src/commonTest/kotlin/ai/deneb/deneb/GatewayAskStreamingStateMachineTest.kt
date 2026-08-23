@@ -67,6 +67,12 @@ class GatewayAskStreamingStateMachineTest {
         buildJsonObject { put("error", message) }.toString(),
     )
 
+    // A stream that ends without its terminal frame — what a dropped mobile socket
+    // over a still-running server turn looks like. Distinct from an `event: error`
+    // frame, which is the gateway telling us the turn itself failed: that one has
+    // no detached run to recover, so only THIS shape may trigger recovery.
+    private fun droppedStream(partial: String = ""): String = partial
+
     private fun tool(
         state: String,
         name: String = "mail_search",
@@ -386,7 +392,7 @@ class GatewayAskStreamingStateMachineTest {
     @Test
     fun streamErrorRecoversCanonicalTranscriptWithoutBlockingResend() = runTest {
         val f = gatewayClientFixture()
-        f.transport.enqueueSse(error("socket lost"))
+        f.transport.enqueueSse(droppedStream())
         f.transport.enqueueRpc(answeredTranscript("question", "canonical"))
         f.transport.enqueueRpc(answeredTranscript("question", "canonical"))
 
@@ -403,7 +409,7 @@ class GatewayAskStreamingStateMachineTest {
     @Test
     fun emptyStreamFailureResendsOnlyAfterTwoNotArrivedPolls() = runTest {
         val f = gatewayClientFixture()
-        f.transport.enqueueSse(error("old gateway"))
+        f.transport.enqueueSse(droppedStream())
         f.transport.enqueueRpc(notArrivedTranscript())
         f.transport.enqueueRpc(notArrivedTranscript())
         f.transport.enqueueJson(blockingReply("blocking answer"))
@@ -420,7 +426,7 @@ class GatewayAskStreamingStateMachineTest {
     @Test
     fun partialStreamFailureNeverResendsAndReportsFailure() = runTest {
         val f = gatewayClientFixture()
-        f.transport.enqueueSse(delta("partial answer") + error("socket reset"))
+        f.transport.enqueueSse(delta("partial answer") + droppedStream())
         f.transport.enqueueRpc(notArrivedTranscript())
         f.transport.enqueueRpc(notArrivedTranscript())
 
@@ -430,6 +436,58 @@ class GatewayAskStreamingStateMachineTest {
         assertEquals("partial answer", f.client.chatHistory.value.assistants().single().content)
         assertEquals(3, f.transport.requests.size)
         assertFalse(f.transport.requests.any { it.rpcMethod == "miniapp.chat.send" })
+    }
+
+    @Test
+    fun gatewayErrorFrameShowsItsMessageWithoutRecoveringOrResending() {
+        // `event: error` is the gateway saying the turn failed — the turn does not
+        // exist to be recovered, and its message IS the outcome. It used to be
+        // swallowed as a transport drop: the text was discarded and the user got a
+        // recovery failure (or a duplicate send) instead of the reason.
+        runTest {
+            val f = gatewayClientFixture()
+            f.transport.enqueueSse(error("모델 사용량을 초과했습니다"))
+
+            val result = f.client.ask("question", emptyList(), null)
+
+            assertFalse(result)
+            assertEquals("⚠️ 모델 사용량을 초과했습니다", f.client.chatHistory.value.assistants().single().content)
+            // One request: the stream. No transcript polls, no blocking resend.
+            assertEquals(1, f.transport.requests.size)
+        }
+    }
+
+    @Test
+    fun connectFailureFailsImmediatelyInsteadOfPollingForATurnThatNeverStarted() {
+        // Offline. The transcript poll recovery depends on is guaranteed to fail the
+        // same way, so it used to sit on "답변 이어받는 중…" for the full 90s budget
+        // and then report that it could not resume — instead of "no connection".
+        runTest {
+            val f = gatewayClientFixture()
+            f.transport.enqueueFailure(IllegalStateException("connect refused"))
+
+            val result = f.client.ask("question", emptyList(), null)
+
+            assertFalse(result)
+            val bubble = f.client.chatHistory.value.assistants().single().content
+            assertTrue(bubble.contains("연결하지 못했습니다"), bubble)
+            assertEquals(1, f.transport.requests.size)
+        }
+    }
+
+    @Test
+    fun rejectedTokenFailsImmediatelyAndPointsAtSettings() {
+        runTest {
+            val f = gatewayClientFixture()
+            f.transport.enqueueSse("unauthorized", status = HttpStatusCode.Unauthorized)
+
+            val result = f.client.ask("question", emptyList(), null)
+
+            assertFalse(result)
+            val bubble = f.client.chatHistory.value.assistants().single().content
+            assertTrue(bubble.contains("토큰"), bubble)
+            assertEquals(1, f.transport.requests.size)
+        }
     }
 
     @Test
@@ -449,7 +507,7 @@ class GatewayAskStreamingStateMachineTest {
     @Test
     fun blockingFallbackRejectsSuccessfulLookingBodyOnHttpError() = runTest {
         val f = gatewayClientFixture()
-        f.transport.enqueueSse(error("stream failed"))
+        f.transport.enqueueSse(droppedStream())
         f.transport.enqueueRpc(notArrivedTranscript())
         f.transport.enqueueRpc(notArrivedTranscript())
         f.transport.enqueueJson(blockingReply("must not accept"), status = HttpStatusCode.InternalServerError)
@@ -468,7 +526,7 @@ class GatewayAskStreamingStateMachineTest {
     @Test
     fun blockingFallbackGatewayNotOkBecomesFailureBubble() = runTest {
         val f = gatewayClientFixture()
-        f.transport.enqueueSse(error("stream failed"))
+        f.transport.enqueueSse(droppedStream())
         f.transport.enqueueRpc(notArrivedTranscript())
         f.transport.enqueueRpc(notArrivedTranscript())
         f.transport.enqueueJson(blockingReply("ignored", ok = false))
@@ -482,7 +540,7 @@ class GatewayAskStreamingStateMachineTest {
     @Test
     fun blockingFallbackTransportFailureNamesTheConnection() = runTest {
         val f = gatewayClientFixture()
-        f.transport.enqueueSse(error("stream failed"))
+        f.transport.enqueueSse(droppedStream())
         f.transport.enqueueRpc(notArrivedTranscript())
         f.transport.enqueueRpc(notArrivedTranscript())
         f.transport.enqueueFailure(IllegalStateException("offline"))
@@ -514,7 +572,7 @@ class GatewayAskStreamingStateMachineTest {
     @Test
     fun blockingFallbackCancellationPropagatesInsteadOfBecomingErrorBubble() = runTest {
         val f = gatewayClientFixture()
-        f.transport.enqueueSse(error("stream failed"))
+        f.transport.enqueueSse(droppedStream())
         f.transport.enqueueRpc(notArrivedTranscript())
         f.transport.enqueueRpc(notArrivedTranscript())
         f.transport.enqueueFailure(CancellationException("cancel resend"))
