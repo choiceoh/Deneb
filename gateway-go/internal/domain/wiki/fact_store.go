@@ -512,7 +512,19 @@ func (s *Store) loadFactPlane() error {
 			return fmt.Errorf("fact journal missing and snapshot is unreadable: %w", snapshotErr)
 		}
 		if snapshotRevision > 0 {
-			return fmt.Errorf("fact journal missing for snapshot revision %d", snapshotRevision)
+			// Rotation renames the active segment and then creates a new one. If the
+			// create failed, history is fully intact in the archives and the missing
+			// active segment is an empty file waiting to be made — refusing to boot
+			// would strand the store over nothing.
+			if archived := newestFactArchiveRevision(s.dir); archived < snapshotRevision {
+				return fmt.Errorf("fact journal missing for snapshot revision %d", snapshotRevision)
+			}
+			slog.Warn("recreating the fact journal segment lost after rotation",
+				"revision", snapshotRevision)
+			if err := ensureFactJournal(journalPath); err != nil {
+				return err
+			}
+			return syncFactParentDir(journalPath)
 		}
 		return ensureFactJournal(journalPath)
 	}
