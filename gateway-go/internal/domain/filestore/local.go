@@ -25,6 +25,11 @@ const defaultListCap = 2000
 // bug becomes an arbitrary-read/write, so the guard is doubled.
 var ErrPathEscape = errors.New("filestore: path escapes store root")
 
+// ErrContentSearchPartial reports that a complete content search could not read
+// or extract one or more entries. Callers may preserve any hits, but must not
+// present the result as exhaustive.
+var ErrContentSearchPartial = errors.New("filestore: content search partial")
+
 // LocalStore is a Store backed by a single local-filesystem root directory.
 // Every virtual path is clamped inside root; "../" and absolute re-anchoring
 // can never climb above it.
@@ -103,7 +108,35 @@ func (s *LocalStore) resolve(virt string) (abs, clean string, err error) {
 	if err != nil {
 		return "", "", ErrPathEscape
 	}
+	if err := s.rejectSymlinkComponents(abs); err != nil {
+		return "", "", err
+	}
 	return abs, clean, nil
+}
+
+func (s *LocalStore) rejectSymlinkComponents(abs string) error {
+	rel, err := filepath.Rel(s.root, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ErrPathEscape
+	}
+	if rel == "." {
+		return nil
+	}
+	current := s.root
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		current = filepath.Join(current, part)
+		info, statErr := os.Lstat(current)
+		if errors.Is(statErr, os.ErrNotExist) {
+			return nil
+		}
+		if statErr != nil {
+			return statErr
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return ErrPathEscape
+		}
+	}
+	return nil
 }
 
 // entryFor builds an Entry from a normalized virtual path and FileInfo.
@@ -138,12 +171,23 @@ func childVPath(dir, name string) string {
 
 // List returns entries under dir. Folders sort before files, then by name.
 func (s *LocalStore) List(ctx context.Context, dir string, recursive bool, limit int) ([]Entry, error) {
+	if limit <= 0 || limit > defaultListCap {
+		limit = defaultListCap
+	}
+	return s.list(ctx, dir, recursive, limit)
+}
+
+// ListAll returns every entry under dir without the user-facing List cap. It is
+// intended for bounded background indexing and request paths that carry their
+// own context deadline; ordinary browsing must keep using List.
+func (s *LocalStore) ListAll(ctx context.Context, dir string, recursive bool) ([]Entry, error) {
+	return s.list(ctx, dir, recursive, 0)
+}
+
+func (s *LocalStore) list(ctx context.Context, dir string, recursive bool, limit int) ([]Entry, error) {
 	abs, clean, err := s.resolve(dir)
 	if err != nil {
 		return nil, err
-	}
-	if limit <= 0 || limit > defaultListCap {
-		limit = defaultListCap
 	}
 	info, err := os.Stat(abs)
 	if err != nil {
@@ -154,13 +198,20 @@ func (s *LocalStore) List(ctx context.Context, dir string, recursive bool, limit
 	}
 
 	var entries []Entry
+	incomplete := false
 	if recursive {
 		err = filepath.WalkDir(abs, func(p string, d fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
+				if limit == 0 {
+					incomplete = true
+				}
 				return nil //nolint:nilerr // skip unreadable entries, keep walking
 			}
 			if p == abs {
 				return nil // skip the directory itself
+			}
+			if d.Type()&fs.ModeSymlink != 0 {
+				return nil
 			}
 			if isInternalName(d.Name()) {
 				return nil
@@ -170,15 +221,21 @@ func (s *LocalStore) List(ctx context.Context, dir string, recursive bool, limit
 			}
 			rel, relErr := filepath.Rel(abs, p)
 			if relErr != nil {
+				if limit == 0 {
+					incomplete = true
+				}
 				return nil //nolint:nilerr // unexpected; skip this entry
 			}
 			virt := path.Join(clean, filepath.ToSlash(rel))
 			fi, fiErr := d.Info()
 			if fiErr != nil {
+				if limit == 0 {
+					incomplete = true
+				}
 				return nil //nolint:nilerr // entry vanished mid-walk; skip
 			}
 			entries = append(entries, entryFor(virt, fi))
-			if len(entries) >= limit {
+			if limit > 0 && len(entries) >= limit {
 				return fs.SkipAll
 			}
 			return nil
@@ -195,17 +252,26 @@ func (s *LocalStore) List(ctx context.Context, dir string, recursive bool, limit
 			if isInternalName(d.Name()) {
 				continue
 			}
-			if len(entries) >= limit {
+			if d.Type()&fs.ModeSymlink != 0 {
+				continue
+			}
+			if limit > 0 && len(entries) >= limit {
 				break
 			}
 			fi, fiErr := d.Info()
 			if fiErr != nil {
+				if limit == 0 {
+					incomplete = true
+				}
 				continue
 			}
 			entries = append(entries, entryFor(childVPath(clean, d.Name()), fi))
 		}
 	}
 	sortEntries(entries)
+	if incomplete {
+		return entries, ErrContentSearchPartial
+	}
 	return entries, nil
 }
 
@@ -225,6 +291,9 @@ func (s *LocalStore) Search(ctx context.Context, query string, maxResults int) (
 			return nil //nolint:nilerr // skip unreadable, keep walking
 		}
 		if p == s.root {
+			return nil
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
 			return nil
 		}
 		if isInternalName(d.Name()) {
@@ -253,11 +322,11 @@ func (s *LocalStore) Search(ctx context.Context, query string, maxResults int) (
 	return out, nil
 }
 
-// maxContentExtractBytes bounds the per-file payload SearchContent will run
+// MaxContentExtractBytes bounds the per-file payload SearchContent will run
 // through extractFn. Files larger than this match on name only — extracting a
 // huge PDF/spreadsheet for a substring scan would dominate latency for little
 // gain, so the cap keeps the walk bounded.
-const maxContentExtractBytes = 5 << 20 // 5 MiB
+const MaxContentExtractBytes = 5 << 20 // 5 MiB
 
 // SearchContent walks the tree and returns files whose name OR extracted text
 // contains query (case-insensitive). It reuses List(recursive) to enumerate and
@@ -267,6 +336,18 @@ const maxContentExtractBytes = 5 << 20 // 5 MiB
 // extractFn (or text it returns empty for) reduces to name-only matching, so
 // SearchContent is a strict superset of Search.
 func (s *LocalStore) SearchContent(ctx context.Context, query string, maxResults int, extractFn func(ctx context.Context, data []byte, name string) string) ([]Entry, error) {
+	return s.searchContent(ctx, query, maxResults, extractFn, false)
+}
+
+// SearchContentComplete searches the entire local store rather than the first
+// defaultListCap entries. Callers must provide a bounded context because text
+// extraction can be expensive on a large corpus. Rows collected before a
+// deadline are returned together with the context error.
+func (s *LocalStore) SearchContentComplete(ctx context.Context, query string, maxResults int, extractFn func(ctx context.Context, data []byte, name string) string) ([]Entry, error) {
+	return s.searchContent(ctx, query, maxResults, extractFn, true)
+}
+
+func (s *LocalStore) searchContent(ctx context.Context, query string, maxResults int, extractFn func(ctx context.Context, data []byte, name string) string, complete bool) ([]Entry, error) {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
 		return nil, fmt.Errorf("filestore: 검색어가 비어 있습니다") //nolint:staticcheck // ST1005 — Korean error surfaced to user
@@ -274,12 +355,23 @@ func (s *LocalStore) SearchContent(ctx context.Context, query string, maxResults
 	if maxResults <= 0 || maxResults > 100 {
 		maxResults = 20
 	}
-	// Enumerate every descendant; defaultListCap bounds the candidate set.
-	all, err := s.List(ctx, "/", true, defaultListCap)
-	if err != nil {
+	// Ordinary callers retain the browsing cap. Evidence search opts into a full
+	// walk under its own deadline so the 2,001st file cannot be silently omitted.
+	var all []Entry
+	var err error
+	if complete {
+		all, err = s.ListAll(ctx, "/", true)
+	} else {
+		all, err = s.List(ctx, "/", true, defaultListCap)
+	}
+	incomplete := errors.Is(err, ErrContentSearchPartial)
+	if err != nil && !incomplete {
 		return nil, err
 	}
 	var out []Entry
+	// Exact filename matches are the strongest lexical signal. Collect them in a
+	// cheap first pass so earlier content-only rows cannot consume the result cap
+	// before a later exact filename is even inspected.
 	for _, e := range all {
 		if cerr := ctx.Err(); cerr != nil {
 			return out, cerr
@@ -287,21 +379,39 @@ func (s *LocalStore) SearchContent(ctx context.Context, query string, maxResults
 		if e.IsFolder() {
 			continue // no content to scan
 		}
-		// Name match is the cheap path and never needs the file bytes.
 		if strings.Contains(strings.ToLower(e.Name), q) {
 			out = append(out, e)
 			if len(out) >= maxResults {
-				break
+				return finishContentSearch(out, incomplete)
 			}
+		}
+	}
+
+	// Fill only the remaining slots with content matches. Filename matches are
+	// skipped because they were already admitted in the first pass.
+	for _, e := range all {
+		if cerr := ctx.Err(); cerr != nil {
+			return out, cerr
+		}
+		if e.IsFolder() || strings.Contains(strings.ToLower(e.Name), q) {
 			continue
 		}
 		// Content match: read + extract, skipping oversized or unreadable files
 		// (they fall back to the already-checked name match, i.e. no match here).
-		if extractFn == nil || e.Size > maxContentExtractBytes {
+		if extractFn == nil || e.Size > MaxContentExtractBytes {
+			if complete && extractFn != nil && e.Size > MaxContentExtractBytes {
+				incomplete = true
+			}
 			continue
 		}
-		data, _, gerr := s.Get(ctx, e.PathDisplay)
+		data, gerr := s.readContentFile(ctx, e.PathDisplay, MaxContentExtractBytes)
 		if gerr != nil {
+			if errors.Is(gerr, context.Canceled) || errors.Is(gerr, context.DeadlineExceeded) {
+				return out, gerr
+			}
+			if complete {
+				incomplete = true
+			}
 			continue // vanished/unreadable mid-walk — name didn't match, so skip
 		}
 		text := extractFn(ctx, data, e.Name)
@@ -312,8 +422,37 @@ func (s *LocalStore) SearchContent(ctx context.Context, query string, maxResults
 			}
 		}
 	}
+	return finishContentSearch(out, incomplete)
+}
+
+func finishContentSearch(out []Entry, incomplete bool) ([]Entry, error) {
 	sortEntries(out)
+	if incomplete {
+		return out, ErrContentSearchPartial
+	}
 	return out, nil
+}
+
+// readContentFile enforces the extraction cap on bytes actually read, not just
+// on stale directory metadata. A file can grow or be replaced after ListAll;
+// LimitReader keeps that TOCTOU race from turning into an unbounded os.ReadFile.
+func (s *LocalStore) readContentFile(ctx context.Context, p string, maxBytes int64) ([]byte, error) {
+	r, meta, err := s.Open(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	if meta != nil && meta.Size > maxBytes {
+		return nil, ErrContentSearchPartial
+	}
+	data, err := io.ReadAll(io.LimitReader(r, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, ErrContentSearchPartial
+	}
+	return data, nil
 }
 
 // Get returns the file bytes and metadata at path.

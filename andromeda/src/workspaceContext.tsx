@@ -21,6 +21,7 @@ export interface PaneTarget {
   id?: string | number;
   dayKey?: string;
   path?: string;
+  size?: number;
   query?: string; // query-driven panes (search): run this query on open
   // 데네브 조종 확장: date = day-pager 점프(YYYY-MM-DD, mail/approvals),
   // prefill = 할일 폼 초안(저장은 사용자), spotlight = 타일 플래시 동반.

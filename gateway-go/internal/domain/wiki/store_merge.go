@@ -22,6 +22,9 @@ func (s *Store) MarkSuperseded(oldPath, newPath string) error {
 	if oldPath == "" || newPath == "" || oldPath == newPath {
 		return nil
 	}
+	if err := supersedePrecondition(oldPath, newPath); err != nil {
+		return err
+	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	page, err := s.ReadPage(oldPath)
@@ -34,6 +37,39 @@ func (s *Store) MarkSuperseded(oldPath, newPath string) error {
 	page.Meta.SupersededBy = newPath
 	page.Meta.Updated = time.Now().Format("2006-01-02")
 	return s.writePageInternal(oldPath, page, true)
+}
+
+// supersedePrecondition refuses the supersession relationships that are never
+// "the same topic's newer version" — the only meaning the flag has.
+//
+// superseded_by is consumed as retirement: search multiplies a superseded page's
+// score by 0.15, the counterparty anchor drops it, and verify auto-archives it
+// 30 days later. So a wrong flag silently deletes knowledge from recall. Both
+// misuses below happened on the live wiki: a project's own 로그.md was marked
+// superseded by its 대표.md (that log becomes recall-dead 30 days on), and a
+// counterparty 거래 ledger plus two mail analyses were marked superseded by a
+// project rep page — mail is raw evidence and a ledger is a different document
+// type, neither is a stale version of anything (the same misuse killed recall
+// for 부산8호 by recording business succession as knowledge replacement).
+//
+// Layout slots and raw data are therefore never the OLD side of a supersession.
+// Ordinary curated pages (기타/업무/인물 …) still supersede freely.
+func supersedePrecondition(oldPath, newPath string) error {
+	// The legacy flat form 프로젝트/<name>.md also answers IsProjectRepPage, but it
+	// is an ordinary curated page in practice (and the migration's leftover), so
+	// only in-folder slots are guarded.
+	_, inFolder := inFolderProjectOf(oldPath)
+	switch {
+	case inFolder && IsProjectRepPage(oldPath):
+		return fmt.Errorf("wiki: refusing to supersede a 대표페이지 (%s → %s) — 프로젝트 승계는 종결/related로 기록", oldPath, newPath)
+	case IsProjectLogPage(oldPath):
+		return fmt.Errorf("wiki: refusing to supersede a 로그.md (%s → %s) — 진행 로그는 대체되지 않는다", oldPath, newPath)
+	case IsMailAnalysisPath(oldPath):
+		return fmt.Errorf("wiki: refusing to supersede a 메일분석 page (%s → %s) — 메일은 원시 증거", oldPath, newPath)
+	case IsDealLedgerPath(oldPath):
+		return fmt.Errorf("wiki: refusing to supersede a 거래 원장 (%s → %s) — 원장은 프로젝트 문서로 대체되지 않는다", oldPath, newPath)
+	}
+	return nil
 }
 
 func toSet(ss []string) map[string]struct{} {

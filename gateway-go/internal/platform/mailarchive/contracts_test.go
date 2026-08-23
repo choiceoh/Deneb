@@ -602,6 +602,11 @@ func TestSnippetAndRuneClampContract(t *testing.T) {
 	if len([]rune(strings.TrimSuffix(got, "..."))) != 360 || !strings.HasSuffix(got, "...") {
 		t.Fatalf("long snippet rune len = %d suffix=%v", len([]rune(got)), strings.HasSuffix(got, "..."))
 	}
+	lateEvidence := strings.Repeat("서문 ", 120) + "결재조건은 납품 후 30일입니다" + strings.Repeat(" 부록", 120)
+	centered := snippetFromBodyAroundQuery(lateEvidence, "결재조건")
+	if !strings.Contains(centered, "결재조건은 납품 후 30일") || len([]rune(centered)) > 366 {
+		t.Fatalf("query-centered snippet = %q (runes=%d)", centered, len([]rune(centered)))
+	}
 	if got := clampRunes("가나다", 3); got != "가나다" {
 		t.Fatalf("exact clamp = %q", got)
 	}
@@ -846,6 +851,53 @@ func TestIMAPExecLiteralAndStatusContract(t *testing.T) {
 	}
 	if msgs, err := c.uidFetchMessages("  "); err != nil || msgs != nil {
 		t.Fatalf("empty uid fetch = %+v/%v", msgs, err)
+	}
+}
+
+func TestIMAPPreviewFetchIsBoundedAndMarksTruncation(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+	c := &imapConn{conn: client, r: bufio.NewReader(client)}
+	done := make(chan error, 1)
+	go func() {
+		r := bufio.NewReader(server)
+		line, err := r.ReadString('\n')
+		if err != nil {
+			done <- err
+			return
+		}
+		if line != "a1 UID FETCH 7 (UID BODY.PEEK[]<0.5>)\r\n" {
+			done <- fmt.Errorf("command = %q", line)
+			return
+		}
+		_, err = io.WriteString(server, "* 1 FETCH (UID 7 BODY[]<0> {5}\r\nhello)\r\na1 OK complete\r\n")
+		done <- err
+	}()
+	msgs, err := c.uidFetchMessagePreviews("7", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 || !msgs[0].Truncated || string(msgs[0].Raw) != "hello" {
+		t.Fatalf("preview messages = %+v", msgs)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestIMAPPreviewRejectsServerLiteralAboveLimit(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+	c := &imapConn{conn: client, r: bufio.NewReader(client)}
+	go func() {
+		r := bufio.NewReader(server)
+		_, _ = r.ReadString('\n')
+		_, _ = io.WriteString(server, "* 1 FETCH (UID 7 BODY[]<0> {6}\r\nabcdef)\r\na1 OK complete\r\n")
+	}()
+	if _, err := c.uidFetchMessagePreviews("7", 5); err == nil || !strings.Contains(err.Error(), "exceeds preview limit") {
+		t.Fatalf("error = %v, want bounded literal rejection", err)
 	}
 }
 

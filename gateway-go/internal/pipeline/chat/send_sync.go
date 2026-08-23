@@ -410,6 +410,9 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	if res, handled := h.trySteerIntoActiveRun(sessionKey, message, opts); handled {
 		return res, nil
 	}
+	if err := h.admitSyncWhenSessionIdle(ctx, sessionKey); err != nil {
+		return nil, err
+	}
 	// Link fetches start now and join inside executeAgentRun, AFTER the
 	// parallel prep phase — a pasted slow link no longer blocks the turn
 	// start for up to 30s (see link_enrichment.go).
@@ -577,6 +580,40 @@ func (h *Handler) finishSyncSessionLifecycle(runCtx context.Context, sessionKey 
 // current behavior (their own run).
 const steerMaxRunes = 400
 
+const syncSessionIdlePoll = 25 * time.Millisecond
+
+// admitSyncWhenSessionIdle blocks until no run is registered for sessionKey.
+// Detached capture turns (miniapp.capture.*) and in-flight sync/stream runs
+// both register in the abort tracker; without this gate a second SendSync would
+// race the same transcript instead of queueing like chat.send does.
+func (h *Handler) admitSyncWhenSessionIdle(ctx context.Context, sessionKey string) error {
+	if h == nil || h.abort == nil {
+		return nil
+	}
+	for {
+		for h.abort.HasActiveRun(sessionKey) {
+			select {
+			case <-ctx.Done():
+				if cause := context.Cause(ctx); cause != nil {
+					return cause
+				}
+				return ctx.Err()
+			case <-time.After(syncSessionIdlePoll):
+			}
+		}
+		if h.mergeWindow == nil {
+			return nil
+		}
+		sessLock := h.mergeWindow.SessionLock(sessionKey)
+		sessLock.Lock()
+		busy := h.abort.HasActiveRun(sessionKey)
+		sessLock.Unlock()
+		if !busy {
+			return nil
+		}
+	}
+}
+
 // isNativeClientDelivery reports whether a delivery targets the native app's
 // "client" channel — an interactive surface that returns its reply as the RPC
 // result, distinct from the autonomous AutoDeliveredOutput relays (cron,
@@ -719,6 +756,9 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 			onDelta(res.Text)
 		}
 		return res, nil
+	}
+	if err := h.admitSyncWhenSessionIdle(ctx, sessionKey); err != nil {
+		return nil, err
 	}
 	// Same deferred link enrichment as SendSync — see the comment there.
 	enrich := h.startLinkEnrichment(ctx, message, opts)

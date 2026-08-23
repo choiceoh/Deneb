@@ -203,30 +203,6 @@ func SystemPromptSequenceDigest(digests []string) (string, error) {
 	return casepack.DigestBytes(encoded), nil
 }
 
-func SetRunProvenance(result *RunResult) error {
-	if result == nil {
-		return errors.New("briefcase: run result is nil")
-	}
-	result.Sampling = SamplingProfile{Temperature: 0, TopP: 1}
-	digests := make([]string, 0, len(result.Episodes))
-	for _, episode := range result.Episodes {
-		if episode.SystemPromptSHA256 != "" {
-			digests = append(digests, episode.SystemPromptSHA256)
-		}
-	}
-	sequence, err := SystemPromptSequenceDigest(digests)
-	if err != nil {
-		return err
-	}
-	result.SystemPromptSequenceSHA256 = sequence
-	profile, err := ExecutionProfileDigest(result.Model, result.APIMode, result.ToolSchemaSHA256, result.EndpointSHA256, result.BuildSHA256, result.Sampling)
-	if err != nil {
-		return err
-	}
-	result.ExecutionProfileSHA256 = profile
-	return nil
-}
-
 func ValidateRunProvenance(result *RunResult) error {
 	if result == nil {
 		return errors.New("briefcase: run result is nil")

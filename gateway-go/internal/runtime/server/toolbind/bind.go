@@ -24,11 +24,13 @@ var ToolObserve = observebind.ToolObserve
 // Doc/media leaf bindings (OCR, attachment text, ASR) — re-exported so server
 // composition files import toolbind once instead of toolbind/docmedia.
 var (
-	OCRImage              = docmedia.OCRImage
-	ExtractAttachmentText = docmedia.ExtractAttachmentText
-	ExtractDocumentText   = docmedia.ExtractDocumentText
-	TranscribeAudio       = docmedia.TranscribeAudio
-	TranslateSegments     = docmedia.TranslateSegments
+	OCRImage                  = docmedia.OCRImage
+	ExtractAttachmentText     = docmedia.ExtractAttachmentText
+	ExtractDocumentText       = docmedia.ExtractDocumentText
+	ExtractFileText           = docmedia.ExtractFileText
+	ExtractFileTextWithoutOCR = docmedia.ExtractFileTextWithoutOCR
+	TranscribeAudio           = docmedia.TranscribeAudio
+	TranslateSegments         = docmedia.TranslateSegments
 )
 
 type LocalAIFunc = docmedia.LocalAIFunc

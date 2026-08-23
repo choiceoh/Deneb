@@ -68,6 +68,7 @@ func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) (mov
 	}
 	hist := s.buildMailDomainHistogram(repByName)
 	armed := mailDomainSignalArmed()
+	domainMoves := 0
 
 	for _, rp := range pages {
 		if len(moved) >= maxMoves {
@@ -81,8 +82,13 @@ func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) (mov
 		if perr != nil || page == nil {
 			continue
 		}
-		project, signal := reclassifyTarget(page, projects)
-		if project == "" {
+		// A retired page is not a refile candidate under any signal: it is
+		// already out of the working set, and re-filing it re-dates it.
+		if page.Meta.Archived || strings.TrimSpace(page.Meta.SupersededBy) != "" {
+			continue
+		}
+		project, signal, ambiguous := reclassifyTarget(page, projects)
+		if project == "" && !ambiguous {
 			project = domainReclassifyTarget(page, hist)
 			if project == "" {
 				continue
@@ -101,6 +107,16 @@ func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) (mov
 				}
 				continue
 			}
+		}
+		// Sender-domain evidence is the weakest signal and the newest one armed,
+		// so it gets its own small per-cycle budget on top of maxMoves: a
+		// histogram that starts pointing the wrong way relocates a handful of
+		// reversible pages, not a whole bucket.
+		if signal == "domain" {
+			if domainMoves >= mailDomainMaxMovesPerCycle {
+				continue
+			}
+			domainMoves++
 		}
 		repPath, ok := repByName[project]
 		if !ok {
@@ -133,23 +149,35 @@ func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) (mov
 // when no unambiguous signal exists (모호하면 잔류 — a wrong filing is worse than
 // an unfiled mail). Matching runs against the caller's already-fetched project
 // list; re-listing per candidate was a silent N× knownProjects scan.
-func reclassifyTarget(page *Page, projects []ProjectRef) (project, signal string) {
-	// Signal 1: Related entries resolving into projects — but only when they
-	// all agree. Two DISTINCT related projects are exactly the ambiguity the
-	// doctrine says to leave alone (returning the first was arbitrary).
+func reclassifyTarget(page *Page, projects []ProjectRef) (project, signal string, ambiguous bool) {
+	// Signal 1: Related entries pointing at a project's 대표페이지 — the ownership
+	// edge the mail analyzer writes (RELATED_PROJECTS validates rep candidates
+	// only). A related entry pointing at ANOTHER MAIL in some project folder is
+	// a topical link, not ownership: counting those filed a 광주 안전관리대행 quote
+	// under a 태안 project and split one O&M thread across two projects (2026-08:
+	// all 9 related-signal moves rested on mail↔mail edges alone).
+	//
+	// Two distinct projects are the ambiguity the doctrine leaves alone — and
+	// that verdict is returned as ambiguous=true so the caller does not fall
+	// through to the weaker sender-domain signal, which would file a mail that
+	// demonstrably belongs to two projects into a third.
 	related := ""
 	for _, r := range page.Meta.Related {
-		name, ok := ProjectNameOf(strings.ReplaceAll(strings.TrimSpace(r), "\\", "/"))
+		rel := strings.ReplaceAll(strings.TrimSpace(r), "\\", "/")
+		if !IsProjectRepPage(rel) {
+			continue
+		}
+		name, ok := ProjectNameOf(rel)
 		if !ok {
 			continue
 		}
 		if related != "" && related != name {
-			return "", "" // ≥2 distinct projects → ambiguous, stay put
+			return "", "", true // ≥2 distinct projects → ambiguous, stay put
 		}
 		related = name
 	}
 	if related != "" {
-		return related, "related"
+		return related, "related", false
 	}
 	// Signal 2: the title resolves to exactly one project by its most
 	// specific identity key (uniqueProjectIn): a title naming one project
@@ -158,14 +186,14 @@ func reclassifyTarget(page *Page, projects []ProjectRef) (project, signal string
 	// projects and stays put.
 	hay := normalizeTitleKey(strings.TrimSpace(page.Meta.Title))
 	if hay == "" {
-		return "", ""
+		return "", "", false
 	}
 	if ref, ok := uniqueProjectIn(hay, projects); ok {
 		if name, k := ProjectNameOf(ref.Path); k {
-			return name, "title"
+			return name, "title", false
 		}
 	}
-	return "", ""
+	return "", "", false
 }
 
 // mailDomainSignalArmed reads the rollout gate for signal 3. Off (any value
@@ -180,6 +208,10 @@ func mailDomainSignalArmed() bool {
 // self-reinforcing mapping (the keyword-filter false-positive incident is the
 // cautionary precedent for evidence thresholds).
 const mailDomainMinEvidence = 3
+
+// mailDomainMaxMovesPerCycle bounds how many mails one cycle may re-file on
+// sender-domain evidence alone — the weakest of the three signals.
+const mailDomainMaxMovesPerCycle = 3
 
 // mailDomainBlocklist holds domains that can never identify a project: our
 // own (internal senders write about every project) and freemail providers

@@ -57,8 +57,8 @@ IMPORTANCE(푸시 긴급도)와 무관합니다. 후보 섹션이 없으면 PROJ
 IMPORTANCE: urgent|attention|routine
 PROJECT_FILE: yes|no`
 
-// GroupwareApprovalsDeps wires Amaranth list/act/get/analyze. List+Act required;
-// Get/Cache/Analyze/Attach optional (those RPCs register only when present).
+// GroupwareApprovalsDeps wires Amaranth list/act/get/analyze/Q&A. List+Act required
+// for the main method set; Get/Cache/Analyze/Attach/Ask are optional.
 type GroupwareApprovalsDeps struct {
 	List func(ctx context.Context, folder string, limit int) ([]groupware.ApprovalSummary, error)
 	Act  func(ctx context.Context, docID, decision, comment string) (string, error)
@@ -71,6 +71,9 @@ type GroupwareApprovalsDeps struct {
 	// idempotently. Nil → analyze RPC returns UNAVAILABLE.
 	Analyze func(ctx context.Context, docID, title, date, body string) (analysis, importance string, err error)
 	Cache   *groupware.ApprovalAnalysisStore
+	// Ask runs an ephemeral, read-only LLM Q&A grounded in the document body
+	// and cached analysis. nil disables miniapp.groupware.approvals.ask.
+	Ask func(ctx context.Context, docID, title, body, analysis string, history []QATurn, question string) (answer string, err error)
 	// ListERP powers miniapp.groupware.erp.list (stock/po/…/people/board).
 	ListERP func(ctx context.Context, area, folder, query string, limit int) (string, error)
 	// ReadBoard powers miniapp.groupware.board.get (one post body by id/title).
@@ -99,6 +102,9 @@ func GroupwareApprovalsMethods(deps GroupwareApprovalsDeps) map[string]rpcutil.H
 	if deps.Get != nil && deps.Cache != nil {
 		m["miniapp.groupware.approvals.analysis_cached"] = groupwareApprovalsAnalysisCached(deps)
 		m["miniapp.groupware.approvals.analyze"] = groupwareApprovalsAnalyze(deps)
+	}
+	for name, handler := range GroupwareApprovalsAskMethods(deps) {
+		m[name] = handler
 	}
 	if deps.ListERP != nil {
 		m["miniapp.groupware.erp.list"] = groupwareERPList(deps)

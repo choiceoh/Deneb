@@ -441,7 +441,7 @@ class GatewayKnowledgeRpcContractTest {
     }
 
     @Test
-    fun searchAllMapsWikiDiaryAndPeopleWithFallbacks() = runTest {
+    fun searchAllMapsEverySourceAndPreservesGroundingLocators() = runTest {
         val f = gatewayClientFixture()
         f.transport.enqueueRpc(
             """{
@@ -458,7 +458,16 @@ class GatewayKnowledgeRpcContractTest {
                     {"email":"ceo@example.com","name":"대표","messageCount":9,"lastSubject":"계약"},
                     {"email":"person@example.com","name":"","messageCount":3,"lastSubject":"안부"},
                     {"email":"","name":"","messageCount":999,"lastSubject":"drop"}
-                ]
+                ],
+                "files":[
+                    {"path":"docs/quote.pdf","name":"quote.pdf","size":245760,"snippet":"공급가액 3억원","score":0.93,"startLine":31,"endLine":35,"kind":"pdf","heading":"견적 합계"},
+                    {"path":"","name":"drop.pdf","snippet":"drop","score":0.1}
+                ],
+                "mail":[
+                    {"id":"mail-1","threadId":"thread-1","from":"협력사","subject":"수정 견적","date":"2026-08-23","snippet":"최종 금액입니다","mailbox":"INBOX"},
+                    {"id":"","subject":"drop"}
+                ],
+                "sources":{"wiki":"ok","diary":"ok","people":"timeout","files":"ok","mail":"error"}
             }
             """.trimIndent(),
         )
@@ -473,12 +482,22 @@ class GatewayKnowledgeRpcContractTest {
         assertEquals(listOf("matched text", "fallback summary"), results?.wiki?.map { it.snippet })
         assertEquals(listOf("일기", "결정"), results?.diary?.map { it.title })
         assertEquals(listOf("diary content", "ship it"), results?.diary?.map { it.snippet })
+        assertEquals(listOf("memory/day.md", "memory/day.md"), results?.diary?.map { it.path })
         assertEquals(listOf("대표", "person@example.com"), results?.people?.map { it.name })
         assertEquals(listOf(9, 3), results?.people?.map { it.messageCount })
+        assertEquals(listOf("docs/quote.pdf"), results?.files?.map { it.path })
+        assertEquals(245_760L, results?.files?.single()?.size)
+        assertEquals(31, results?.files?.single()?.startLine)
+        assertEquals(35, results?.files?.single()?.endLine)
+        assertEquals("견적 합계", results?.files?.single()?.heading)
+        assertEquals(listOf("mail-1"), results?.mail?.map { it.id })
+        assertEquals("thread-1", results?.mail?.single()?.threadId)
+        assertEquals("timeout", results?.sourceStatus?.people)
+        assertEquals("error", results?.sourceStatus?.mail)
     }
 
     @Test
-    fun searchAllReturnsThreeEmptyCollectionsForValidEmptyResult() = runTest {
+    fun searchAllReturnsEmptyCollectionsForValidEmptyResult() = runTest {
         val f = gatewayClientFixture()
         f.transport.enqueueRpc("{}")
 
@@ -488,6 +507,8 @@ class GatewayKnowledgeRpcContractTest {
         assertTrue(results.wiki.isEmpty())
         assertTrue(results.diary.isEmpty())
         assertTrue(results.people.isEmpty())
+        assertTrue(results.files.isEmpty())
+        assertTrue(results.mail.isEmpty())
     }
 
     @Test

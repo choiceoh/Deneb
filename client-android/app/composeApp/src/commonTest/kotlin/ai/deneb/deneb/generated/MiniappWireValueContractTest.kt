@@ -2785,6 +2785,21 @@ class MiniappWireValueContractTest {
                     value = objectList,
                     expectation = Expectation.ObjectList,
                 ),
+                fieldValue(
+                    name = "files",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "mail",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "sources",
+                    value = JsonObject(emptyMap()),
+                    expectation = Expectation.Object,
+                ),
             ),
             invalidField = "wiki",
             invalidValue = JsonObject(mapOf("not" to JsonPrimitive("a-list"))),
@@ -2820,6 +2835,135 @@ class MiniappWireValueContractTest {
                 ),
             ),
             invalidField = "file",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "SearchFileHit",
+            serializer = SearchFileHit.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "path",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "name",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "size",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "snippet",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "score",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "startLine",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "endLine",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "kind",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "heading",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "path",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "SearchMailHit",
+            serializer = SearchMailHit.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "id",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "threadId",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "from",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "subject",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "date",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "snippet",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "mailbox",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "id",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "SearchSourceStatus",
+            serializer = SearchSourceStatus.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "wiki",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "diary",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "people",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "files",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "mail",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "wiki",
             invalidValue = JsonObject(emptyMap()),
         ),
         wireContract(

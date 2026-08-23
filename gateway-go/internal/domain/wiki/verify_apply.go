@@ -27,6 +27,14 @@ import (
 // backlog that outpaces the cap is precisely how the duplicate pile formed.
 const maxAutoVerifyFixes = 15
 
+// maxAutoMovesPerCycle caps the misclassification moves separately from the
+// shared fix budget. Merges and archivals are content decisions with their own
+// guards; a move is a location decision made by an LLM over the whole index,
+// and when it goes wrong it goes wrong in bulk — 2026-08-17 spent the entire
+// 15-fix budget relocating deal ledgers in one cycle. A small cap keeps any
+// future misfire to a handful of reversible pages per cycle.
+const maxAutoMovesPerCycle = 3
+
 // applyVerifyFixes auto-applies the high-confidence findings (those carrying a
 // Fix) and returns the count applied. Findings without a Fix are ignored here —
 // they remain in the report as advisory items. record, when non-nil, is invoked
@@ -34,6 +42,7 @@ const maxAutoVerifyFixes = 15
 // counters, 5.6); it must never panic or block.
 func (wd *WikiDreamer) applyVerifyFixes(findings []verifyFinding, record func(f verifyFinding)) int {
 	applied := 0
+	moves := 0
 	for _, f := range findings {
 		if f.Fix == nil {
 			continue
@@ -45,13 +54,23 @@ func (wd *WikiDreamer) applyVerifyFixes(findings []verifyFinding, record func(f 
 		}
 		switch f.Fix.Kind {
 		case "move":
+			if moves >= maxAutoMovesPerCycle {
+				wd.logger.Info("wiki-verify: auto-move cap reached, deferring the rest to next cycle",
+					"cap", maxAutoMovesPerCycle)
+				continue
+			}
 			if err := wd.store.MovePage(f.PageA, f.Fix.NewPath); err != nil {
 				wd.logger.Warn("wiki-verify: auto-move failed",
 					"from", f.PageA, "to", f.Fix.NewPath, "error", err)
 				continue
 			}
+			moves++
+			// The verdict's reason is the only record of WHY a page moved:
+			// findings carrying a Fix are excluded from the advisory ledger and
+			// the operator notification, so without it a relocation is
+			// unauditable after the fact.
 			wd.logger.Info("wiki-verify: auto-moved misclassified page",
-				"from", f.PageA, "to", f.Fix.NewPath)
+				"from", f.PageA, "to", f.Fix.NewPath, "reason", f.Detail)
 			if record != nil {
 				record(f)
 			}
@@ -124,6 +143,16 @@ func (s *Store) FoldDuplicate(keep, fold string) error {
 		return fmt.Errorf("wiki: refusing to fold two distinct mail analyses (%s ≠ %s) — 메일 1통 = 1페이지",
 			mailAnalysisMsgID(keep), mailAnalysisMsgID(fold))
 	}
+	// Same class of backstop for project layout slots. A project folder's 대표 /
+	// 로그 / 상세 pages are DIFFERENT documents about one project by design, and
+	// two 대표 pages under different code folders are two different projects —
+	// neither is ever a duplicate, whatever a title- or id-based detector
+	// concluded. Both shapes actually fired in 2026-08 (대표←로그 three times,
+	// pl2-kia-epc-001/대표 ← pl2-kia-epc-002/대표 once, which is how a project
+	// lost its 대표페이지).
+	if err := refuseLayoutSlotFold(keep, fold); err != nil {
+		return err
+	}
 
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -132,6 +161,46 @@ func (s *Store) FoldDuplicate(keep, fold string) error {
 			"\n\n## 병합된 중복 문서 (" + fold + ")\n\n" + foldPage.Body
 	})
 	return err
+}
+
+// refuseLayoutSlotFold rejects folds between pages whose relationship is fixed
+// by the project layout rather than by their content: two pages inside one
+// project folder (대표/로그/상세 are distinct documents about the same project),
+// and two 대표 pages belonging to different project codes (two projects).
+//
+// Only in-folder pages (프로젝트/<name>/…) are guarded. The legacy flat form
+// 프로젝트/<name>.md is a migration remnant whose repair IS a fold into the
+// folder's 대표 slot (wiki-review's layout repair), so folding it must stay
+// possible.
+func refuseLayoutSlotFold(keep, fold string) error {
+	keepProject, keepOK := inFolderProjectOf(keep)
+	foldProject, foldOK := inFolderProjectOf(fold)
+	if !keepOK || !foldOK {
+		return nil
+	}
+	if keepProject == foldProject {
+		return fmt.Errorf("wiki: refusing to fold two pages of project %q (%s ← %s) — 대표/로그/상세는 같은 프로젝트의 다른 문서",
+			keepProject, keep, fold)
+	}
+	// Two 대표 pages under DIFFERENT minted codes are two different deals
+	// (pl2-kia-epc-001 vs -002), never a spelling variant of one project — the
+	// fold that cost pl2-kia-epc-002 its 대표페이지. Folder names that are not
+	// codes (탑솔라 vs 탑솔라-중복) are exactly the splintering that normalized-title
+	// merges exist to repair, so those still fold.
+	if IsProjectRepPage(keep) && IsProjectRepPage(fold) &&
+		validProjectCode(keepProject) && validProjectCode(foldProject) {
+		return fmt.Errorf("wiki: refusing to fold 대표 pages of different project codes (%s ← %s)", keep, fold)
+	}
+	return nil
+}
+
+// inFolderProjectOf returns the owning project for a page that lives INSIDE a
+// project folder (프로젝트/<name>/…), excluding the legacy flat form.
+func inFolderProjectOf(relPath string) (string, bool) {
+	if len(splitProjectPath(relPath)) < 2 {
+		return "", false
+	}
+	return ProjectNameOf(relPath)
 }
 
 // archivePage sets a page's Archived flag in place (no move, no delete) — the
@@ -189,6 +258,18 @@ func recategorizedPath(path, newCat string) string {
 	}
 	cur, rest, ok := strings.Cut(path, "/")
 	if !ok || cur == newCat {
+		return ""
+	}
+	// Category swaps move flat pages only. Preserving the sub-folder used to
+	// mint category/sub-folder combinations nothing else writes or reads
+	// (기타/거래/, 인물/거래/, 기타/<projectCode>/) — the 2026-08 ledger split.
+	// A page that lives in a slot is placed by layout, not by category.
+	if strings.Contains(rest, "/") {
+		return ""
+	}
+	// 프로젝트/ is folder-structured (프로젝트/<code>/대표.md): a page cannot be
+	// promoted into it by renaming its leading segment.
+	if newCat == projectCategoryPrefix {
 		return ""
 	}
 	return newCat + "/" + rest

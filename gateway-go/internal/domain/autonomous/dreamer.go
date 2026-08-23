@@ -29,8 +29,11 @@ type DreamReport struct {
 	// cycle (== len(appliedPaths) — guards-dropped proposals never count).
 	FactsLearned int `json:"factsLearned,omitempty"`
 	// FactsMoved counts misclassification moves auto-applied by verify.
-	FactsMoved        int `json:"factsMoved,omitempty"`
-	PatternsExtracted int `json:"patternsExtracted"`
+	FactsMoved int `json:"factsMoved,omitempty"`
+	// CorrectionsConsidered counts user corrections (5.7 반증 큐) the critique
+	// pass saw this cycle — corrections are consumed only by an eligible cycle.
+	CorrectionsConsidered int `json:"correctionsConsidered,omitempty"`
+	PatternsExtracted     int `json:"patternsExtracted"`
 	// UserModelUpdated counts 사용자-category wiki pages the cycle created or
 	// updated — the agent's model of its user (preferences, working style,
 	// personal context). Subset of WikiPagesCreated/Updated.
@@ -52,6 +55,10 @@ type DreamReport struct {
 	WikiGraphNodes       int      `json:"wikiGraphNodes,omitempty"`
 	WikiGraphEdges       int      `json:"wikiGraphEdges,omitempty"`
 	WikiGraphClustered   bool     `json:"wikiGraphClustered,omitempty"`
+	// GitCommit is the wiki git snapshot hash capturing this cycle's result —
+	// the key for whole-cycle and selective revert (5.8). Empty when nothing
+	// changed or git is unavailable.
+	GitCommit string `json:"gitCommit,omitempty"`
 	// WikiChangeSummary is a preformatted, human-readable block describing
 	// what this cycle changed (paths, git snapshot hash, diffstat, rollback
 	// hint). Appended verbatim to the dream notification.

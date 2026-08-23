@@ -477,6 +477,31 @@ private fun BrowserTabSnapshot.toRuntime(adBlockEnabled: Boolean): BrowserTabRun
     initialTitle = title,
 )
 
+@Composable
+private fun BrowserPopupBar(
+    title: String,
+    onClose: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            title,
+            style = DenebType.meta,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+        )
+        TextButton(onClick = onClose) { Text("닫기") }
+    }
+    HorizontalDivider(color = denebHairline())
+}
+
 /**
  * Stateless browser chrome, separated from the stateful shell so renderPreviews can
  * exercise the look with mock state. Safari-style: NO top header — the page fills the
@@ -515,24 +540,43 @@ fun DenebBrowserChrome(
     val haptics = rememberHaptics()
     val focusManager = LocalFocusManager.current
 
-    // No on-screen back button — system back owns "back": page history first, then exit.
-    PlatformBackHandler(enabled = true) { if (state.canGoBack) state.goBack() else onBack() }
+    // No on-screen back button — system back owns "back": popup history/close,
+    // then page history, then exit. A live popup must win or a login/payment
+    // window would close the whole browser.
+    PlatformBackHandler(enabled = true) {
+        when {
+            state.popupActive -> state.goBack()
+            state.canGoBack -> state.goBack()
+            else -> onBack()
+        }
+    }
 
     // Re-sync only after this tab actually navigates. The state-local guard keeps
     // an unfinished edit when the user switches to another tab and comes back.
     LaunchedEffect(state, state.currentUrl) { state.syncOmniboxWithCurrentUrl() }
-    val field = state.omniboxDraft
+    val field = if (state.popupActive) state.popupUrl else state.omniboxDraft
     var menuOpen by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            if (state.popupActive) {
+                BrowserPopupBar(
+                    title = state.popupTitle.ifBlank { state.popupUrl.ifBlank { "새 창" } },
+                    onClose = {
+                        haptics.tap()
+                        state.closePopup()
+                    },
+                )
+            }
             // Page fills the top — no top header.
             content()
-            if (state.loading) {
+            if (state.popupActive && state.popupLoading) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            } else if (!state.popupActive && state.loading) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), progress = { state.progress / 100f })
             }
-            if (state.translateEnabled) {
+            if (state.translateEnabled && !state.popupActive) {
                 val translation = state.translationProgress
                 Row(
                     modifier = Modifier
@@ -565,7 +609,8 @@ fun DenebBrowserChrome(
             }
             // A failed load leaves the WebView blank; say why instead of showing
             // an empty page with no explanation.
-            state.loadError?.let { message ->
+            val pageError = if (state.popupActive) state.popupError else state.loadError
+            pageError?.let { message ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -600,39 +645,47 @@ fun DenebBrowserChrome(
                 IconButton(
                     onClick = {
                         haptics.tap()
-                        onBack()
+                        if (state.popupActive) state.closePopup() else onBack()
                     },
                     modifier = Modifier.size(40.dp),
                 ) {
-                    Icon(Icons.Outlined.Close, contentDescription = "브라우저 닫기", tint = denebHint())
+                    Icon(
+                        Icons.Outlined.Close,
+                        contentDescription = if (state.popupActive) "새 창 닫기" else "브라우저 닫기",
+                        tint = denebHint(),
+                    )
                 }
+                val canGoForward = if (state.popupActive) state.popupCanGoForward else state.canGoForward
                 IconButton(
                     onClick = {
                         haptics.tap()
                         state.goForward()
                     },
-                    enabled = state.canGoForward,
+                    enabled = canGoForward,
                     modifier = Modifier.size(40.dp),
                 ) {
                     Icon(
                         Icons.AutoMirrored.Outlined.ArrowForward,
                         contentDescription = "앞으로",
-                        tint = if (state.canGoForward) denebHint() else denebHint().copy(alpha = 0.3f),
+                        tint = if (canGoForward) denebHint() else denebHint().copy(alpha = 0.3f),
                     )
                 }
                 BasicTextField(
                     value = field,
-                    onValueChange = state::editOmnibox,
+                    onValueChange = { if (!state.popupActive) state.editOmnibox(it) },
                     singleLine = true,
+                    readOnly = state.popupActive,
                     textStyle = DenebType.meta.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(
                         onGo = {
-                            val target = normalizeUrl(field)
-                            if (target.isNotEmpty()) {
-                                state.load(target)
-                                state.editOmnibox(target)
+                            if (!state.popupActive) {
+                                val target = normalizeUrl(field)
+                                if (target.isNotEmpty()) {
+                                    state.load(target)
+                                    state.editOmnibox(target)
+                                }
                             }
                             focusManager.clearFocus()
                         },
@@ -646,7 +699,7 @@ fun DenebBrowserChrome(
                                 }
                                 innerTextField()
                             }
-                            if (field.isNotEmpty()) {
+                            if (field.isNotEmpty() && !state.popupActive) {
                                 IconButton(
                                     onClick = {
                                         haptics.tap()
@@ -665,71 +718,74 @@ fun DenebBrowserChrome(
                         }
                     },
                 )
+                val chromeLoading = if (state.popupActive) state.popupLoading else state.loading
                 IconButton(
                     onClick = {
                         haptics.tap()
-                        if (state.loading) state.stop() else state.reload()
+                        if (chromeLoading) state.stop() else state.reload()
                     },
                     modifier = Modifier.size(40.dp),
                 ) {
                     Icon(
-                        if (state.loading) Icons.Outlined.Close else Icons.Outlined.Refresh,
-                        contentDescription = if (state.loading) "정지" else "새로고침",
+                        if (chromeLoading) Icons.Outlined.Close else Icons.Outlined.Refresh,
+                        contentDescription = if (chromeLoading) "정지" else "새로고침",
                         tint = denebHint(),
                     )
                 }
-                IconButton(
-                    onClick = {
-                        haptics.tap()
-                        state.translateEnabled = !state.translateEnabled
-                    },
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(
-                        Icons.Outlined.Translate,
-                        contentDescription = if (state.translateEnabled) "원문 보기" else "DeepL로 한국어 번역",
-                        tint = if (state.translateEnabled) denebInsight() else denebHint(),
-                    )
-                }
-                // Frequency-ordered (operator feedback): the persistent bar hosts the
-                // FREQUENT action — opening the bookmark list — while the rare
-                // add/remove toggle lives in the More menu. The filled/insight tint
-                // still signals "this page is bookmarked" at a glance.
-                IconButton(
-                    onClick = {
-                        haptics.tap()
-                        onShowBookmarks?.invoke()
-                    },
-                    enabled = onShowBookmarks != null,
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(
-                        if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                        contentDescription = "북마크 목록",
-                        tint = if (isBookmarked) denebInsight() else denebHint(),
-                    )
-                }
-                IconButton(
-                    onClick = {
-                        haptics.tap()
-                        onShowTabs?.invoke()
-                    },
-                    enabled = onShowTabs != null,
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    BadgedBox(
-                        badge = {
-                            Badge(containerColor = MaterialTheme.colorScheme.primary) {
-                                Text(tabCount.toString())
-                            }
+                if (!state.popupActive) {
+                    IconButton(
+                        onClick = {
+                            haptics.tap()
+                            state.translateEnabled = !state.translateEnabled
                         },
+                        modifier = Modifier.size(40.dp),
                     ) {
                         Icon(
-                            Icons.Outlined.ContentCopy,
-                            contentDescription = "탭 ${tabCount}개",
-                            tint = denebHint(),
-                            modifier = Modifier.size(22.dp),
+                            Icons.Outlined.Translate,
+                            contentDescription = if (state.translateEnabled) "원문 보기" else "DeepL로 한국어 번역",
+                            tint = if (state.translateEnabled) denebInsight() else denebHint(),
                         )
+                    }
+                    // Frequency-ordered (operator feedback): the persistent bar hosts the
+                    // FREQUENT action — opening the bookmark list — while the rare
+                    // add/remove toggle lives in the More menu. The filled/insight tint
+                    // still signals "this page is bookmarked" at a glance.
+                    IconButton(
+                        onClick = {
+                            haptics.tap()
+                            onShowBookmarks?.invoke()
+                        },
+                        enabled = onShowBookmarks != null,
+                        modifier = Modifier.size(40.dp),
+                    ) {
+                        Icon(
+                            if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                            contentDescription = "북마크 목록",
+                            tint = if (isBookmarked) denebInsight() else denebHint(),
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            haptics.tap()
+                            onShowTabs?.invoke()
+                        },
+                        enabled = onShowTabs != null,
+                        modifier = Modifier.size(40.dp),
+                    ) {
+                        BadgedBox(
+                            badge = {
+                                Badge(containerColor = MaterialTheme.colorScheme.primary) {
+                                    Text(tabCount.toString())
+                                }
+                            },
+                        ) {
+                            Icon(
+                                Icons.Outlined.ContentCopy,
+                                contentDescription = "탭 ${tabCount}개",
+                                tint = denebHint(),
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
                     }
                 }
                 Box {
@@ -886,7 +942,9 @@ fun DenebBrowserChrome(
                             leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null, tint = denebHint()) },
                             onClick = {
                                 haptics.tap()
-                                clipboard.setText(AnnotatedString(state.currentUrl))
+                                clipboard.setText(
+                                    AnnotatedString(if (state.popupActive) state.popupUrl else state.currentUrl),
+                                )
                                 menuOpen = false
                             },
                         )
@@ -904,7 +962,7 @@ fun DenebBrowserChrome(
                             leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null, tint = denebHint()) },
                             onClick = {
                                 haptics.tap()
-                                openUrl(state.currentUrl)
+                                openUrl(if (state.popupActive) state.popupUrl else state.currentUrl)
                                 menuOpen = false
                             },
                         )

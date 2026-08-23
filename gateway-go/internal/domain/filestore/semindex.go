@@ -177,6 +177,38 @@ type ScoredEntry struct {
 	Heading   string
 }
 
+// IndexedCount reports how many live paths the loaded sidecar knows about.
+// Evidence search uses it to distinguish a genuinely searched empty corpus
+// from a cold/unbuilt index.
+func (si *SemanticIndex) IndexedCount() int {
+	if si == nil {
+		return 0
+	}
+	si.mu.Lock()
+	defer si.mu.Unlock()
+	return len(si.files)
+}
+
+// IsEntryCurrent verifies that a hit's indexed freshness key still matches the
+// live file. The content-prefix hash closes the same-size/same-second overwrite
+// gap that mtime+size alone leaves, while reading at most 64 KiB per hit.
+func (si *SemanticIndex) IsEntryCurrent(ctx context.Context, store Store, path string) bool {
+	if si == nil || store == nil {
+		return false
+	}
+	si.mu.Lock()
+	indexed := cloneFileEntry(si.files[path])
+	si.mu.Unlock()
+	if indexed == nil || indexed.Content == "" {
+		return false
+	}
+	live, err := store.Stat(ctx, path)
+	if err != nil || live == nil || live.Size != indexed.Size || live.ServerModified != indexed.MTime {
+		return false
+	}
+	return contentHashFor(ctx, store, path, live.Size) == indexed.Content
+}
+
 // ReindexStats summarizes one Reindex pass for logging.
 type ReindexStats struct {
 	Scanned        int // files enumerated in the store
@@ -419,8 +451,9 @@ func (si *SemanticIndex) Reindex(ctx context.Context, store Store, extractFn Ext
 	}
 	identityChanged := si.adoptEmbeddingIdentity(embed)
 
-	// Enumerate every file once. defaultListCap bounds the candidate set.
-	all, err := store.List(ctx, "/", true, defaultListCap)
+	// Enumerate every file once. The local store exposes a complete walk for the
+	// bounded background indexer; generic stores retain the interface cap.
+	all, err := listSemanticIndexEntries(ctx, store)
 	if err != nil {
 		return stats, err
 	}
@@ -517,6 +550,17 @@ func (si *SemanticIndex) Reindex(ctx context.Context, store Store, extractFn Ext
 	return stats, nil
 }
 
+type completeStoreLister interface {
+	ListAll(context.Context, string, bool) ([]Entry, error)
+}
+
+func listSemanticIndexEntries(ctx context.Context, store Store) ([]Entry, error) {
+	if complete, ok := store.(completeStoreLister); ok {
+		return complete.ListAll(ctx, "/", true)
+	}
+	return store.List(ctx, "/", true, defaultListCap)
+}
+
 func cloneFileEntry(entry *fileEntry) *fileEntry {
 	if entry == nil {
 		return nil
@@ -574,9 +618,13 @@ func (si *SemanticIndex) embedFile(
 	if e.Size > maxIndexFileBytes {
 		return nil, 0, 0, false
 	}
-	data, _, err := store.Get(ctx, e.PathDisplay)
+	data, current, err := readIndexFileBounded(ctx, store, e.PathDisplay)
 	if err != nil {
 		return nil, 0, 0, false // vanished/unreadable mid-walk
+	}
+	if current != nil {
+		e.Size = current.Size
+		e.ServerModified = current.ServerModified
 	}
 	content := contentHashOfBytes(data, e.Size)
 	text := extractFn(ctx, data, e.Name)
@@ -630,6 +678,25 @@ func (si *SemanticIndex) embedFile(
 	}
 	mtime, size := freshKey(e)
 	return &fileEntry{Path: e.PathDisplay, MTime: mtime, Size: size, Content: content, Chunks: out}, len(pending), reused, true
+}
+
+func readIndexFileBounded(ctx context.Context, store Store, path string) ([]byte, *Entry, error) {
+	r, meta, err := store.Open(ctx, path)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer r.Close()
+	if meta != nil && meta.Size > maxIndexFileBytes {
+		return nil, meta, ErrContentSearchPartial
+	}
+	data, err := io.ReadAll(io.LimitReader(r, maxIndexFileBytes+1))
+	if err != nil {
+		return nil, meta, err
+	}
+	if len(data) > maxIndexFileBytes {
+		return nil, meta, ErrContentSearchPartial
+	}
+	return data, meta, nil
 }
 
 func isCodeChunkKind(kind string) bool {

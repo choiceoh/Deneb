@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	wikiMailConflictMarker = "⚠ 불일치(위키와 최근 메일 From이 다름 — 둘 다 근거로 두고 서버가 한쪽을 이기게 하지 말 것)"
+	wikiMailConflictMarker  = "⚠ 불일치(위키와 최근 메일 From이 다름 — 둘 다 근거로 두고 서버가 한쪽을 이기게 하지 말 것)"
 	wikiMailConflictPullMax = 2
 )
 

@@ -1,12 +1,37 @@
 package filestore
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+type growingIndexStore struct {
+	Store
+}
+
+type indexReadSeekCloser struct {
+	*bytes.Reader
+}
+
+func (indexReadSeekCloser) Close() error { return nil }
+
+func (s growingIndexStore) List(context.Context, string, bool, int) ([]Entry, error) {
+	return []Entry{{Tag: "file", Name: "growing.txt", PathDisplay: "/growing.txt", Size: 12}}, nil
+}
+
+func (s growingIndexStore) Open(context.Context, string) (io.ReadSeekCloser, *Entry, error) {
+	data := bytes.Repeat([]byte("indexed"), maxIndexFileBytes/7+1)
+	return indexReadSeekCloser{Reader: bytes.NewReader(data)}, &Entry{Tag: "file", Name: "growing.txt", Size: 12}, nil
+}
+
+func (s growingIndexStore) Get(context.Context, string) ([]byte, *Entry, error) {
+	panic("semantic index must use bounded Open, not Get")
+}
 
 // fakeEmbedder maps text to a deterministic vector by counting occurrences of a
 // fixed vocabulary. Texts sharing vocabulary get high cosine similarity, so
@@ -49,6 +74,20 @@ func (f *fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, er
 
 // plainText is a trivial extractor: the file's bytes ARE its text.
 func plainText(_ context.Context, data []byte, _ string) string { return string(data) }
+
+func TestSemanticIndex_ReindexBoundsActualBytesWhenFileGrowsAfterList(t *testing.T) {
+	store := growingIndexStore{Store: newTestStore(t)}
+	embed := newFakeEmbedder("indexed")
+	idx := NewSemanticIndex(filepath.Join(t.TempDir(), "idx.json"))
+
+	stats, err := idx.Reindex(context.Background(), store, plainText, embed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Scanned != 1 || stats.Embedded != 0 || embed.texts != 0 {
+		t.Fatalf("stats=%+v embeddedTexts=%d, want oversized replacement skipped", stats, embed.texts)
+	}
+}
 
 func TestSemanticIndex_ReindexAndSearchReturnsTopHit(t *testing.T) {
 	ctx := context.Background()
@@ -260,6 +299,36 @@ func TestSemanticIndex_IncrementalReindexUpdatesChangedFiles(t *testing.T) {
 	}
 	if embed.texts <= before {
 		t.Error("changed file was not re-embedded")
+	}
+}
+
+func TestSemanticIndex_IsEntryCurrentRejectsSameMetadataOverwrite(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	mustPut(t, store, "/evidence.txt", "old evidence")
+	idx := NewSemanticIndex(filepath.Join(t.TempDir(), "idx.json"))
+	if _, err := idx.Reindex(ctx, store, plainText, newFakeEmbedder("old", "new", "evidence")); err != nil {
+		t.Fatal(err)
+	}
+	if !idx.IsEntryCurrent(ctx, store, "/evidence.txt") {
+		t.Fatal("freshly indexed entry reported stale")
+	}
+	abs, err := store.AbsPath("/evidence.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(abs, []byte("new evidence"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(abs, info.ModTime(), info.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	if idx.IsEntryCurrent(ctx, store, "/evidence.txt") {
+		t.Fatal("same-size/same-mtime overwrite retained stale evidence")
 	}
 }
 

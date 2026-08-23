@@ -102,6 +102,15 @@ func uniqueProjectIn(hay string, projects []ProjectRef) (ProjectRef, bool) {
 			continue
 		}
 		if key == normalizeTitleKey(ref.Client) {
+			// Our own company is never evidence of WHICH project a document
+			// belongs to — every internal mail says "탑솔라". One active project
+			// carries client: 탑솔라, so the client fallback filed five unrelated
+			// "[탑솔라(주)] …" subjects into it (2026-08, 5 of 7 title refiles).
+			// The domain path already blocklists topsolar.kr; this is the same
+			// rule for the name.
+			if isOwnCompanyKey(key) {
+				continue
+			}
 			clientHits = append(clientHits, hit{ref: ref, key: key})
 		} else {
 			ownHits = append(ownHits, hit{ref: ref, key: key})
@@ -217,4 +226,19 @@ func bestProjectKeyIn(hay string, ref ProjectRef) string {
 		}
 	}
 	return best
+}
+
+// ownCompanyKeys are normalized spellings of OUR company. Kept next to
+// mailDomainBlocklist's topsolar.kr entry — same rule, name side.
+var ownCompanyKeys = map[string]bool{
+	"탑솔라":      true,
+	"탑솔라주":     true,
+	"주탑솔라":     true,
+	"탑솔라그룹":    true,
+	"topsolar": true,
+}
+
+// isOwnCompanyKey reports whether a normalized match key names our own company.
+func isOwnCompanyKey(key string) bool {
+	return ownCompanyKeys[key]
 }

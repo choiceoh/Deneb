@@ -168,7 +168,7 @@ func (s *Store) PruneDeadRelatedLinks() (PruneStats, error) {
 	for _, rp := range pages {
 		rp = strings.ReplaceAll(rp, "\\", "/")
 		repointed, removed := 0, 0
-		if err := s.UpdatePage(rp, func(cur *Page) (*Page, error) {
+		if err := s.UpdatePageMetaOnly(rp, func(cur *Page) (*Page, error) {
 			if cur == nil || len(cur.Meta.Related) == 0 {
 				return nil, nil
 			}

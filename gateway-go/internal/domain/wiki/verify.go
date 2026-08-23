@@ -276,6 +276,16 @@ func (wd *WikiDreamer) detectStaleSuperseded() []verifyFinding {
 		if err != nil || page == nil || page.Meta.Archived || page.Meta.SupersededBy == "" {
 			continue
 		}
+		// Never archive a layout slot or raw evidence on the strength of a
+		// superseded_by flag: MarkSuperseded now refuses to set one there, but
+		// pages already carrying a bad flag (a live project 로그.md, a 거래 ledger,
+		// mail analyses) would otherwise be archived 30 days later and drop out
+		// of recall entirely (validity 0.3 × 0.15). Those flags are repaired, not
+		// acted on.
+		if supersedePrecondition(rp, page.Meta.SupersededBy) != nil {
+			wd.logger.Debug("wiki-verify: skipping stale-superseded archive on a layout page", "path", rp)
+			continue
+		}
 		last := strings.TrimSpace(page.Meta.Updated)
 		if last == "" {
 			last = strings.TrimSpace(page.Meta.Created)
@@ -479,8 +489,27 @@ func detectDuplicates(entries map[string]IndexEntry) []verifyFinding {
 				}
 				dist := levenshtein(a.id, b.id)
 				if dist == 0 {
-					findings = append(findings, exactDupFinding(entries, a.path, b.path,
-						fmt.Sprintf("동일한 ID: \"%s\"", a.id)))
+					// An identical id is only auto-mergeable when the titles agree
+					// too. `id` is not a stable key on the producing side: the
+					// dreamer's update merge overwrites an existing page's id with
+					// whatever the LLM emitted, so one stamped id turns two
+					// unrelated pages into an "exact duplicate" and the fold
+					// silently destroys one (measured 2026-08: 5 of 8 auto-merges,
+					// including a project 대표 folded into a sibling project's 대표
+					// and a system page folded into an unrelated 기타 page). With
+					// mismatched titles the finding stays advisory and names the id
+					// collision itself as the thing to repair.
+					if norm := normalizeTitleKey(a.title); norm != "" && norm == normalizeTitleKey(b.title) {
+						findings = append(findings, exactDupFinding(entries, a.path, b.path,
+							fmt.Sprintf("동일한 ID: \"%s\"", a.id)))
+					} else {
+						findings = append(findings, verifyFinding{
+							Type: "duplicate",
+							Detail: fmt.Sprintf("동일한 ID(제목 상이): \"%s\" — \"%s\" ~ \"%s\" (id 충돌 수리 대상)",
+								a.id, a.title, b.title),
+							PageA: a.path, PageB: b.path,
+						})
+					}
 				} else {
 					findings = append(findings, verifyFinding{
 						Type:   "duplicate",
@@ -627,10 +656,12 @@ JSON 배열만 반환. 다른 텍스트 없이.
 			Detail: fmt.Sprintf("%s → %s (%s)", r.CurrentCategory, r.CorrectCategory, r.Reason),
 			PageA:  r.Path,
 		}
-		// Attach an auto-applicable move ONLY when the LLM is highly confident
-		// and the target is a real, different category — a low-confidence guess
+		// Attach an auto-applicable move ONLY when the LLM is highly confident,
+		// the page it names actually exists, its location is a topic decision
+		// (not a layout contract), and the target is a real, different category.
+		// A low-confidence guess — or any verdict about a layout-managed path —
 		// stays advisory and never moves a real page.
-		if strings.EqualFold(strings.TrimSpace(r.Confidence), "high") {
+		if strings.EqualFold(strings.TrimSpace(r.Confidence), "high") && wd.moveAllowedFor(entries, r.Path) {
 			if np := recategorizedPath(r.Path, r.CorrectCategory); np != "" {
 				f.Fix = &verifyFix{Kind: "move", NewPath: np}
 			}
@@ -639,6 +670,39 @@ JSON 배열만 반환. 다른 텍스트 없이.
 	}
 
 	return findings
+}
+
+// moveAllowedFor decides whether a misclassification verdict about relPath may
+// carry an auto-applied move. Three deterministic refusals, each from a way the
+// unguarded path damaged the live wiki in 2026-08:
+//
+//   - the page must exist in the snapshot the prompt was built from. The model
+//     returned already-moved paths (프로젝트/거래/김운.md, moved days earlier),
+//     which failed with ENOENT every cycle and would have relocated a real page
+//     had the name been recycled;
+//   - its location must not be layout-managed (IsLayoutManagedPath) — the deal
+//     ledger and project slots are placed by code, not by topic;
+//   - a `deal` page is a ledger wherever it currently sits, so a topic verdict
+//     never relocates one (인물/거래/*, 업무/거래/* are prior damage of exactly
+//     this kind and must not be re-shuffled).
+//
+// Refusals are logged at Debug: they are the normal case for a noisy verdict
+// list, and the finding still surfaces to the operator as advisory.
+func (wd *WikiDreamer) moveAllowedFor(entries map[string]IndexEntry, relPath string) bool {
+	entry, ok := entries[relPath]
+	if !ok {
+		wd.logger.Warn("wiki-verify: misclassification names an unknown page, move refused", "path", relPath)
+		return false
+	}
+	if IsLayoutManagedPath(relPath) {
+		wd.logger.Debug("wiki-verify: move refused (layout-managed path)", "path", relPath)
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(entry.Type), "deal") {
+		wd.logger.Debug("wiki-verify: move refused (deal ledger page)", "path", relPath)
+		return false
+	}
+	return true
 }
 
 func hasTemplateThinkingOff(extra jsonObject) bool {

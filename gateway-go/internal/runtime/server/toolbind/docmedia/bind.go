@@ -8,11 +8,13 @@ import (
 )
 
 var (
-	OCRImage              = document.OCRImage
-	ExtractAttachmentText = document.ExtractAttachmentText
-	ExtractDocumentText   = document.ExtractDocumentText
-	TranscribeAudio       = artifact.TranscribeAudio
-	TranslateSegments     = translateops.TranslateSegments
+	OCRImage                  = document.OCRImage
+	ExtractAttachmentText     = document.ExtractAttachmentText
+	ExtractDocumentText       = document.ExtractDocumentText
+	ExtractFileText           = document.ExtractFileText
+	ExtractFileTextWithoutOCR = document.ExtractFileTextWithoutOCR
+	TranscribeAudio           = artifact.TranscribeAudio
+	TranslateSegments         = translateops.TranslateSegments
 )
 
 type LocalAIFunc = recallops.LocalAIFunc

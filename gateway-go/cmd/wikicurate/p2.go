@@ -8,9 +8,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
-const kia002Rep = "프로젝트/pl2-kia-epc-002/대표.md"
-const kia002Bid = "프로젝트/pl2-kia-epc-002/기아-al광주-2공장-태양광-모듈-입찰.md"
-const kia003Rep = "프로젝트/pl2-kia-epc-003/대표.md"
+const (
+	kia002Rep = "프로젝트/pl2-kia-epc-002/대표.md"
+	kia002Bid = "프로젝트/pl2-kia-epc-002/기아-al광주-2공장-태양광-모듈-입찰.md"
+	kia003Rep = "프로젝트/pl2-kia-epc-003/대표.md"
+)
 
 var repMergeRemnantPaths = []string{
 	"프로젝트/pl2-kia-epc-001/대표.md",

@@ -120,6 +120,13 @@ type wikiUpdate struct {
 	Kinds      flexStringList `json:"kinds"`      // 프로젝트 특성 2단 enum ("1차" 또는 "1차/2차" — page.go:projectKinds, 복수) — 대표페이지 전용
 	Stage      string         `json:"stage"`      // 프로젝트 사업 단계 (page.go:projectStages). Overwrite on update when the diary confirms progress
 	Program    string         `json:"program"`    // 형제 딜 사업군 슬러그. Fill-only on update, like Client
+
+	// retargetedFrom records the path the synthesis actually proposed when
+	// retargetDreamUpdate rerouted this update onto an existing page. Not a wire
+	// field — set by Go, and the signal that the update's identity fields
+	// (summary/type/resource/…) describe a DIFFERENT page than the one being
+	// written, so they must not overwrite the target's.
+	retargetedFrom string
 }
 
 // parseWikiUpdates parses the synthesis response array leniently: one malformed
@@ -716,6 +723,7 @@ func (wd *WikiDreamer) retargetDreamUpdate(u wikiUpdate) wikiUpdate {
 			wd.logger.Info("wiki-dream: duplicate detected, converting to update",
 				"proposed", u.Path, "existing", existing)
 			u.Action = "update"
+			u.retargetedFrom = u.Path
 			u.Path = existing
 		}
 	}
@@ -728,6 +736,7 @@ func (wd *WikiDreamer) retargetDreamUpdate(u wikiUpdate) wikiUpdate {
 	if existing := wd.findExistingPage(u); existing != "" {
 		wd.logger.Info("wiki-dream: missing update target matched existing page",
 			"proposed", u.Path, "existing", existing)
+		u.retargetedFrom = u.Path
 		u.Path = existing
 	}
 	return u
@@ -830,6 +839,17 @@ func (wd *WikiDreamer) updateDreamPage(u wikiUpdate, code, episodeRef string) (b
 	created := false
 	err := wd.store.UpdatePage(u.Path, func(existing *Page) (*Page, error) {
 		if existing == nil {
+			// Update-on-missing writes the update's content verbatim, so an
+			// update with nothing to say creates a frontmatter-only page (three
+			// 0-byte pages on the live wiki, e.g. 인물/제용범.md). An empty page
+			// still enters FTS and the embedding set and competes for recall
+			// slots, so drop the proposal instead. The create path has a
+			// template body and is unaffected.
+			if strings.TrimSpace(u.Content) == "" {
+				wd.logger.Info("wiki-dream: update target missing and content empty; page not created",
+					"path", u.Path, "title", u.Title)
+				return nil, nil
+			}
 			page := newPageFromUpdate(u, code, episodeRef)
 			page.Body = u.Content
 			created = true
@@ -858,32 +878,45 @@ func (wd *WikiDreamer) mergeDreamUpdate(existing *Page, u wikiUpdate, code, epis
 	if u.Importance > existing.Meta.Importance {
 		existing.Meta.Importance = u.Importance
 	}
-	if u.ID != "" {
+	// Identity fields are fill-only. `id` is a key other subsystems resolve by
+	// (similar.go's first retarget stage, verify's duplicate merge, link_prune's
+	// related repair, graph seeds, the graphify node id): overwriting it with
+	// whatever slug the synthesis emitted made a page's identity drift per
+	// update (24 rewrites in 30 days — one page went vaultwarden →
+	// vaultwarden-cli-security-setup → vaulwarden-ssh-keys → isw-family), and a
+	// stamped id is what let verify auto-fold two unrelated pages.
+	if u.ID != "" && existing.Meta.ID == "" {
 		existing.Meta.ID = u.ID
 	}
-	if u.Summary != "" {
+	// A retargeted update was written ABOUT another page; its summary describes
+	// that other subject, so appending its content is right but replacing the
+	// target's one-line identity is not (2026-07-30: a G2 glasses page kept its
+	// title while its summary/id became a scopolamine warning).
+	if u.Summary != "" && (existing.Meta.Summary == "" || u.retargetedFrom == "") {
 		existing.Meta.Summary = u.Summary
 	}
 	if len(u.Related) > 0 {
 		existing.Meta.Related = mergeRelated(existing.Meta.Related, u.Related)
 	}
-	if u.Type != "" {
+	if u.Type != "" && (existing.Meta.Type == "" || u.retargetedFrom == "") {
 		existing.Meta.Type = u.Type
 	}
-	if u.Confidence != "" {
+	if u.Confidence != "" && (existing.Meta.Confidence == "" || u.retargetedFrom == "") {
 		existing.Meta.Confidence = string(u.Confidence)
 	}
-	if u.Due != "" {
+	if u.Due != "" && (existing.Meta.Due == "" || u.retargetedFrom == "") {
 		existing.Meta.Due = u.Due
 	}
-	if u.Resource != "" {
+	// Resource is the page's underlying asset URI — a retargeted update carries
+	// the PROPOSED page's asset, never the target's.
+	if u.Resource != "" && (existing.Meta.Resource == "" || u.retargetedFrom == "") {
 		existing.Meta.Resource = u.Resource
 	}
 	if len(u.Cues) > 0 {
 		existing.Meta.Cues = mergeCues(existing.Meta.Cues, u.Cues)
 	}
-	// Fill-only: an operator-set client remains authoritative.
-	if u.Client != "" && existing.Meta.Client == "" {
+	// Fill-only: an operator-set client remains authoritative. 대표페이지 전용.
+	if u.Client != "" && existing.Meta.Client == "" && IsProjectRepPage(u.Path) {
 		existing.Meta.Client = u.Client
 	}
 	// Sites/kinds are usually confirmed AFTER the rep page already exists (the
@@ -891,19 +924,25 @@ func (wd *WikiDreamer) mergeDreamUpdate(existing *Page, u wikiUpdate, code, epis
 	// dropped them, so a later "현장이 확인되면 기입/갱신" never persisted. Union
 	// with existing (normalize dedups; normalizeKinds refines parent→child) so a
 	// confirmation adds without clobbering prior values.
-	if len(u.Sites) > 0 {
+	// …but only on the page that owns them. Sites/kinds/client/stage/program are
+	// 대표페이지 fields; a retargeted update stamped them onto a child page once
+	// (프로젝트/pl2-kia-epc-002/기아-al광주-…md picked up client/sites/kinds meant for
+	// the folder's 대표), which then reads as a second rep page to every consumer
+	// that groups by client.
+	repPage := IsProjectRepPage(u.Path)
+	if len(u.Sites) > 0 && repPage {
 		existing.Meta.Sites = normalizeSites(append(append([]string{}, existing.Meta.Sites...), u.Sites...))
 	}
-	if len(u.Kinds) > 0 {
+	if len(u.Kinds) > 0 && repPage {
 		existing.Meta.Kinds = normalizeKinds(append(append([]string{}, existing.Meta.Kinds...), u.Kinds...))
 	}
 	// Stage tracks live progress — overwrite when synthesis names a
 	// canonical value. Program is fill-only like Client: an operator-set
 	// venture slug stays authoritative.
-	if stage := normalizeStage(u.Stage); stage != "" {
+	if stage := normalizeStage(u.Stage); stage != "" && repPage {
 		existing.Meta.Stage = stage
 	}
-	if u.Program != "" && existing.Meta.Program == "" {
+	if u.Program != "" && existing.Meta.Program == "" && repPage {
 		existing.Meta.Program = strings.TrimSpace(u.Program)
 	}
 	// Append this cycle's episode to the provenance chain so a merged fact

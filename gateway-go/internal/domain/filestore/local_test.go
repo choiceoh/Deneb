@@ -2,6 +2,8 @@ package filestore
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -230,6 +232,83 @@ func TestLocalStore_SearchContentFallbackToNameOnly(t *testing.T) {
 	}
 }
 
+func TestLocalStore_SearchContentCompleteSearchesPastBrowseCap(t *testing.T) {
+	s := newTestStore(t)
+	for i := 0; i <= defaultListCap; i++ {
+		body := "ordinary"
+		if i == defaultListCap {
+			body = "needle-after-cap"
+		}
+		name := filepath.Join(s.root, fmt.Sprintf("file-%04d.txt", i))
+		if err := os.WriteFile(name, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	listed, err := s.ListAll(context.Background(), "/", true)
+	if err != nil || len(listed) != defaultListCap+1 {
+		t.Fatalf("ListAll len=%d err=%v", len(listed), err)
+	}
+	extract := func(_ context.Context, data []byte, _ string) string { return string(data) }
+	hits, err := s.SearchContentComplete(context.Background(), "needle-after-cap", 5, extract)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 || hits[0].Name != "file-2000.txt" {
+		t.Fatalf("complete hits = %+v", hits)
+	}
+}
+
+func TestLocalStore_SearchContentPrioritizesExactFilenamePastContentLimit(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	for i := range 5 {
+		mustPut(t, s, fmt.Sprintf("/a-content-%d.txt", i), "needle in body")
+	}
+	mustPut(t, s, "/z-needle-exact.txt", "ordinary body")
+	extract := func(_ context.Context, data []byte, _ string) string { return string(data) }
+
+	hits, err := s.SearchContentComplete(ctx, "needle", 5, extract)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 5 {
+		t.Fatalf("hits = %d, want capped 5: %+v", len(hits), hits)
+	}
+	foundExact := false
+	for _, hit := range hits {
+		if hit.Name == "z-needle-exact.txt" {
+			foundExact = true
+		}
+	}
+	if !foundExact {
+		t.Fatalf("exact filename was displaced by earlier content matches: %+v", hits)
+	}
+}
+
+func TestFinishContentSearchPreservesIncompleteCoverageAtResultCap(t *testing.T) {
+	hits, err := finishContentSearch([]Entry{{Tag: "file", Name: "needle.txt"}}, true)
+	if !errors.Is(err, ErrContentSearchPartial) || len(hits) != 1 {
+		t.Fatalf("hits=%+v err=%v, want preserved hit plus partial", hits, err)
+	}
+}
+
+func TestLocalStore_SearchContentCompleteReportsOversizedCoverageGap(t *testing.T) {
+	s := newTestStore(t)
+	path := filepath.Join(s.root, "large.txt")
+	if err := os.WriteFile(path, []byte("prefix"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(path, MaxContentExtractBytes+1); err != nil {
+		t.Fatal(err)
+	}
+	hits, err := s.SearchContentComplete(context.Background(), "not-in-name", 5, func(_ context.Context, data []byte, _ string) string {
+		return string(data)
+	})
+	if !errors.Is(err, ErrContentSearchPartial) || len(hits) != 0 {
+		t.Fatalf("hits=%+v err=%v, want empty partial", hits, err)
+	}
+}
+
 // TestLocalStore_RejectsPathEscape is the security-critical test: a virtual path
 // with "../" (or absolute re-anchoring) must never read or write outside the root.
 func TestLocalStore_RejectsPathEscape(t *testing.T) {
@@ -270,6 +349,27 @@ func TestLocalStore_RejectsPathEscape(t *testing.T) {
 	// The write should have been clamped to root/secret.txt instead.
 	if _, err := os.Stat(filepath.Join(root, "secret.txt")); err != nil {
 		t.Errorf("clamped write not found inside root: %v", err)
+	}
+
+	link := filepath.Join(root, "outside-link.txt")
+	if err := os.Symlink(secret, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Get(ctx, "/outside-link.txt"); !errors.Is(err, ErrPathEscape) {
+		t.Fatalf("symlink Get error = %v, want ErrPathEscape", err)
+	}
+	entries, err := s.ListAll(ctx, "/", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.Name == "outside-link.txt" {
+			t.Fatalf("symlink escaped into listing: %+v", entry)
+		}
+	}
+	hits, err := s.SearchContentComplete(ctx, "TOPSECRET", 5, func(_ context.Context, data []byte, _ string) string { return string(data) })
+	if err != nil || len(hits) != 0 {
+		t.Fatalf("symlink content search hits=%+v err=%v", hits, err)
 	}
 }
 

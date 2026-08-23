@@ -270,4 +270,56 @@ class DenebWebViewStateTest {
         )
         assertEquals("번역할 텍스트 없음", browserTranslationStatusText(BrowserTranslationProgress(scanned = true)))
     }
+
+    @Test
+    fun closePopupTicksOnlyWhileAPopupIsAttached() {
+        val state = DenebWebViewState("https://example.com")
+
+        state.closePopup()
+        assertEquals(0, state.closePopupTick)
+        assertFalse(state.popupActive)
+
+        state.attachPopup("https://pay.example/auth", "결제")
+        assertTrue(state.popupActive)
+        assertEquals("https://pay.example/auth", state.popupUrl)
+        assertEquals("결제", state.popupTitle)
+
+        state.closePopup()
+        state.closePopup()
+        assertEquals(2, state.closePopupTick)
+        assertTrue(state.popupActive)
+
+        state.detachPopup()
+        assertFalse(state.popupActive)
+        assertEquals("", state.popupUrl)
+        state.closePopup()
+        assertEquals(2, state.closePopupTick)
+    }
+
+    @Test
+    fun retryWhilePopupClearsPopupErrorWithoutTouchingTheOpener() {
+        val state = DenebWebViewState("https://example.com")
+        state.loadError = "오프너 실패"
+        state.attachPopup("https://pay.example/auth")
+        state.popupError = "결제 창을 열지 못했습니다"
+
+        state.retry()
+
+        assertEquals(1, state.retryTick)
+        assertEquals(null, state.popupError)
+        assertEquals("오프너 실패", state.loadError)
+    }
+
+    @Test
+    fun commandCursorDoesNotReplayClosePopupAfterReattach() {
+        val state = DenebWebViewState("https://example.com")
+        state.attachPopup("https://pay.example/auth")
+        state.closePopup()
+        val attached = BrowserCommandCursor(state)
+
+        assertFalse(attached.consumeClosePopup(state))
+        state.closePopup()
+        assertTrue(attached.consumeClosePopup(state))
+        assertFalse(attached.consumeClosePopup(state))
+    }
 }

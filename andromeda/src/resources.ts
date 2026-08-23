@@ -201,6 +201,7 @@ export const APPROVALS_RPC = {
   get: "miniapp.groupware.approvals.get",
   analyze: "miniapp.groupware.approvals.analyze",
   analysisCached: "miniapp.groupware.approvals.analysis_cached",
+  ask: "miniapp.groupware.approvals.ask",
 } as const;
 
 export const GROUPWARE_ERP_RPC = {

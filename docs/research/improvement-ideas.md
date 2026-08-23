@@ -52,6 +52,8 @@
 | 23 | 인물·거래 도시에 (Business Dossier) — ✅ 구현됨 | P2 | M |
 | 24 | 주간 기억 다이제스트 + dreamer 피드백 루프 — ✅ 구현됨 | P2 | S |
 | 25 | 드리머 팩트 원장 — 사실 단위 감사 로그 + 카운터 실측 — ✅ 구현됨 | P1 | M |
+| 26 | 드리머 반증 증거 큐 — 사용자 정정의 비평 주입 — ✅ 구현됨 | P1 | M |
+| 27 | 드리머 변경 기록 + 선택적 되돌리기 — ✅ 구현됨 | P2 | M |
 
 ---
 
@@ -470,6 +472,22 @@
 
 ---
 
+### 5.7 드리머 반증 증거 큐 — **P1 / M · implemented 2026-08-23**
+
+**무엇.** 사용자 정정이 드리머에 직접 도달하는 큐. 드림/다이제스트 카드의 정정(workfeed `Correct`)이 `.dream-corrections.jsonl`에 기록되고, 다음 비평 자격 사이클(제안 ≥3 · LLM 배선)의 비평 프롬프트에 "사용자 반증" 블록으로 주입된다 — 정정된 사실을 재진술·위반하는 제안은 drop 사유가 된다. 반증은 실제로 검토한 사이클만 소비하고, `DreamReport.CorrectionsConsidered`로 보고된다.
+
+**배경.** 비평·검증은 제안+인덱스만 봤다(`dreamer_critique.go`). 모순 채널은 LLM 스스로 제안하는 `supersedes`뿐 — 사용자의 정정은 채팅 턴과 수동 위키 수정으로 죽었다. 4.9 다이제스트가 약속한 "정정은 다음 검증 주기에 반영"의 실제 회로.
+
+---
+
+### 5.8 드리머 변경 기록 + 선택적 되돌리기 — **P2 / M · implemented 2026-08-23**
+
+**무엇.** 사이클별 구조화 변경 기록(`.dream-cycle-changes.jsonl` — 커밋 해시 → 생성/갱신/병합/만료/이동 페이지 맵)과 되돌리기 API 2종: `RevertDreamCycle`(사이클 전체 git revert)·`RevertDreamPages`(페이지별 선택 복원 — 갱신 페이지는 이전 내용, 사이클 생성 페이지는 삭제). `DreamReport.GitCommit`가 카드로 흘러 들르미 카드에 "되돌리기" 액션이 달린다(실패 시 카드 미정착·재시도). 감사 파일 두 종(팩트 원장·변경 기록)은 의도적으로 git 버전 관리 대상 — 커서 상태와 달리 드리머의 책무 흔적이라 스스로 못 고치게.
+
+**배경.** `WikiChangeSummary`는 산문이었고 되돌리기 최소 단위가 커밋 전체라 좋은 변경과 나쁜 변경이 함께 죽거나 함께 살아야 했다. 4.7에서 의도적으로 뺐던 dream 카드 되돌리기 액션의 안전한 기반.
+
+---
+
 ## 6. 인프라/운영 (Ops)
 
 ### 6.1 Live-test 시간 단축 — **P2 / M**
@@ -524,6 +542,8 @@
 - 4.9 주간 기억 다이제스트 + dreamer 피드백 (implemented 2026-08-23)
 - 5.5 개인 MCP 브로커 (implemented 2026-08-23 — §8 개정 완료)
 - 5.6 드리머 팩트 원장 + 카운터 실측 (implemented 2026-08-23)
+- 5.7 드리머 반증 증거 큐 (implemented 2026-08-23)
+- 5.8 드리머 변경 기록 + 선택적 되돌리기 (implemented 2026-08-23)
 
 ### Later — 분기 단위 (P3)
 
@@ -562,8 +582,11 @@
 | 2026-08-23 | ZCode (GLM-5.3) | 4.7 Trust Inbox 구현 — 자기교정 감시 태스크(신규 후보 승인/거절 카드) + dream 카드 확인 액션 + 안드로이드 알림 tray 승인/거절 버튼. 기존 auto-apply 표면(meta·graduation·evolve verdict) 카드는 이미 존재해 재활용 |
 | 2026-08-23 | ZCode (GLM-5.3) | 4.9 주간 기억 다이제스트 구현 — DreamReport 롤업(`dream-reports.jsonl`) + 주간 다이제스트 카드(확인/틀린 기억 알리기 → 정정 턴) |
 | 2026-08-23 | ZCode (GLM-5.3) | 4.8 Business Dossier 구현 — `miniapp.person.dossier` RPC(메일 롤업 + phoneledger 통화·알림 + 위키 전문검색 조인) + 안드로이드 사람 화면·안드로메다 PersonCard 도시에 섹션 |
+| 2026-08-23 | ZCode (GLM-5.3) | 5.8 변경 기록+선택적 되돌리기 구현 — 사이클 변경 맵 + RevertDreamCycle/RevertDreamPages + dream 카드 되돌리기 액션 |
+| 2026-08-23 | ZCode (GLM-5.3) | 5.7 반증 증거 큐 구현 — 드림/다이제스트 카드 정정 → 비평 프롬프트 반증 블록 주입·소비 |
 | 2026-08-23 | ZCode (GLM-5.3) | 드리머 개선 3건(5.6–5.8) 착수 — 5.6 팩트 원장 구현 완료. 사실: 4.9 다이제스트가 항상 0이던 레거시 카운터를 집계하고 있었음을 발견·수정 |
 | 2026-08-23 | ZCode (GLM-5.3) | 5.5 개인 MCP 브로커 구현 — `DENEB_MCP_TOKEN` 전용 토큰 분리(상수시간 비교, 클라이언트 토큰 공존) + §8 스코프 명시 개정 + `docs/tools/mcp-broker.md` 가이드. tailnet serve 노출은 운영자 절차로 가이드 |
+| 2026-08-23 | Claude (Fable 5) | 위키 전용 개선안을 별도 문서로 분리 — [wiki-improvement-plan-2026-08](wiki-improvement-plan-2026-08.md) (W1~W17: verify 자동이동·드리머 정체성·동일ID 병합·supersede 가드 P0, 메일 재분류·원장 위치·인물·계측·링크 P1, 저장/성능·라우팅·표면·린트 P2) |
 
 ---
 
@@ -572,4 +595,5 @@
 - 코드 인벤토리: Explore 에이전트 (2026-05-25) — `gateway-go/` 핵심 파일 LOC, 테스트 커버리지 갭, 컴팩션 tier 점검
 - 도메인 규칙: `docs/agent-rules/{go-gateway,prompt-cache,concurrency,logging,live-testing,optimization}.md`
 - 최근 4.22.x CHANGELOG: Polaris/Wiki/단일사용자 simplification 흐름
+- 위키 전용 개선안: `docs/research/wiki-improvement-plan-2026-08.md` (2026-08-23, 10영역 조사 + 3렌즈 검증; 본 문서 §4.7~4.9·5.6과 교차)
 - 관련 research: `docs/research/{hermes-agent-analysis,hermes-deneb-mapping,tool-interception-gap}.md`

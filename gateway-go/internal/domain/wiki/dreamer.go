@@ -428,6 +428,12 @@ type dreamCycle struct {
 	created      int
 	updated      int
 	userPages    int
+	// mergedPages/expiredPages/movedPages collect the verify fixes this cycle
+	// applied — the per-cycle change record (5.8) maps them to the cycle's git
+	// commit for selective revert.
+	mergedPages  []string
+	expiredPages []string
+	movedPages   []string
 	// appliedPaths are the pages this cycle actually wrote (created or
 	// updated). The processed-capsule history records THESE, not the proposed
 	// paths — a dropped proposal never existed on disk, and recording it would
@@ -616,8 +622,18 @@ func (wd *WikiDreamer) synthesizeDreamCycle(ctx context.Context, cycle *dreamCyc
 
 	// Offline self-critique (P3): a second, cheap model pass drops proposals that
 	// duplicate the index or add no knowledge, before they reach the store.
-	updates, dropped := wd.critiqueUpdates(ctx, updates)
+	// Pending user corrections (5.7) ride along as 반증 evidence; the cycle that
+	// actually ran the critique consumes them, a skipped critique leaves them
+	// pending for the next eligible cycle.
+	dreamCorrections := wd.pendingDreamCorrections()
+	updates, dropped := wd.critiqueUpdates(ctx, updates, dreamCorrections)
 	cycle.report.CritiqueDropped = dropped
+	if len(dreamCorrections) > 0 && wd.client != nil && cycle.report.WikiUpdatesProposed >= critiqueMinUpdates {
+		wd.consumeDreamCorrections(dreamCorrections)
+		cycle.report.CorrectionsConsidered = len(dreamCorrections)
+		wd.logger.Info("wiki-dream: user corrections injected into critique",
+			"corrections", len(dreamCorrections))
+	}
 
 	gated, demandDropped := applyDemandGate(cycle.synthInput, updates)
 	if demandDropped > 0 {
@@ -816,12 +832,15 @@ func (wd *WikiDreamer) rebuildAndVerifyDreamWiki(ctx context.Context, cycle *dre
 		switch f.Fix.Kind {
 		case "merge":
 			cycle.report.FactsMerged++
+			cycle.mergedPages = append(cycle.mergedPages, f.PageA)
 			wd.recordDreamFact("verify", "merged", f.PageA, f.PageB, f.Detail)
 		case "archive":
 			cycle.report.FactsExpired++
+			cycle.expiredPages = append(cycle.expiredPages, f.PageA)
 			wd.recordDreamFact("verify", "expired", f.PageA, "", f.Detail)
 		case "move":
 			cycle.report.FactsMoved++
+			cycle.movedPages = append(cycle.movedPages, f.Fix.NewPath)
 			wd.recordDreamFact("verify", "moved", f.Fix.NewPath, f.PageA, f.Detail)
 		}
 	}
@@ -974,12 +993,14 @@ func (wd *WikiDreamer) completeDreamCycle(ctx context.Context, cycle *dreamCycle
 
 	message := fmt.Sprintf("dream: +%d페이지 생성, %d페이지 수정", cycle.created, cycle.updated)
 	if hash := wd.store.SnapshotGit(ctx, message); hash != "" {
+		cycle.report.GitCommit = hash
 		cycle.report.WikiChangeSummary = formatWikiChangeSummary(
 			hash,
 			wd.store.gitSnapshotStat(ctx, hash),
 			wd.store.Dir(),
 			updatePaths(cycle.updates),
 		)
+		wd.recordDreamCycleChanges(hash, cycle)
 	}
 
 	wd.logger.Info("wiki-dream: cycle complete",

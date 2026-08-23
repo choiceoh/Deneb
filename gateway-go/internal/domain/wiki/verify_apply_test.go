@@ -33,10 +33,16 @@ func TestRecategorizedPath_SwapsLeadingCategoryDirNoopOnSameOrInvalid(t *testing
 		path, newCat, want string
 	}{
 		{"기타/김부장.md", "인물", "인물/김부장.md"},
-		{"기타/김부장.md", "기타", ""},              // same category → no move
-		{"기타/김부장.md", "엉뚱", ""},              // invalid category → no move
-		{"김부장.md", "인물", ""},                 // no category segment → skip
-		{"프로젝트/거래/x.md", "업무", "업무/거래/x.md"}, // only the leading dir swaps
+		{"기타/김부장.md", "기타", ""}, // same category → no move
+		{"기타/김부장.md", "엉뚱", ""}, // invalid category → no move
+		{"김부장.md", "인물", ""},    // no category segment → skip
+		// A sub-folder is a layout slot, not a category: swapping the leading
+		// dir used to mint 업무/거래/ — a bucket nothing writes to or reads from.
+		{"프로젝트/거래/x.md", "업무", ""},
+		{"기타/거래/x.md", "프로젝트", ""},
+		// 프로젝트/ is folder-structured (프로젝트/<code>/대표.md); a page cannot be
+		// promoted into it by renaming its leading segment.
+		{"기타/김부장.md", "프로젝트", ""},
 	}
 	for _, c := range cases {
 		if got := recategorizedPath(c.path, c.newCat); got != c.want {
@@ -95,15 +101,16 @@ func TestApplyVerifyFixes_MergeFoldsPagePreservingBothBodies(t *testing.T) {
 	}
 }
 
-func TestApplyVerifyFixes_IgnoresAdvisoryAndCapsAppliedFixCount(t *testing.T) {
+func TestApplyVerifyFixes_IgnoresAdvisoryAndCapsMovesPerCycle(t *testing.T) {
 	s, wd := newVerifyStore(t)
 	// One advisory finding (no Fix) must be ignored entirely.
 	advisory := verifyFinding{Type: "misclassified", PageA: "기타/keep.md", Detail: "low-confidence"}
 	writePageT(t, s, "기타/keep.md", "keep", "기타", "stays put")
 
-	// Cap+1 high-confidence moves — the cap must hold, leaving exactly one behind.
+	// More moves than the per-cycle move cap: the cap must hold so a bad verdict
+	// list relocates a handful of reversible pages, not the whole category.
 	var names []string
-	for i := 0; i <= maxAutoVerifyFixes; i++ {
+	for i := 0; i <= maxAutoMovesPerCycle; i++ {
 		names = append(names, fmt.Sprintf("p%02d", i))
 	}
 	var findings []verifyFinding
@@ -118,8 +125,8 @@ func TestApplyVerifyFixes_IgnoresAdvisoryAndCapsAppliedFixCount(t *testing.T) {
 	findings = append([]verifyFinding{advisory}, findings...)
 
 	n := wd.applyVerifyFixes(findings, nil)
-	if n != maxAutoVerifyFixes {
-		t.Fatalf("applied = %d, want %d (cap)", n, maxAutoVerifyFixes)
+	if n != maxAutoMovesPerCycle {
+		t.Fatalf("applied = %d, want %d (move cap)", n, maxAutoMovesPerCycle)
 	}
 	// The advisory page is untouched.
 	if p, _ := s.ReadPage("기타/keep.md"); p == nil {
@@ -189,5 +196,92 @@ func TestExactDupFinding_PicksHigherImportancePageAsKeeperWithMergeFix(t *testin
 	}
 	if f.Fix == nil || f.Fix.Kind != "merge" {
 		t.Errorf("expected a merge Fix, got %+v", f.Fix)
+	}
+}
+
+// TestFoldDuplicate_RefusesLayoutSlotAndCrossProjectRepFolds: a project folder's
+// 대표/로그/상세 are distinct documents about one project, and two 대표 pages under
+// different codes are two projects — neither pair is ever a duplicate no matter
+// how a detector decided it. Both shapes fired in 2026-08 and destroyed live
+// pages (대표 ← 로그 ×3, pl2-kia-epc-001/대표 ← pl2-kia-epc-002/대표).
+func TestFoldDuplicate_RefusesLayoutSlotAndCrossProjectRepFolds(t *testing.T) {
+	s, _ := newVerifyStore(t)
+	rep := "프로젝트/pl2-kia-epc-002/대표.md"
+	logPage := "프로젝트/pl2-kia-epc-002/로그.md"
+	sibling := "프로젝트/pl2-kia-epc-001/대표.md"
+	detail := "프로젝트/pl2-kia-epc-002/기아-모듈-입찰.md"
+	for _, p := range []string{rep, logPage, sibling, detail} {
+		writePageT(t, s, p, "기아 AL광주 2공장 태양광", "프로젝트", "본문 "+p)
+	}
+
+	for _, c := range []struct{ keep, fold, why string }{
+		{rep, logPage, "대표 ← 로그 (same project)"},
+		{rep, detail, "대표 ← 상세 (same project)"},
+		{sibling, rep, "대표 ← 대표 (different project codes)"},
+	} {
+		if err := s.FoldDuplicate(c.keep, c.fold); err == nil {
+			t.Errorf("FoldDuplicate allowed %s", c.why)
+		}
+		if p, _ := s.ReadPage(c.fold); p == nil {
+			t.Errorf("%s: fold page destroyed despite the guard", c.why)
+		}
+	}
+
+	// Repairs that legitimately fold across project folders still work: a
+	// cross-category duplicate, a spelling-variant folder (non-code names), and
+	// the legacy flat remnant folding into its 대표 slot.
+	writePageT(t, s, "업무/중복.md", "중복", "업무", "A")
+	writePageT(t, s, "기타/중복.md", "중복", "기타", "B")
+	if err := s.FoldDuplicate("업무/중복.md", "기타/중복.md"); err != nil {
+		t.Errorf("ordinary duplicate fold rejected: %v", err)
+	}
+	writePageT(t, s, "프로젝트/탑솔라/대표.md", "탑솔라", "프로젝트", "정본")
+	writePageT(t, s, "프로젝트/탑솔라-중복/대표.md", "탑솔라", "프로젝트", "변형 표기")
+	if err := s.FoldDuplicate("프로젝트/탑솔라/대표.md", "프로젝트/탑솔라-중복/대표.md"); err != nil {
+		t.Errorf("spelling-variant project fold rejected: %v", err)
+	}
+	writePageT(t, s, "프로젝트/영산고/대표.md", "영산고", "프로젝트", "슬롯")
+	writePageT(t, s, "프로젝트/영산고.md", "영산고", "프로젝트", "flat 잔재")
+	if err := s.FoldDuplicate("프로젝트/영산고/대표.md", "프로젝트/영산고.md"); err != nil {
+		t.Errorf("legacy flat remnant fold rejected: %v", err)
+	}
+}
+
+// TestDetectDuplicates_SameIDDifferentTitleStaysAdvisory: `id` is overwritten by
+// LLM writers, so an id collision alone must not carry a merge Fix — that is how
+// a stamped id folded unrelated pages. Same id AND same normalized title still
+// auto-merges.
+func TestDetectDuplicates_SameIDDifferentTitleStaysAdvisory(t *testing.T) {
+	entries := map[string]IndexEntry{
+		"시스템/vaultwarden.md": {Title: "Vaultwarden", Category: "시스템", ID: "shared-id"},
+		"기타/isw-가족-소유.md":    {Title: "ISW 가족 소유", Category: "기타", ID: "shared-id"},
+		"업무/a.md":            {Title: "영산고 태양광", Category: "업무", ID: "twin"},
+		"업무/b.md":            {Title: "영산고-태양광", Category: "업무", ID: "twin"},
+	}
+
+	byPair := map[string]verifyFinding{}
+	for _, f := range detectDuplicates(entries) {
+		byPair[f.PageA+"|"+f.PageB] = f
+	}
+	collision, ok := byPair["기타/isw-가족-소유.md|시스템/vaultwarden.md"]
+	if !ok {
+		collision, ok = byPair["시스템/vaultwarden.md|기타/isw-가족-소유.md"]
+	}
+	if !ok {
+		t.Fatalf("id collision not reported at all: %+v", byPair)
+	}
+	if collision.Fix != nil {
+		t.Errorf("id collision with different titles carries a fix %+v, want advisory", collision.Fix)
+	}
+	if !strings.Contains(collision.Detail, "동일한 ID(제목 상이)") {
+		t.Errorf("collision detail = %q, want the id-conflict wording", collision.Detail)
+	}
+
+	twin, ok := byPair["업무/a.md|업무/b.md"]
+	if !ok {
+		t.Fatalf("same-title twins not reported: %+v", byPair)
+	}
+	if twin.Fix == nil || twin.Fix.Kind != "merge" {
+		t.Errorf("same id + same normalized title fix = %+v, want merge", twin.Fix)
 	}
 }

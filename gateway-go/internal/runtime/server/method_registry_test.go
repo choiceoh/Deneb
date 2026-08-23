@@ -167,6 +167,9 @@ var requiredMethods = []string{
 	// non-nil (it degrades to an empty snapshot when the tracker is unwired), so
 	// the read handler registers unconditionally.
 	"miniapp.rsi.status",
+	// Unified personal search always registers: the local file source remains
+	// available even when wiki or archive mail are not configured.
+	"miniapp.search.all",
 	// Project digests — the store is a stateless dir wrapper (always non-nil),
 	// so the read handler registers unconditionally (empty until the dream
 	// cycle writes the first digest).
@@ -198,6 +201,7 @@ var requiredMethods = []string{
 	"miniapp.groupware.approvals.attachment",
 	"miniapp.groupware.approvals.analysis_cached",
 	"miniapp.groupware.approvals.analyze",
+	"miniapp.groupware.approvals.ask",
 	"miniapp.groupware.erp.list",
 	// Single-topic background editor — registers whenever topics resolve
 	// (the test harness loads the real deneb.json topics map {"0":"업무"}).

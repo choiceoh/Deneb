@@ -36,6 +36,7 @@ import ai.deneb.deneb.DenebSkillScreen
 import ai.deneb.deneb.DenebTodoAddScreen
 import ai.deneb.deneb.DenebUsageScreen
 import ai.deneb.deneb.DenebWikiPageScreen
+import ai.deneb.deneb.filesDownloadUrl
 import ai.deneb.deneb.hiddenMoreTilesForUi
 import ai.deneb.deneb.markWorkFeedRead
 import ai.deneb.deneb.openWorkFeedItem
@@ -454,6 +455,8 @@ internal fun AppContent(
                                                 onBack = { navController.navigateUp() },
                                                 onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
                                                 onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
+                                                onOpenFile = { hit -> openUrl(client.filesDownloadUrl(hit.path)) },
+                                                onOpenMail = { id -> navController.navigate(DenebMailDetail(id)) },
                                                 onOpenCategories = { navController.navigate(DenebCategories) },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                                             )

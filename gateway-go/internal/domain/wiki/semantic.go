@@ -890,10 +890,31 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 		si.cacheDimensions = identity.Dimensions
 	}
 	si.cachePreprocessing = semanticPreprocessingVersion
-	for rp, hash := range want {
-		if cur, ok := si.vecs[rp]; !ok || cur.hash != hash || !validCachedSemanticPage(cur, identity.Dimensions) {
-			toEmbed = append(toEmbed, rp)
+	// A moved page arrives as a new path with no cache entry, so a pure
+	// path-keyed comparison re-embeds text that is byte-identical to what the
+	// old path already holds. Chunk offsets are body-relative, so the cached
+	// vectors transfer exactly. This matters because relocation comes in
+	// batches — deal-ledger normalization, orphan-mail refiles, layout repairs —
+	// and each batch otherwise costs a full re-embed plus a whole-cache rewrite.
+	byHash := make(map[string]cachedVec, len(si.vecs))
+	for rp, cur := range si.vecs {
+		if _, stillThere := want[rp]; stillThere {
+			continue // only vanished paths are relocation candidates
 		}
+		if validCachedSemanticPage(cur, identity.Dimensions) {
+			byHash[cur.hash] = cur
+		}
+	}
+	for rp, hash := range want {
+		if cur, ok := si.vecs[rp]; ok && cur.hash == hash && validCachedSemanticPage(cur, identity.Dimensions) {
+			continue
+		}
+		if moved, ok := byHash[hash]; ok {
+			si.vecs[rp] = moved
+			mutated = true
+			continue
+		}
+		toEmbed = append(toEmbed, rp)
 	}
 	// Drop entries for pages that no longer exist.
 	for rp := range si.vecs {

@@ -119,9 +119,9 @@ internal class BrowserJsDialog(
 }
 
 /**
- * A `window.open` / `target=_blank` hitch has reached a real target URL.
- * Skip blank/about/javascript — OAuth often opens `about:blank` first, then
- * navigates; the browser waits for that real URL before opening a tab.
+ * True when a stolen popup URL is worth adopting as a navigation target.
+ * Live popups no longer use this path — the child WebView stays attached —
+ * but the predicate still documents which URLs are real vs hitch placeholders.
  */
 internal fun browserAdoptPopupUrl(url: String): Boolean {
     val s = url.trim()

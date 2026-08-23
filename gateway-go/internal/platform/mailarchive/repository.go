@@ -27,6 +27,7 @@ const (
 
 var (
 	ErrArchiveUnavailable      = errors.New("mailarchive: archive unavailable")
+	ErrArchivePartial          = errors.New("mailarchive: partial search")
 	ErrArchiveUnsupportedQuery = errors.New("mailarchive: unsupported query")
 	ErrArchiveNotFound         = errors.New("mailarchive: message not found")
 )
@@ -113,12 +114,16 @@ func NewRepository(cfg Config, opts RepositoryOptions) *Repository {
 
 // Search returns the first page of messages matching query.
 func (r *Repository) Search(ctx context.Context, query string, maxResults int) ([]gmail.MessageSummary, error) {
-	rows, _, err := r.SearchPage(ctx, query, "", maxResults)
+	rows, _, err := r.searchPage(ctx, query, "", maxResults, true)
 	return rows, err
 }
 
 // SearchPage returns a page of archive messages and the next page token.
 func (r *Repository) SearchPage(ctx context.Context, query, pageToken string, maxResults int) ([]gmail.MessageSummary, string, error) {
+	return r.searchPage(ctx, query, pageToken, maxResults, false)
+}
+
+func (r *Repository) searchPage(ctx context.Context, query, pageToken string, maxResults int, reportPartial bool) ([]gmail.MessageSummary, string, error) {
 	if r == nil || !r.archiveEnabled() {
 		return r.fallbackSearchPage(ctx, query, pageToken, maxResults)
 	}
@@ -129,8 +134,17 @@ func (r *Repository) SearchPage(ctx context.Context, query, pageToken string, ma
 	if spec.Degraded != "" {
 		slog.Warn("mailarchive: query degraded to recent view", "query", query, "reason", spec.Degraded)
 	}
-	rows, next, err := r.searchArchive(ctx, spec, pageToken, maxResults)
+	rows, next, err := r.searchArchive(ctx, spec, pageToken, maxResults, reportPartial)
 	if err != nil {
+		if errors.Is(err, ErrArchivePartial) {
+			if reportPartial {
+				return rows, next, err
+			}
+			// Existing paged inbox callers have no partial-state wire contract yet;
+			// preserve their historical best-effort rows. Unified search opts in
+			// above and reports the incomplete source explicitly.
+			return rows, next, nil
+		}
 		if r.fallback != nil {
 			return r.fallback.SearchPage(ctx, query, pageToken, maxResults)
 		}
