@@ -52,6 +52,7 @@ class WorkFeedNativeSyncStateMachineTest {
     private fun syncPayload(
         cursor: Long,
         hasMore: Boolean = false,
+        truncated: Boolean = false,
         vararg events: NativeSyncEvent,
     ): String = json.encodeToString(
         NativeSyncPayload(
@@ -59,6 +60,7 @@ class WorkFeedNativeSyncStateMachineTest {
             cursor = cursor,
             latestSeq = cursor,
             hasMore = hasMore,
+            truncated = truncated,
         ),
     )
 
@@ -626,6 +628,39 @@ class WorkFeedNativeSyncStateMachineTest {
 
         assertEquals(40, f.transport.requests.size)
         assertEquals(40L, f.client.nativeSyncCursor)
+    }
+
+    @Test
+    fun truncatedSyncResyncsWholesaleInsteadOfTrustingTheDelta() = runTest {
+        // Server retention rotated past our cursor (truncated=true): the
+        // retained tail still applies, but the pruned range is unrecoverable —
+        // so the feed must be replaced from server truth and the home warm must
+        // fire despite prepareSuccessfulSync arming its throttle (battery doc
+        // §3.1, the last open gap behind the background-Doze handoff).
+        val f = gatewayClientFixture()
+        f.prepareSuccessfulSync(feed = listOf(item("stale")))
+        f.transport.enqueueRpc(
+            syncPayload(
+                cursor = 9,
+                truncated = true,
+                events = arrayOf(event("workfeed.created", 9, item("retained"))),
+            ),
+        )
+        f.transport.enqueueRpc(workFeedPayload(item("fresh-one"), item("fresh-two")))
+        f.transport.enqueueRpc("{}") // calendar.list_upcoming — forced warm
+        f.transport.enqueueRpc("{}") // mail.list_recent — forced warm
+        f.transport.enqueueRpc("{}") // mail.native_status — refreshMail tail
+
+        assertTrue(f.client.syncNativeState())
+
+        assertEquals(9L, f.client.nativeSyncCursor)
+        // The wholesale replace wins over both the retained-tail delta and the
+        // stale pre-sync feed.
+        assertEquals(listOf("fresh-one", "fresh-two"), f.client.denebWorkFeed.value.map { it.id })
+        val methods = f.transport.requests.mapNotNull { it.rpcMethod }
+        assertTrue(methods.contains("miniapp.workfeed.list"), "methods=$methods")
+        assertTrue(methods.contains("miniapp.calendar.list_upcoming"), "methods=$methods")
+        assertTrue(methods.contains("miniapp.mail.list_recent"), "methods=$methods")
     }
 
     @Test

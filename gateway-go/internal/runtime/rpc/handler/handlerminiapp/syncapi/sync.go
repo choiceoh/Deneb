@@ -58,6 +58,7 @@ func syncPull(deps SyncDeps) rpcutil.HandlerFunc {
 			"cursor":       result.Cursor,
 			"latestSeq":    result.LatestSeq,
 			"hasMore":      result.HasMore,
+			"truncated":    result.Truncated,
 			"count":        len(result.Events),
 			"serverTimeMs": time.Now().UnixMilli(),
 		})
