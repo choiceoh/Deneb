@@ -428,6 +428,12 @@ type dreamCycle struct {
 	created      int
 	updated      int
 	userPages    int
+	// mergedPages/expiredPages/movedPages collect the verify fixes this cycle
+	// applied — the per-cycle change record (5.8) maps them to the cycle's git
+	// commit for selective revert.
+	mergedPages  []string
+	expiredPages []string
+	movedPages   []string
 	// appliedPaths are the pages this cycle actually wrote (created or
 	// updated). The processed-capsule history records THESE, not the proposed
 	// paths — a dropped proposal never existed on disk, and recording it would
@@ -826,12 +832,15 @@ func (wd *WikiDreamer) rebuildAndVerifyDreamWiki(ctx context.Context, cycle *dre
 		switch f.Fix.Kind {
 		case "merge":
 			cycle.report.FactsMerged++
+			cycle.mergedPages = append(cycle.mergedPages, f.PageA)
 			wd.recordDreamFact("verify", "merged", f.PageA, f.PageB, f.Detail)
 		case "archive":
 			cycle.report.FactsExpired++
+			cycle.expiredPages = append(cycle.expiredPages, f.PageA)
 			wd.recordDreamFact("verify", "expired", f.PageA, "", f.Detail)
 		case "move":
 			cycle.report.FactsMoved++
+			cycle.movedPages = append(cycle.movedPages, f.Fix.NewPath)
 			wd.recordDreamFact("verify", "moved", f.Fix.NewPath, f.PageA, f.Detail)
 		}
 	}
@@ -984,12 +993,14 @@ func (wd *WikiDreamer) completeDreamCycle(ctx context.Context, cycle *dreamCycle
 
 	message := fmt.Sprintf("dream: +%d페이지 생성, %d페이지 수정", cycle.created, cycle.updated)
 	if hash := wd.store.SnapshotGit(ctx, message); hash != "" {
+		cycle.report.GitCommit = hash
 		cycle.report.WikiChangeSummary = formatWikiChangeSummary(
 			hash,
 			wd.store.gitSnapshotStat(ctx, hash),
 			wd.store.Dir(),
 			updatePaths(cycle.updates),
 		)
+		wd.recordDreamCycleChanges(hash, cycle)
 	}
 
 	wd.logger.Info("wiki-dream: cycle complete",

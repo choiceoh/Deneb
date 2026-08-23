@@ -17,6 +17,7 @@ type nativeWorkFeedStore struct {
 	onLadderAction   func(workfeed.Item, string) error
 	onApprovalAct    func(workfeed.Item, string, string) error
 	onSelfCorrection func(workfeed.Item, string, string) error
+	onDreamRevert    func(workfeed.Item, string) error
 	// wikiDir routes dream-card corrections into the dreamer's 반증 queue
 	// (improvement-ideas 5.7); empty disables the funnel.
 	wikiDir string
@@ -38,6 +39,7 @@ func (s *Server) nativeWorkFeedStore() *nativeWorkFeedStore {
 		onLadderAction:   s.handleLadderCardAction,
 		onApprovalAct:    s.handleGroupwareApprovalAction,
 		onSelfCorrection: s.handleSelfCorrectionCardAction,
+		onDreamRevert:    s.handleDreamRevertCardAction,
 		wikiDir:          wikiDir,
 	}
 }
@@ -192,6 +194,10 @@ func (s *nativeWorkFeedStore) RunAction(itemID, actionID, comment string) (workf
 		if s.onSelfCorrection != nil && item.Source == selfCorrectionSource &&
 			(action.ID == workfeedApproveAction || action.ID == workfeedRejectAction) {
 			return s.onSelfCorrection(item, action.ID, approvalComment)
+		}
+		if s.onDreamRevert != nil && item.Source == workfeed.SourceDream &&
+			strings.HasPrefix(action.ID, dreamRevertActionPrefix) {
+			return s.onDreamRevert(item, action.ID)
 		}
 		return nil
 	}
