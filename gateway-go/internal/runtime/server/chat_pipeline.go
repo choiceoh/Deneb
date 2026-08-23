@@ -128,8 +128,14 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 			// migration resumes on the next clean startup.
 			return closeOnCutoverFailure(fmt.Errorf("initialize enabled wiki fact plane for workspace %q: %w", workspaceDir, cutoverErr))
 		}
+		// Bind persisted prompt snapshots to the canonical journal revision
+		// before asynchronous session restore. This closes both first-cutover and
+		// commit-before-cache-clear crash windows: an older Tier1/MEMORY snapshot
+		// is sanitized even when an idempotent restart imports zero new rows.
+		chat.SetFactDerivedRevision(uint64(wikiStore.LatestFactRevision()))
 
 		s.wikiStore = wikiStore
+		wikiStore.SetFactJournalFailureObserver(s.handleFactJournalFailure)
 		chatCfg.Memory.Wiki = wikiStore
 		s.logger.Info("wiki knowledge base and fact plane enabled", "dir", wikiCfg.Dir,
 			"revision", wikiStore.LatestFactRevision(), "legacyImported", imported)
@@ -475,8 +481,8 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		knowledge.NewWikiAdapter(s.wikiStore),
 		filesAdapter,
 	)
-	knowledgeRouter.SetFactMutationObserver(func(knowledge.FactMutationResult) {
-		chat.ClearFactDerivedCaches()
+	knowledgeRouter.SetFactMutationObserver(func(result knowledge.FactMutationResult) {
+		chat.ClearFactDerivedCachesAtRevision(result.Revision, result.ProjectionError)
 	})
 	toolwire.RegisterKnowledgeTool(chatCfg.Tools, knowledgeRouter)
 

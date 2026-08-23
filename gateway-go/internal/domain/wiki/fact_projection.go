@@ -198,10 +198,12 @@ func (s *Store) syncFactWorkspaceLocked() error {
 		{name: "MEMORY.md", path: filepath.Join(s.factProjectionDir, "MEMORY.md"), data: []byte(memory)},
 		{name: "USER.md", path: filepath.Join(s.factProjectionDir, "USER.md"), data: []byte(user)},
 	}
-	for _, target := range targets {
-		if err := preserveLegacyProjection(target.path); err != nil {
+	for i := range targets {
+		expected, err := preserveLegacyProjection(targets[i].path)
+		if err != nil {
 			return err
 		}
+		targets[i].expected = expected
 	}
 	rename := s.factProjectionRename
 	if rename == nil {
@@ -374,39 +376,98 @@ func factProjectionSource(source string) string {
 	return truncateFactContext(source, maxRunes)
 }
 
-func preserveLegacyProjection(path string) error {
-	raw, err := os.ReadFile(path)
+type factProjectionExpectedState uint8
+
+const (
+	factProjectionExpectedInvalid factProjectionExpectedState = iota
+	factProjectionExpectedMissing
+	factProjectionExpectedGenerated
+	factProjectionExpectedManual
+)
+
+type factProjectionExpectation struct {
+	state factProjectionExpectedState
+	raw   []byte
+}
+
+func preserveLegacyProjection(path string) (factProjectionExpectation, error) {
+	info, err := os.Lstat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return factProjectionExpectation{state: factProjectionExpectedMissing}, nil
 		}
-		return fmt.Errorf("read existing projection %s: %w", filepath.Base(path), err)
+		return factProjectionExpectation{}, fmt.Errorf("inspect existing projection %s: %w", filepath.Base(path), err)
+	}
+	if !info.Mode().IsRegular() {
+		return factProjectionExpectation{}, fmt.Errorf("preserve existing projection %s: source is not a regular file", filepath.Base(path))
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return factProjectionExpectation{}, fmt.Errorf("read existing projection %s: %w", filepath.Base(path), err)
 	}
 	if bytesContainGeneratedMarker(raw) {
-		return nil
+		return factProjectionExpectation{state: factProjectionExpectedGenerated, raw: raw}, nil
 	}
 	legacy := strings.TrimSuffix(path, filepath.Ext(path)) + ".legacy" + filepath.Ext(path)
-	if _, err := os.Stat(legacy); err == nil {
-		return nil
-	} else if !os.IsNotExist(err) {
-		return err
+	if legacyInfo, statErr := os.Lstat(legacy); statErr == nil {
+		if !legacyInfo.Mode().IsRegular() {
+			return factProjectionExpectation{}, fmt.Errorf("preserve existing projection %s: backup is not a regular file", filepath.Base(path))
+		}
+		backup, readErr := os.ReadFile(legacy)
+		if readErr != nil {
+			return factProjectionExpectation{}, fmt.Errorf("read existing projection backup %s: %w", filepath.Base(legacy), readErr)
+		}
+		if !bytes.Equal(backup, raw) {
+			return factProjectionExpectation{}, fmt.Errorf("preserve existing projection %s: live file differs from existing backup", filepath.Base(path))
+		}
+		return factProjectionExpectation{state: factProjectionExpectedManual, raw: raw}, nil
+	} else if !os.IsNotExist(statErr) {
+		return factProjectionExpectation{}, fmt.Errorf("inspect existing projection backup %s: %w", filepath.Base(legacy), statErr)
 	}
-	f, err := os.OpenFile(legacy, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	mode := info.Mode().Perm()
+	if mode == 0 {
+		mode = 0o600
+	}
+	f, err := os.OpenFile(legacy, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
-		return err
+		return factProjectionExpectation{}, fmt.Errorf("create existing projection backup %s: %w", filepath.Base(legacy), err)
+	}
+	cleanup := func(cause error) (factProjectionExpectation, error) {
+		_ = f.Close()
+		if removeErr := os.Remove(legacy); removeErr != nil && !os.IsNotExist(removeErr) {
+			return factProjectionExpectation{}, errors.Join(cause, fmt.Errorf("remove incomplete projection backup: %w", removeErr))
+		}
+		return factProjectionExpectation{}, cause
 	}
 	if _, err := f.Write(raw); err != nil {
-		_ = f.Close()
-		return err
+		return cleanup(fmt.Errorf("write existing projection backup %s: %w", filepath.Base(legacy), err))
 	}
 	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		return err
+		return cleanup(fmt.Errorf("sync existing projection backup %s: %w", filepath.Base(legacy), err))
 	}
 	if err := f.Close(); err != nil {
-		return err
+		if removeErr := os.Remove(legacy); removeErr != nil && !os.IsNotExist(removeErr) {
+			return factProjectionExpectation{}, errors.Join(
+				fmt.Errorf("close existing projection backup %s: %w", filepath.Base(legacy), err),
+				fmt.Errorf("remove incomplete projection backup: %w", removeErr),
+			)
+		}
+		return factProjectionExpectation{}, fmt.Errorf("close existing projection backup %s: %w", filepath.Base(legacy), err)
 	}
-	return syncFactParentDir(legacy)
+	if err := syncFactParentDir(legacy); err != nil {
+		if removeErr := os.Remove(legacy); removeErr != nil && !os.IsNotExist(removeErr) {
+			return factProjectionExpectation{}, errors.Join(err, fmt.Errorf("remove uncommitted projection backup: %w", removeErr))
+		}
+		return factProjectionExpectation{}, fmt.Errorf("sync existing projection backup directory: %w", err)
+	}
+	current, err := os.ReadFile(path)
+	if err != nil {
+		return factProjectionExpectation{}, fmt.Errorf("verify preserved projection %s: %w", filepath.Base(path), err)
+	}
+	if !bytes.Equal(current, raw) {
+		return factProjectionExpectation{}, fmt.Errorf("verify preserved projection %s: source changed during backup", filepath.Base(path))
+	}
+	return factProjectionExpectation{state: factProjectionExpectedManual, raw: raw}, nil
 }
 
 // preserveManualFactPage copies a pre-cutover wiki page byte-for-byte before
@@ -503,6 +564,7 @@ type factProjectionWrite struct {
 	previousMode   os.FileMode
 	previousExists bool
 	tmp            string
+	expected       factProjectionExpectation
 }
 
 func writeFactProjectionTransaction(targets []factProjectionWrite, rename func(string, string) error) error {
@@ -510,19 +572,19 @@ func writeFactProjectionTransaction(targets []factProjectionWrite, rename func(s
 		return nil
 	}
 	for i := range targets {
-		raw, err := os.ReadFile(targets[i].path)
+		raw, mode, exists, err := readFactProjectionForCommit(targets[i].path)
 		if err != nil {
-			if !os.IsNotExist(err) {
-				return fmt.Errorf("read existing %s projection: %w", targets[i].name, err)
-			}
-		} else {
+			cleanupFactProjectionTemps(targets)
+			return fmt.Errorf("read existing %s projection: %w", targets[i].name, err)
+		}
+		if err := verifyFactProjectionExpectation(targets[i], raw, exists); err != nil {
+			cleanupFactProjectionTemps(targets)
+			return err
+		}
+		if exists {
 			targets[i].previous = raw
 			targets[i].previousExists = true
-			info, err := os.Stat(targets[i].path)
-			if err != nil {
-				return fmt.Errorf("stat existing %s projection: %w", targets[i].name, err)
-			}
-			targets[i].previousMode = info.Mode().Perm()
+			targets[i].previousMode = mode
 		}
 		targets[i].tmp = targets[i].path + ".fact-prepare"
 		if err := writeFileSync(targets[i].tmp, targets[i].data, 0o600); err != nil {
@@ -533,6 +595,19 @@ func writeFactProjectionTransaction(targets []factProjectionWrite, rename func(s
 
 	committed := 0
 	for i := range targets {
+		current, _, exists, err := readFactProjectionForCommit(targets[i].path)
+		if err != nil || exists != targets[i].previousExists || exists && !bytes.Equal(current, targets[i].previous) {
+			cleanupFactProjectionTemps(targets)
+			rollbackErr := rollbackFactProjectionWrites(targets[:committed], rename)
+			cause := fmt.Errorf("verify preserved %s projection: source changed before commit", targets[i].name)
+			if err != nil {
+				cause = fmt.Errorf("verify preserved %s projection before commit: %w", targets[i].name, err)
+			}
+			if rollbackErr != nil {
+				return errors.Join(cause, fmt.Errorf("rollback failed: %w", rollbackErr))
+			}
+			return cause
+		}
 		if err := rename(targets[i].tmp, targets[i].path); err != nil {
 			cleanupFactProjectionTemps(targets)
 			rollbackErr := rollbackFactProjectionWrites(targets[:committed], rename)
@@ -559,6 +634,46 @@ func writeFactProjectionTransaction(targets []factProjectionWrite, rename func(s
 		return fmt.Errorf("sync workspace projection directory: %w", err)
 	}
 	return nil
+}
+
+func readFactProjectionForCommit(path string) ([]byte, os.FileMode, bool, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, 0, false, nil
+		}
+		return nil, 0, false, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, 0, true, fmt.Errorf("source is not a regular file")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, 0, true, err
+	}
+	return raw, info.Mode().Perm(), true, nil
+}
+
+func verifyFactProjectionExpectation(target factProjectionWrite, raw []byte, exists bool) error {
+	switch target.expected.state {
+	case factProjectionExpectedMissing:
+		if !exists {
+			return nil
+		}
+		return fmt.Errorf("verify preserved %s projection: source appeared after preservation", target.name)
+	case factProjectionExpectedGenerated:
+		if exists && bytes.Equal(raw, target.expected.raw) {
+			return nil
+		}
+		return fmt.Errorf("verify preserved %s projection: generated source changed after preservation", target.name)
+	case factProjectionExpectedManual:
+		if exists && bytes.Equal(raw, target.expected.raw) {
+			return nil
+		}
+		return fmt.Errorf("verify preserved %s projection: source changed after backup", target.name)
+	default:
+		return fmt.Errorf("verify preserved %s projection: expected source state is missing", target.name)
+	}
 }
 
 func cleanupFactProjectionTemps(targets []factProjectionWrite) {

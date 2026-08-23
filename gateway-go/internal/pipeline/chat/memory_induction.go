@@ -65,7 +65,7 @@ func maybeRunMemoryInduction(deps runDeps, params RunParams, result *agent.Agent
 					return
 				}
 				if factResult.Committed {
-					ClearFactDerivedCaches()
+					ClearFactDerivedCachesAtRevision(uint64(factResult.Revision), factResult.ProjectionError)
 					logger.Info("memory induction tombstoned fact",
 						"revision", factResult.Revision, "resolution", factResult.Resolution,
 						"session", sessionKey, "projectionDegraded", factResult.ProjectionError != "")
@@ -90,7 +90,7 @@ func maybeRunMemoryInduction(deps runDeps, params RunParams, result *agent.Agent
 				// The legacy context and tier-1 snapshots intentionally freeze per
 				// session. A rare explicit correction is the exception: clear all
 				// three derived caches so the old value cannot coexist next turn.
-				ClearFactDerivedCaches()
+				ClearFactDerivedCachesAtRevision(uint64(factResult.Revision), factResult.ProjectionError)
 				logger.Info(
 					"memory induction committed fact",
 					"revision", factResult.Revision,

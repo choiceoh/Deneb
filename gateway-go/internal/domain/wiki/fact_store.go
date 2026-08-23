@@ -194,6 +194,7 @@ type FactProjectionStatus struct {
 	Revision        FactRevision `json:"revision"`
 	Degraded        bool         `json:"degraded"`
 	ProjectionError string       `json:"projectionError,omitempty"`
+	JournalError    string       `json:"journalError,omitempty"`
 }
 
 func (s *Store) FactProjectionStatus() FactProjectionStatus {
@@ -204,9 +205,23 @@ func (s *Store) FactProjectionStatus() FactProjectionStatus {
 	defer s.factMu.RUnlock()
 	return FactProjectionStatus{
 		Revision:        s.factState.Revision,
-		Degraded:        s.factProjectionError != "",
+		Degraded:        s.factProjectionError != "" || s.factJournalPoisoned != "",
 		ProjectionError: s.factProjectionError,
+		JournalError:    s.factJournalPoisoned,
 	}
+}
+
+// SetFactJournalFailureObserver registers the process-fatal boundary for an
+// ambiguous journal append. The callback must not call back into Store: it runs
+// while the fact mutation lock is held so no reader can observe a half-decided
+// revision. The server uses it only to close admission and start shutdown.
+func (s *Store) SetFactJournalFailureObserver(observer func(error)) {
+	if s == nil {
+		return
+	}
+	s.factMu.Lock()
+	s.factJournalFailureObserver = observer
+	s.factMu.Unlock()
 }
 
 // SnapshotFacts returns a deep copy safe for callers to retain and inspect.
@@ -817,44 +832,97 @@ func strongestFactTombstone(claims []FactClaim) *factTombstoneBarrier {
 	return barrier
 }
 
+type factJournalAppendOutcome uint8
+
+const (
+	factJournalAppendNotStarted factJournalAppendOutcome = iota
+	factJournalAppendAmbiguous
+	factJournalAppendCommitted
+)
+
 func (s *Store) appendFactMutationLocked(mutation FactMutation) error {
+	if s.factJournalPoisoned != "" {
+		return fmt.Errorf("wiki: fact journal requires restart before another mutation: %s", s.factJournalPoisoned)
+	}
 	raw, err := json.Marshal(mutation)
 	if err != nil {
 		return fmt.Errorf("wiki: marshal fact mutation: %w", err)
 	}
 	path := filepath.Join(s.dir, factJournalFile)
-	created := false
-	if _, err := os.Stat(path); err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("wiki: stat fact journal: %w", err)
-		}
-		created = true
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return fmt.Errorf("wiki: open fact journal: %w", err)
-	}
 	record := make([]byte, len(raw)+1)
 	copy(record, raw)
 	record[len(raw)] = '\n'
+	appendRecord := s.factJournalAppend
+	if appendRecord == nil {
+		appendRecord = appendFactJournalRecord
+	}
+	outcome, appendErr := appendRecord(path, record)
+	switch outcome {
+	case factJournalAppendCommitted:
+		if appendErr != nil {
+			// File data reached fsync, which is the canonical commit point. A
+			// subsequent close error cannot make callers retry the same revision.
+			slog.Warn("fact journal close failed after durable commit",
+				"revision", mutation.Revision, "error", appendErr)
+		}
+		return nil
+	case factJournalAppendAmbiguous:
+		if appendErr == nil {
+			appendErr = fmt.Errorf("unknown append failure")
+		}
+		s.factJournalPoisoned = appendErr.Error()
+		fatalErr := fmt.Errorf("wiki: fact journal append is ambiguous; restart required: %w", appendErr)
+		if observer := s.factJournalFailureObserver; observer != nil {
+			observer(fatalErr)
+		}
+		return fatalErr
+	default:
+		if appendErr == nil {
+			appendErr = fmt.Errorf("fact journal append did not start")
+		}
+		return appendErr
+	}
+}
+
+func appendFactJournalRecord(path string, record []byte) (factJournalAppendOutcome, error) {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return factJournalAppendNotStarted, fmt.Errorf("wiki: open fact journal: %w", err)
+	}
 	if n, err := f.Write(record); err != nil {
 		_ = f.Close()
-		return fmt.Errorf("wiki: append fact journal: %w", err)
+		return factJournalAppendAmbiguous, fmt.Errorf("wiki: append fact journal: %w", err)
 	} else if n != len(record) {
 		_ = f.Close()
-		return fmt.Errorf("wiki: append fact journal: short write %d/%d", n, len(record))
+		return factJournalAppendAmbiguous, fmt.Errorf("wiki: append fact journal: short write %d/%d", n, len(record))
 	}
 	if err := f.Sync(); err != nil {
 		_ = f.Close()
-		return fmt.Errorf("wiki: sync fact journal: %w", err)
+		return factJournalAppendAmbiguous, fmt.Errorf("wiki: sync fact journal: %w", err)
 	}
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("wiki: close fact journal: %w", err)
+		return factJournalAppendCommitted, fmt.Errorf("wiki: close fact journal: %w", err)
 	}
-	if created {
-		if err := syncFactParentDir(path); err != nil {
-			return fmt.Errorf("wiki: sync fact journal directory: %w", err)
+	return factJournalAppendCommitted, nil
+}
+
+func ensureFactJournal(path string) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if os.IsExist(err) {
+			return nil
 		}
+		return fmt.Errorf("create fact journal: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("sync new fact journal: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close new fact journal: %w", err)
+	}
+	if err := syncFactParentDir(path); err != nil {
+		return fmt.Errorf("sync new fact journal directory: %w", err)
 	}
 	return nil
 }
@@ -1029,7 +1097,7 @@ func (s *Store) loadFactPlane() error {
 		if snapshotRevision > 0 {
 			return fmt.Errorf("fact journal missing for snapshot revision %d", snapshotRevision)
 		}
-		return nil
+		return ensureFactJournal(journalPath)
 	}
 
 	lines := bytes.Split(raw, []byte{'\n'})
@@ -1080,6 +1148,12 @@ func (s *Store) loadFactPlane() error {
 		if err := s.saveFactSnapshotLocked(); err != nil {
 			return fmt.Errorf("checkpoint fact snapshot: %w", err)
 		}
+	}
+	// Older binaries created the journal lazily on the first mutation. Sync its
+	// directory entry during startup so future append commit semantics never
+	// depend on an unproven create from a previous process.
+	if err := syncFactParentDir(journalPath); err != nil {
+		return fmt.Errorf("sync existing fact journal directory: %w", err)
 	}
 	return nil
 }

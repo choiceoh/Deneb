@@ -1119,6 +1119,27 @@ func TestFactWorkspaceProjectionRollsBackBothFilesOnSecondRenameFailure(t *testi
 		}
 	}
 	store.factProjectionRename = nil
+	changedUser := []byte("# USER\n\noperator edited after interrupted cutover\n")
+	if err := os.WriteFile(filepath.Join(workspace, "USER.md"), changedUser, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetFactProjectionDir(workspace); err == nil || !strings.Contains(err.Error(), "differs from existing backup") {
+		t.Fatalf("retry with changed live USER must fail closed, got %v", err)
+	}
+	for name, want := range map[string][]byte{
+		"MEMORY.md":        originalMemory,
+		"USER.md":          changedUser,
+		"MEMORY.legacy.md": originalMemory,
+		"USER.legacy.md":   originalUser,
+	} {
+		got, err := os.ReadFile(filepath.Join(workspace, name))
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("%s changed across fail-closed retry: got=%q want=%q err=%v", name, got, want, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "USER.md"), originalUser, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := store.SetFactProjectionDir(workspace); err != nil {
 		t.Fatal(err)
 	}
@@ -1127,6 +1148,94 @@ func TestFactWorkspaceProjectionRollsBackBothFilesOnSecondRenameFailure(t *testi
 		if err != nil || !bytesContainGeneratedMarker(raw) {
 			t.Fatalf("%s did not commit after retry: %s err=%v", name, raw, err)
 		}
+	}
+}
+
+func TestFactWorkspaceProjectionRejectsSourceEditAfterBackup(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "MEMORY.md")
+	original := []byte("# MEMORY\n\nmanual A\n")
+	changed := []byte("# MEMORY\n\nmanual B\n")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	expected, err := preserveLegacyProjection(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, changed, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err = writeFactProjectionTransaction([]factProjectionWrite{{
+		name: "MEMORY.md", path: path, data: []byte("generated"), expected: expected,
+	}}, os.Rename)
+	if err == nil || !strings.Contains(err.Error(), "source changed after backup") {
+		t.Fatalf("source edit after backup must fail closed, got %v", err)
+	}
+	if got, readErr := os.ReadFile(path); readErr != nil || !bytes.Equal(got, changed) {
+		t.Fatalf("live manual edit was lost: got=%q err=%v", got, readErr)
+	}
+	if got, readErr := os.ReadFile(filepath.Join(dir, "MEMORY.legacy.md")); readErr != nil || !bytes.Equal(got, original) {
+		t.Fatalf("legacy backup changed: got=%q err=%v", got, readErr)
+	}
+}
+
+func TestFactWorkspaceProjectionRejectsSourceStateChangesAfterPreserve(t *testing.T) {
+	t.Run("missing to manual", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "MEMORY.md")
+		expected, err := preserveLegacyProjection(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		changed := []byte("# MEMORY\n\ncreated during cutover\n")
+		if err := os.WriteFile(path, changed, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		err = writeFactProjectionTransaction([]factProjectionWrite{{
+			name: "MEMORY.md", path: path, data: []byte("generated"), expected: expected,
+		}}, os.Rename)
+		if err == nil || !strings.Contains(err.Error(), "appeared after preservation") {
+			t.Fatalf("missing source creation must fail closed, got %v", err)
+		}
+		if got, readErr := os.ReadFile(path); readErr != nil || !bytes.Equal(got, changed) {
+			t.Fatalf("new manual source was lost: got=%q err=%v", got, readErr)
+		}
+	})
+
+	generated := func(revision int) []byte {
+		return []byte(fmt.Sprintf("%s revision=%d; source=%s; do-not-edit -->\n", factGeneratedMarker, revision, factJournalFile))
+	}
+	for _, test := range []struct {
+		name    string
+		changed []byte
+	}{
+		{name: "generated to manual", changed: []byte("# MEMORY\n\nmanual replacement\n")},
+		{name: "generated to different generated", changed: generated(2)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "MEMORY.md")
+			if err := os.WriteFile(path, generated(1), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			expected, err := preserveLegacyProjection(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, test.changed, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			err = writeFactProjectionTransaction([]factProjectionWrite{{
+				name: "MEMORY.md", path: path, data: generated(3), expected: expected,
+			}}, os.Rename)
+			if err == nil || !strings.Contains(err.Error(), "generated source changed after preservation") {
+				t.Fatalf("generated source replacement must fail closed, got %v", err)
+			}
+			if got, readErr := os.ReadFile(path); readErr != nil || !bytes.Equal(got, test.changed) {
+				t.Fatalf("replacement source was lost: got=%q err=%v", got, readErr)
+			}
+		})
 	}
 }
 
@@ -1285,6 +1394,105 @@ func TestFactPlaneRecoversTornTailButRejectsMiddleCorruption(t *testing.T) {
 	}
 	if _, err := NewStore(wikiDir, diaryDir); err == nil {
 		t.Fatal("middle corruption must fail closed")
+	}
+}
+
+func TestFactJournalExistsBeforeFirstMutation(t *testing.T) {
+	store, wikiDir, _ := newFactTestStore(t)
+	if store.LatestFactRevision() != 0 {
+		t.Fatal("fresh store revision must be zero")
+	}
+	info, err := os.Stat(filepath.Join(wikiDir, factJournalFile))
+	if err != nil {
+		t.Fatalf("fresh store did not pre-create fact journal: %v", err)
+	}
+	if info.Size() != 0 {
+		t.Fatalf("fresh fact journal size=%d, want 0", info.Size())
+	}
+}
+
+func TestFactJournalCloseErrorAfterSyncRemainsCommitted(t *testing.T) {
+	store, wikiDir, diaryDir := newFactTestStore(t)
+	store.factJournalAppend = func(path string, record []byte) (factJournalAppendOutcome, error) {
+		outcome, err := appendFactJournalRecord(path, record)
+		if err != nil || outcome != factJournalAppendCommitted {
+			return outcome, err
+		}
+		return factJournalAppendCommitted, fmt.Errorf("injected close error")
+	}
+	result, err := store.UpsertFact(FactInput{
+		Subject: "self", Key: "communication.language", Value: "한국어로 답변",
+		Kind: FactKindPreference, Authority: FactAuthorityDirectUser,
+	})
+	if err != nil || !result.Committed || result.Revision != 1 {
+		t.Fatalf("durable close-error mutation=%+v err=%v", result, err)
+	}
+	if status := store.FactProjectionStatus(); status.JournalError != "" || status.Degraded {
+		t.Fatalf("post-commit close error poisoned journal: %+v", status)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if reopened.LatestFactRevision() != 1 {
+		t.Fatalf("reopened revision=%d, want 1", reopened.LatestFactRevision())
+	}
+}
+
+func TestFactJournalAmbiguousAppendPoisonsFurtherMutationsUntilRestart(t *testing.T) {
+	store, wikiDir, diaryDir := newFactTestStore(t)
+	appendCalls := 0
+	store.factJournalAppend = func(path string, record []byte) (factJournalAppendOutcome, error) {
+		appendCalls++
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			return factJournalAppendNotStarted, err
+		}
+		_, _ = f.Write(record[:len(record)/2])
+		_ = f.Sync()
+		_ = f.Close()
+		return factJournalAppendAmbiguous, fmt.Errorf("injected ambiguous sync")
+	}
+	input := FactInput{
+		Subject: "self", Key: "communication.language", Value: "한국어로 답변",
+		Kind: FactKindPreference, Authority: FactAuthorityDirectUser,
+	}
+	if _, err := store.UpsertFact(input); err == nil || !strings.Contains(err.Error(), "restart required") {
+		t.Fatalf("ambiguous append error=%v", err)
+	}
+	journal := filepath.Join(wikiDir, factJournalFile)
+	before, err := os.Stat(journal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertFact(input); err == nil || !strings.Contains(err.Error(), "requires restart") {
+		t.Fatalf("poisoned retry error=%v", err)
+	}
+	after, err := os.Stat(journal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if appendCalls != 1 || after.Size() != before.Size() {
+		t.Fatalf("poisoned retry appended again: calls=%d size=%d->%d", appendCalls, before.Size(), after.Size())
+	}
+	status := store.FactProjectionStatus()
+	if !status.Degraded || !strings.Contains(status.JournalError, "ambiguous") || status.Revision != 0 {
+		t.Fatalf("poison status=%+v", status)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if reopened.LatestFactRevision() != 0 {
+		t.Fatalf("torn ambiguous tail advanced reopened revision to %d", reopened.LatestFactRevision())
 	}
 }
 

@@ -32,6 +32,12 @@ func sampleTopic() *prompt.TopicKnowledge {
 	}
 }
 
+func approvedPromptSnapshotPersister(dir string, revision uint64) *promptSnapshotPersister {
+	return &promptSnapshotPersister{
+		dir: dir, logger: discardLogger(), factRevision: revision, factDerivedApproved: true,
+	}
+}
+
 // TestPromptSnapshot_RoundTripRestoresExactBytes is the core cache-doctrine
 // guarantee: persist a session's frozen inputs, then load them in a fresh
 // persister (simulating a restart with empty memory) and confirm the live
@@ -45,7 +51,7 @@ func TestPromptSnapshot_RoundTripRestoresExactBytes(t *testing.T) {
 	ctxFiles := sampleCtxFiles()
 	topic := sampleTopic()
 
-	writer := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	writer := approvedPromptSnapshotPersister(dir, 7)
 	writer.record(key, tier1, ctxFiles, topic)
 
 	if _, err := os.Stat(filepath.Join(dir, promptSnapshotFileName)); err != nil {
@@ -58,7 +64,7 @@ func TestPromptSnapshot_RoundTripRestoresExactBytes(t *testing.T) {
 		t.Fatal("precondition: tier1 store should be empty after clear")
 	}
 
-	reader := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	reader := approvedPromptSnapshotPersister(dir, 7)
 	if n := reader.load(func(string) bool { return true }); n != 1 {
 		t.Fatalf("load restored %d sessions, want 1", n)
 	}
@@ -76,6 +82,80 @@ func TestPromptSnapshot_RoundTripRestoresExactBytes(t *testing.T) {
 	}
 }
 
+func TestPromptSnapshot_RevisionMismatchSanitizesFactDerivedFields(t *testing.T) {
+	const key = "client:main:persist-revision-mismatch"
+	dir := t.TempDir()
+	t.Cleanup(func() { clearSessionStores(key) })
+	topic := sampleTopic()
+
+	writer := approvedPromptSnapshotPersister(dir, 11)
+	writer.record(key, "stale-tier1", sampleCtxFiles(), topic)
+	clearSessionStores(key)
+
+	// Simulate a fact commit followed by a crash before the live cache observer
+	// ran. The journal is now revision 12 while disk still carries revision 11.
+	reader := approvedPromptSnapshotPersister(dir, 12)
+	if n := reader.load(func(string) bool { return true }); n != 1 {
+		t.Fatalf("load restored %d sessions, want topic-only survivor", n)
+	}
+	if got, ok := cachedTier1Wiki(key); ok || got != "" {
+		t.Fatalf("stale tier1 restored across revision mismatch: (%q, %v)", got, ok)
+	}
+	if got, ok := prompt.Cache.SessionSnapshot(key); ok || len(got) != 0 {
+		t.Fatalf("stale context restored across revision mismatch: %#v", got)
+	}
+	if got, ok := prompt.Cache.TopicSnapshot(key); !ok || got.Key != topic.Key {
+		t.Fatalf("independent topic was not restored: %#v (ok=%v)", got, ok)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, promptSnapshotFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted map[string]persistedPromptSnapshot
+	if err := json.Unmarshal(raw, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if snap := persisted[key]; snap.Tier1Wiki != "" || len(snap.ContextFiles) != 0 || snap.FactRevision != nil || snap.TopicKnowledge == nil {
+		t.Fatalf("revision-mismatched snapshot was not sanitized: %+v", snap)
+	}
+}
+
+func TestPromptSnapshot_UnversionedFactDerivedFieldsAreRejectedAtRevisionZero(t *testing.T) {
+	const key = "client:main:persist-unversioned"
+	dir := t.TempDir()
+	t.Cleanup(func() { clearSessionStores(key) })
+	topic := sampleTopic()
+
+	// This is the exact pre-upgrade JSON shape. A zero canonical revision can
+	// still represent a prose-only cutover, so a missing stamp must not compare
+	// equal to an explicitly approved revision 0.
+	persisted := map[string]persistedPromptSnapshot{
+		key: {Tier1Wiki: "legacy-tier1", ContextFiles: sampleCtxFiles(), TopicKnowledge: topic},
+	}
+	raw, err := json.Marshal(persisted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, promptSnapshotFileName), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := approvedPromptSnapshotPersister(dir, 0)
+	if n := reader.load(func(string) bool { return true }); n != 1 {
+		t.Fatalf("load restored %d sessions, want topic-only survivor", n)
+	}
+	if got, ok := cachedTier1Wiki(key); ok || got != "" {
+		t.Fatalf("unversioned tier1 restored at revision zero: (%q, %v)", got, ok)
+	}
+	if got, ok := prompt.Cache.SessionSnapshot(key); ok || len(got) != 0 {
+		t.Fatalf("unversioned context restored at revision zero: %#v", got)
+	}
+	if got, ok := prompt.Cache.TopicSnapshot(key); !ok || got.Key != topic.Key {
+		t.Fatalf("independent topic was not restored: %#v (ok=%v)", got, ok)
+	}
+}
+
 // TestPromptSnapshot_FirstWriteWins verifies a later turn cannot shift a field
 // that was already frozen — the same invariant the in-memory stores hold.
 func TestPromptSnapshot_FirstWriteWins(t *testing.T) {
@@ -83,12 +163,12 @@ func TestPromptSnapshot_FirstWriteWins(t *testing.T) {
 	dir := t.TempDir()
 	t.Cleanup(func() { clearSessionStores(key) })
 
-	p := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	p := approvedPromptSnapshotPersister(dir, 0)
 	p.record(key, "first", sampleCtxFiles(), nil)
 	p.record(key, "second-ignored", nil, sampleTopic()) // tier1 already set; topic is new
 
 	clearSessionStores(key)
-	reader := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	reader := approvedPromptSnapshotPersister(dir, 0)
 	reader.load(func(string) bool { return true })
 
 	if got, _ := cachedTier1Wiki(key); got != "first" {
@@ -110,14 +190,14 @@ func TestPromptSnapshot_EvictsVanishedSession(t *testing.T) {
 	dir := t.TempDir()
 	t.Cleanup(func() { clearSessionStores(live); clearSessionStores(dead) })
 
-	w := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	w := approvedPromptSnapshotPersister(dir, 0)
 	w.record(live, "live-wiki", nil, nil)
 	w.record(dead, "dead-wiki", nil, nil)
 
 	clearSessionStores(live)
 	clearSessionStores(dead)
 
-	reader := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	reader := approvedPromptSnapshotPersister(dir, 0)
 	isLive := func(k string) bool { return k == live }
 	if n := reader.load(isLive); n != 1 {
 		t.Fatalf("load restored %d, want 1 (dead pruned)", n)
@@ -132,7 +212,7 @@ func TestPromptSnapshot_EvictsVanishedSession(t *testing.T) {
 	// The dead entry must also be gone from disk after the prune rewrite: a
 	// second load that treats everything as live restores only the survivor.
 	clearSessionStores(live)
-	r2 := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	r2 := approvedPromptSnapshotPersister(dir, 0)
 	if n := r2.load(func(string) bool { return true }); n != 1 {
 		t.Fatalf("after prune, file holds %d sessions, want 1", n)
 	}
@@ -145,14 +225,14 @@ func TestPromptSnapshot_DeletesSessionOnForget(t *testing.T) {
 	dir := t.TempDir()
 	t.Cleanup(func() { clearSessionStores(keep); clearSessionStores(drop) })
 
-	p := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	p := approvedPromptSnapshotPersister(dir, 0)
 	p.record(keep, "keep-wiki", nil, nil)
 	p.record(drop, "drop-wiki", nil, nil)
 	p.forget(drop)
 
 	clearSessionStores(keep)
 	clearSessionStores(drop)
-	reader := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	reader := approvedPromptSnapshotPersister(dir, 0)
 	if n := reader.load(func(string) bool { return true }); n != 1 {
 		t.Fatalf("after forget, restored %d, want 1", n)
 	}
@@ -165,7 +245,7 @@ func TestPromptSnapshot_DeletesSessionOnForget(t *testing.T) {
 // sessions are written, so cron/system keys never bloat the file.
 func TestPromptSnapshot_GateRejectsNonRestorable(t *testing.T) {
 	dir := t.TempDir()
-	p := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	p := approvedPromptSnapshotPersister(dir, 0)
 	p.record("cron:daily", "should-not-persist", nil, nil)
 	p.record("system:diary-heartbeat", "nope", nil, nil)
 
@@ -189,12 +269,12 @@ func TestPromptSnapshot_GateRejectsNonRestorable(t *testing.T) {
 func TestPromptSnapshot_FactInvalidationPersistsAndFencesInflightRefill(t *testing.T) {
 	const key = "client:main:fact-invalidation"
 	dir := t.TempDir()
-	p := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	p := approvedPromptSnapshotPersister(dir, 0)
 	topic := sampleTopic()
 	oldGeneration := p.currentGeneration()
 	p.recordAtGeneration(key, "old-tier1", sampleCtxFiles(), topic, oldGeneration)
 
-	p.clearFactDerived()
+	p.clearFactDerivedAtRevision(1, true)
 	p.mu.Lock()
 	cleared := p.store[key]
 	p.mu.Unlock()
@@ -241,15 +321,15 @@ func TestPromptSnapshot_FactInvalidationBeforeAsyncLoadSanitizesDisk(t *testing.
 	t.Cleanup(func() { clearSessionStores(key) })
 	topic := sampleTopic()
 
-	writer := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	writer := approvedPromptSnapshotPersister(dir, 0)
 	writer.record(key, "stale-tier1", sampleCtxFiles(), topic)
 	clearSessionStores(key)
 
 	// Simulate a fact mutation after the server is ready but before its async
 	// session-restore goroutine calls load(). The in-memory mirror is empty in a
 	// fresh process, so the invalidation must be remembered and applied to disk.
-	reader := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
-	reader.clearFactDerived()
+	reader := approvedPromptSnapshotPersister(dir, 0)
+	reader.clearFactDerivedAtRevision(1, true)
 	if n := reader.load(func(string) bool { return true }); n != 1 {
 		t.Fatalf("load restored %d sessions, want topic-only survivor", n)
 	}
@@ -276,13 +356,102 @@ func TestPromptSnapshot_FactInvalidationBeforeAsyncLoadSanitizesDisk(t *testing.
 	}
 }
 
+func TestPromptSnapshot_ProjectionFailureRejectsFreshFactFieldsUntilHealthyRevision(t *testing.T) {
+	const key = "client:main:projection-failure"
+	dir := t.TempDir()
+	t.Cleanup(func() { clearSessionStores(key) })
+	topic := sampleTopic()
+
+	writer := approvedPromptSnapshotPersister(dir, 3)
+	writer.record(key, "revision-3-tier1", sampleCtxFiles(), topic)
+
+	// Revision 4 committed canonically, but MEMORY.md/USER.md projection failed.
+	// A new turn can still assemble bytes from those stale files; persistence must
+	// reject them even though the turn carries the post-invalidation generation.
+	writer.clearFactDerivedAtRevision(4, false)
+	failedGeneration := writer.currentGeneration()
+	writer.recordAtGeneration(
+		key,
+		"stale-projection-stamped-as-revision-4",
+		[]prompt.ContextFile{{Path: "MEMORY.md", Content: "stale projection"}},
+		nil,
+		failedGeneration,
+	)
+
+	clearSessionStores(key)
+	reader := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	reader.setFactRevision(4) // successful startup projection explicitly approves revision 4
+	if n := reader.load(func(string) bool { return true }); n != 1 {
+		t.Fatalf("load restored %d sessions, want topic-only survivor", n)
+	}
+	if got, ok := cachedTier1Wiki(key); ok || got != "" {
+		t.Fatalf("failed-projection tier1 survived restart: (%q, %v)", got, ok)
+	}
+	if got, ok := prompt.Cache.SessionSnapshot(key); ok || len(got) != 0 {
+		t.Fatalf("failed-projection context survived restart: %#v", got)
+	}
+	if got, ok := prompt.Cache.TopicSnapshot(key); !ok || got.Key != topic.Key {
+		t.Fatalf("independent topic was not preserved: %#v (ok=%v)", got, ok)
+	}
+
+	// A later healthy canonical mutation explicitly approves revision 5. Fresh
+	// derived fields at that generation regain the normal restart restoration.
+	reader.clearFactDerivedAtRevision(5, true)
+	freshGeneration := reader.currentGeneration()
+	freshContext := []prompt.ContextFile{{Path: "MEMORY.md", Content: "healthy projection"}}
+	reader.recordAtGeneration(key, "revision-5-tier1", freshContext, nil, freshGeneration)
+
+	clearSessionStores(key)
+	restarted := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	restarted.setFactRevision(5)
+	if n := restarted.load(func(string) bool { return true }); n != 1 {
+		t.Fatalf("healthy revision restored %d sessions, want 1", n)
+	}
+	if got, ok := cachedTier1Wiki(key); !ok || got != "revision-5-tier1" {
+		t.Fatalf("healthy tier1 = (%q, %v), want restored revision 5", got, ok)
+	}
+	if got, ok := prompt.Cache.SessionSnapshot(key); !ok || !reflect.DeepEqual(got, freshContext) {
+		t.Fatalf("healthy context = %#v (ok=%v), want %#v", got, ok, freshContext)
+	}
+}
+
+func TestPromptSnapshot_DisableDoesNotApproveRevision(t *testing.T) {
+	const key = "client:main:fatal-disable"
+	dir := t.TempDir()
+	topic := sampleTopic()
+	p := approvedPromptSnapshotPersister(dir, 8)
+	p.record(key, "before-fatal", sampleCtxFiles(), topic)
+
+	p.disableFactDerived()
+	currentGeneration := p.currentGeneration()
+	p.recordAtGeneration(key, "after-fatal", sampleCtxFiles(), nil, currentGeneration)
+
+	p.mu.Lock()
+	snap := p.store[key]
+	approved := p.factDerivedApproved
+	revision := p.factRevision
+	p.mu.Unlock()
+	if approved {
+		t.Fatal("fatal disable unexpectedly approved fact-derived persistence")
+	}
+	if revision != 8 {
+		t.Fatalf("fatal disable changed revision to %d, want existing 8", revision)
+	}
+	if snap.Tier1Wiki != "" || len(snap.ContextFiles) != 0 || snap.FactRevision != nil {
+		t.Fatalf("fact-derived fields survived fatal disable: %+v", snap)
+	}
+	if snap.TopicKnowledge == nil || snap.TopicKnowledge.Key != topic.Key {
+		t.Fatalf("fatal disable removed independent topic: %+v", snap.TopicKnowledge)
+	}
+}
+
 // TestPromptSnapshot_IgnoresRecordWhenDisabled confirms an empty state dir keeps the
 // feature dormant (in-memory only), matching autonomous's SetStateDir contract.
 func TestPromptSnapshot_IgnoresRecordWhenDisabled(t *testing.T) {
 	const key = "client:main:persist-disabled"
 	t.Cleanup(func() { clearSessionStores(key) })
 
-	p := &promptSnapshotPersister{dir: "", logger: discardLogger()}
+	p := approvedPromptSnapshotPersister("", 0)
 	p.record(key, "wiki", sampleCtxFiles(), nil) // must not panic, must not write
 	if n := p.load(func(string) bool { return true }); n != 0 {
 		t.Fatalf("disabled load restored %d, want 0", n)

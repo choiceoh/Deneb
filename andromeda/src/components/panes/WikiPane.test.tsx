@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as fx from "@/mocks/fixtures";
+import { MEMORY_RPC } from "@/resources";
+import { rpcCacheKey, writeCachedRpc } from "@/rpcCache";
 import { renderWithProviders } from "@/test/util";
+import { useAiFeed, useWorkspace } from "@/workspaceContext";
 import { WikiPane } from "./WikiPane";
 
 let writeParams: Record<string, unknown> | null;
@@ -20,6 +23,17 @@ const treePages = [
   { path: "프로젝트/영산고/로그.md", title: "영산고 진행 로그" },
   { path: "프로젝트/영산고/메일분석/19e8717314b5c914.md", title: "RE: 견적" },
 ];
+
+function CrossPaneFactProbe({ path }: { path: string }) {
+  const { openWiki } = useWorkspace();
+  const { aiText } = useAiFeed();
+  return (
+    <>
+      <button onClick={() => openWiki(path)}>open cross-pane fact</button>
+      <output data-testid="ai-context">{aiText}</output>
+    </>
+  );
+}
 
 beforeEach(() => {
   localStorage.clear();
@@ -277,5 +291,29 @@ describe("WikiPane", () => {
     expect(screen.queryByText(/owner is A/)).not.toBeInTheDocument();
     expect(getPageCalls).toBe(1);
     expect(lastGetPagePath).toBe("@facts/fact-old.md");
+  });
+
+  it("routes cross-pane fact refs through uncached validation and never feeds a poisoned body to AI", async () => {
+    const factRef = "@facts\\fact-poisoned.md";
+    writeCachedRpc("wiki", rpcCacheKey(MEMORY_RPC.getPage, { path: factRef }), {
+      path: factRef,
+      body: "stale owner is A from poisoned cache",
+    });
+    getPageFails = true;
+
+    renderWithProviders(
+      <>
+        <CrossPaneFactProbe path={factRef} />
+        <WikiPane />
+      </>,
+      { connected: true },
+    );
+    await userEvent.click(screen.getByRole("button", { name: "open cross-pane fact" }));
+
+    expect(await screen.findByText("사실이 변경되었습니다. 다시 검색하세요.")).toBeInTheDocument();
+    expect(screen.queryByText(/stale owner is A/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("ai-context")).toHaveTextContent("");
+    expect(getPageCalls).toBe(1);
+    expect(lastGetPagePath).toBe("@facts/fact-poisoned.md");
   });
 });

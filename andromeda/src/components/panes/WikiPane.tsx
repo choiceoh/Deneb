@@ -45,6 +45,7 @@ export function WikiPane() {
   const [preview, setPreview] = useState(true);
   const dirty = Boolean(path && !currentReadOnly && content !== savedContent);
   const editorRef = useRef<HTMLDivElement>(null);
+  const pageOpenSeqRef = useRef(0);
 
   // 페이지 인쇄: 편집 중이었다면 미리보기(렌더된 마크다운)로 전환한 뒤, 그 렌더가 커밋된
   // 다음 프레임에 인쇄한다 — raw 마크다운 대신 읽기용 문서가 나가도록.
@@ -53,7 +54,14 @@ export function WikiPane() {
     requestAnimationFrame(() => printElement(editorRef.current));
   }
 
-  useRegisterPane(WIKI_RESOURCE, content.trim() ? `[위키${path ? ` ${path}` : ""}]\n${content}` : "");
+  // Synthetic facts are a read-only trust projection, not editable workspace
+  // prose. Never copy their body into the generic AI workspace context.
+  useRegisterPane(
+    WIKI_RESOURCE,
+    !currentReadOnly && !isSyntheticFactPath(path ?? "") && content.trim()
+      ? `[위키${path ? ` ${path}` : ""}]\n${content}`
+      : "",
+  );
 
   useEffect(() => {
     if (!connected) return;
@@ -171,6 +179,10 @@ export function WikiPane() {
 
   function requestOpenPath(key: string) {
     if (!key) return;
+    if (isSyntheticFactPath(key)) {
+      requestOpenFactRef(key);
+      return;
+    }
     if (dirty && key !== path) {
       setPendingPath(key);
       return;
@@ -179,39 +191,48 @@ export function WikiPane() {
   }
 
   function requestOpenSearchHit(hit: WikiPage) {
-    if (hit.resultKind !== "fact" && !hit.readOnly) {
-      requestOpenPath(keyOf(hit));
+    const ref = keyOf(hit);
+    if (hit.resultKind !== "fact" && !hit.readOnly && !isSyntheticFactPath(ref)) {
+      requestOpenPath(ref);
       return;
     }
+    requestOpenFactRef(ref);
+  }
+
+  function requestOpenFactRef(ref: string) {
     if (dirty) {
       setStatus("먼저 현재 페이지를 저장하거나 되돌리세요");
       return;
     }
-    void openFact(hit);
+    void openFactRef(ref);
   }
 
-  async function openFact(hit: WikiPage) {
-    const ref = keyOf(hit).trim();
+  async function openFactRef(rawRef: string) {
+    const ref = normalizeWikiRef(rawRef);
     if (!ref) {
       setStatus("사실 참조가 없습니다. 다시 검색하세요.");
       return;
     }
+    const requestID = ++pageOpenSeqRef.current;
     // Never leave a previously-open fact visible while revalidating an old
     // search ref. get_page bypasses the client cache so Store.ReadPage can
     // reject a superseded claim ID.
-    if (currentReadOnly) {
-      setPath(null);
-      setContent("");
-      setSavedContent("");
-      setCurrentReadOnly(false);
-    }
+    setPath(null);
+    setContent("");
+    setSavedContent("");
+    setCurrentReadOnly(false);
     const r = await call<WikiPageResponse>(MEMORY_RPC.getPage, { path: ref }, "현재 사실 확인 중...");
+    if (pageOpenSeqRef.current !== requestID) return;
     if (!r.ok) {
       setStatus("사실이 변경되었습니다. 다시 검색하세요.");
       return;
     }
-    const body = typeof r.data === "string" ? r.data : (r.data?.body ?? r.data?.content ?? "");
-    setPath(ref);
+    if (typeof r.data === "string" || canonicalFactRef(r.data?.path ?? "") !== canonicalFactRef(ref)) {
+      setStatus("사실이 변경되었습니다. 다시 검색하세요.");
+      return;
+    }
+    const body = r.data?.body ?? r.data?.content ?? "";
+    setPath(r.data.path ?? ref);
     setContent(body);
     setSavedContent(body);
     setCurrentReadOnly(true);
@@ -221,16 +242,23 @@ export function WikiPane() {
 
   async function openPath(key: string) {
     if (!key) return;
+    if (isSyntheticFactPath(key)) {
+      await openFactRef(key);
+      return;
+    }
+    const requestID = ++pageOpenSeqRef.current;
     const r = await callCached<WikiPageResponse>(
       MEMORY_RPC.getPage,
       { path: key },
       {
         pending: "불러오는 중...",
         scope: "wiki:page",
-        apply: (data) => applyPage(key, data),
+        apply: (data) => {
+          if (pageOpenSeqRef.current === requestID) applyPage(key, data);
+        },
       },
     );
-    if (r.ok && r.applied) setStatus("");
+    if (r.ok && r.applied && pageOpenSeqRef.current === requestID) setStatus("");
   }
 
   function applyPage(key: string, page: WikiPageResponse) {
@@ -628,6 +656,20 @@ export function WikiPane() {
 
 const WIKI_RESOURCE = "wiki";
 
+function isSyntheticFactPath(path: string): boolean {
+  return normalizeWikiRef(path).startsWith("@facts/");
+}
+
+function canonicalFactRef(path: string): string {
+  const trimmed = normalizeWikiRef(path);
+  if (!isSyntheticFactPath(trimmed)) return "";
+  return trimmed.endsWith(".md") ? trimmed : `${trimmed}.md`;
+}
+
+function normalizeWikiRef(path: string): string {
+  return path.trim().replaceAll("\\", "/");
+}
+
 interface WikiCategoriesResponse {
   categories?: WikiCategory[];
 }
@@ -643,7 +685,7 @@ interface WikiDiaryResponse {
   entries?: WikiDiaryEntry[];
 }
 
-type WikiPageResponse = { body?: string; content?: string } | string;
+type WikiPageResponse = { path?: string; body?: string; content?: string } | string;
 
 function keyOf(p: WikiPage): string {
   return p.path ?? String(p.id ?? "");

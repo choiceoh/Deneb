@@ -84,6 +84,11 @@ type Store struct {
 	// factProjectionRename is a test seam for the two-file workspace commit.
 	// Production leaves it nil and uses os.Rename.
 	factProjectionRename func(string, string) error
+	// factJournalAppend is a test seam around the durable append commit point.
+	// Production leaves it nil and uses appendFactJournalRecord.
+	factJournalAppend          func(string, []byte) (factJournalAppendOutcome, error)
+	factJournalPoisoned        string
+	factJournalFailureObserver func(error)
 	// factPageWrite is a test seam for the generated wiki projection. Production
 	// leaves it nil and writes through writePageLocked.
 	factPageWrite func(string, *Page) error
