@@ -229,4 +229,11 @@ actual fun sendHeartbeatNotification(title: String, body: String) {
 }
 
 // Desktop has no deep-link target; surface proactive reports like a heartbeat.
-actual fun sendProactiveReportNotification(title: String, body: String, kind: String, ref: String) = sendHeartbeatNotification(title, body)
+actual fun sendProactiveReportNotification(
+    title: String,
+    body: String,
+    kind: String,
+    ref: String,
+    approveActionId: String?,
+    rejectActionId: String?,
+) = sendHeartbeatNotification(title, body)

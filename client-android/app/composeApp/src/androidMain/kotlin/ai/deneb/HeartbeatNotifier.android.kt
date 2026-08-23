@@ -41,13 +41,20 @@ const val EXTRA_OPEN_WORK_FEED_ITEM_ID = "ai.deneb.OPEN_WORK_FEED_ITEM_ID"
 private const val HEARTBEAT_NOTIFICATION_ID = 9003
 
 /** Separate tray ID so a proactive report doesn't replace an unread heartbeat. */
-private const val PROACTIVE_NOTIFICATION_ID = 9004
+const val PROACTIVE_NOTIFICATION_ID = 9004
 
 actual fun sendHeartbeatNotification(title: String, body: String) {
     postNotification(title, body, EXTRA_OPEN_HEARTBEAT, HEARTBEAT_NOTIFICATION_ID)
 }
 
-actual fun sendProactiveReportNotification(title: String, body: String, kind: String, ref: String) {
+actual fun sendProactiveReportNotification(
+    title: String,
+    body: String,
+    kind: String,
+    ref: String,
+    approveActionId: String?,
+    rejectActionId: String?,
+) {
     val itemId = workFeedItemId(kind, ref)
     if (itemId != null) {
         postNotification(
@@ -56,6 +63,8 @@ actual fun sendProactiveReportNotification(title: String, body: String, kind: St
             deepLinkExtra = EXTRA_OPEN_WORK_FEED_ITEM_ID,
             notificationId = PROACTIVE_NOTIFICATION_ID,
             deepLinkValue = itemId,
+            approveActionId = approveActionId?.takeIf { itemId.isNotBlank() },
+            rejectActionId = rejectActionId?.takeIf { itemId.isNotBlank() },
         )
     } else {
         postNotification(title, body, EXTRA_OPEN_WORK_TOPIC, PROACTIVE_NOTIFICATION_ID)
@@ -66,7 +75,9 @@ actual fun sendProactiveReportNotification(title: String, body: String, kind: St
  * Posts a tray notification whose tap deep-links via [deepLinkExtra] (one of the
  * EXTRA_OPEN_* keys). [deepLinkValue] carries an opaque target ID when present;
  * legacy boolean extras remain unchanged when it is null. [notificationId] keeps
- * heartbeat vs proactive reports in separate tray slots.
+ * heartbeat vs proactive reports in separate tray slots. [approveActionId]/
+ * [rejectActionId] add Trust Inbox tray buttons that settle the card's approval
+ * action via [WorkFeedActionReceiver] without opening the app.
  */
 private fun postNotification(
     title: String,
@@ -74,6 +85,8 @@ private fun postNotification(
     deepLinkExtra: String,
     notificationId: Int,
     deepLinkValue: String? = null,
+    approveActionId: String? = null,
+    rejectActionId: String? = null,
 ) {
     val context: Context by inject(Context::class.java)
     val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -108,6 +121,26 @@ private fun postNotification(
 
     pendingIntent?.let { notificationBuilder.setContentIntent(it) }
 
+    // Trust Inbox approve/reject tray buttons. Distinct request codes keep the
+    // two PendingIntents from colliding with the content tap or each other.
+    val actionItemId = deepLinkValue?.takeIf { it.isNotBlank() }
+    if (actionItemId != null) {
+        approveActionId?.let { id ->
+            notificationBuilder.addAction(
+                0,
+                "승인",
+                workFeedActionPendingIntent(context, notificationId, 1, actionItemId, id),
+            )
+        }
+        rejectActionId?.let { id ->
+            notificationBuilder.addAction(
+                0,
+                "거절",
+                workFeedActionPendingIntent(context, notificationId, 2, actionItemId, id),
+            )
+        }
+    }
+
     val notification = notificationBuilder.build()
 
     runCatching { notificationManager.notify(notificationId, notification) }
@@ -128,3 +161,21 @@ fun ensureAiNotificationChannel(manager: NotificationManager) {
         },
     )
 }
+
+/** Broadcast PendingIntent routing one Trust Inbox tray button tap. */
+private fun workFeedActionPendingIntent(
+    context: Context,
+    notificationId: Int,
+    slot: Int,
+    itemId: String,
+    actionId: String,
+): PendingIntent = PendingIntent.getBroadcast(
+    context,
+    notificationId * 10 + slot,
+    Intent(context, WorkFeedActionReceiver::class.java).apply {
+        action = WorkFeedActionReceiver.ACTION_RUN_WORK_FEED_ACTION
+        putExtra(WorkFeedActionReceiver.EXTRA_WORK_FEED_ITEM_ID, itemId)
+        putExtra(WorkFeedActionReceiver.EXTRA_WORK_FEED_ACTION_ID, actionId)
+    },
+    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+)

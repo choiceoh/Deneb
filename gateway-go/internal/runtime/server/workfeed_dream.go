@@ -51,6 +51,12 @@ func (s *Server) postDreamWorkfeedCard(r *autonomous.DreamReport) {
 		Source:  workfeed.SourceDream,
 		Title:   title,
 		Summary: summary,
+		// Trust Inbox (improvement-ideas.md 4.7): the dream card is settleable
+		// like every other autonomous-change card. A machine-rollback action is
+		// deliberately absent — the dreamer's change summary is prose, not a
+		// restorable snapshot; operator correction goes through the weekly
+		// memory digest feedback (4.9) or a chat turn.
+		Actions: []workfeed.Action{{ID: "dream:ack", Kind: workfeed.ActionAck, Label: "확인"}},
 	}); err != nil {
 		s.logger.Warn("dream workfeed card append failed", "error", err)
 	}

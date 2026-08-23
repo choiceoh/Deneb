@@ -65,7 +65,7 @@ func TestSelfCorrectionSafetyDecisionsFailClosedOnCorruptLedger(t *testing.T) {
 	}
 
 	_, err = tracker.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
-		ID: "safe", Status: selfCorrectionStatusRejected,
+		ID: "safe", Status: SelfCorrectionStatusRejected,
 	})
 	assertCorrupt("review", err)
 	_, err = tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
@@ -96,7 +96,7 @@ func TestSelfCorrectionDispatchEligibleCentralizesReviewDeliveryAndSurfacePolicy
 	}
 	tests := []SelfCorrectionCandidateRecord{
 		{ID: "wrong-scope", Scope: "skill", Status: SelfCorrectionStatusProposed, Source: "health-finding:x"},
-		{ID: "rejected", Scope: "code", Status: selfCorrectionStatusRejected, Source: "health-finding:x"},
+		{ID: "rejected", Scope: "code", Status: SelfCorrectionStatusRejected, Source: "health-finding:x"},
 		{ID: "active", Scope: "code", Status: SelfCorrectionStatusAccepted, Source: "health-finding:x", DispatchPhase: selfCorrectionDispatchStarted},
 		{ID: "staged", Scope: "code", Status: SelfCorrectionStatusProposed, Source: "novel-miner:x"},
 		{ID: "forbidden-prose", Scope: "code", Status: SelfCorrectionStatusAccepted, Source: "health-finding:x", ProposedChange: "relax validation_engine.go"},

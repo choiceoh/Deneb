@@ -83,7 +83,7 @@ func TestPromoteTargetRecurrenceCandidatesStaysBlockedAfterOperatorRejection(t *
 	}
 	if _, err := tr.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
 		ID:       cands[0].ID,
-		Status:   selfCorrectionStatusRejected,
+		Status:   SelfCorrectionStatusRejected,
 		Reviewer: "test",
 	}); err != nil {
 		t.Fatalf("review: %v", err)

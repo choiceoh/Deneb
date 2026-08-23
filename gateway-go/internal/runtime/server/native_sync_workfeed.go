@@ -9,12 +9,13 @@ import (
 )
 
 type nativeWorkFeedStore struct {
-	store           *workfeed.Store
-	sync            *nativesync.Store
-	log             interface{ Error(string, ...any) }
-	onEvolveVerdict func(workfeed.Item, string) error
-	onLadderAction  func(workfeed.Item, string) error
-	onApprovalAct   func(workfeed.Item, string, string) error
+	store            *workfeed.Store
+	sync             *nativesync.Store
+	log              interface{ Error(string, ...any) }
+	onEvolveVerdict  func(workfeed.Item, string) error
+	onLadderAction   func(workfeed.Item, string) error
+	onApprovalAct    func(workfeed.Item, string, string) error
+	onSelfCorrection func(workfeed.Item, string, string) error
 }
 
 func (s *Server) nativeWorkFeedStore() *nativeWorkFeedStore {
@@ -22,12 +23,13 @@ func (s *Server) nativeWorkFeedStore() *nativeWorkFeedStore {
 		return nil
 	}
 	return &nativeWorkFeedStore{
-		store:           s.workFeedStore,
-		sync:            s.nativeSyncStore,
-		log:             s.logger,
-		onEvolveVerdict: s.handleEvolveVerdictAction,
-		onLadderAction:  s.handleLadderCardAction,
-		onApprovalAct:   s.handleGroupwareApprovalAction,
+		store:            s.workFeedStore,
+		sync:             s.nativeSyncStore,
+		log:              s.logger,
+		onEvolveVerdict:  s.handleEvolveVerdictAction,
+		onLadderAction:   s.handleLadderCardAction,
+		onApprovalAct:    s.handleGroupwareApprovalAction,
+		onSelfCorrection: s.handleSelfCorrectionCardAction,
 	}
 }
 
@@ -158,6 +160,10 @@ func (s *nativeWorkFeedStore) RunAction(itemID, actionID, comment string) (workf
 		if s.onApprovalAct != nil && item.Source == workfeed.SourceGroupwareApproval &&
 			strings.HasPrefix(action.ID, "approval:") {
 			return s.onApprovalAct(item, action.ID, approvalComment)
+		}
+		if s.onSelfCorrection != nil && item.Source == selfCorrectionSource &&
+			(action.ID == workfeedApproveAction || action.ID == workfeedRejectAction) {
+			return s.onSelfCorrection(item, action.ID, approvalComment)
 		}
 		return nil
 	}

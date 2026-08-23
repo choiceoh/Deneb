@@ -31,7 +31,7 @@ func TestSelfCorrectionReopenRejectedUnlessAppliedCooledAndFreshlyRecurring(t *t
 		{"different source → allow", []SelfCorrectionCandidateRecord{{Source: "other:1", Status: SelfCorrectionStatusProposed, CreatedAt: old}}, recent, false},
 		{"live proposed twin → block", []SelfCorrectionCandidateRecord{{Source: src, Status: SelfCorrectionStatusProposed, CreatedAt: old}}, recent, true},
 		{"accepted twin → block", []SelfCorrectionCandidateRecord{{Source: src, Status: SelfCorrectionStatusAccepted, CreatedAt: old}}, recent, true},
-		{"rejected → block (operator ruled)", []SelfCorrectionCandidateRecord{{Source: src, Status: selfCorrectionStatusRejected, CreatedAt: old}}, recent, true},
+		{"rejected → block (operator ruled)", []SelfCorrectionCandidateRecord{{Source: src, Status: SelfCorrectionStatusRejected, CreatedAt: old}}, recent, true},
 		{"superseded → block", []SelfCorrectionCandidateRecord{{Source: src, Status: selfCorrectionStatusSuperseded, CreatedAt: old}}, recent, true},
 		{"applied + cooled + fresh recurrence → REOPEN", []SelfCorrectionCandidateRecord{{Source: src, Status: SelfCorrectionStatusApplied, CreatedAt: old}}, recent, false},
 		{"applied but not cooled → block", []SelfCorrectionCandidateRecord{{Source: src, Status: SelfCorrectionStatusApplied, CreatedAt: recent}}, now.UnixMilli(), true},
@@ -53,7 +53,7 @@ func TestSelfCorrectionReopenRejectedUnlessAppliedCooledAndFreshlyRecurring(t *t
 
 	t.Run("newest applied wins over older rejected → reopen", func(t *testing.T) {
 		existing := []SelfCorrectionCandidateRecord{
-			{Source: src, Status: selfCorrectionStatusRejected, CreatedAt: now.Add(-60 * 24 * time.Hour).UnixMilli()},
+			{Source: src, Status: SelfCorrectionStatusRejected, CreatedAt: now.Add(-60 * 24 * time.Hour).UnixMilli()},
 			{Source: src, Status: SelfCorrectionStatusApplied, CreatedAt: old},
 		}
 		if selfCorrectionReopenBlocked(existing, src, recent, now) {

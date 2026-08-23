@@ -381,6 +381,32 @@ suspend fun DenebGatewayClient.runWorkFeedAction(
 }
 
 /**
+ * Tray-action delivery (Trust Inbox): settles a card's approval action without
+ * adopting its chat session — the notification path has no conversation to
+ * route a prompt into. Reports success distinctly from a blank prompt, so a
+ * background caller can tell "settled" from "delivery failed, card still
+ * actionable in the feed".
+ */
+suspend fun DenebGatewayClient.runWorkFeedActionDurable(itemId: String, actionId: String): Boolean {
+    if (itemId.isBlank() || actionId.isBlank()) return false
+    val payload = callRpc<WorkFeedActionRunPayload>(
+        "miniapp.workfeed.action.run",
+        buildJsonObject {
+            put("itemId", itemId)
+            put("actionId", actionId)
+        },
+    ) ?: return false
+    if (payload.removeFromFeed) {
+        _denebWorkFeed.update { items -> items.filterNot { it.id == itemId } }
+    } else if (payload.item.id.isNotBlank()) {
+        _denebWorkFeed.update { items ->
+            items.map { if (it.id == payload.item.id) payload.item else it }
+        }
+    }
+    return true
+}
+
+/**
  * Free-text answer to a question card: settles the card and routes the typed
  * answer to the card's asking session (so the agent reacts to it). Mirrors
  * [runWorkFeedAction]'s adopt-session + return-prompt shape. Returns the answer
@@ -592,6 +618,8 @@ private fun DenebGatewayClient.maybeEmitProactiveNotification(item: WorkFeedItem
             title = item.title.ifBlank { "Deneb" },
             body = body,
             ref = item.id,
+            approveActionId = item.actions.firstOrNull { it.id.startsWith("approval:approve") }?.id,
+            rejectActionId = item.actions.firstOrNull { it.id.startsWith("approval:reject") }?.id,
         ),
     )
 }

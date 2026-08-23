@@ -47,7 +47,7 @@
 | 18 | `executeAgentRun` 12개 파라미터 → struct 압축 | P2 | S |
 | 19 | Skill SKILL.md schema lint + CI | P3 | S |
 | 20 | 대용량 파일 전송 처리 (다운로드 링크 폴백) | P3 | M |
-| 21 | Trust Inbox: 자율 변경 통합 승인 대기열 (안드로이드 워크피드) | P1 | M |
+| 21 | Trust Inbox: 자율 변경 통합 승인 대기열 (안드로이드 워크피드) — ✅ 구현됨 | P1 | M |
 | 22 | 개인 MCP 브로커 — tailnet 경유 읽기 전용 노출 | P2 | M |
 | 23 | 인물·거래 도시에 (Business Dossier) | P2 | M |
 | 24 | 주간 기억 다이제스트 + dreamer 피드백 루프 | P2 | S |
@@ -329,7 +329,7 @@
 
 ---
 
-### 4.7 Trust Inbox: 자율 변경 통합 승인 대기열 (안드로이드) — **P1 / M · ideation**
+### 4.7 Trust Inbox: 자율 변경 통합 승인 대기열 (안드로이드) — **P1 / M · implemented 2026-08-23**
 
 **무엇.** 시스템이 자율적으로 적용·제안하는 변경 — genesis 스킬 진화·auto-apply, `skill_lifecycle` 자기교정 후보, graduation 단계 상승, dreamer 위키 합성 — 을 안드로이드 워크피드의 승인 카드로 모으고, 카드에서 승인/거절/상세(diff)를 처리.
 
@@ -493,7 +493,7 @@
 - 3.1 Polaris reopen 라운드트립 테스트
 - 3.2 CJK rune boundary 테스트
 - 2.4 한국어 quality CI gate
-- 4.7 Trust Inbox 통합 승인 대기열 (ideation)
+- 4.7 Trust Inbox 통합 승인 대기열 (implemented 2026-08-23)
 
 ### Next — 다음 1개월 (P2)
 
@@ -543,6 +543,7 @@
 | 2026-05-25 | Claude (claude-opus-4-7) | 초안 작성 |
 | 2026-06-02 | Claude | PR 1922 (Telegram 봇 제거) 반영 — 표면 참조를 네이티브 클라로 정정 |
 | 2026-08-23 | ZCode (GLM-5.3) | 운영자 요청 4개 제안 추가 (모두 ideation) — 4.7 Trust Inbox(안드로이드), 4.8 Business Dossier, 4.9 주간 기억 다이제스트, 5.5 개인 MCP 브로커(§8 긴장 명시) |
+| 2026-08-23 | ZCode (GLM-5.3) | 4.7 Trust Inbox 구현 — 자기교정 감시 태스크(신규 후보 승인/거절 카드) + dream 카드 확인 액션 + 안드로이드 알림 tray 승인/거절 버튼. 기존 auto-apply 표면(meta·graduation·evolve verdict) 카드는 이미 존재해 재활용 |
 
 ---
 

@@ -184,7 +184,7 @@ func TestLadderWatchAutoGraduatesOnFloorStopsForVetoKillSwitchAndDriftFreeze(t *
 
 	// A rejection anywhere in a source blocks its graduation (standing veto).
 	seed("sop-mining:b1", SelfCorrectionStatusProposed)
-	seed("sop-mining:b2", selfCorrectionStatusRejected)
+	seed("sop-mining:b2", SelfCorrectionStatusRejected)
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatal(err)
 	}
