@@ -19,12 +19,21 @@ const (
 )
 
 // ToolKnowledge wraps the knowledge.Router as a single agent-facing tool over
-// the wiki knowledge base. Four ops:
+// the wiki knowledge base. Six ops:
 //
 //	recall      — federated search across all read backends, merged by score
 //	read        — fetch one document by its layered ref ("w:...")
 //	record      — write a wiki page (the only writable backend)
+//	assert_fact — append a typed claim and resolve its current-state status
+//	forget_fact — append a tombstone while preserving history
 //	facts       — read active facts or one key's history
+//
+// The two fact mutations never carry a caller-declared authority. The model
+// supplies evidence (subject/key/value/source_refs); the server decides how much
+// that evidence is worth, and knowledge.wikiAdapter caps it at agent_confirmed.
+// direct_user stays exclusive to authenticated direct-message induction, and
+// primary_document/runtime_observation stay exclusive to ingestion paths that
+// authenticate their own source. See docs/adr/0005-fact-write-authority.md.
 
 func ToolKnowledge(router *knowledge.Router) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
@@ -52,9 +61,13 @@ func ToolKnowledge(router *knowledge.Router) toolport.ToolFunc {
 			Supersedes []string `json:"supersedes"`
 			Importance float64  `json:"importance"`
 
-			// facts
-			Subject string `json:"subject"`
-			FactKey string `json:"fact_key"`
+			// assert_fact / forget_fact / facts
+			Subject    string   `json:"subject"`
+			FactKey    string   `json:"fact_key"`
+			Value      string   `json:"value"`
+			FactKind   string   `json:"fact_kind"`
+			SourceRefs []string `json:"source_refs"`
+			Reason     string   `json:"reason"`
 		}
 		if err := jsonutil.UnmarshalInto("knowledge params", input, &p); err != nil {
 			return "", err
@@ -92,10 +105,20 @@ func ToolKnowledge(router *knowledge.Router) toolport.ToolFunc {
 				Supersedes: p.Supersedes,
 				Importance: p.Importance,
 			})
+		case "assert_fact":
+			return knowledgeAssertFact(ctx, router, knowledge.FactRecordOptions{
+				Subject: p.Subject, Key: p.FactKey, Value: p.Value,
+				Kind: p.FactKind, Sources: p.SourceRefs, Reason: p.Reason,
+			})
+		case "forget_fact":
+			return knowledgeForgetFact(ctx, router, knowledge.FactForgetOptions{
+				Subject: p.Subject, Key: p.FactKey,
+				Sources: p.SourceRefs, Reason: p.Reason,
+			})
 		case "facts":
 			return knowledgeFacts(ctx, router, p.Subject, p.FactKey, p.Limit)
 		default:
-			return "", fmt.Errorf("unknown knowledge op %q (expected recall|read|record|facts)", op)
+			return "", fmt.Errorf("unknown knowledge op %q (expected recall|read|record|assert_fact|forget_fact|facts)", op)
 		}
 	}
 }
@@ -250,4 +273,77 @@ func knowledgeRecord(ctx context.Context, router *knowledge.Router, opts knowled
 		return "", err
 	}
 	return fmt.Sprintf("✏️ 기록됨: `%s`", ref.String()), nil
+}
+
+// knowledgeAssertFact records a model-supplied claim as evidence, never as an
+// authority. Source refs are mandatory: an agent claim that cannot name where it
+// came from is exactly the kind of unverifiable assertion the fact plane exists
+// to keep out of answers.
+func knowledgeAssertFact(ctx context.Context, router *knowledge.Router, opts knowledge.FactRecordOptions) (string, error) {
+	if strings.TrimSpace(opts.Key) == "" || strings.TrimSpace(opts.Value) == "" {
+		return "", fmt.Errorf("fact_key and value are required for knowledge(op=\"assert_fact\")")
+	}
+	if err := requireFactSourceRefs(opts.Sources); err != nil {
+		return "", err
+	}
+	result, err := router.RecordFact(ctx, opts)
+	if err != nil {
+		return "", err
+	}
+	if !result.Committed {
+		return "", fmt.Errorf("fact assertion was not committed (resolution=%s)", result.Resolution)
+	}
+	prefix := "사실 mutation 커밋됨"
+	switch result.Status {
+	case "current":
+		prefix = "현행 사실 반영됨"
+	case "conflicted":
+		prefix = "상충하는 사실로 기록됨"
+	case "superseded":
+		prefix = "사실 주장은 이력에 기록됐지만 현행 사실은 변경되지 않음"
+	}
+	message := fmt.Sprintf("%s: revision=%d status=%s resolution=%s claim=%s", prefix,
+		result.Revision, result.Status, result.Resolution, result.ClaimID)
+	if result.ProjectionError != "" {
+		message += "\n⚠ 정본은 커밋됐지만 호환 projection 갱신이 지연됨: " + result.ProjectionError
+	}
+	return message, nil
+}
+
+// knowledgeForgetFact retires an identity the agent itself established. The
+// store refuses to retire a stronger claim (a direct-user fact in particular),
+// so a rejected delete comes back as a recorded but ignored lifecycle event.
+func knowledgeForgetFact(ctx context.Context, router *knowledge.Router, opts knowledge.FactForgetOptions) (string, error) {
+	if strings.TrimSpace(opts.Key) == "" {
+		return "", fmt.Errorf("fact_key is required for knowledge(op=\"forget_fact\")")
+	}
+	result, err := router.ForgetFact(ctx, opts)
+	if err != nil {
+		return "", err
+	}
+	if !result.Committed {
+		return "", fmt.Errorf("fact tombstone was not committed (resolution=%s)", result.Resolution)
+	}
+	prefix := "사실을 소프트 삭제함"
+	switch {
+	case result.Resolution == "ignored_lower_authority":
+		prefix = "삭제 요청은 이력에 남았지만 더 높은 권위의 현행 사실은 유지됨 (사용자 직접 발화만 철회 가능)"
+	case result.Resolution == "already_absent":
+		prefix = "이미 현행 사실이 없어 변화 없음"
+	}
+	message := fmt.Sprintf("%s: revision=%d resolution=%s claim=%s", prefix,
+		result.Revision, result.Resolution, result.ClaimID)
+	if result.ProjectionError != "" {
+		message += "\n⚠ 정본은 커밋됐지만 호환 projection 갱신이 지연됨: " + result.ProjectionError
+	}
+	return message, nil
+}
+
+func requireFactSourceRefs(sources []string) error {
+	for _, source := range sources {
+		if strings.TrimSpace(source) != "" {
+			return nil
+		}
+	}
+	return fmt.Errorf("source_refs is required for knowledge(op=\"assert_fact\"): name the ref/document this claim came from")
 }

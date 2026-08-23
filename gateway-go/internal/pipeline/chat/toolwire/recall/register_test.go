@@ -27,13 +27,16 @@ type knowledgeRegistrationCapture struct {
 
 func (r *knowledgeRegistrationCapture) RegisterTool(def toolport.ToolDef) { r.def = def }
 
-func TestRegisterKnowledgeToolPublishesReadOnlyFactBoundary(t *testing.T) {
+// The model-callable surface may accept fact evidence but never a fact
+// authority: assert_fact/forget_fact are published, while authority/basis_at —
+// the two fields that would let a caller claim a privilege — must stay absent.
+func TestRegisterKnowledgeToolPublishesEvidenceOnlyFactBoundary(t *testing.T) {
 	registry := &knowledgeRegistrationCapture{}
 	RegisterKnowledgeTool(registry, knowledge.New(&knowledgeRegistrationAdapter{}))
 	if registry.def.Name != "knowledge" || registry.def.Fn == nil {
 		t.Fatalf("registered definition = %+v", registry.def)
 	}
-	for _, want := range []string{"facts", "직접 사용자 발화", "내부 ingestion", "최대 50건"} {
+	for _, want := range []string{"facts", "assert_fact", "source_refs", "직접 발화", "내부 ingestion", "최대 50건"} {
 		if !strings.Contains(registry.def.Description, want) {
 			t.Errorf("description missing %q: %s", want, registry.def.Description)
 		}
@@ -44,14 +47,9 @@ func TestRegisterKnowledgeToolPublishesReadOnlyFactBoundary(t *testing.T) {
 		t.Fatalf("properties = %#v", registry.def.InputSchema["properties"])
 	}
 	op := schemaProperty(t, properties, "op")
-	for _, want := range []string{"recall", "read", "record", "facts"} {
+	for _, want := range []string{"recall", "read", "record", "assert_fact", "forget_fact", "facts"} {
 		if !containsSchemaString(op["enum"], want) {
 			t.Errorf("op enum missing %q: %#v", want, op["enum"])
-		}
-	}
-	for _, forbidden := range []string{"assert_fact", "forget_fact"} {
-		if containsSchemaString(op["enum"], forbidden) {
-			t.Fatalf("model-callable op enum exposes mutation %q: %#v", forbidden, op["enum"])
 		}
 	}
 	if got := schemaProperty(t, properties, "subject")["default"]; got != "self" {
@@ -64,9 +62,14 @@ func TestRegisterKnowledgeToolPublishesReadOnlyFactBoundary(t *testing.T) {
 	if description, _ := limit["description"].(string); !strings.Contains(description, "facts 이력은 최신 N개") {
 		t.Errorf("limit description does not document bounded fact history: %q", description)
 	}
-	for _, forbidden := range []string{"value", "fact_kind", "authority", "source_refs", "basis_at", "reason"} {
+	for _, required := range []string{"value", "fact_kind", "source_refs", "reason"} {
+		if _, exposed := properties[required]; !exposed {
+			t.Fatalf("model schema is missing fact evidence field %q", required)
+		}
+	}
+	for _, forbidden := range []string{"authority", "basis_at"} {
 		if _, exposed := properties[forbidden]; exposed {
-			t.Fatalf("model schema exposes fact mutation field %q", forbidden)
+			t.Fatalf("model schema exposes caller-declared fact authority field %q", forbidden)
 		}
 	}
 }

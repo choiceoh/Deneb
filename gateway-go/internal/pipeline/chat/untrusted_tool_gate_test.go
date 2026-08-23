@@ -26,6 +26,13 @@ func TestIsIrreversibleToolReturnsExpectedClassification(t *testing.T) {
 		{"wiki_forget gated", "wiki_forget", `{"path":"x","reason":"y"}`, true},
 		{"preference gated", "preference", `{"rule":"x"}`, true},
 		{"read tool", "read", `{"path":"/x"}`, false},
+		{"knowledge recall allowed", "knowledge", `{"op":"recall","query":"x"}`, false},
+		{"knowledge page record allowed", "knowledge", `{"op":"record","page":"인물/박부장"}`, false},
+		{"knowledge facts read allowed", "knowledge", `{"op":"facts","subject":"self"}`, false},
+		{"knowledge assert_fact gated", "knowledge", `{"op":"assert_fact","fact_key":"x","value":"y"}`, true},
+		{"knowledge forget_fact gated", "knowledge", `{"op":"forget_fact","fact_key":"x"}`, true},
+		{"knowledge action alias gated", "knowledge", `{"action":"assert_fact","fact_key":"x"}`, true},
+		{"knowledge malformed payload gated", "knowledge", `{"op":`, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

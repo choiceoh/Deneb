@@ -161,16 +161,25 @@ globs:
 ## 현행 사실 plane (정정·삭제 가능한 기억)
 
 변할 수 있는 한 줄 사실(선호, 이름, 금액, 기한, 계약 상태, 런타임 상태)은 일반
-위키 본문을 덮어쓰는 방식으로 관리하지 않는다. 정본은 위키 루트의 append-only
+위키 본문을 덮어쓰는 방식으로 관리하지 않는다 (근거: [ADR-0004](../adr/0004-canonical-fact-plane.md)). 정본은 위키 루트의 append-only
 `.fact-mutations.jsonl`이며, `(subject, fact_key)`별 현재값은 사실 종류·출처 권위·
 기준 시각을 함께 해석해 결정한다.
 
-- **쓰기 계약**: 새 현행 사실/정정은 `knowledge(op="assert_fact")`, 의도적 삭제는
-  `knowledge(op="forget_fact")`를 쓴다. `forget_fact`는 과거를 지우지 않고 tombstone을
-  남겨 약한 추론이 삭제값을 되살리지 못하게 한다. `primary_document`의 금액·기한·계약
-  사실과 `runtime_observation`은 검증 가능한 source ref가 필수다. 에이전트가 도구로
-  `direct_user` 권위를 자칭할 수 없으며, 그 권위는 신뢰된 사용자 발화 induction에서만
-  부여한다.
+- **쓰기 계약**: 에이전트가 근거를 확인한 사실/정정은 `knowledge(op="assert_fact")`,
+  의도적 삭제는 `knowledge(op="forget_fact")`를 쓴다. `forget_fact`는 과거를 지우지 않고
+  tombstone을 남겨 약한 추론이 삭제값을 되살리지 못하게 한다.
+  **권위는 호출자가 고르는 값이 아니라 경로가 정한다** ([ADR-0005](../adr/0005-fact-write-authority.md)):
+  모델 도구 스키마에는 `authority`·`basis_at` 필드 자체가 없고 어댑터가 `agent_confirmed`로
+  고정한다(`assert_fact`는 `source_refs` 필수). `direct_user`는 인증된 네이티브 직접 발화
+  induction만, `primary_document`/`runtime_observation`은 자기 출처를 인증하는 내부 ingestion만
+  발급한다. 그래서 도구 호출은 사용자가 직접 말한 사실을 덮거나 지울 수 없고, 시도는
+  `ignored_lower_authority`로 이력에만 남는다. promptware로 오염된 턴에서는 두 mutation op이
+  비가역 도구 게이트에 걸려 아예 실행되지 않는다.
+- **저널 세그먼트**: 저널은 컴팩션하지 않는다(영구 이력). 활성 세그먼트가 임계치를
+  넘으면 스냅샷을 durable하게 만든 뒤 `.fact-mutations.<revision>.jsonl` 아카이브로
+  rename하고 새 세그먼트를 연다. 기동은 스냅샷 seed + 활성 세그먼트 replay이며,
+  스냅샷을 못 읽을 때만 아카이브 전체로 복구한다. 저널(또는 최신 아카이브)이 스냅샷
+  watermark에 못 미치면 fail-closed로 기동을 거부한다.
 - **커밋 경계**: 저널 append+fsync가 먼저다. `.fact-state.json`,
   `사용자/현행-사실.md`, 워크스페이스 `MEMORY.md`/`USER.md`는 재생성 가능한 호환 뷰다.
   projection 오류가 나도 이미 커밋된 mutation을 재시도하지 말고

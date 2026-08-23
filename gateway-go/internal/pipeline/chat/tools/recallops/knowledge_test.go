@@ -22,6 +22,8 @@ type knowledgeFactToolAdapter struct {
 	factViews   []knowledge.FactView
 	recordCalls int
 	forgetCalls int
+	lastRecord  knowledge.FactRecordOptions
+	lastForget  knowledge.FactForgetOptions
 }
 
 func (a *knowledgeToolAdapter) Layer() knowledge.Layer { return a.layer }
@@ -38,14 +40,20 @@ func (a *knowledgeToolAdapter) Descriptor() knowledge.SourceDescriptor {
 	return knowledge.SourceDescriptor{Layer: a.layer, Name: "wiki"}
 }
 
-func (a *knowledgeFactToolAdapter) RecordFact(context.Context, knowledge.FactRecordOptions) (knowledge.FactMutationResult, error) {
+func (a *knowledgeFactToolAdapter) RecordFact(_ context.Context, opts knowledge.FactRecordOptions) (knowledge.FactMutationResult, error) {
 	a.recordCalls++
-	return knowledge.FactMutationResult{}, nil
+	a.lastRecord = opts
+	return knowledge.FactMutationResult{
+		Committed: true, Revision: 7, Status: "current", Resolution: "accepted", ClaimID: "fm-1",
+	}, nil
 }
 
-func (a *knowledgeFactToolAdapter) ForgetFact(context.Context, knowledge.FactForgetOptions) (knowledge.FactMutationResult, error) {
+func (a *knowledgeFactToolAdapter) ForgetFact(_ context.Context, opts knowledge.FactForgetOptions) (knowledge.FactMutationResult, error) {
 	a.forgetCalls++
-	return knowledge.FactMutationResult{}, nil
+	a.lastForget = opts
+	return knowledge.FactMutationResult{
+		Committed: true, Revision: 8, Resolution: "tombstoned", ClaimID: "fm-2",
+	}, nil
 }
 
 func (a *knowledgeFactToolAdapter) Facts(_ context.Context, subject, key string) ([]knowledge.FactView, error) {
@@ -86,21 +94,77 @@ func TestKnowledgeRecallRejectsUnknownExplicitSource(t *testing.T) {
 	}
 }
 
-func TestKnowledgeFactMutationsAreNotModelCallable(t *testing.T) {
+// A model may supply evidence but never an authority: the tool struct has no
+// authority/basis_at field at all, so a caller-declared privilege is dropped at
+// the JSON boundary instead of relying on a downstream string comparison.
+func TestKnowledgeAssertFactNeverCarriesCallerAuthority(t *testing.T) {
+	adapter := &knowledgeFactToolAdapter{knowledgeToolAdapter: knowledgeToolAdapter{layer: knowledge.LayerWiki}}
+	tool := ToolKnowledge(knowledge.New(adapter))
+	out, err := tool(context.Background(), json.RawMessage(`{
+		"op":"assert_fact","fact_key":"project.quote.amount","value":"1,200만원",
+		"fact_kind":"amount","authority":"primary_document","basis_at":"2026-01-02",
+		"source_refs":["w:프로젝트/ABC-견적"],"reason":"견적서 확인"
+	}`))
+	if err != nil {
+		t.Fatalf("assert_fact: %v", err)
+	}
+	if adapter.recordCalls != 1 {
+		t.Fatalf("record calls = %d", adapter.recordCalls)
+	}
+	if adapter.lastRecord.Authority != "" {
+		t.Fatalf("caller authority reached the adapter: %q", adapter.lastRecord.Authority)
+	}
+	if adapter.lastRecord.BasisAt != "" {
+		t.Fatalf("caller basis_at reached the adapter: %q", adapter.lastRecord.BasisAt)
+	}
+	if adapter.lastRecord.Key != "project.quote.amount" || adapter.lastRecord.Value != "1,200만원" ||
+		adapter.lastRecord.Kind != "amount" || len(adapter.lastRecord.Sources) != 1 {
+		t.Fatalf("evidence lost in transit: %+v", adapter.lastRecord)
+	}
+	if !strings.Contains(out, "revision=7") {
+		t.Fatalf("assert_fact output = %q", out)
+	}
+}
+
+func TestKnowledgeAssertFactRequiresSourceRefs(t *testing.T) {
 	adapter := &knowledgeFactToolAdapter{knowledgeToolAdapter: knowledgeToolAdapter{layer: knowledge.LayerWiki}}
 	tool := ToolKnowledge(knowledge.New(adapter))
 	for _, input := range []string{
-		`{"op":"assert_fact","fact_key":"identity.name","value":"external claim"}`,
-		`{"op":"forget_fact","fact_key":"identity.name"}`,
+		`{"op":"assert_fact","fact_key":"identity.name","value":"주장"}`,
+		`{"op":"assert_fact","fact_key":"identity.name","value":"주장","source_refs":["  "]}`,
 	} {
-		_, err := tool(context.Background(), json.RawMessage(input))
-		if err == nil || !strings.Contains(err.Error(), "unknown knowledge op") {
-			t.Fatalf("disabled mutation error = %v", err)
+		if _, err := tool(context.Background(), json.RawMessage(input)); err == nil ||
+			!strings.Contains(err.Error(), "source_refs is required") {
+			t.Fatalf("unsourced assertion error = %v", err)
 		}
 	}
-	if adapter.recordCalls != 0 || adapter.forgetCalls != 0 {
-		t.Fatalf("disabled fact mutation reached adapter: record=%d forget=%d", adapter.recordCalls, adapter.forgetCalls)
+	if adapter.recordCalls != 0 {
+		t.Fatalf("unsourced assertion reached adapter: %d", adapter.recordCalls)
 	}
+}
+
+func TestKnowledgeForgetFactReportsRefusedLowerAuthority(t *testing.T) {
+	adapter := &knowledgeFactRefusingAdapter{knowledgeFactToolAdapter: knowledgeFactToolAdapter{
+		knowledgeToolAdapter: knowledgeToolAdapter{layer: knowledge.LayerWiki},
+	}}
+	out, err := ToolKnowledge(knowledge.New(adapter))(context.Background(),
+		json.RawMessage(`{"op":"forget_fact","fact_key":"communication.language"}`))
+	if err != nil {
+		t.Fatalf("forget_fact: %v", err)
+	}
+	if !strings.Contains(out, "유지됨") {
+		t.Fatalf("refused delete must say the current fact survived: %q", out)
+	}
+}
+
+type knowledgeFactRefusingAdapter struct{ knowledgeFactToolAdapter }
+
+func (a *knowledgeFactRefusingAdapter) ForgetFact(_ context.Context, opts knowledge.FactForgetOptions) (knowledge.FactMutationResult, error) {
+	a.forgetCalls++
+	a.lastForget = opts
+	return knowledge.FactMutationResult{
+		Committed: true, Revision: 9, Resolution: "ignored_lower_authority", ClaimID: "fm-3",
+	}, nil
 }
 
 func TestKnowledgeFactsRendersStableAuditJSON(t *testing.T) {
