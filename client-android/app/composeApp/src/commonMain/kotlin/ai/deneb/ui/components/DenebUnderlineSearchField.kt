@@ -25,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +33,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -52,6 +55,8 @@ import androidx.compose.ui.unit.dp
  *   precedence over [clearable] when a screen needs custom trailing content.
  * - [textStyle] defaults to the airy [DenebType.subject]; pass a smaller role
  *   (e.g. [DenebType.body]) on dense list/filter bars.
+ * - [autoFocus] requests focus on first composition (collapsed search that
+ *   expands on an icon tap).
  */
 @Composable
 fun DenebUnderlineSearchField(
@@ -63,8 +68,19 @@ fun DenebUnderlineSearchField(
     onSearch: (() -> Unit)? = null,
     clearable: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
+    autoFocus: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(autoFocus) {
+        if (!autoFocus) return@LaunchedEffect
+        try {
+            focusRequester.requestFocus()
+        } catch (_: IllegalStateException) {
+            // First frame of an expand animation: the field is composed but not
+            // attached yet. Skip — the user can tap the field.
+        }
+    }
     val line = if (focused) MaterialTheme.colorScheme.primary else denebHairline()
     val effectiveTrailing: (@Composable () -> Unit)? = when {
         trailing != null -> trailing
@@ -90,6 +106,7 @@ fun DenebUnderlineSearchField(
             keyboardActions = KeyboardActions(onSearch = { onSearch?.invoke() }),
             modifier = Modifier
                 .fillMaxWidth()
+                .focusRequester(focusRequester)
                 .onFocusChanged { focused = it.isFocused }
                 .padding(vertical = 10.dp),
             decorationBox = { inner ->

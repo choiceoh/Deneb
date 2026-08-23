@@ -505,6 +505,9 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
     // Chat transient states — only reachable on a device when something specific
     // happens, so this fixture is their only visual regression surface.
     "chat_states" to { scheme -> chatStatesBody(scheme) },
+    "session_drawer" to { scheme -> sessionDrawerBody(scheme) },
+    "session_drawer_search" to { scheme -> sessionDrawerBody(scheme, searchOpen = true) },
+    "session_drawer_actions" to { scheme -> sessionDrawerBody(scheme, revealedId = "client:main:nda") },
     "states" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {

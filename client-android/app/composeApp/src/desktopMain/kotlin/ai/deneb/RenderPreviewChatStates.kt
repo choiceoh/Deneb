@@ -6,12 +6,15 @@ import ai.deneb.data.SmsDraftStatus
 import ai.deneb.network.UiError
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.chat.ChatActions
+import ai.deneb.ui.chat.ConversationSummary
+import ai.deneb.ui.chat.composables.DenebSessionDrawerSheet
 import ai.deneb.ui.chat.composables.ErrorMessage
 import ai.deneb.ui.chat.composables.HeartbeatBanner
 import ai.deneb.ui.chat.composables.PendingSmsBanners
 import ai.deneb.ui.chat.composables.ServiceSelector
 import ai.deneb.ui.chat.composables.WorkReportBanner
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ColorScheme
@@ -33,6 +36,52 @@ import kotlinx.collections.immutable.persistentListOf
  * make them show on demand. That made them the blind spot of the DenebType sweep:
  * compilation proved they still built, and nothing proved they still looked right.
  */
+
+private val previewSessions = persistentListOf(
+    ConversationSummary(
+        id = "client:main",
+        title = "업무",
+        updatedAt = 1_787_500_000_000,
+    ),
+    ConversationSummary(
+        id = "client:main:nda",
+        title = "아르고에너지 NDA 조항 검토",
+        updatedAt = 1_787_400_000_000,
+        pinned = true,
+        snippet = "손해배상 상한과 EPC 관례",
+    ),
+    ConversationSummary(
+        id = "client:main:letter",
+        title = "모닝레터 후속",
+        updatedAt = 1_787_300_000_000,
+        model = "anthropic/claude-opus-4",
+    ),
+)
+
+@Composable
+internal fun sessionDrawerBody(
+    scheme: ColorScheme,
+    searchOpen: Boolean = false,
+    revealedId: String? = null,
+) {
+    MaterialTheme(colorScheme = scheme) {
+        Surface(
+            color = MaterialTheme.colorScheme.background,
+            modifier = Modifier.width(360.dp).height(720.dp),
+        ) {
+            DenebSessionDrawerSheet(
+                conversations = previewSessions,
+                hasMoreConversations = true,
+                currentConversationId = "client:main:nda",
+                pendingConversationDeletion = null,
+                actions = previewChatActions(),
+                onClose = {},
+                initiallySearchOpen = searchOpen,
+                initiallyRevealedSessionId = revealedId,
+            )
+        }
+    }
+}
 
 /**
  * A ChatActions whose every callback is a no-op. [ChatUiState] requires one and it
