@@ -331,9 +331,20 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 		defer cancel()
 	}
 
-	queries := searchQueries(message)
+	// Multiturn context rewrite: an elliptical follow-up ("그 현장 계약 조건은
+	// 어떻게 됐지?") carries no searchable subject of its own — prepend the
+	// prior user turn so query assembly, anchors, and ranking see a
+	// self-contained text (grounding: recall_context_rewrite.go).
+	searchMessage := message
+	if needsContextRewrite(message) {
+		if prior := lastPriorUserTurn(deps, params.SessionKey, message); prior != "" {
+			searchMessage = prior + " " + message
+		}
+	}
 
-	sources := buildRecallSources(params, deps, queries, message)
+	queries := searchQueries(searchMessage)
+
+	sources := buildRecallSources(params, deps, queries, searchMessage)
 	collection := runRecallSources(ctx, sources, deps, logger)
 	truncated = collection.truncated
 	evidence := collection.evidence
@@ -374,7 +385,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	// wiki↔메일 담당자 충돌: 둘 다 올리고 불일치만 표시. 점수 중재 없음
 	// (stale 위키가 이기면 안 된다). 검색은 cue 턴에서만 보강.
 	evidence = attachWikiMailConflicts(ctx, deps.Wiki, evidence, cue)
-	evidence = rankRecallEvidence(evidence, queries, message, cue, deps.now())
+	evidence = rankRecallEvidence(evidence, queries, searchMessage, cue, deps.now())
 	if logger != nil {
 		logger.Info("recall preflight: evidence injected",
 			"session", params.SessionKey, "count", len(evidence), "sources", collection.sourceSummary, "truncated", truncated)
@@ -424,7 +435,10 @@ func buildRecallSources(params Params, deps Deps, queries []string, message stri
 		}})
 	} else {
 		sources = append(sources, recallSource{name: "transcript", run: func(ctx context.Context) []recallEvidence {
-			return recallTranscriptEvidence(ctx, deps.Transcript, params.SessionKey, message, queries)
+			// The skip-current comparison inside must match the turn's raw
+			// message, not the context-rewritten text — otherwise the current
+			// message itself would surface as its own evidence.
+			return recallTranscriptEvidence(ctx, deps.Transcript, params.SessionKey, params.Message, queries)
 		}})
 	}
 
