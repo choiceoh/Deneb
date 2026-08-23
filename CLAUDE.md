@@ -64,7 +64,7 @@
 | "이 함수/타입 누가 쓰나" (리팩터·시그니처 변경) | `codegraph callers SYMBOL` |
 | 이름 조각으로 정의 찾기 | `codegraph query NAME` (`--kind`로 좁히기) |
 
-원칙: **모르는 영역은 explore, 이미 이름이 있는 심볼은 node/callers/impact**. explore에 단일 PascalCase만 넣으면 camelCase 분해(`GatewayHub`→`Hub`/`GatewayTab`)로 노이즈가 섞일 수 있다 — 그 경우 node로 핀. (런타임 에이전트의 `codegraph_explore`는 단일 특정 심볼이면 게이트웨이 브리지가 **자동으로 node 리라우트**해 이 노이즈를 없앤다; dev CLI/MCP는 리라우트 없으니 수동으로 node를 골라라.) **크로스모듈 노이즈**(게이트웨이 질문에 client-android Kotlin·andromeda TS가 섞임)는 explore가 경로 필터가 없어 랭킹으로만 좁혀지니 — 쿼리에 모듈/파일 토큰(`gateway-go`, 파일명)을 더해 좁혀라. (런타임 에이전트의 codegraph explore/node 결과엔 검색된 파일이 속한 폴더의 **CLAUDE.md 서브트리 맵이 자동 첨부**된다 — 구조(codegraph)+폴더 의도(맵)를 한 번에. dev 하네스는 파일 접근 시 서브트리 맵을 이미 주입하므로 별개.) 심볼 이름을 grep하려는 순간이면 CodeGraph(훅이 유도).
+원칙: **모르는 영역은 explore, 이미 이름이 있는 심볼은 node/callers/impact**. explore에 단일 PascalCase만 넣으면 camelCase 분해(`GatewayHub`→`Hub`/`GatewayTab`)로 노이즈가 섞일 수 있다 — 그 경우 node로 핀. 런타임 게이트웨이 **와** 모든 IDE MCP(`codegraph-serve.sh` 프록시)는 단일 특정 심볼 explore를 **자동으로 node 리라우트**하고, node miss면 원래 explore로 폴백한다. **크로스모듈 노이즈**(게이트웨이 질문에 client-android Kotlin·andromeda TS가 섞임)는 explore가 경로 필터가 없어 랭킹으로만 좁혀지니 — 쿼리에 모듈/파일 토큰(`gateway-go`, 파일명)을 더해 좁혀라. (런타임 에이전트의 codegraph explore/node 결과엔 검색된 파일이 속한 폴더의 **CLAUDE.md 서브트리 맵이 자동 첨부**된다 — 구조(codegraph)+폴더 의도(맵)를 한 번에. IDE 하네스는 파일 접근 시 서브트리 맵을 이미 주입하므로 별개.) 심볼 이름을 grep하려는 순간이면 CodeGraph(훅이 유도).
 
 - **MCP 툴** (`CODEGRAPH_MCP_TOOLS=explore,node,search,impact,callers,callees`): 영역 조사=`explore`, 심볼 핀=`node`/`search`, 변경 영향=`impact`/`callers`.
 - **CLI**(같은 그래프, 셸에서 쓸 때):
@@ -78,9 +78,9 @@ codegraph query    NAME      # 이름 검색 (정확; explore보다 덜 퍼짐)
 codegraph explore  "영역..."  # 지형 one-shot (다중 토큰; --max-files 낮게)
 ```
 
-- **인덱스는 로컬 `.codegraph/`**(SQLite, gitignore됨)에 저장, **PostToolUse 훅(`zcode-codegraph-sync.sh`)이 편집 후 백그라운드에서 `codegraph sync` 실행**(<0.5s) — 수동 명령 불필요, 항상 신선. Claude·ZCode 양쪽에 배선. Go·Kotlin·TypeScript·Rust 등 전부 인덱싱.
+- **인덱스는 로컬 `.codegraph/`**(SQLite, gitignore됨)에 저장, **PostToolUse 훅이 편집 후 `codegraph-sync-run.sh`(sync→rpcmap→시맨틱)를 백그라운드 실행** — 수동 명령 불필요. Cursor·ZCode·Claude·Codex 훅이 같은 파이프라인을 쓴다. Go·Kotlin·TypeScript·Rust 등 전부 인덱싱.
 - **새 워크트리는 SessionStart 훅(`codegraph-autoindex.py`)이 자동 준비** — 형제 워크트리 인덱스를 복사+`sync`(<1s)하거나 없으면 풀 init, 백그라운드라 세션 지연 0. 즉 워크트리마다 손수 `codegraph init` 할 필요 없다. ZCode 워크트리도 `zcode-worktree-init.sh`가 메인 체크아웃의 인덱스를 복사+`sync`로 동일하게 준비.
-- 설치/재빌드: `npm i -g @colbymchenry/codegraph@1.5.0` → `codegraph init` (Rust 엔진·explore NL 하이재킹 수정). 재인덱싱은 `codegraph index`, MCP 재배선은 `codegraph install`. **`codegraph upgrade`는 `.cursor/mcp.json` / `.mcp.json`을 덮어쓰니 래퍼(`cursor-codegraph-serve.sh` / `codegraph-serve.sh`)를 복구할 것.** GPU·컴파일 불필요(aarch64 네이티브). 상세는 메모리 [[codegraph-adoption]] 참조.
+- 설치/재빌드: `npm i -g @colbymchenry/codegraph@1.5.0` → `codegraph init` (Rust 엔진·explore NL 하이재킹 수정). 재인덱싱은 `codegraph index`, MCP 재배선은 `codegraph install`. **`codegraph upgrade`는 MCP JSON을 덮어쓴다 — SessionStart의 `codegraph_mcp_restore.py`가 래퍼 지문을 복구하고, serve 래퍼는 구버전 데몬을 내림.** GPU·컴파일 불필요(aarch64 네이티브). 상세는 메모리 [[codegraph-adoption]] 참조.
 - 문자열-키 간접참조(RPC 메서드명·툴명·이벤트명 → 핸들러/이벤트 타입)는 CodeGraph가 못 잇는 엣지(static-analysis frontier). **`scripts/dev/rpcmap.py`가 결정적으로 채운다**: `rpcmap <메서드명|툴명|이벤트명>` → 핸들러+파일:라인+`codegraph node` 힌트 (예: `rpcmap miniapp.people.list`→`peopleList (people.go:91)`, `rpcmap wiki`→`ToolWiki`, `rpcmap chat.delivery_failed`→`ChatDeliveryFailedEvent`). 역방향 `rpcmap --handler <이름>`, 전체는 `rpcmap --list`. 핸들러를 얻으면 `codegraph node <핸들러>`로 소스+호출자/피호출자. (점 있는 메서드명을 grep하면 훅이 rpcmap으로 유도한다.)
 - **개념(시맨틱) 검색**: 심볼 이름을 모르는 "무엇을 하는 코드가 어딨나" 질의는 `make codesearch Q="재시도 백오프"` — Nemotron 임베딩(로컬 :8002) dense 검색과 CodeGraph FTS를 RRF 융합, 한국어 질의는 도메인 동의어 확장으로 영문 코드에 닿는다. 인덱스는 `make codesearch-index`(CodeGraph 노드 기반 증분, `.codegraph/semantic-code.*`), 융합 상위 10개는 XProvence 리랭커(:8004, 위키 회상과 공용)가 자동 재정렬(미가동 시 무손실 폴백). 품질 회귀는 `make codesearch-bench`(골드셋 P@5·P@1 base/rerank).
 - 주의: CodeGraph는 **소스 코드 전용**. 위키/업무 지식 그래프는 별개 도구(`graphify` 챗 툴 → `~/.deneb/wiki-graph`)이며 이걸로 대체 불가.

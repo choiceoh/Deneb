@@ -63,8 +63,13 @@ GIT_COMMON=$(cd "$ROOT" && git rev-parse --git-common-dir 2>/dev/null) || exit 0
 GIT_DIR_ABS=$(cd "$ROOT" && cd "$GIT_DIR" 2>/dev/null && pwd) || exit 0
 GIT_COMMON_ABS=$(cd "$ROOT" && cd "$GIT_COMMON" 2>/dev/null && pwd) || exit 0
 
+restore_codegraph_mcp() {
+  python3 "$ROOT/scripts/dev/codegraph_mcp_restore.py" --root "$1" >/dev/null 2>&1 || true
+}
+
 # Already inside a linked worktree? Don't nest — pin active-root and remind.
 if [[ "$GIT_DIR_ABS" != "$GIT_COMMON_ABS" ]]; then
+  restore_codegraph_mcp "$ROOT"
   write_active_root "$ROOT" "$SAFE_ID"
   BRANCH=$(cd "$ROOT" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
   # move_agent_to_root may flip the worktree onto main — never hint "checkout main".
@@ -99,14 +104,15 @@ else
 fi
 
 write_active_root "$WT_PATH" "$SAFE_ID"
+restore_codegraph_mcp "$ROOT"
+restore_codegraph_mcp "$WT_PATH"
 
-# Seed CodeGraph index in background (copy + sync).
+# Seed CodeGraph index in background (copy + sync + rpcmap). Skip daemon
+# runtime files — they point at the donor's socket and would bind the
+# worktree to the wrong process.
 if [[ -d "$ROOT/.codegraph" ]]; then
   {
-    if [[ ! -d "$WT_PATH/.codegraph" ]]; then
-      cp -r "$ROOT/.codegraph" "$WT_PATH/.codegraph" 2>/dev/null || true
-    fi
-    cd "$WT_PATH" && (codegraph sync 2>/dev/null || true)
+    bash "$ROOT/scripts/dev/codegraph-seed-index.sh" "$ROOT/.codegraph" "$WT_PATH"
   } >/dev/null 2>&1 &
   disown 2>/dev/null || true
 fi

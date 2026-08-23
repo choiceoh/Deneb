@@ -1,9 +1,9 @@
 {
-  "mcpServers": {
+  "servers": {
     "codegraph": {
       "type": "stdio",
       "command": "bash",
-      "args": ["scripts/dev/codegraph-serve.sh"],
+      "args": ["${workspaceFolder}/scripts/dev/codegraph-serve.sh"],
       "env": {
         "CODEGRAPH_MCP_TOOLS": "explore,node,search,impact,callers,callees",
         "CODEGRAPH_AGENT": "claude"

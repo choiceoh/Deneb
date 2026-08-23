@@ -19,19 +19,21 @@ PostToolUse ───→ codegraph-sync               background codegraph sync 
 
 Stop ──────────→ zcode-worktree-status.sh    reports commit/uncommitted counts (ZCode)
 
-MCP ───────────→ codegraph                    codegraph_explore tool (serves via codegraph-serve.sh)
+MCP ───────────→ codegraph                    codegraph-serve.sh (worktree bind + explore→node proxy)
 ```
 
-Four agents share the codegraph and hook infrastructure:
+Every coding agent shares one CodeGraph stack (`codegraph_root.py` + `codegraph-serve.sh` + explore→node proxy + `codegraph-sync-run.sh`):
 
 | Agent | Config file | Worktree location | Branch prefix |
 |-------|-------------|-------------------|---------------|
 | **ZCode** | `.zcode/config.json` | `~/.zcode/worktrees/Deneb/` | `zcode/` |
 | **Cursor** | `.cursor/hooks.json` + `.cursor/mcp.json` | `~/.cursor/worktrees/Deneb/` | `cursor/` |
-| **Claude Code** | `.claude/settings.json` | native `EnterWorktree` | `claude/` |
-| **Codex** | `~/.codex/hooks.json` + `config.toml` | `~/.codex/worktrees/` | `codex/` <!-- docref:ignore --> |
+| **Claude Code** | `.claude/settings.json` + `.mcp.json` | native `EnterWorktree` | `claude/` |
+| **Codex** | `.codex/config.toml` + `.codex/hooks.json` | `~/.codex/worktrees/Deneb/` | `codex/` <!-- docref:ignore --> |
+| **Trae** | `.trae/mcp.json` | `~/.trae/worktrees/Deneb/` | `trae/` |
+| **VS Code / Copilot** | `.vscode/mcp.json` | workspace folder | — |
 
-All four auto-connect the `codegraph` MCP server and share the same sync / rules-gate / nudge / remind scripts — ensuring consistent code intelligence across agents without duplication.
+Serve wrappers refuse the production checkout, bind that agent's `active-root` worktree, evict a stale daemon, and reroute a single-symbol `explore` to `node` (same precision as the runtime gateway). `codegraph upgrade` clobbers MCP configs — `codegraph_mcp_restore.py` rewrites only the fingerprint.
 
 ## Configuration files
 
@@ -55,9 +57,13 @@ Cursor's equivalent:
 
 Claude Code's equivalent: SessionStart codegraph-autoindex, PreToolUse clash+rules-gate+nudge+remind, PostToolUse codegraph-sync.
 
-### `~/.codex/hooks.json` + `~/.codex/config.toml` (user scope)
+### `.codex/config.toml` + `.codex/hooks.json` (project scope)
 
-Codex CLI's global config: auto-worktree, codegraph MCP, nudge/remind/sync hooks, rules-gate. All codegraph hooks are guarded by `[ -d .../Deneb/.codegraph ]` so they no-op outside the Deneb repo.
+Codex loads these in trusted checkouts (CLI + IDE extension). MCP goes through `codegraph-serve.sh`; hooks restore wrappers, seed the index, nudge symbol greps, and sync after edits. User-level `~/.codex/` stays untouched so operator hooks are not rewritten.
+
+### `.trae/mcp.json` + `.vscode/mcp.json`
+
+Trae and VS Code / Copilot use the same wrapper. `.vscode/` is gitignored except `mcp.json`.
 
 ## Worktree isolation
 
@@ -113,13 +119,13 @@ After cleanup (post-precision excludes): ~**54.6K nodes**; audit/dev script cons
 Precision notes (Deneb):
 
 - CLI/MCP `query`/`node`/`callers` pin exact symbols; `explore` may camelCase-split (`GatewayHub` → `Hub`/`GatewayTab`) — prefer `node` for a single known symbol.
-- MCP exposes `explore,node,search,impact,callers,callees` via `CODEGRAPH_MCP_TOOLS` in `codegraph-serve.sh` / `cursor-codegraph-serve.sh`.
+- MCP exposes `explore,node,search,impact,callers,callees` via `CODEGRAPH_MCP_TOOLS`. `codegraph_mcp_proxy.py` reroutes a single-symbol explore to node (miss → original explore).
 - `codegraph.json` excludes audit/dev scripts and generated/resource noise; re-index after changes.
-- Runtime: CodeGraph **1.5.0+** (`npm i -g @colbymchenry/codegraph@1.5.0`). `codegraph upgrade` rewrites MCP configs — restore `scripts/dev/cursor-codegraph-serve.sh` / `codegraph-serve.sh` afterwards.
+- Runtime: CodeGraph **1.5.0+** (`npm i -g @colbymchenry/codegraph@1.5.0`). `codegraph upgrade` rewrites MCP configs — `codegraph_mcp_restore.py` (SessionStart) rewrites Cursor / Claude / ZCode / Codex / Trae / VS Code wrappers if the upgrade fingerprint is present. Serve wrappers evict a stale-version daemon and bind `codegraph_root.py`'s worktree pin (never the production checkout).
 
 ### Auto-sync
 
-The codegraph file-watcher daemon is inactive in some versions. The **PostToolUse hook** (`zcode-codegraph-sync.sh`) runs `codegraph sync` in the background after each Write/Edit/MultiEdit (<0.5s, detached, never blocks the session).
+The **PostToolUse / afterFileEdit hooks** (`zcode-codegraph-sync.sh`, `cursor-codegraph-sync.sh`, Codex `.codex/hooks.json`) run the shared `codegraph-sync-run.sh` pipeline in the background: `codegraph sync` → rpcmap synthetic edges → optional semantic index refresh. Worktree seeds go through `codegraph-seed-index.sh` so daemon pid/sock files are not copied.
 
 ### rpcmap — the string-key edge filler
 

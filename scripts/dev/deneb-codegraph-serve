@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# User-level CodeGraph MCP entry for any IDE. Never bind to ~/deneb.
+set -euo pipefail
+
+PROD="${HOME}/deneb"
+DEV="${HOME}/deneb-dev"
+
+usable() {
+  local root="$1"
+  [[ -n "$root" && -d "$root" && -f "$root/scripts/dev/codegraph-serve.sh" ]] || return 1
+  if [[ -d "$PROD" ]]; then
+    local cand prod
+    cand=$(cd "$root" && pwd)
+    prod=$(cd "$PROD" && pwd)
+    [[ "$cand" == "$prod" ]] && return 1
+  fi
+  return 0
+}
+
+read_pin() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  head -1 "$file" 2>/dev/null || true
+}
+
+CANDIDATES=()
+for base in \
+  "${HOME}/.cursor/worktrees/Deneb" \
+  "${HOME}/.zcode/worktrees/Deneb" \
+  "${HOME}/.claude/worktrees/Deneb" \
+  "${HOME}/.codex/worktrees/Deneb" \
+  "${HOME}/.trae/worktrees/Deneb"; do
+  sid=""
+  case "$base" in
+    *cursor*) sid="${CURSOR_SESSION_ID:-}" ;;
+    *zcode*) sid="${ZCODE_SESSION_ID:-${CLAUDE_SESSION_ID:-}}" ;;
+    *claude*) sid="${CLAUDE_SESSION_ID:-}" ;;
+    *codex*) sid="${CODEX_THREAD_ID:-${CODEX_SESSION_ID:-}}" ;;
+    *trae*) sid="${TRAE_SESSION_ID:-}" ;;
+  esac
+  if [[ -n "$sid" ]]; then
+    safe=$(printf '%s' "$sid" | tr -c 'A-Za-z0-9._-' '_' | cut -c1-80)
+    CANDIDATES+=("$(read_pin "$base/active-root.$safe")")
+  fi
+  CANDIDATES+=("$(read_pin "$base/active-root")")
+done
+CANDIDATES+=("$DEV")
+
+for root in "${CANDIDATES[@]}"; do
+  usable "$root" || continue
+  exec bash "$root/scripts/dev/codegraph-serve.sh" "${1:-$root}" "${@:2}"
+done
+
+echo "deneb-codegraph-serve: codegraph-serve.sh not found" >&2
+exit 127

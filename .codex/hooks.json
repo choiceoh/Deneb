@@ -1,0 +1,39 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f \"$PWD/codegraph.json\" ]; then python3 \"$PWD/scripts/dev/codegraph_mcp_restore.py\" --root \"$PWD\" --no-user; python3 \"$PWD/scripts/dev/codegraph-autoindex.py\"; fi",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Grep|Bash|Shell|grep|shell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -d \"$PWD/.codegraph\" ]; then python3 \"$PWD/scripts/dev/codegraph-nudge.py\"; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|ApplyPatch|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f \"$PWD/scripts/dev/zcode-codegraph-sync.sh\" ]; then bash \"$PWD/scripts/dev/zcode-codegraph-sync.sh\"; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

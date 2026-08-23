@@ -18,4 +18,5 @@ alwaysApply: true
 - Pin with filters when needed: `name:GatewayHub path:gateway-go` or MCP `codegraph_node` / CLI `codegraph node|callers|impact`.
 - Keep `codegraph_explore` `maxFiles` low (3–6) for symbol lookups; raise only for area surveys.
 - Available MCP tools: `explore`, `node`, `search`, `impact`, `callers`, `callees` (`CODEGRAPH_MCP_TOOLS`).
+- A single-symbol `explore` is rerouted to `node` by `codegraph_mcp_proxy.py` (same as the runtime gateway). Use multi-token / NL queries for area surveys.
 - String-keyed RPC/tool/event names: `scripts/dev/rpcmap.py <name>` then `codegraph node <handler>`.

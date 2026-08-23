@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# User-level Cursor MCP entry. Never bind to ~/deneb (production).
+# Prefers the Cursor session pin, then the shared finder.
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -x "$HERE/deneb-codegraph-serve" ]]; then
+  export CODEGRAPH_AGENT="${CODEGRAPH_AGENT:-cursor}"
+  exec bash "$HERE/deneb-codegraph-serve" "$@"
+fi
+WT_BASE="${HOME}/.cursor/worktrees/Deneb"
+ACTIVE=""
+sid="${CURSOR_SESSION_ID:-}"
+if [[ -n "$sid" ]]; then
+  safe=$(printf '%s' "$sid" | tr -c 'A-Za-z0-9._-' '_' | cut -c1-80)
+  if [[ -n "$safe" && -f "$WT_BASE/active-root.$safe" ]]; then
+    ACTIVE=$(head -1 "$WT_BASE/active-root.$safe" || true)
+  fi
+fi
+if [[ -z "$ACTIVE" && -f "$WT_BASE/active-root" ]]; then
+  ACTIVE=$(head -1 "$WT_BASE/active-root" || true)
+fi
+for root in "$ACTIVE" "${HOME}/deneb-dev"; do
+  [[ -n "${root:-}" && -d "$root" && -f "$root/scripts/dev/cursor-codegraph-serve.sh" ]] || continue
+  if [[ -d "${HOME}/deneb" ]]; then
+    cand=$(cd "$root" && pwd)
+    prod=$(cd "${HOME}/deneb" && pwd)
+    [[ "$cand" == "$prod" ]] && continue
+  fi
+  exec bash "$root/scripts/dev/cursor-codegraph-serve.sh" "${1:-$root}" "${@:2}"
+done
+echo "deneb-cursor-codegraph-serve: cursor-codegraph-serve.sh not found" >&2
+exit 127

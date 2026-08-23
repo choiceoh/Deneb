@@ -104,7 +104,7 @@ def sync(repo: Path) -> tuple[int, int]:
 
 
 def main() -> int:
-    repo = Path(__file__).resolve().parents[2]
+    repo = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[2]
     linked, skipped = sync(repo)
     print(f"rpcmap→codegraph: {linked} edges injected, {skipped} skipped (handler not in index)")
     return 0

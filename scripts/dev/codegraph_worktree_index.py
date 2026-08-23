@@ -92,14 +92,19 @@ def ensure_index(root):
 
         dst = os.path.join(root, ".codegraph")
         q = shlex.quote
+        here = os.path.dirname(os.path.abspath(__file__))
+        seed = os.path.join(here, "codegraph-seed-index.sh")
+        rpc = os.path.join(here, "rpcmap_codegraph_sync.py")
         if donor:
-            # Seed from the donor, then reconcile branch drift. If the seed is
-            # unusable (partial/locked copy, sync error), self-heal to a full
-            # init so the worktree still ends up correctly indexed.
-            cmd = (f"cp -r {q(donor)} {q(dst)} && cd {q(root)} && codegraph sync"
-                   f" || {{ rm -rf {q(dst)}; cd {q(root)} && codegraph init; }}")
+            # Seed from the donor (skip daemon runtime), then sync + rpcmap.
+            # If the seed is unusable, self-heal to a full init + rpcmap inject.
+            cmd = (
+                f"bash {q(seed)} {q(donor)} {q(root)}"
+                f" || {{ rm -rf {q(dst)}; cd {q(root)} && codegraph init"
+                f" && python3 {q(rpc)} {q(root)}; }}"
+            )
         else:
-            cmd = f"cd {q(root)} && codegraph init"
+            cmd = f"cd {q(root)} && codegraph init && python3 {q(rpc)} {q(root)}"
 
         log = os.path.join(tempfile.gettempdir(), f"codegraph-autoindex-{key}.log")
         # LOGIN shell restores the profile PATH (node + codegraph) a minimal hook

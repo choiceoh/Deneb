@@ -8,6 +8,12 @@
             "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/dev/codegraph-autoindex.py\"",
             "timeout": 15,
             "statusMessage": "codegraph: 워크트리 인덱스 자동 준비"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/dev/codegraph_mcp_restore.py\" --root \"$CLAUDE_PROJECT_DIR\" --no-user",
+            "timeout": 10,
+            "statusMessage": "codegraph: upgrade 잔여 MCP 래퍼 복구"
           }
         ]
       },
