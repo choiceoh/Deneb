@@ -104,6 +104,245 @@ func TestSearchAndSearchPlanReturnOnlyCanonicalActiveFactWinner(t *testing.T) {
 	assertCurrent("Search after restart", restarted)
 }
 
+func TestTypedFactLifecycleKeepsSharedShortValuesScopedAcrossSearchPlanAndRestart(t *testing.T) {
+	root := t.TempDir()
+	wikiDir, diaryDir := filepath.Join(root, "wiki"), filepath.Join(root, "diary")
+	store, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
+
+	write := func(path, title, subject, body string) {
+		t.Helper()
+		page := NewPage(title, "프로젝트", nil)
+		page.Meta.SubjectID = subject
+		page.Body = body
+		if writeErr := store.WritePage(path, page); writeErr != nil {
+			t.Fatal(writeErr)
+		}
+	}
+	write("자료/quality-grade.md", "품질 등급", "", "품질 등급 A는 통과")
+	write("프로젝트/alpha-quote.md", "alpha quote", "project:alpha", "project alpha quote amount A")
+	write("프로젝트/beta-quote-old.md", "beta old quote", "project:beta", "project beta quote amount A")
+	write("프로젝트/beta-quote-current.md", "beta current quote", "project:beta", "project beta quote amount B")
+
+	upsert := func(input FactInput) {
+		t.Helper()
+		result, upsertErr := store.UpsertFact(input)
+		if upsertErr != nil || !result.Committed {
+			t.Fatalf("UpsertFact(%s/%s/%s) = %+v, err=%v", input.Subject, input.Key, input.Value, result, upsertErr)
+		}
+	}
+	for index, value := range []string{"A", "B"} {
+		upsert(FactInput{
+			Subject: "self", Key: "preference.language", Value: value,
+			Kind: FactKindPreference, Authority: FactAuthorityDirectUser,
+			At: base.Add(time.Duration(index) * time.Hour),
+		})
+	}
+	upsert(FactInput{
+		Subject: "project:alpha", Key: "quote.amount", Value: "A",
+		Kind: FactKindAmount, Authority: FactAuthorityPrimaryDoc,
+		Sources: []string{"doc:alpha"}, At: base, BasisAt: base,
+	})
+	for index, value := range []string{"A", "B"} {
+		at := base.Add(time.Duration(index) * time.Hour)
+		upsert(FactInput{
+			Subject: "project:beta", Key: "quote.amount", Value: value,
+			Kind: FactKindAmount, Authority: FactAuthorityPrimaryDoc,
+			Sources: []string{"doc:beta"}, At: at, BasisAt: at,
+		})
+	}
+
+	assertScoped := func(label string, current *Store) {
+		t.Helper()
+		quality, searchErr := current.Search(context.Background(), "품질 등급", 10)
+		if searchErr != nil || !searchResultsContainPath(quality, "자료/quality-grade.md") {
+			t.Fatalf("%s unrelated shared A missing from Search: %+v err=%v", label, quality, searchErr)
+		}
+		qualityPlan, planErr := current.SearchPlan(context.Background(), QueryPlan{
+			Clauses: []QueryClause{{Kind: QueryKindLex, Query: "품질 등급"}},
+		}, 10)
+		if planErr != nil || !searchResultsContainPath(qualityPlan.Results, "자료/quality-grade.md") {
+			t.Fatalf("%s unrelated shared A missing from SearchPlan: %+v err=%v", label, qualityPlan.Results, planErr)
+		}
+
+		alpha, searchErr := current.Search(context.Background(), "project alpha quote amount", 10)
+		if searchErr != nil || !searchResultsContainPath(alpha, "프로젝트/alpha-quote.md") {
+			t.Fatalf("%s alpha current A was removed: %+v err=%v", label, alpha, searchErr)
+		}
+		beta, searchErr := current.Search(context.Background(), "project beta quote amount", 10)
+		if searchErr != nil {
+			t.Fatal(searchErr)
+		}
+		if searchResultsContainPath(beta, "프로젝트/beta-quote-old.md") ||
+			!searchResultsContainPath(beta, "프로젝트/beta-quote-current.md") {
+			t.Fatalf("%s beta lifecycle mismatch: %+v", label, beta)
+		}
+		joined := ""
+		for _, hit := range beta {
+			joined += "\n" + hit.Content + "\n" + hit.ExpandedContent
+		}
+		if strings.Contains(joined, "amount A") || !strings.Contains(joined, "amount B") {
+			t.Fatalf("%s beta stale/current values mismatch:\n%s", label, joined)
+		}
+	}
+
+	snapshot := store.RecallFactSnapshot()
+	if strings.Contains(strings.Join(snapshot.StaleValues, "\n"), "A") {
+		t.Fatalf("typed short value leaked into global stale lines: %+v", snapshot.StaleValues)
+	}
+	if len(snapshot.LifecycleRules) != 2 {
+		t.Fatalf("lifecycle rules = %+v, want self and beta corrections", snapshot.LifecycleRules)
+	}
+	assertScoped("live", store)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	assertScoped("reopen", reopened)
+}
+
+func TestFactLifecycleMatcherRequiresIdentityForShortTypedAndUntypedValues(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	snapshot := FactRecallSnapshot{
+		Active: []FactClaim{
+			{Subject: "project:alpha", Key: "quote.total", Kind: FactKindAmount, Value: "A", Status: FactStatusCurrent},
+			{Subject: "project:beta", Key: "quote.total", Kind: FactKindAmount, Value: "B", Status: FactStatusCurrent},
+			{Subject: "project:beta", Key: "budget.limit", Kind: FactKindAmount, Value: "C", Status: FactStatusCurrent},
+		},
+		LifecycleRules: []FactLifecycleRule{{
+			Subject: "project:beta", Key: "quote.total", Kind: FactKindAmount,
+			CurrentValues: []string{"B"}, StaleValues: []string{"A"},
+		}},
+		StaleValues: []string{"A", "오로라 운영 포트는 18789를 사용한다"},
+	}
+	tests := []struct {
+		name     string
+		evidence FactLifecycleEvidence
+		want     bool
+	}{
+		{
+			name: "other subject current shared value",
+			evidence: FactLifecycleEvidence{
+				Query: "project beta quote amount", Ref: "project/alpha/quote.txt",
+				Text: "project alpha quote amount A",
+			},
+			want: true,
+		},
+		{
+			name: "broad subject old short value",
+			evidence: FactLifecycleEvidence{
+				Query: "project beta", Ref: "project/beta/history.txt", Text: "project beta was A",
+			},
+			want: false,
+		},
+		{
+			name: "unrelated short typed and untyped value",
+			evidence: FactLifecycleEvidence{
+				Query: "품질 등급", Ref: "quality/grade.txt", Text: "품질 등급 A는 통과",
+			},
+			want: true,
+		},
+		{
+			name: "kind alone is ambiguous across active keys",
+			evidence: FactLifecycleEvidence{
+				Query: "project beta amount", Ref: "project/beta/overview.txt", Text: "project beta amount is pending",
+			},
+			want: true,
+		},
+		{
+			name: "long legacy phrase remains globally denied",
+			evidence: FactLifecycleEvidence{
+				Query: "운영 포트", Ref: "notes/copy.txt", Text: "오로라 운영 포트는 18789를 사용한다",
+			},
+			want: false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := store.FactLifecycleEvidenceAllowed(test.evidence, snapshot); got != test.want {
+				t.Fatalf("FactLifecycleEvidenceAllowed(%+v) = %v, want %v", test.evidence, got, test.want)
+			}
+		})
+	}
+}
+
+func TestTombstonedShortValueFiltersOnlyItsIdentityAcrossRestart(t *testing.T) {
+	root := t.TempDir()
+	wikiDir, diaryDir := filepath.Join(root, "wiki"), filepath.Join(root, "diary")
+	store, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := NewPage("gamma old status", "프로젝트", nil)
+	old.Meta.SubjectID = "project:gamma"
+	old.Body = "project gamma release status A"
+	if err := store.WritePage("프로젝트/gamma-old-status.md", old); err != nil {
+		t.Fatal(err)
+	}
+	unrelated := NewPage("품질 등급", "자료", nil)
+	unrelated.Body = "품질 등급 A는 통과"
+	if err := store.WritePage("자료/quality-grade.md", unrelated); err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
+	if _, err := store.UpsertFact(FactInput{
+		Subject: "project:gamma", Key: "release.status", Value: "A",
+		Kind: FactKindGeneric, Authority: FactAuthorityAgent, At: base,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.TombstoneFact(FactTombstoneInput{
+		Subject: "project:gamma", Key: "release.status",
+		Authority: FactAuthorityAgent, At: base.Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	assertScoped := func(label string, current *Store) {
+		t.Helper()
+		oldHits, searchErr := current.Search(context.Background(), "project gamma release status", 10)
+		if searchErr != nil || searchResultsContainPath(oldHits, "프로젝트/gamma-old-status.md") {
+			t.Fatalf("%s tombstoned identity resurfaced: %+v err=%v", label, oldHits, searchErr)
+		}
+		plan, planErr := current.SearchPlan(context.Background(), QueryPlan{
+			Clauses: []QueryClause{{Kind: QueryKindLex, Query: "project gamma release status"}},
+		}, 10)
+		if planErr != nil || searchResultsContainPath(plan.Results, "프로젝트/gamma-old-status.md") {
+			t.Fatalf("%s tombstoned identity resurfaced in plan: %+v err=%v", label, plan.Results, planErr)
+		}
+		quality, searchErr := current.Search(context.Background(), "품질 등급", 10)
+		if searchErr != nil || !searchResultsContainPath(quality, "자료/quality-grade.md") {
+			t.Fatalf("%s unrelated shared A was removed: %+v err=%v", label, quality, searchErr)
+		}
+	}
+	assertScoped("live", store)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	assertScoped("reopen", reopened)
+}
+
+func searchResultsContainPath(results []SearchResult, path string) bool {
+	for _, result := range results {
+		if result.Path == path {
+			return true
+		}
+	}
+	return false
+}
+
 func TestFactSearchRequiresNamespaceForCollidingSubjectAlias(t *testing.T) {
 	store, _, _ := newFactTestStore(t)
 	base := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
@@ -301,6 +540,89 @@ func TestFactCandidatesReserveAtLeastOnePageEvidenceSlot(t *testing.T) {
 	if !pageSeen {
 		t.Fatalf("fact candidates consumed every page evidence slot: %+v", hits)
 	}
+}
+
+func TestExcludeFactResultsPreservesPageOnlySearchAndPlanWindows(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	for index := range 8 {
+		page := NewPage("alpha page "+string(rune('a'+index)), "프로젝트", nil)
+		page.Body = "alpha dossier page " + string(rune('a'+index))
+		if err := store.WritePage("프로젝트/alpha-"+string(rune('a'+index))+".md", page); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.UpsertFact(FactInput{
+			Subject: "project:alpha", Key: "field." + string(rune('a'+index)), Value: "value-" + string(rune('a'+index)),
+			Kind: FactKindGeneric, Authority: FactAuthorityAgent,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	assertNoFacts := func(label string, results []SearchResult) {
+		t.Helper()
+		if len(results) != 5 {
+			t.Fatalf("%s returned %d results, want five page slots: %+v", label, len(results), results)
+		}
+		for _, result := range results {
+			if result.FactID != "" {
+				t.Fatalf("%s returned synthetic fact %+v", label, result)
+			}
+		}
+	}
+
+	baseline, err := store.SearchWithOptions(context.Background(), "alpha", 5, QueryOptions{Mode: SearchModeBM25})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertNoFacts("bm25 baseline", baseline.Results)
+	baselinePaths := make([]string, len(baseline.Results))
+	for i := range baseline.Results {
+		baselinePaths[i] = baseline.Results[i].Path
+	}
+	for _, mode := range []SearchMode{SearchModeAuto, SearchModeFull} {
+		allPlane, searchErr := store.SearchWithOptions(context.Background(), "alpha", 5, QueryOptions{Mode: mode})
+		if searchErr != nil {
+			t.Fatal(searchErr)
+		}
+		factSeen := false
+		for _, result := range allPlane.Results {
+			factSeen = factSeen || result.FactID != ""
+		}
+		if !factSeen {
+			t.Fatalf("%s all-plane search did not expose a fact fixture: %+v", mode, allPlane.Results)
+		}
+
+		pagePlane, searchErr := store.SearchWithOptions(context.Background(), "alpha", 5, QueryOptions{
+			Mode: mode, ExcludeFactResults: true,
+		})
+		if searchErr != nil {
+			t.Fatal(searchErr)
+		}
+		assertNoFacts(string(mode), pagePlane.Results)
+		for i, result := range pagePlane.Results {
+			if result.Path != baselinePaths[i] {
+				t.Fatalf("%s page rank %d = %q, want baseline %q", mode, i, result.Path, baselinePaths[i])
+			}
+		}
+	}
+
+	plan := QueryPlan{Clauses: []QueryClause{{Kind: QueryKindLex, Query: "alpha"}}}
+	allPlan, err := store.SearchPlan(context.Background(), plan, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	factSeen := false
+	for _, result := range allPlan.Results {
+		factSeen = factSeen || result.FactID != ""
+	}
+	if !factSeen {
+		t.Fatalf("all-plane plan did not expose a fact fixture: %+v", allPlan.Results)
+	}
+	pagePlan, err := store.SearchPlanWithOptions(context.Background(), plan, 5, QueryOptions{ExcludeFactResults: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertNoFacts("typed plan", pagePlan.Results)
 }
 
 func TestSyntheticFactReadIsExtensionOptionalAndNamespaceReserved(t *testing.T) {

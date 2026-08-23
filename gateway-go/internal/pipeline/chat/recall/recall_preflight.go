@@ -245,11 +245,6 @@ type recallCollection struct {
 	truncated     bool
 }
 
-type correctedFactRule struct {
-	key           string
-	currentValues []string
-}
-
 type indexedRecallSourceResult struct {
 	index  int
 	result recallSourceResult
@@ -361,29 +356,27 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	currentFacts := ""
 	currentFactsResolveCue := false
 	staleFactValues := supersededPageValues
-	var correctedRules []correctedFactRule
+	var factSnapshot *wiki.FactRecallSnapshot
 	var unmatchedSubjectValues []string
 	var unmatchedSubjectAliases []factSubjectAlias
 	var matchedSubjects map[string]struct{}
 	if deps.Wiki != nil {
 		// Canonical current facts are a live, typed tail block rather than a
-		// session-frozen system-prompt fragment. Filter every legacy source by
-		// the same ledger's deny set before ranking, so an old diary/transcript
-		// mention cannot outscore and resurrect a corrected value.
-		// The deny set spans every subject. Diary/transcript rows do not carry a
-		// reliable subject identifier, so filtering only self would let a corrected
-		// project or counterparty value resurface through those untyped sources.
-		factSnapshot := deps.Wiki.RecallFactSnapshot()
-		staleFactValues = append(staleFactValues, factSnapshot.StaleValues...)
+		// session-frozen system-prompt fragment. Filter every legacy source with
+		// the same ledger snapshot before ranking, so an old diary/transcript
+		// mention cannot outscore and resurrect a corrected value. Typed retired
+		// values stay scoped to subject+key; source path/text/query supply identity
+		// context when a row has no explicit SubjectID.
+		snapshot := deps.Wiki.RecallFactSnapshot()
+		factSnapshot = &snapshot
 		evidence = filterStaleFactEvidence(evidence, staleFactValues)
-		factRevision, activeFacts := factSnapshot.Revision, factSnapshot.Active
+		evidence = filterRecallFactLifecycleEvidence(deps.Wiki, searchMessage, evidence, snapshot)
+		factRevision, activeFacts := snapshot.Revision, snapshot.Active
 		matchedSubjects = explicitlyMatchedFactSubjects(searchMessage, activeFacts)
 		unmatchedSubjectValues = unmatchedNonSelfFactValues(activeFacts, matchedSubjects)
 		unmatchedSubjectAliases = unmatchedNonSelfFactAliases(activeFacts, matchedSubjects)
 		evidence = filterUnmatchedSubjectFactEvidence(evidence, unmatchedSubjectValues)
 		evidence = filterUnmatchedSubjectAliases(evidence, unmatchedSubjectAliases, matchedSubjects)
-		correctedRules = buildCorrectedFactRules(activeFacts, factSnapshot.CorrectedKeys)
-		evidence = filterCorrectedFactEvidence(evidence, correctedRules)
 		currentFacts = subjectAwareCurrentFactContext(factRevision, activeFacts, matchedSubjects, searchMessage, currentFactMaxChars)
 		currentFactsResolveCue = strings.TrimSpace(currentFacts) != "" &&
 			currentFactsResolveMessage(searchMessage, activeFacts, matchedSubjects)
@@ -400,9 +393,11 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	// same deny set again so a vague cue cannot bypass lifecycle filtering via
 	// the newest raw diary entries.
 	evidence = filterStaleFactEvidence(evidence, staleFactValues)
+	if factSnapshot != nil {
+		evidence = filterRecallFactLifecycleEvidence(deps.Wiki, searchMessage, evidence, *factSnapshot)
+	}
 	evidence = filterUnmatchedSubjectFactEvidence(evidence, unmatchedSubjectValues)
 	evidence = filterUnmatchedSubjectAliases(evidence, unmatchedSubjectAliases, matchedSubjects)
-	evidence = filterCorrectedFactEvidence(evidence, correctedRules)
 
 	// wiki↔메일 담당자 충돌: pull candidates without annotating either side,
 	// apply the fact guards, then annotate only surviving pairs. Annotation is
@@ -411,14 +406,18 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 		evidence = pullMissingMailAnalysisConflicts(ctx, deps.Wiki, evidence)
 	}
 	evidence = filterStaleFactEvidence(evidence, staleFactValues)
+	if factSnapshot != nil {
+		evidence = filterRecallFactLifecycleEvidence(deps.Wiki, searchMessage, evidence, *factSnapshot)
+	}
 	evidence = filterUnmatchedSubjectFactEvidence(evidence, unmatchedSubjectValues)
 	evidence = filterUnmatchedSubjectAliases(evidence, unmatchedSubjectAliases, matchedSubjects)
-	evidence = filterCorrectedFactEvidence(evidence, correctedRules)
 	evidence = annotateExistingWikiMailConflicts(deps.Wiki, evidence)
 	evidence = filterStaleFactEvidence(evidence, staleFactValues)
+	if factSnapshot != nil {
+		evidence = filterRecallFactLifecycleEvidence(deps.Wiki, searchMessage, evidence, *factSnapshot)
+	}
 	evidence = filterUnmatchedSubjectFactEvidence(evidence, unmatchedSubjectValues)
 	evidence = filterUnmatchedSubjectAliases(evidence, unmatchedSubjectAliases, matchedSubjects)
-	evidence = filterCorrectedFactEvidence(evidence, correctedRules)
 
 	if len(evidence) == 0 {
 		// The canonical fact plane is itself authoritative recall evidence. A cue
@@ -697,6 +696,13 @@ func filterUnmatchedSubjectFactEvidence(evidence []recallEvidence, values []stri
 	for _, item := range evidence {
 		blocked := false
 		for _, value := range values {
+			// Subject-less short/common values cannot safely enforce privacy by
+			// themselves. Alias/SubjectID guards below still block rows that name
+			// the unmatched subject; typed lifecycle rules handle same-identity
+			// short corrections without turning "A" into a global deny.
+			if !wiki.IsFactLifecycleGlobalStalePhrase(value) {
+				continue
+			}
 			if evidenceContainsNormalizedFactValue(item.Note, value) {
 				blocked = true
 				break
@@ -1197,6 +1203,31 @@ func subjectFactBasisSuffix(claim wiki.FactClaim) string {
 	return " (" + strings.Join(parts, " · ") + ")"
 }
 
+func filterRecallFactLifecycleEvidence(
+	store *wiki.Store,
+	query string,
+	evidence []recallEvidence,
+	snapshot wiki.FactRecallSnapshot,
+) []recallEvidence {
+	if store == nil || len(evidence) == 0 {
+		return evidence
+	}
+	items := make([]wiki.FactLifecycleEvidence, len(evidence))
+	for index, item := range evidence {
+		items[index] = wiki.FactLifecycleEvidence{
+			Query: query, Ref: item.Source, SubjectID: item.SubjectID, Text: item.Note,
+		}
+	}
+	allowed := store.FactLifecycleEvidencesAllowed(items, snapshot)
+	filtered := evidence[:0]
+	for index, item := range evidence {
+		if allowed[index] {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
 func filterStaleFactEvidence(evidence []recallEvidence, staleValues []string) []recallEvidence {
 	if len(evidence) == 0 || len(staleValues) == 0 {
 		return evidence
@@ -1204,7 +1235,7 @@ func filterStaleFactEvidence(evidence []recallEvidence, staleValues []string) []
 	stale := make([]string, 0, len(staleValues))
 	for _, value := range staleValues {
 		value = strings.ToLower(strings.Join(strings.Fields(value), " "))
-		if value != "" && !structuralStaleValue(value) {
+		if value != "" && !structuralStaleValue(value) && wiki.IsFactLifecycleGlobalStalePhrase(value) {
 			stale = append(stale, value)
 		}
 	}
@@ -1266,104 +1297,6 @@ func structuralStaleValue(value string) bool {
 	value = strings.ToLower(strings.Join(strings.Fields(value), " "))
 	switch value {
 	case "요약", "핵심 사실", "변경 이력", "summary", "key facts", "change history", "changelog":
-		return true
-	default:
-		return false
-	}
-}
-
-func buildCorrectedFactRules(active []wiki.FactClaim, keys []string) []correctedFactRule {
-	current := make(map[string][]string)
-	for _, claim := range active {
-		key := strings.ToLower(strings.TrimSpace(claim.Key))
-		value := strings.TrimSpace(claim.Value)
-		if key != "" && value != "" {
-			current[key] = append(current[key], value)
-		}
-	}
-	rules := make([]correctedFactRule, 0, len(keys))
-	for _, key := range keys {
-		key = strings.ToLower(strings.TrimSpace(key))
-		if key != "" {
-			rules = append(rules, correctedFactRule{key: key, currentValues: current[key]})
-		}
-	}
-	return rules
-}
-
-func filterCorrectedFactEvidence(evidence []recallEvidence, rules []correctedFactRule) []recallEvidence {
-	if len(evidence) == 0 || len(rules) == 0 {
-		return evidence
-	}
-	out := evidence[:0]
-	for _, item := range evidence {
-		blocked := false
-		for _, rule := range rules {
-			if !evidenceMatchesFactKey(item.Note, rule.key) {
-				continue
-			}
-			if containsAnyCurrentFactValue(item.Note, rule.currentValues) {
-				continue
-			}
-			blocked = true
-			break
-		}
-		if !blocked {
-			out = append(out, item)
-		}
-	}
-	return out
-}
-
-func containsAnyCurrentFactValue(note string, values []string) bool {
-	for _, value := range values {
-		if evidenceContainsNormalizedFactValue(note, value) {
-			return true
-		}
-	}
-	return false
-}
-
-func evidenceMatchesFactKey(note, key string) bool {
-	if strings.EqualFold(mem.FactKeyFromText(note), key) {
-		return true
-	}
-	// Arbitrary stable keys need a conservative fallback because they are not
-	// part of memory.FactKeyFromText's semantic axes. One substring (for example
-	// "owner" or "quote") is far too broad; require at least two meaningful key
-	// components and exact token matches for all of them.
-	var keyTokens []string
-	for _, token := range strings.FieldsFunc(key, func(r rune) bool {
-		return r == '.' || r == '_' || r == ':' || r == '/' || r == '-'
-	}) {
-		token = strings.ToLower(strings.TrimSpace(token))
-		if len([]rune(token)) < 3 || genericFactKeyToken(token) {
-			continue
-		}
-		keyTokens = append(keyTokens, token)
-	}
-	if len(keyTokens) < 2 {
-		return false
-	}
-	noteTokens := make(map[string]struct{})
-	for _, token := range strings.FieldsFunc(strings.ToLower(note), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
-	}) {
-		noteTokens[token] = struct{}{}
-	}
-	for _, token := range keyTokens {
-		if _, ok := noteTokens[token]; !ok {
-			return false
-		}
-	}
-	return true
-}
-
-func genericFactKeyToken(token string) bool {
-	switch token {
-	case "communication", "preference", "identity", "project", "current", "fact", "generic",
-		"amount", "deadline", "contract", "state", "response", "length", "language",
-		"answer", "first", "progress", "updates", "format", "wiki", "policy", "diet", "vegan", "address":
 		return true
 	default:
 		return false

@@ -52,14 +52,15 @@ const (
 // Intent never admits a new document: it only reranks already-admitted
 // candidates, and normally runs only when the base ranking is ambiguous.
 type QueryOptions struct {
-	Mode         SearchMode
-	Explain      bool
-	Intent       string
-	ForceIntent  bool
-	ForceRerank  bool
-	SkipRerank   bool // when true, skip cross-encoder model rerank (agent lean path)
-	skipMetadata bool
-	skipValidity bool
+	Mode               SearchMode
+	Explain            bool
+	Intent             string
+	ForceIntent        bool
+	ForceRerank        bool
+	SkipRerank         bool // when true, skip cross-encoder model rerank (agent lean path)
+	ExcludeFactResults bool // page-only consumers must not spend result slots on synthetic fact hits
+	skipMetadata       bool
+	skipValidity       bool
 }
 
 type SearchSignalExplanation struct {
@@ -750,14 +751,14 @@ func (s *Store) composeSearchReport(
 		results = s.fts.applyValidity(results)
 	}
 	beforeLifecycle := len(results)
-	results = s.filterFactLifecycleSearchResults(results, factSnapshot)
+	results = s.filterFactLifecycleSearchResults(query, results, factSnapshot)
 	if dropped := beforeLifecycle - len(results); dropped > 0 {
 		diagnostics.Dropped = appendDrop(diagnostics.Dropped, "superseded_fact_evidence", dropped)
 	}
 	var intentResults []SearchResult
 	if shouldIntentRerank(results, options) && loadIntent != nil {
 		intentResults = loadIntent()
-		intentResults = s.filterFactLifecycleSearchResults(intentResults, factSnapshot)
+		intentResults = s.filterFactLifecycleSearchResults(query, intentResults, factSnapshot)
 	}
 	intentBonuses, applied := s.applyIntentRerank(results, intentResults, options)
 	diagnostics.IntentApplied = applied
@@ -771,7 +772,7 @@ func (s *Store) composeSearchReport(
 	}
 	diagnostics.Rerank = rerankDiagnostics
 	var factResults []SearchResult
-	if !options.skipMetadata && (mode == SearchModeAuto || mode == SearchModeFull) {
+	if !options.ExcludeFactResults && !options.skipMetadata && (mode == SearchModeAuto || mode == SearchModeFull) {
 		factResults = searchActiveFactClaims(
 			query,
 			fetchLimit,
@@ -803,8 +804,8 @@ func (s *Store) composeSearchReport(
 	// the old claim/page and adds the new canonical claim without mixing epochs.
 	latestFactSnapshot := s.RecallFactSnapshot()
 	beforeLifecycle = len(results)
-	results = s.filterFactLifecycleSearchResults(results, latestFactSnapshot)
-	if !options.skipMetadata && (mode == SearchModeAuto || mode == SearchModeFull) {
+	results = s.filterFactLifecycleSearchResults(query, results, latestFactSnapshot)
+	if !options.ExcludeFactResults && !options.skipMetadata && (mode == SearchModeAuto || mode == SearchModeFull) {
 		latestFacts := searchActiveFactClaims(
 			query,
 			fetchLimit,
@@ -951,6 +952,7 @@ func (s *Store) attachResultMetadata(query string, results []SearchResult) {
 			continue
 		}
 		results[i].Context = hierarchicalPageContext(results[i].Path, page)
+		results[i].SubjectID = normalizeFactSubjectHint(page.Meta.SubjectID)
 		if updated, err := time.Parse("2006-01-02", strings.TrimSpace(page.Meta.Updated)); err == nil {
 			results[i].UpdatedAt = updated.UnixMilli()
 		}
@@ -976,6 +978,13 @@ func (s *Store) attachResultMetadata(query string, results []SearchResult) {
 		results[i].Line = start + offset
 		results[i].EndLine = end + offset
 	}
+}
+
+func normalizeFactSubjectHint(subject string) string {
+	if strings.TrimSpace(subject) == "" {
+		return ""
+	}
+	return normalizeFactSubject(subject)
 }
 
 func hierarchicalPageContext(relPath string, page *Page) []string {

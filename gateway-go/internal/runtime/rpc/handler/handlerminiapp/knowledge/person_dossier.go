@@ -20,6 +20,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/phoneledger"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -199,7 +200,13 @@ func fillDossierWikiRefs(ctx context.Context, storeFn func() (MemorySearcher, er
 	if err != nil || store == nil {
 		return
 	}
-	results, err := store.Search(ctx, name, dossierWikiRefsMax*2)
+	var results []wiki.SearchResult
+	if searcher, ok := store.(memoryQuerySearcher); ok {
+		report, searchErr := searcher.SearchWithOptions(ctx, name, dossierWikiRefsMax*2, wiki.QueryOptions{ExcludeFactResults: true})
+		results, err = report.Results, searchErr
+	} else {
+		results, err = store.Search(ctx, name, dossierWikiRefsMax*2)
+	}
 	if err != nil {
 		return
 	}

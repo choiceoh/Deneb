@@ -75,6 +75,9 @@ type (
 	FactClaim               = wiki.FactClaim
 	FactWriteResult         = wiki.FactWriteResult
 	FactSnapshot            = wiki.FactSnapshot
+	FactRecallSnapshot      = wiki.FactRecallSnapshot
+	FactLifecycleRule       = wiki.FactLifecycleRule
+	FactLifecycleEvidence   = wiki.FactLifecycleEvidence
 	FactProjectionStatus    = wiki.FactProjectionStatus
 )
 
@@ -212,6 +215,10 @@ func NormalizeProjectPagePath(relPath string) string {
 
 func IsEffectivelySuperseded(relPath string, meta Frontmatter) bool {
 	return wiki.IsEffectivelySuperseded(relPath, meta)
+}
+
+func IsFactLifecycleGlobalStalePhrase(value string) bool {
+	return wiki.IsFactLifecycleGlobalStalePhrase(value)
 }
 
 func ValidateCategory(cat string) bool {

@@ -416,73 +416,300 @@ func factValueAllowsAttachedSuffix(last rune, suffix string) bool {
 	return false
 }
 
-// FactLifecycleTextAllowed applies the canonical correction/tombstone deny
-// contract to evidence from any retrieval backend. The supplied snapshot makes
-// a caller's whole result set observe one fact revision.
-func (s *Store) FactLifecycleTextAllowed(text string, snapshot FactRecallSnapshot) bool {
-	return newFactLifecycleMatcher(snapshot).allows(text)
+// FactLifecycleEvidenceAllowed applies the canonical correction/tombstone
+// contract to one result from any retrieval backend. The supplied snapshot
+// makes a caller's whole result set observe one fact revision.
+func (s *Store) FactLifecycleEvidenceAllowed(evidence FactLifecycleEvidence, snapshot FactRecallSnapshot) bool {
+	return newFactLifecycleMatcher(snapshot).allows(evidence)
 }
 
-// FactLifecycleTextsAllowed is the batch form used by federated recall. It
-// builds corrected-key/current-value indexes once for the whole result set.
-func (s *Store) FactLifecycleTextsAllowed(texts []string, snapshot FactRecallSnapshot) []bool {
+// FactLifecycleEvidencesAllowed is the batch form used by federated recall. It
+// builds subject/key/value indexes once for the whole result set.
+func (s *Store) FactLifecycleEvidencesAllowed(evidence []FactLifecycleEvidence, snapshot FactRecallSnapshot) []bool {
 	matcher := newFactLifecycleMatcher(snapshot)
-	allowed := make([]bool, len(texts))
-	for index, text := range texts {
-		allowed[index] = matcher.allows(text)
+	allowed := make([]bool, len(evidence))
+	for index, item := range evidence {
+		allowed[index] = matcher.allows(item)
 	}
 	return allowed
 }
 
+// FactLifecycleTextAllowed is the compatibility form for callers without
+// typed source context. New retrieval code should pass FactLifecycleEvidence.
+func (s *Store) FactLifecycleTextAllowed(text string, snapshot FactRecallSnapshot) bool {
+	return s.FactLifecycleEvidenceAllowed(FactLifecycleEvidence{Text: text}, snapshot)
+}
+
+// FactLifecycleTextsAllowed is the compatibility batch form.
+func (s *Store) FactLifecycleTextsAllowed(texts []string, snapshot FactRecallSnapshot) []bool {
+	evidence := make([]FactLifecycleEvidence, len(texts))
+	for index, text := range texts {
+		evidence[index].Text = text
+	}
+	return s.FactLifecycleEvidencesAllowed(evidence, snapshot)
+}
+
 type factLifecycleMatcher struct {
-	stale     []string
-	corrected []string
-	current   map[string][]string
+	untypedStale     []string
+	rules            []FactLifecycleRule
+	subjects         []string
+	ambiguousSubject map[string]struct{}
+	valueOwners      map[string]map[string]struct{}
+	subjectOwners    map[string]map[string]map[string]struct{}
+	kindCounts       map[string]map[FactKind]int
 }
 
 func newFactLifecycleMatcher(snapshot FactRecallSnapshot) factLifecycleMatcher {
 	matcher := factLifecycleMatcher{
-		stale:   append([]string(nil), snapshot.StaleValues...),
-		current: make(map[string][]string),
+		untypedStale:     append([]string(nil), snapshot.StaleValues...),
+		valueOwners:      make(map[string]map[string]struct{}),
+		subjectOwners:    make(map[string]map[string]map[string]struct{}),
+		kindCounts:       make(map[string]map[FactKind]int),
+		ambiguousSubject: make(map[string]struct{}),
+	}
+	kindIdentities := make(map[string]struct{})
+	addKindIdentity := func(subject, key string, kind FactKind) {
+		subject = normalizeFactSubject(subject)
+		key = normalizeFactKey(key)
+		kind = normalizeFactKind(kind)
+		identity := factIdentity(subject, key)
+		seenKey := subject + "\x00" + string(kind) + "\x00" + identity
+		if _, seen := kindIdentities[seenKey]; seen {
+			return
+		}
+		kindIdentities[seenKey] = struct{}{}
+		if matcher.kindCounts[subject] == nil {
+			matcher.kindCounts[subject] = make(map[FactKind]int)
+		}
+		matcher.kindCounts[subject][kind]++
+	}
+	subjectClaims := make([]FactClaim, 0, len(snapshot.Active)+len(snapshot.LifecycleRules))
+	subjectSeen := make(map[string]struct{})
+	addSubject := func(subject string) {
+		subject = normalizeFactSubject(subject)
+		if _, seen := subjectSeen[subject]; seen {
+			return
+		}
+		subjectSeen[subject] = struct{}{}
+		matcher.subjects = append(matcher.subjects, subject)
 	}
 	for _, claim := range snapshot.Active {
-		key := normalizeFactKey(claim.Key)
-		matcher.current[key] = append(matcher.current[key], claim.Value)
+		subjectClaims = append(subjectClaims, claim)
+		addSubject(claim.Subject)
+		matcher.addValueOwner(claim.Subject, claim.Key, claim.Value)
+		addKindIdentity(claim.Subject, claim.Key, claim.Kind)
 	}
-	for _, key := range snapshot.CorrectedKeys {
-		matcher.corrected = append(matcher.corrected, normalizeFactKey(key))
+	for _, raw := range snapshot.LifecycleRules {
+		currentSeen := make(map[string]struct{}, len(raw.CurrentValues))
+		for _, value := range raw.CurrentValues {
+			if folded := factSearchText(value); folded != "" {
+				currentSeen[folded] = struct{}{}
+			}
+		}
+		rule := FactLifecycleRule{
+			Subject: normalizeFactSubject(raw.Subject), Key: normalizeFactKey(raw.Key),
+			Kind: normalizeFactKind(raw.Kind), Tombstoned: raw.Tombstoned,
+			CurrentValues: append([]string(nil), raw.CurrentValues...),
+			StaleValues: removeCurrentFactLifecycleValues(
+				append([]string(nil), raw.StaleValues...),
+				currentSeen,
+			),
+		}
+		matcher.rules = append(matcher.rules, rule)
+		subjectClaims = append(subjectClaims, FactClaim{Subject: rule.Subject})
+		addSubject(rule.Subject)
+		addKindIdentity(rule.Subject, rule.Key, rule.Kind)
+		for _, value := range rule.CurrentValues {
+			matcher.addValueOwner(rule.Subject, rule.Key, value)
+		}
+		for _, value := range rule.StaleValues {
+			matcher.addValueOwner(rule.Subject, rule.Key, value)
+		}
 	}
+	matcher.ambiguousSubject = factSearchAmbiguousSubjectSignatures(subjectClaims)
+	sort.Strings(matcher.subjects)
 	return matcher
 }
 
-func (m factLifecycleMatcher) allows(text string) bool {
-	for _, stale := range m.stale {
-		if factContainsBoundedValue(text, stale) {
+func (m *factLifecycleMatcher) addValueOwner(subject, key, value string) {
+	folded := factSearchText(value)
+	if folded == "" {
+		return
+	}
+	if m.valueOwners[folded] == nil {
+		m.valueOwners[folded] = make(map[string]struct{})
+	}
+	m.valueOwners[folded][factIdentity(subject, key)] = struct{}{}
+	subject = normalizeFactSubject(subject)
+	if m.subjectOwners[subject] == nil {
+		m.subjectOwners[subject] = make(map[string]map[string]struct{})
+	}
+	if m.subjectOwners[subject][folded] == nil {
+		m.subjectOwners[subject][folded] = make(map[string]struct{})
+	}
+	m.subjectOwners[subject][folded][factIdentity(subject, key)] = struct{}{}
+}
+
+func (m factLifecycleMatcher) allows(evidence FactLifecycleEvidence) bool {
+	for _, stale := range m.untypedStale {
+		if IsFactLifecycleGlobalStalePhrase(stale) && factContainsBoundedValue(evidence.Text, stale) {
 			return false
 		}
 	}
-	if len(m.corrected) == 0 {
+	if len(m.rules) == 0 {
 		return true
 	}
-	tokens := factSearchTokens(text)
-	for _, key := range m.corrected {
-		if !factLifecycleKeyMatch(tokens, key) {
+
+	explicitSubject := ""
+	if strings.TrimSpace(evidence.SubjectID) != "" {
+		explicitSubject = normalizeFactSubject(evidence.SubjectID)
+	}
+	evidenceContext := strings.TrimSpace(evidence.Ref + "\n" + evidence.Text)
+	evidenceSubjects := m.matchedSubjects(evidenceContext)
+	querySubjects := m.matchedSubjects(evidence.Query)
+	// An ambiguous query does not authorize a typed deny. Evidence-local
+	// subject context can still resolve one rule below.
+	if len(querySubjects) != 1 {
+		querySubjects = nil
+	}
+	evidenceTokens := factSearchTokens(evidenceContext)
+	queryTokens := factSearchTokens(evidence.Query)
+
+	for _, rule := range m.rules {
+		evidenceKeyMatched := normalizeFactKey(evidence.FactKey) == rule.Key && strings.TrimSpace(evidence.FactKey) != "" ||
+			factLifecycleKeyMatch(evidenceTokens, rule.Key)
+		queryKeyMatched := factLifecycleKeyMatch(queryTokens, rule.Key)
+		evidenceKindMatched := factSearchKindMatch(evidenceTokens, rule.Kind)
+		queryKindMatched := factSearchKindMatch(queryTokens, rule.Kind)
+		kindIdentifiesKey := m.kindCounts[rule.Subject][rule.Kind] == 1
+		evidenceKeyRelevant := evidenceKeyMatched || evidenceKindMatched && kindIdentifiesKey
+		queryKeyRelevant := queryKeyMatched || queryKindMatched && kindIdentifiesKey
+
+		currentMatched := factLifecycleContainsAnyValue(evidence.Text, rule.CurrentValues)
+		staleMatched := factLifecycleContainsAnyValue(evidence.Text, rule.StaleValues)
+		globalValueIdentifiesRule := m.valueIdentifiesRule(evidence.Text, rule, false)
+
+		subjectRelevant, strongSubjectContext := false, false
+		switch {
+		case explicitSubject != "":
+			strongSubjectContext = true
+			subjectRelevant = explicitSubject == rule.Subject
+		case len(evidenceSubjects) > 0:
+			strongSubjectContext = true
+			_, subjectRelevant = evidenceSubjects[rule.Subject]
+		case len(querySubjects) == 1:
+			_, subjectRelevant = querySubjects[rule.Subject]
+		case rule.Subject == "self":
+			subjectRelevant = evidenceKeyRelevant || globalValueIdentifiesRule
+			strongSubjectContext = evidenceKeyRelevant
+		default:
+			subjectRelevant = globalValueIdentifiesRule
+		}
+		if !subjectRelevant {
 			continue
 		}
-		matchedCurrent := false
-		for _, value := range m.current[key] {
-			if factContainsBoundedValue(text, value) {
-				matchedCurrent = true
-				break
-			}
+
+		// Query-only scope cannot make a common short token identify a claim.
+		// The result itself (typed subject/path/text) must provide subject or key
+		// context; otherwise "beta amount" would erase an unrelated "grade A".
+		keyRelevant := evidenceKeyRelevant
+		if strongSubjectContext {
+			keyRelevant = keyRelevant || queryKeyRelevant
 		}
-		if !matchedCurrent {
+		valueIdentifiesRule := m.valueIdentifiesRule(
+			evidence.Text,
+			rule,
+			strongSubjectContext || evidenceKeyRelevant,
+		)
+		identityRelevant := keyRelevant || valueIdentifiesRule
+		if !identityRelevant {
+			continue
+		}
+		// Current wins inside one identity when an old value was explicitly
+		// re-established. Snapshot construction removes overlaps, so any stale
+		// match remaining here is genuinely retired.
+		if staleMatched {
+			return false
+		}
+		if !keyRelevant {
+			continue
+		}
+		if rule.Tombstoned {
+			return false
+		}
+		if len(rule.CurrentValues) > 0 && !currentMatched {
 			return false
 		}
 	}
 	return true
 }
 
+// IsFactLifecycleGlobalStalePhrase reports whether an untyped line from a
+// legacy superseded page is distinctive enough for a global evidence deny.
+// Short atomic values remain recorded for audit but cannot safely identify an
+// owner/key: making "A" global would erase unrelated grade/status evidence.
+// Typed LifecycleRules do not use this heuristic and still retire short values
+// whenever subject/key context resolves their identity.
+func IsFactLifecycleGlobalStalePhrase(value string) bool {
+	value = strings.Join(strings.Fields(value), " ")
+	return len([]rune(value)) >= 8 && len(factSearchTokens(value)) >= 2
+}
+
+func (m factLifecycleMatcher) matchedSubjects(value string) map[string]struct{} {
+	tokens := factSearchTokens(value)
+	if len(tokens) == 0 {
+		return nil
+	}
+	matched := make(map[string]struct{})
+	for _, subject := range m.subjects {
+		if ok, _ := factSearchSubjectMatch(tokens, subject, m.ambiguousSubject); ok {
+			matched[subject] = struct{}{}
+		}
+	}
+	return matched
+}
+
+func (m factLifecycleMatcher) valueIdentifiesRule(text string, rule FactLifecycleRule, subjectResolved bool) bool {
+	for _, values := range [][]string{rule.CurrentValues, rule.StaleValues} {
+		for _, value := range values {
+			if !factContainsBoundedValue(text, value) {
+				continue
+			}
+			folded := factSearchText(value)
+			if subjectResolved && len(m.subjectOwners[rule.Subject][folded]) == 1 {
+				return true
+			}
+			if !factLifecycleValueCarriesIdentity(value) {
+				continue
+			}
+			if len(m.valueOwners[folded]) == 1 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func factLifecycleValueCarriesIdentity(value string) bool {
+	if len(factSearchTokens(value)) >= 2 {
+		return true
+	}
+	return len([]rune(strings.TrimSpace(value))) >= 12
+}
+
+func factLifecycleContainsAnyValue(text string, values []string) bool {
+	for _, value := range values {
+		if factContainsBoundedValue(text, value) {
+			return true
+		}
+	}
+	return false
+}
+
+// factLifecycleKeyMatch is deliberately stricter than factSearchKeyMatch.
+// Search admission may treat a shared prefix (quote.amount -> amount) as a
+// useful cue, but lifecycle deletion must prove the whole composite key or use
+// a kind that is unique within the subject.
 func factLifecycleKeyMatch(textTokens map[string]struct{}, key string) bool {
 	var components []string
 	for _, token := range strings.FieldsFunc(strings.ToLower(key), func(r rune) bool {
@@ -504,7 +731,7 @@ func factLifecycleKeyMatch(textTokens map[string]struct{}, key string) bool {
 	return true
 }
 
-func (s *Store) filterFactLifecycleSearchResults(results []SearchResult, snapshot FactRecallSnapshot) []SearchResult {
+func (s *Store) filterFactLifecycleSearchResults(query string, results []SearchResult, snapshot FactRecallSnapshot) []SearchResult {
 	if len(results) == 0 {
 		return results
 	}
@@ -522,7 +749,10 @@ func (s *Store) filterFactLifecycleSearchResults(results []SearchResult, snapsho
 			continue
 		}
 		text := result.Content + "\n" + result.ExpandedContent + "\n" + strings.Join(result.Context, "\n")
-		if matcher.allows(text) {
+		if matcher.allows(FactLifecycleEvidence{
+			Query: query, Ref: result.Path, SubjectID: result.SubjectID,
+			FactKey: result.FactKey, Text: text,
+		}) {
 			filtered = append(filtered, result)
 		}
 	}

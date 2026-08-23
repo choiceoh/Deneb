@@ -1,7 +1,9 @@
 package recall
 
 import (
+	"path/filepath"
 	"testing"
+	"time"
 
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 )
@@ -29,7 +31,7 @@ func TestStripSupersededPageMarkersDoesNotPoisonStructuralHeadings(t *testing.T)
 	}
 }
 
-func TestStripSupersededPageMarkersRetainsShortAtomicValues(t *testing.T) {
+func TestStripSupersededPageMarkersRecordsButDoesNotGloballyDenyShortAtomicValues(t *testing.T) {
 	evidence := []recallEvidence{
 		{Kind: "superseded", StaleValue: "# 이전 상태\n\n- A"},
 		{Kind: "diary", Note: "예전 릴리스 상태는 A였다"},
@@ -40,46 +42,64 @@ func TestStripSupersededPageMarkersRetainsShortAtomicValues(t *testing.T) {
 		t.Fatalf("short marker stale values = %#v, want A", stale)
 	}
 	filtered := filterStaleFactEvidence(kept, stale)
-	if len(filtered) != 1 || filtered[0].Note != "alpha project remains active" {
-		t.Fatalf("short stale marker filter = %+v", filtered)
-	}
-}
-
-func TestFilterCorrectedFactEvidenceUsesConservativeKeyFallback(t *testing.T) {
-	rules := []correctedFactRule{{key: "project.mercury.owner", currentValues: []string{"mercury owner bob"}}}
-	evidence := []recallEvidence{
-		{Kind: "file", Note: "owner permissions for the venus service"},
-		{Kind: "diary", Note: "mercury owner alice"},
-		{Kind: "wiki", Note: "mercury owner bob"},
-	}
-	filtered := filterCorrectedFactEvidence(evidence, rules)
 	if len(filtered) != 2 {
-		t.Fatalf("filtered = %+v, want unrelated and current rows", filtered)
-	}
-	if filtered[0].Note != evidence[0].Note || filtered[1].Note != evidence[2].Note {
-		t.Fatalf("unexpected rows after semantic deny: %+v", filtered)
-	}
-
-	profileRule := []correctedFactRule{{key: "communication.response_length", currentValues: []string{"짧고 간결하게"}}}
-	unrelated := []recallEvidence{{Kind: "file", Note: "HTTP response length 헤더 분석"}}
-	if got := filterCorrectedFactEvidence(unrelated, profileRule); len(got) != 1 {
-		t.Fatalf("profile key tokens falsely removed technical evidence: %+v", got)
-	}
-
-	shortCurrent := buildCorrectedFactRules(
-		[]wiki.FactClaim{{Key: "release.status", Value: "B", Status: wiki.FactStatusCurrent}},
-		[]string{"release.status"},
-	)
-	shortEvidence := []recallEvidence{
-		{Kind: "diary", Note: "release status was A in beta rollout"},
-		{Kind: "wiki", Note: "release status is B"},
-	}
-	if got := filterCorrectedFactEvidence(shortEvidence, shortCurrent); len(got) != 1 || got[0].Note != shortEvidence[1].Note {
-		t.Fatalf("short current value used substring matching: %+v", got)
+		t.Fatalf("short untyped stale marker removed unrelated evidence: %+v", filtered)
 	}
 }
 
-func TestFilterStaleFactEvidenceMatchesShortValuesAsWholeTokens(t *testing.T) {
+func TestFilterRecallFactLifecycleEvidenceScopesSharedShortValues(t *testing.T) {
+	root := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(root, "wiki"), filepath.Join(root, "diary"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	base := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
+	upsert := func(input wiki.FactInput) {
+		t.Helper()
+		if _, upsertErr := store.UpsertFact(input); upsertErr != nil {
+			t.Fatal(upsertErr)
+		}
+	}
+	upsert(wiki.FactInput{
+		Subject: "project:alpha", Key: "quote.amount", Value: "A",
+		Kind: wiki.FactKindAmount, Authority: wiki.FactAuthorityPrimaryDoc,
+		Sources: []string{"doc:alpha"}, At: base, BasisAt: base,
+	})
+	for index, value := range []string{"A", "B"} {
+		at := base.Add(time.Duration(index) * time.Hour)
+		upsert(wiki.FactInput{
+			Subject: "project:beta", Key: "quote.amount", Value: value,
+			Kind: wiki.FactKindAmount, Authority: wiki.FactAuthorityPrimaryDoc,
+			Sources: []string{"doc:beta"}, At: at, BasisAt: at,
+		})
+	}
+	makeEvidence := func() []recallEvidence {
+		return []recallEvidence{
+			{Kind: "file", Source: "/project/alpha/quote.txt", Note: "project alpha quote amount A"},
+			{Kind: "diary", Source: "diary#beta-old", Note: "project beta quote amount A"},
+			{Kind: "transcript", Source: "session:beta-current", Note: "project beta quote amount B"},
+			{Kind: "file", Source: "/quality/grade.txt", Note: "quality grade A passes"},
+		}
+	}
+	filtered := filterRecallFactLifecycleEvidence(store, "project beta quote amount", makeEvidence(), store.RecallFactSnapshot())
+	if len(filtered) != 3 || filtered[0].Source != "/project/alpha/quote.txt" ||
+		filtered[1].Source != "session:beta-current" || filtered[2].Source != "/quality/grade.txt" {
+		t.Fatalf("identity-scoped recall filter = %+v", filtered)
+	}
+	if _, err := store.TombstoneFact(wiki.FactTombstoneInput{
+		Subject: "project:beta", Key: "quote.amount",
+		Authority: wiki.FactAuthorityAgent, At: base.Add(2 * time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	filtered = filterRecallFactLifecycleEvidence(store, "project beta quote amount", makeEvidence(), store.RecallFactSnapshot())
+	if len(filtered) != 2 || filtered[0].Source != "/project/alpha/quote.txt" || filtered[1].Source != "/quality/grade.txt" {
+		t.Fatalf("identity-scoped tombstone filter = %+v", filtered)
+	}
+}
+
+func TestFilterUntypedStaleFactEvidenceDoesNotGloballyDenyShortValues(t *testing.T) {
 	evidence := []recallEvidence{
 		{Kind: "diary", Note: "alpha project remains active"},
 		{Kind: "diary", Note: "legacy status was A"},
@@ -90,20 +110,8 @@ func TestFilterStaleFactEvidenceMatchesShortValuesAsWholeTokens(t *testing.T) {
 	}
 
 	filtered := filterStaleFactEvidence(evidence, []string{"A", "80", "Bob"})
-	if len(filtered) != 3 {
-		t.Fatalf("filtered = %+v, want only exact-token stale rows removed", filtered)
-	}
-	for _, want := range []string{"alpha project remains active", "예산은 800만원이다", "Bobcat 배포를 점검했다"} {
-		found := false
-		for _, item := range filtered {
-			if item.Note == want {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("unrelated evidence %q was removed: %+v", want, filtered)
-		}
+	if len(filtered) != len(evidence) {
+		t.Fatalf("short untyped values became global denies: %+v", filtered)
 	}
 }
 

@@ -106,7 +106,7 @@ func (a *wikiAdapter) Recall(ctx context.Context, query string, limit int) ([]Re
 // FilterRecallResults applies one atomic fact-lifecycle snapshot to the full
 // federated result set. The guard intentionally runs in Router after all
 // adapters return, so an old files hit cannot bypass a wiki correction.
-func (a *wikiAdapter) FilterRecallResults(results []Result) []Result {
+func (a *wikiAdapter) FilterRecallResults(query string, results []Result) []Result {
 	if a == nil || a.store == nil || len(results) == 0 {
 		return results
 	}
@@ -115,14 +115,17 @@ func (a *wikiAdapter) FilterRecallResults(results []Result) []Result {
 	for _, claim := range snapshot.Active {
 		activeIDs[claim.ID] = struct{}{}
 	}
-	texts := make([]string, len(results))
+	evidence := make([]wiki.FactLifecycleEvidence, len(results))
 	for index, result := range results {
-		texts[index] = result.Snippet + "\n" + result.Context
+		evidence[index] = wiki.FactLifecycleEvidence{
+			Query: query, Ref: result.Ref.ID, SubjectID: result.Meta["subjectId"],
+			FactKey: result.Meta["factKey"], Text: result.Snippet + "\n" + result.Context,
+		}
 	}
-	allowed := a.store.FactLifecycleTextsAllowed(texts, snapshot)
+	allowed := a.store.FactLifecycleEvidencesAllowed(evidence, snapshot)
 	filtered := results[:0]
 	for index, result := range results {
-		if result.Meta["factPlane"] == "current" {
+		if result.Ref.Layer == LayerWiki && result.Meta["factPlane"] == "current" {
 			if _, current := activeIDs[result.Meta["factId"]]; current {
 				filtered = append(filtered, result)
 			}

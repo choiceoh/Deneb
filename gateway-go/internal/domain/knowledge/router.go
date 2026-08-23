@@ -167,8 +167,14 @@ func (r *Router) RecallPacket(ctx context.Context, query string, limit int, opti
 	// non-wiki connector and prevents a now-superseded synthetic hit from
 	// surviving a mutation that committed while retrieval was in flight.
 	for _, guard := range r.recallGuards {
-		for layer, hits := range byHits {
-			byHits[layer] = guard.FilterRecallResults(hits)
+		allHits := make([]Result, 0)
+		for _, hits := range byHits {
+			allHits = append(allHits, hits...)
+		}
+		guarded := guard.FilterRecallResults(query, allHits)
+		byHits = make(map[Layer][]Result, len(byHits))
+		for _, hit := range guarded {
+			byHits[hit.Ref.Layer] = append(byHits[hit.Ref.Layer], hit)
 		}
 	}
 

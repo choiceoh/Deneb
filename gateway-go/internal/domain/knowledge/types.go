@@ -45,7 +45,7 @@ type Adapter interface {
 // fact plane implements it so corrections and tombstones also govern evidence
 // returned by other adapters (for example an older value in a source file).
 type RecallResultGuard interface {
-	FilterRecallResults(results []Result) []Result
+	FilterRecallResults(query string, results []Result) []Result
 }
 
 // Writer extends Adapter for backends that accept agent-initiated writes.

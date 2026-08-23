@@ -637,7 +637,7 @@ func briefTopicQuery(summary string) string {
 }
 
 type briefingWikiStore interface {
-	Search(ctx context.Context, query string, limit int) ([]wiki.SearchResult, error)
+	SearchWithOptions(ctx context.Context, query string, limit int, options wiki.QueryOptions) (wiki.SearchReport, error)
 	ReadPage(relPath string) (*wiki.Page, error)
 }
 
@@ -657,11 +657,11 @@ func wikiTopNote(ctx context.Context, getStore func() *wiki.Store, query string)
 }
 
 func wikiTopPageNote(ctx context.Context, st briefingWikiStore, query string) string {
-	hits, err := st.Search(ctx, query, briefWikiSearchCandidates)
-	if err != nil || len(hits) == 0 {
+	report, err := st.SearchWithOptions(ctx, query, briefWikiSearchCandidates, wiki.QueryOptions{ExcludeFactResults: true})
+	if err != nil || len(report.Results) == 0 {
 		return ""
 	}
-	for _, hit := range hits {
+	for _, hit := range report.Results {
 		if hit.FactID != "" || hit.Path == "" {
 			continue
 		}

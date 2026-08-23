@@ -97,6 +97,9 @@ func TestSenderWikiHitsSkipsSyntheticFactResults(t *testing.T) {
 	if !ok || len(rows) != 1 || rows[0].Path != "people/alice.md" {
 		t.Fatalf("rows = %+v, ok = %v", rows, ok)
 	}
+	if len(store.seenQueryOptions) != 1 || !store.seenQueryOptions[0].ExcludeFactResults {
+		t.Fatalf("wiki search options = %+v, want page-only", store.seenQueryOptions)
+	}
 }
 
 func TestSenderContextFallsBackToRawEmailForWikiQueryWhenNoDisplayName(t *testing.T) {

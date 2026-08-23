@@ -139,14 +139,44 @@ type FactSnapshot struct {
 	Facts         map[string][]FactClaim `json:"facts"`
 }
 
-// FactRecallSnapshot is one atomic retrieval epoch. Active winners, stale
-// values, and corrected keys must be read under the same factMu lock; combining
-// separate calls can otherwise expose old diary evidence beside a newer winner
-// during a concurrent correction.
-type FactRecallSnapshot struct {
-	Revision      FactRevision
-	Active        []FactClaim
+// FactLifecycleRule keeps correction and tombstone policy scoped to one
+// canonical identity. Retired values must never be flattened across subjects:
+// the same short value can be current for one project and stale for another.
+type FactLifecycleRule struct {
+	Subject       string
+	Key           string
+	Kind          FactKind
+	CurrentValues []string
 	StaleValues   []string
+	Tombstoned    bool
+}
+
+// FactLifecycleEvidence is the shared identity context used to guard results
+// from wiki search, federated knowledge backends, and chat recall sources.
+// Ref is a stable page/file/source identifier; SubjectID and FactKey are
+// optional typed hints when a backend has them.
+type FactLifecycleEvidence struct {
+	Query     string
+	Ref       string
+	SubjectID string
+	FactKey   string
+	Text      string
+}
+
+// FactRecallSnapshot is one atomic retrieval epoch. Active winners, typed
+// lifecycle rules, and untyped legacy stale lines must be read under the same
+// factMu lock; combining separate calls can otherwise expose old evidence
+// beside a newer winner during a concurrent correction.
+type FactRecallSnapshot struct {
+	Revision       FactRevision
+	Active         []FactClaim
+	LifecycleRules []FactLifecycleRule
+	// StaleValues contains only untyped lines extracted from legacy
+	// superseded pages. Typed claim history lives in LifecycleRules and must
+	// never be applied as a global string deny set.
+	StaleValues []string
+	// CorrectedKeys is retained for diagnostics/backward compatibility. Recall
+	// enforcement uses LifecycleRules so current values stay subject-scoped.
 	CorrectedKeys []string
 }
 

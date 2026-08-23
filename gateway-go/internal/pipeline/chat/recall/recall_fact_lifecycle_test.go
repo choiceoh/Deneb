@@ -85,6 +85,101 @@ func TestRecallFactLifecycleForgetRemovesTombstonedDiaryValue(t *testing.T) {
 	assertRecallFactLifecycle(t, store, "vague forget", "그거 기억나?", "", forgotten)
 }
 
+func TestRecallFactLifecycleKeepsUnrelatedSharedShortDiaryValueAcrossReopen(t *testing.T) {
+	root := t.TempDir()
+	wikiDir, diaryDir := filepath.Join(root, "wiki"), filepath.Join(root, "diary")
+	store := openRecallFactLifecycleStore(t, wikiDir, diaryDir)
+	const unrelated = "품질 등급 A는 통과"
+	if err := store.AppendDiary(unrelated + "."); err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
+	for index, value := range []string{"A", "B"} {
+		upsertRecallFact(t, store, wiki.FactInput{
+			Subject: "self", Key: "preference.language", Value: value,
+			Kind: wiki.FactKindPreference, Authority: wiki.FactAuthorityDirectUser,
+			At: base.Add(time.Duration(index) * time.Hour),
+		})
+	}
+	assertUnrelated := func(label string, current *wiki.Store) {
+		t.Helper()
+		out := buildRecallFactLifecycle(t, current, "품질 등급 기억나?")
+		if !strings.Contains(out, unrelated) {
+			t.Fatalf("%s unrelated shared A diary evidence was removed:\n%s", label, out)
+		}
+	}
+	assertUnrelated("live", store)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened := openRecallFactLifecycleStore(t, wikiDir, diaryDir)
+	defer reopened.Close()
+	assertUnrelated("reopen", reopened)
+}
+
+func TestRecallPreflightScopesSharedShortValuesAcrossFilesAndTombstone(t *testing.T) {
+	root := t.TempDir()
+	store := openRecallFactLifecycleStore(t, filepath.Join(root, "wiki"), filepath.Join(root, "diary"))
+	defer store.Close()
+	base := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
+	upsertRecallFact(t, store, wiki.FactInput{
+		Subject: "project:alpha", Key: "quote.amount", Value: "A",
+		Kind: wiki.FactKindAmount, Authority: wiki.FactAuthorityPrimaryDoc,
+		Sources: []string{"doc:alpha"}, At: base, BasisAt: base,
+	})
+	for index, value := range []string{"A", "B"} {
+		at := base.Add(time.Duration(index) * time.Hour)
+		upsertRecallFact(t, store, wiki.FactInput{
+			Subject: "project:beta", Key: "quote.amount", Value: value,
+			Kind: wiki.FactKindAmount, Authority: wiki.FactAuthorityPrimaryDoc,
+			Sources: []string{"doc:beta"}, At: at, BasisAt: at,
+		})
+	}
+	files := FileRecallFunc(func(_ context.Context, query string, _ int) []FileRecallHit {
+		switch {
+		case strings.Contains(query, "alpha"):
+			return []FileRecallHit{{Path: "/project/alpha/quote.txt", Snippet: "project alpha quote amount A", Score: 0.99}}
+		case strings.Contains(query, "beta"):
+			return []FileRecallHit{
+				{Path: "/project/beta/quote-old.txt", Snippet: "project beta quote amount A OLD-BETA", Score: 0.99},
+				{Path: "/quality/grade.txt", Snippet: "quality grade A passes KEEP-A", Score: 0.98},
+			}
+		default:
+			return nil
+		}
+	})
+	build := func(message string) string {
+		t.Helper()
+		out, truncated := Build(
+			context.Background(),
+			Params{SessionKey: "client:main:fact-short-files", Message: message},
+			Deps{Wiki: store, FileRecall: files}, nil,
+		)
+		if truncated {
+			t.Fatalf("Build(%q) truncated", message)
+		}
+		return out
+	}
+	alpha := build("project alpha quote amount 기억나?")
+	if !strings.Contains(alpha, "project alpha quote amount A") {
+		t.Fatalf("alpha current A file evidence was removed:\n%s", alpha)
+	}
+	beta := build("project beta quote amount 기억나?")
+	if strings.Contains(beta, "OLD-BETA") || !strings.Contains(beta, "): B") || !strings.Contains(beta, "KEEP-A") {
+		t.Fatalf("beta correction or unrelated shared A mismatch:\n%s", beta)
+	}
+	if _, err := store.TombstoneFact(wiki.FactTombstoneInput{
+		Subject: "project:beta", Key: "quote.amount",
+		Authority: wiki.FactAuthorityAgent, At: base.Add(2 * time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	forgotten := build("project beta quote amount 기억나?")
+	if strings.Contains(forgotten, "OLD-BETA") || strings.Contains(forgotten, "): B") || !strings.Contains(forgotten, "KEEP-A") {
+		t.Fatalf("beta tombstone or unrelated shared A mismatch:\n%s", forgotten)
+	}
+}
+
 func TestRecallFactLifecycleCrossSubjectCorrectionRemovesOldDiaryValue(t *testing.T) {
 	root := t.TempDir()
 	store := openRecallFactLifecycleStore(t, filepath.Join(root, "wiki"), filepath.Join(root, "diary"))

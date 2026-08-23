@@ -105,6 +105,57 @@ func TestStaleFactValuesRetainsShortAtomicCorrections(t *testing.T) {
 	}
 }
 
+func TestRecallFactSnapshotReestablishedValueWinsWithinIdentityAcrossRestart(t *testing.T) {
+	store, wikiDir, diaryDir := newFactTestStore(t)
+	base := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
+	assert := func(value string, at time.Time) {
+		t.Helper()
+		result, err := store.UpsertFact(FactInput{
+			Subject: "self", Key: "preference.language", Value: value,
+			Kind: FactKindPreference, Authority: FactAuthorityDirectUser, At: at,
+		})
+		if err != nil || !result.Committed {
+			t.Fatalf("UpsertFact = %+v, err=%v", result, err)
+		}
+	}
+	assert("A", base)
+	if _, err := store.TombstoneFact(FactTombstoneInput{
+		Subject: "self", Key: "preference.language",
+		Authority: FactAuthorityDirectUser, At: base.Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assert("A", base.Add(2*time.Hour))
+
+	check := func(label string, current *Store) {
+		t.Helper()
+		snapshot := current.RecallFactSnapshot()
+		if len(snapshot.LifecycleRules) != 1 {
+			t.Fatalf("%s rules = %+v", label, snapshot.LifecycleRules)
+		}
+		rule := snapshot.LifecycleRules[0]
+		if rule.Tombstoned || len(rule.CurrentValues) != 1 || rule.CurrentValues[0] != "A" || containsString(rule.StaleValues, "A") {
+			t.Fatalf("%s re-established rule = %+v", label, rule)
+		}
+		if !current.FactLifecycleEvidenceAllowed(FactLifecycleEvidence{
+			Query: "language preference", SubjectID: "self",
+			FactKey: "preference.language", Text: "language preference A",
+		}, snapshot) {
+			t.Fatalf("%s re-established current value was denied", label)
+		}
+	}
+	check("live", store)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	check("reopen", reopened)
+}
+
 func TestFactPlaneAuthorityPoliciesAndUnresolvedConflict(t *testing.T) {
 	store, _, _ := newFactTestStore(t)
 	base := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)

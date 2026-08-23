@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -318,7 +319,16 @@ func senderWikiHits(ctx context.Context, storeFn func() (MemorySearcher, error),
 	if wikiQuery == "" {
 		wikiQuery = raw
 	}
-	hits, werr := store.Search(ctx, wikiQuery, maxWiki)
+	var hits []wiki.SearchResult
+	var werr error
+	if searcher, supportsOptions := store.(interface {
+		SearchWithOptions(context.Context, string, int, wiki.QueryOptions) (wiki.SearchReport, error)
+	}); supportsOptions {
+		report, searchErr := searcher.SearchWithOptions(ctx, wikiQuery, maxWiki, wiki.QueryOptions{ExcludeFactResults: true})
+		hits, werr = report.Results, searchErr
+	} else {
+		hits, werr = store.Search(ctx, wikiQuery, maxWiki)
+	}
 	if werr != nil {
 		addNotice("memory search failed: " + werr.Error())
 		return nil, false

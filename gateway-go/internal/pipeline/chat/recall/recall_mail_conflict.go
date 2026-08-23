@@ -91,11 +91,11 @@ func pullMissingMailAnalysisConflicts(ctx context.Context, store *wiki.Store, ev
 		if hasMailAnalysisForPerson(evidence, title) {
 			continue
 		}
-		hits, err := store.Search(ctx, title, 3)
-		if err != nil || len(hits) == 0 {
+		report, err := store.SearchWithOptions(ctx, title, 3, wiki.QueryOptions{ExcludeFactResults: true})
+		if err != nil || len(report.Results) == 0 {
 			continue
 		}
-		for _, h := range hits {
+		for _, h := range report.Results {
 			if !wiki.IsMailAnalysisPath(h.Path) {
 				continue
 			}

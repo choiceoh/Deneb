@@ -197,7 +197,9 @@ func recallWikiEvidenceResult(ctx context.Context, store *wiki.Store, queries []
 		}
 		plan.Clauses = append(plan.Clauses, wiki.QueryClause{Kind: wiki.QueryKindLex, Query: query, Weight: weight})
 	}
-	report, err := store.SearchPlan(ctx, plan, min(8, max(3, len(queries)*3)))
+	report, err := store.SearchPlanWithOptions(ctx, plan, min(8, max(3, len(queries)*3)), wiki.QueryOptions{
+		ExcludeFactResults: true,
+	})
 	if err != nil {
 		return evidence, err
 	}

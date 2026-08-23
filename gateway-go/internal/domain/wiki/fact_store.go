@@ -279,21 +279,44 @@ func (s *Store) RecallFactSnapshot() FactRecallSnapshot {
 	staleSeen := make(map[string]struct{})
 	correctedSeen := make(map[string]struct{})
 	for _, identity := range sortedFactIdentities(s.factState.Facts) {
-		for _, claim := range s.factState.Facts[identity] {
+		claims := s.factState.Facts[identity]
+		rule := FactLifecycleRule{}
+		currentSeen := make(map[string]struct{})
+		retiredSeen := make(map[string]struct{})
+		hasRetiredValue := false
+		hasActive := false
+		hasLiveTombstone := false
+		for _, claim := range claims {
+			if rule.Subject == "" {
+				rule.Subject = claim.Subject
+				rule.Key = claim.Key
+				rule.Kind = claim.Kind
+			}
 			switch claim.Status {
 			case FactStatusCurrent, FactStatusConflicted:
+				hasActive = true
 				out.Active = append(out.Active, cloneFactClaim(claim))
+				appendFactLifecycleValue(&rule.CurrentValues, currentSeen, claim.Value)
 			case FactStatusSuperseded, FactStatusTombstoned:
-				value := strings.TrimSpace(claim.Value)
-				if value != "" {
-					folded := strings.ToLower(strings.Join(strings.Fields(value), " "))
-					if _, seen := staleSeen[folded]; !seen {
-						staleSeen[folded] = struct{}{}
-						out.StaleValues = append(out.StaleValues, value)
-					}
+				if strings.TrimSpace(claim.Value) != "" {
+					hasRetiredValue = true
+					appendFactLifecycleValue(&rule.StaleValues, retiredSeen, claim.Value)
 				}
-				correctedSeen[normalizeFactKey(claim.Key)] = struct{}{}
+				if claim.Status == FactStatusTombstoned && strings.TrimSpace(claim.Value) == "" {
+					hasLiveTombstone = true
+				}
 			}
+		}
+		if hasRetiredValue || hasLiveTombstone && !hasActive {
+			rule.Tombstoned = hasLiveTombstone && !hasActive
+			// A value may become canonical again after a tombstone. Current wins
+			// within the same identity; retaining that value in the stale side
+			// would make the rebuilt snapshot reject its own live evidence.
+			rule.StaleValues = removeCurrentFactLifecycleValues(rule.StaleValues, currentSeen)
+			sortFactLifecycleValues(rule.CurrentValues)
+			sortFactLifecycleValues(rule.StaleValues)
+			out.LifecycleRules = append(out.LifecycleRules, rule)
+			correctedSeen[normalizeFactKey(rule.Key)] = struct{}{}
 		}
 	}
 	for folded, value := range s.supersededPageStale {
@@ -322,7 +345,47 @@ func (s *Store) RecallFactSnapshot() FactRecallSnapshot {
 		}
 		return out.StaleValues[i] < out.StaleValues[j]
 	})
+	sort.SliceStable(out.LifecycleRules, func(i, j int) bool {
+		if out.LifecycleRules[i].Subject != out.LifecycleRules[j].Subject {
+			return out.LifecycleRules[i].Subject < out.LifecycleRules[j].Subject
+		}
+		return out.LifecycleRules[i].Key < out.LifecycleRules[j].Key
+	})
 	sort.Strings(out.CorrectedKeys)
+	return out
+}
+
+func appendFactLifecycleValue(values *[]string, seen map[string]struct{}, raw string) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return
+	}
+	folded := strings.ToLower(strings.Join(strings.Fields(value), " "))
+	if _, exists := seen[folded]; exists {
+		return
+	}
+	seen[folded] = struct{}{}
+	*values = append(*values, value)
+}
+
+func sortFactLifecycleValues(values []string) {
+	sort.SliceStable(values, func(i, j int) bool {
+		leftRunes, rightRunes := len([]rune(values[i])), len([]rune(values[j]))
+		if leftRunes != rightRunes {
+			return leftRunes > rightRunes
+		}
+		return values[i] < values[j]
+	})
+}
+
+func removeCurrentFactLifecycleValues(values []string, current map[string]struct{}) []string {
+	out := values[:0]
+	for _, value := range values {
+		folded := strings.ToLower(strings.Join(strings.Fields(value), " "))
+		if _, isCurrent := current[folded]; !isCurrent {
+			out = append(out, value)
+		}
+	}
 	return out
 }
 
@@ -364,9 +427,9 @@ func (s *Store) ActiveFactByID(id string) (FactClaim, bool) {
 	return FactClaim{}, false
 }
 
-// StaleFactValues returns values explicitly superseded or forgotten. Recall
-// uses this deny set across wiki, diary, transcript, and Polaris evidence so a
-// lexically strong old episode cannot reintroduce a corrected belief.
+// StaleFactValues is the compatibility/diagnostic view of values explicitly
+// superseded or forgotten. Retrieval must use RecallFactSnapshot so typed
+// values retain subject/key identity instead of becoming a global deny set.
 func (s *Store) StaleFactValues(subject string) []string {
 	if s == nil {
 		return nil
@@ -476,10 +539,9 @@ func (s *Store) cacheSupersededPageStaleLocked(page *Page) {
 	}
 }
 
-// CorrectedFactKeys returns stable identity keys that have superseded or
-// tombstoned history. Recall uses this semantic deny set in addition to exact
-// stale values so a paraphrased legacy MEMORY/diary bullet cannot revive an
-// older version of a corrected fact.
+// CorrectedFactKeys is the compatibility/diagnostic view of keys that have
+// superseded or tombstoned history. Retrieval uses identity-scoped lifecycle
+// rules from RecallFactSnapshot.
 func (s *Store) CorrectedFactKeys(subject string) []string {
 	if s == nil {
 		return nil

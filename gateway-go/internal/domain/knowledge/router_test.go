@@ -202,6 +202,80 @@ func TestRouterRecallAppliesCanonicalFactGuardAcrossFiles(t *testing.T) {
 	}
 }
 
+func TestRouterFactGuardScopesSharedShortValuesAcrossFilesAndRestart(t *testing.T) {
+	root := t.TempDir()
+	wikiDir, diaryDir := filepath.Join(root, "wiki"), filepath.Join(root, "diary")
+	store, err := wiki.NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
+	upsert := func(input wiki.FactInput) {
+		t.Helper()
+		if _, upsertErr := store.UpsertFact(input); upsertErr != nil {
+			t.Fatal(upsertErr)
+		}
+	}
+	upsert(wiki.FactInput{
+		Subject: "project:alpha", Key: "quote.amount", Value: "A",
+		Kind: wiki.FactKindAmount, Authority: wiki.FactAuthorityPrimaryDoc,
+		Sources: []string{"doc:alpha"}, At: base, BasisAt: base,
+	})
+	for index, value := range []string{"A", "B"} {
+		at := base.Add(time.Duration(index) * time.Hour)
+		upsert(wiki.FactInput{
+			Subject: "project:beta", Key: "quote.amount", Value: value,
+			Kind: wiki.FactKindAmount, Authority: wiki.FactAuthorityPrimaryDoc,
+			Sources: []string{"doc:beta"}, At: at, BasisAt: at,
+		})
+	}
+
+	files := &mockAdapter{layer: LayerFiles, results: []Result{
+		{Ref: Ref{Layer: LayerFiles, ID: "/project/alpha/quote.txt"}, Snippet: "project alpha quote amount A", Score: 0.99},
+		{Ref: Ref{Layer: LayerFiles, ID: "/project/beta/quote-old.txt"}, Snippet: "project beta quote amount A", Score: 0.98},
+		{Ref: Ref{Layer: LayerFiles, ID: "/project/beta/quote-current.txt"}, Snippet: "project beta quote amount B", Score: 0.97},
+		{Ref: Ref{Layer: LayerFiles, ID: "/quality/grade.txt"}, Snippet: "quality grade A passes", Score: 0.96},
+	}}
+	assertFiles := func(label string, current *wiki.Store, tombstoned bool) {
+		t.Helper()
+		packet := New(NewWikiAdapter(current), files).RecallPacket(
+			context.Background(), "project beta quote amount", 20, RecallOptions{},
+		)
+		seen := make(map[string]bool)
+		for _, hit := range packet.Results {
+			seen[hit.Ref.ID] = true
+		}
+		for _, required := range []string{"/project/alpha/quote.txt", "/quality/grade.txt"} {
+			if !seen[required] {
+				t.Fatalf("%s unrelated shared A result %q was removed: %+v", label, required, packet.Results)
+			}
+		}
+		if seen["/project/beta/quote-old.txt"] {
+			t.Fatalf("%s beta old A survived: %+v", label, packet.Results)
+		}
+		if seen["/project/beta/quote-current.txt"] == tombstoned {
+			t.Fatalf("%s beta current presence=%v, tombstoned=%v: %+v", label, seen["/project/beta/quote-current.txt"], tombstoned, packet.Results)
+		}
+	}
+	assertFiles("corrected", store, false)
+	if _, err := store.TombstoneFact(wiki.FactTombstoneInput{
+		Subject: "project:beta", Key: "quote.amount",
+		Authority: wiki.FactAuthorityAgent, At: base.Add(2 * time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assertFiles("tombstoned", store, true)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := wiki.NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	assertFiles("reopened tombstone", reopened, true)
+}
+
 // TestRouter_Recall_RRFPrefersWikiRankOverFilesCosine ensures final ordering
 // uses per-layer rank RRF, not raw backend scores: a low wiki BM25 rank-1 still
 // beats a high files cosine rank-2.

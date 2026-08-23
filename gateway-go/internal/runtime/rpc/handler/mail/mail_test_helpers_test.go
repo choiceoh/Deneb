@@ -8,15 +8,26 @@ import (
 )
 
 type fakeMemoryStore struct {
-	searchFn      func(ctx context.Context, q string, limit int) ([]wiki.SearchResult, error)
-	searchDiaryFn func(ctx context.Context, q string, limit int) ([]wiki.DiaryHit, error)
-	readPageFn    func(relPath string) (*wiki.Page, error)
-	writePageFn   func(relPath string, page *wiki.Page) error
-	deletePageFn  func(relPath string) error
-	movePageFn    func(from, to string) error
-	statsFn       func() wiki.StoreStats
-	listPagesFn   func(category string) ([]string, error)
-	diaryRecentFn func(limit int) []wiki.DiaryHit
+	searchFn         func(ctx context.Context, q string, limit int) ([]wiki.SearchResult, error)
+	querySearchFn    func(ctx context.Context, q string, limit int, options wiki.QueryOptions) (wiki.SearchReport, error)
+	searchDiaryFn    func(ctx context.Context, q string, limit int) ([]wiki.DiaryHit, error)
+	readPageFn       func(relPath string) (*wiki.Page, error)
+	writePageFn      func(relPath string, page *wiki.Page) error
+	deletePageFn     func(relPath string) error
+	movePageFn       func(from, to string) error
+	statsFn          func() wiki.StoreStats
+	listPagesFn      func(category string) ([]string, error)
+	diaryRecentFn    func(limit int) []wiki.DiaryHit
+	seenQueryOptions []wiki.QueryOptions
+}
+
+func (f *fakeMemoryStore) SearchWithOptions(ctx context.Context, q string, n int, options wiki.QueryOptions) (wiki.SearchReport, error) {
+	f.seenQueryOptions = append(f.seenQueryOptions, options)
+	if f.querySearchFn != nil {
+		return f.querySearchFn(ctx, q, n, options)
+	}
+	results, err := f.Search(ctx, q, n)
+	return wiki.SearchReport{Results: results}, err
 }
 
 func (f *fakeMemoryStore) Search(ctx context.Context, q string, n int) ([]wiki.SearchResult, error) {

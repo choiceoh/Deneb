@@ -243,11 +243,11 @@ func youtubeVideoID(u *url.URL) string {
 // findIngestedPage returns the path of an existing 자료 page whose frontmatter
 // Resource equals the normalized URL, or "".
 func findIngestedPage(ctx context.Context, store *wiki.Store, normalized string) string {
-	results, err := store.Search(ctx, normalized, 10)
+	report, err := store.SearchWithOptions(ctx, normalized, 10, wiki.QueryOptions{ExcludeFactResults: true})
 	if err != nil {
 		return ""
 	}
-	for _, r := range results {
+	for _, r := range report.Results {
 		if !wiki.IsMaterialPath(r.Path) {
 			continue
 		}

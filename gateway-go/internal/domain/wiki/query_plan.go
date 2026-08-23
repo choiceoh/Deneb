@@ -140,6 +140,13 @@ func inQueryScopes(path string, scopes []string) bool {
 // with weighted RRF. It preserves the existing per-backend admission floors,
 // validity demotion, deterministic ties, and graceful semantic fallback.
 func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (SearchReport, error) {
+	return s.SearchPlanWithOptions(ctx, plan, limit, QueryOptions{})
+}
+
+// SearchPlanWithOptions executes a typed plan with caller-specific result-plane
+// options. SearchPlan keeps the production all-plane default; page-only
+// consumers set ExcludeFactResults so synthetic facts never consume page slots.
+func (s *Store) SearchPlanWithOptions(ctx context.Context, plan QueryPlan, limit int, options QueryOptions) (SearchReport, error) {
 	plan = normalizeQueryPlan(plan)
 	if len(plan.Clauses) == 0 || s == nil || s.fts == nil {
 		return SearchReport{}, nil
@@ -197,9 +204,10 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 	diagnostics.CandidateCount = len(results)
 	baseScores := resultScoreMap(results)
 	results = s.fts.applyValidity(results)
+	lifecycleQuery := factLifecyclePlanQuery(plan)
 	factSnapshot := s.RecallFactSnapshot()
 	beforeLifecycle := len(results)
-	results = s.filterFactLifecycleSearchResults(results, factSnapshot)
+	results = s.filterFactLifecycleSearchResults(lifecycleQuery, results, factSnapshot)
 	if dropped := beforeLifecycle - len(results); dropped > 0 {
 		diagnostics.Dropped = appendDrop(diagnostics.Dropped, "superseded_fact_evidence", dropped)
 	}
@@ -215,7 +223,7 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 			}
 			intentResults = filtered
 		}
-		intentResults = s.filterFactLifecycleSearchResults(intentResults, factSnapshot)
+		intentResults = s.filterFactLifecycleSearchResults(lifecycleQuery, intentResults, factSnapshot)
 	}
 	bonuses, applied := s.applyIntentRerank(results, intentResults, QueryOptions{Intent: plan.Intent})
 	diagnostics.IntentApplied = applied
@@ -228,11 +236,13 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 	}
 	rerankScores, rerankWeights, rerankDiagnostics := s.applyModelRerank(ctx, rerankQuery, results, plan.ForceRerank)
 	diagnostics.Rerank = rerankDiagnostics
-	factResults := searchActiveFactsForPlan(plan, fetchLimit, factSnapshot.Active)
-	results = mergeActiveFactSearchResults(results, factResults, fetchLimit)
-	diagnostics.CandidateCount += len(factResults)
-	for _, result := range factResults {
-		baseScores[result.Path] = result.Score
+	if !options.ExcludeFactResults {
+		factResults := searchActiveFactsForPlan(plan, fetchLimit, factSnapshot.Active)
+		results = mergeActiveFactSearchResults(results, factResults, fetchLimit)
+		diagnostics.CandidateCount += len(factResults)
+		for _, result := range factResults {
+			baseScores[result.Path] = result.Score
+		}
 	}
 	results = truncateResults(results, limit)
 	// Vocabulary-gap backfill (query_expansion.go): fires only when the primary
@@ -244,12 +254,14 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 	diagnostics.ContextExpanded = s.attachLateContext(results)
 	latestFactSnapshot := s.RecallFactSnapshot()
 	beforeLifecycle = len(results)
-	results = s.filterFactLifecycleSearchResults(results, latestFactSnapshot)
-	results = mergeActiveFactSearchResults(
-		results,
-		searchActiveFactsForPlan(plan, fetchLimit, latestFactSnapshot.Active),
-		limit,
-	)
+	results = s.filterFactLifecycleSearchResults(lifecycleQuery, results, latestFactSnapshot)
+	if !options.ExcludeFactResults {
+		results = mergeActiveFactSearchResults(
+			results,
+			searchActiveFactsForPlan(plan, fetchLimit, latestFactSnapshot.Active),
+			limit,
+		)
+	}
 	results = truncateResults(results, limit)
 	if dropped := beforeLifecycle - len(results); dropped > 0 {
 		diagnostics.Dropped = appendDrop(diagnostics.Dropped, "superseded_fact_late_context", dropped)
@@ -261,6 +273,24 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 		markFactSearchExplanations(results)
 	}
 	return SearchReport{Results: results, Diagnostics: diagnostics}, nil
+}
+
+func factLifecyclePlanQuery(plan QueryPlan) string {
+	parts := make([]string, 0, len(plan.Clauses))
+	seen := make(map[string]struct{}, len(plan.Clauses))
+	for _, clause := range plan.Clauses {
+		query := strings.TrimSpace(clause.Query)
+		if query == "" {
+			continue
+		}
+		folded := strings.ToLower(strings.Join(strings.Fields(query), " "))
+		if _, duplicate := seen[folded]; duplicate {
+			continue
+		}
+		seen[folded] = struct{}{}
+		parts = append(parts, query)
+	}
+	return strings.Join(parts, " ")
 }
 
 func searchActiveFactsForPlan(plan QueryPlan, limit int, claims []FactClaim) []SearchResult {

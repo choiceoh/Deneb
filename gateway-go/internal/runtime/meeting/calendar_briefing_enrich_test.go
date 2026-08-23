@@ -13,15 +13,17 @@ import (
 )
 
 type fakeBriefingWikiStore struct {
-	hits      []wiki.SearchResult
-	pages     map[string]*wiki.Page
-	seenLimit int
-	readPaths []string
+	hits        []wiki.SearchResult
+	pages       map[string]*wiki.Page
+	seenLimit   int
+	seenOptions wiki.QueryOptions
+	readPaths   []string
 }
 
-func (f *fakeBriefingWikiStore) Search(_ context.Context, _ string, limit int) ([]wiki.SearchResult, error) {
+func (f *fakeBriefingWikiStore) SearchWithOptions(_ context.Context, _ string, limit int, options wiki.QueryOptions) (wiki.SearchReport, error) {
 	f.seenLimit = limit
-	return f.hits, nil
+	f.seenOptions = options
+	return wiki.SearchReport{Results: f.hits}, nil
 }
 
 func (f *fakeBriefingWikiStore) ReadPage(path string) (*wiki.Page, error) {
@@ -179,6 +181,9 @@ func TestWikiTopPageNoteSkipsSyntheticFactResult(t *testing.T) {
 	}
 	if store.seenLimit != briefWikiSearchCandidates {
 		t.Fatalf("search limit = %d, want %d", store.seenLimit, briefWikiSearchCandidates)
+	}
+	if !store.seenOptions.ExcludeFactResults {
+		t.Fatal("page-only calendar note search did not exclude synthetic facts")
 	}
 	if len(store.readPaths) != 1 || store.readPaths[0] != "projects/alpha.md" {
 		t.Fatalf("ReadPage paths = %v", store.readPaths)
