@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.coroutines.coroutineContext
+import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 import kotlin.uuid.Uuid
 
@@ -86,6 +87,7 @@ suspend fun DenebGatewayClient.sendDetachedChat(
  */
 suspend fun DenebGatewayClient.subscribeEvents(onPush: (title: String, body: String) -> Unit) {
     var backoffMs = 2_000L
+    var connectedAt: TimeMark? = null
     while (coroutineContext.isActive) {
         if (clientToken.isEmpty() || gatewayUrl.isBlank()) {
             delay(10_000)
@@ -109,6 +111,7 @@ suspend fun DenebGatewayClient.subscribeEvents(onPush: (title: String, body: Str
                     throw IllegalStateException("events HTTP ${response.status.value}")
                 }
                 backoffMs = 2_000L // connected — reset backoff
+                connectedAt = TimeSource.Monotonic.markNow()
                 syncNativeStateAsync()
                 reconcileOpenConversationAsync()
                 val channel = response.bodyAsChannel()
@@ -199,6 +202,12 @@ suspend fun DenebGatewayClient.subscribeEvents(onPush: (title: String, body: Str
                     }
                 }
             }
+            // A clean EOF lands here, not in the catch below — and readSseLines
+            // swallows mid-stream read errors into a normal return, so a reset socket
+            // arrives the same way. Without a pause the loop reconnected instantly and
+            // re-ran the sync + reconcile kick on every lap; a proxy that answers 200
+            // and closes would spin the radio flat.
+            pauseBeforeReconnect(connectedAt)
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (_: Throwable) {
@@ -209,4 +218,25 @@ suspend fun DenebGatewayClient.subscribeEvents(onPush: (title: String, body: Str
             backoffMs = (backoffMs * 2).coerceAtMost(120_000L)
         }
     }
+}
+
+/**
+ * Minimum gap between event-stream connections.
+ *
+ * A stream that lived a while and then closed normally is the ordinary case — the
+ * gateway restarting, the phone changing networks — and reconnecting promptly is
+ * right. A stream that closes immediately after connecting is not: it is a proxy
+ * or a broken deployment answering 200 and hanging up, and the only useful
+ * response is to stop hammering it.
+ */
+internal const val EVENTS_MIN_RECONNECT_GAP_MS = 1_000L
+internal const val EVENTS_SHORT_CONNECTION_MS = 5_000L
+internal const val EVENTS_SHORT_CONNECTION_GAP_MS = 15_000L
+
+/** The pause a connection of [aliveMs] earns before the next attempt. */
+internal fun reconnectGapMs(aliveMs: Long): Long = if (aliveMs < EVENTS_SHORT_CONNECTION_MS) EVENTS_SHORT_CONNECTION_GAP_MS else EVENTS_MIN_RECONNECT_GAP_MS
+
+private suspend fun pauseBeforeReconnect(connectedAt: TimeMark?) {
+    val aliveMs = connectedAt?.elapsedNow()?.inWholeMilliseconds ?: 0L
+    delay(reconnectGapMs(aliveMs))
 }

@@ -39,6 +39,14 @@ class SessionTranscriptStateMachineTest {
 
     private fun transcriptPayload(vararg messages: String): String = """{"messages":[${messages.joinToString(",")}] }"""
 
+    /**
+     * A transcript the gateway reports as having a live run. Recovery only extends
+     * its poll window on this — "user row, no answer" alone also describes a turn
+     * that died with the gateway (restart, drain), and polling half an hour for that
+     * one is the bug this distinction exists to prevent.
+     */
+    private fun runningTranscriptPayload(vararg messages: String): String = """{"messages":[${messages.joinToString(",")}], "turnRunning":true }"""
+
     private fun message(
         role: String,
         content: String,
@@ -680,7 +688,7 @@ class SessionTranscriptStateMachineTest {
                 DenebGatewayClient.STREAM_RECOVERY_POLL_MS
             ).toInt()
         repeat(shortBudgetPolls + 5) {
-            f.transport.enqueueTranscript(transcriptPayload(message("user", "question")))
+            f.transport.enqueueTranscript(runningTranscriptPayload(message("user", "question")))
         }
         f.transport.enqueueTranscript(answered(answer = "late answer"))
         f.transport.enqueueTranscript(answered(answer = "late answer"))
@@ -702,7 +710,7 @@ class SessionTranscriptStateMachineTest {
                 DenebGatewayClient.STREAM_RECOVERY_POLL_MS
             ).toInt()
         repeat(maxPolls + 1) {
-            f.transport.enqueueTranscript(transcriptPayload(message("user", "question")))
+            f.transport.enqueueTranscript(runningTranscriptPayload(message("user", "question")))
         }
         var poll = 0
         val recovered = f.client.recoverTurnFromTranscript("client:main", "question") {
@@ -710,6 +718,30 @@ class SessionTranscriptStateMachineTest {
         }
 
         assertEquals(TurnRecoveryResult.GiveUp, recovered)
+    }
+
+    @Test
+    fun deadTurnGivesUpAtTheShortBudgetInsteadOfPollingForHalfAnHour() = runTest {
+        // A gateway restart or drain leaves exactly this shape: the user row is
+        // persisted, no answer follows, and the session Manager no longer has a run.
+        // Reading that as "still working" held the waiting chip on screen for the
+        // full 30-minute ceiling.
+        val f = gatewayClientFixture()
+        val shortBudgetPolls = (
+            DenebGatewayClient.STREAM_RECOVERY_BUDGET_MS /
+                DenebGatewayClient.STREAM_RECOVERY_POLL_MS
+            ).toInt()
+        repeat(shortBudgetPolls + 5) {
+            f.transport.enqueueTranscript(transcriptPayload(message("user", "question")))
+        }
+
+        var poll = 0
+        val recovered = f.client.recoverTurnFromTranscript("client:main", "question") {
+            poll++ * DenebGatewayClient.STREAM_RECOVERY_POLL_MS
+        }
+
+        assertEquals(TurnRecoveryResult.GiveUp, recovered)
+        assertTrue(f.transport.requests.size <= shortBudgetPolls + 1, "polled ${f.transport.requests.size} times")
     }
 
     @Test

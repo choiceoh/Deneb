@@ -108,58 +108,85 @@ internal suspend fun streamGatewayChat(
 ): GatewayReply {
     if (clientToken.isEmpty()) return missingTokenReply()
     var terminal: DoneEvent? = null
-    http.preparePost("${gatewayUrl.trimEnd('/')}/api/v1/miniapp/chat/stream") {
-        header(DenebGatewayClient.CLIENT_TOKEN_HEADER, clientToken)
-        header("Accept", "text/event-stream")
-        contentType(ContentType.Application.Json)
-        setBody(SendParams(message = message, sessionKey = sessionKey))
-        timeout {
-            requestTimeoutMillis = Long.MAX_VALUE
-            socketTimeoutMillis = DenebGatewayClient.STREAM_SOCKET_TIMEOUT_MS
-        }
-    }.execute { response ->
-        if (!response.status.isSuccess()) {
-            throw IllegalStateException("stream HTTP ${response.status.value}")
-        }
-        val channel = response.bodyAsChannel()
-        var event = ""
-        val data = StringBuilder()
-        fun flushEvent() {
-            if (event.isEmpty() && data.isEmpty()) return
-            val pendingEvent = event
-            val pendingData = data.toString()
-            event = ""
-            data.clear()
-            dispatchGatewayEvent(
-                event = pendingEvent,
-                data = pendingData,
-                jsonCodec = jsonCodec,
-                onDelta = onDelta,
-                onTool = onTool,
-                onProgress = onProgress,
-                onThinking = onThinking,
-                onReasoning = onReasoning,
-                onDone = { terminal = it },
-            )
-        }
-        readSseLines(channel) { line ->
-            when {
-                line.startsWith(":") -> Unit
-
-                line.startsWith("event:") -> event = line.removePrefix("event:").trim()
-
-                line.startsWith("data:") -> {
-                    if (data.isNotEmpty()) data.append('\n')
-                    data.append(line.removePrefix("data:").trimStart())
-                }
-
-                line.isEmpty() -> flushEvent()
+    // A failure before the gateway answered at all means the turn never started, so
+    // there is nothing in the transcript to recover; a failure after it answered may
+    // be a half-open socket over a run that IS still going. The two are separated
+    // here rather than lumped together as "the stream threw".
+    var gotResponse = false
+    try {
+        http.preparePost("${gatewayUrl.trimEnd('/')}/api/v1/miniapp/chat/stream") {
+            header(DenebGatewayClient.CLIENT_TOKEN_HEADER, clientToken)
+            header("Accept", "text/event-stream")
+            contentType(ContentType.Application.Json)
+            setBody(SendParams(message = message, sessionKey = sessionKey))
+            timeout {
+                requestTimeoutMillis = Long.MAX_VALUE
+                socketTimeoutMillis = DenebGatewayClient.STREAM_SOCKET_TIMEOUT_MS
             }
+        }.execute { response ->
+            // The gateway answered, whatever it said — so a later failure is a
+            // dropped stream, not a connect failure.
+            gotResponse = true
+            if (!response.status.isSuccess()) {
+                val code = response.status.value
+                throw if (isCredentialRejection(code)) {
+                    GatewayStreamRefusedException(code)
+                } else {
+                    IllegalStateException("stream HTTP $code")
+                }
+            }
+            val channel = response.bodyAsChannel()
+            var event = ""
+            val data = StringBuilder()
+            fun flushEvent() {
+                if (event.isEmpty() && data.isEmpty()) return
+                val pendingEvent = event
+                val pendingData = data.toString()
+                event = ""
+                data.clear()
+                dispatchGatewayEvent(
+                    event = pendingEvent,
+                    data = pendingData,
+                    jsonCodec = jsonCodec,
+                    onDelta = onDelta,
+                    onTool = onTool,
+                    onProgress = onProgress,
+                    onThinking = onThinking,
+                    onReasoning = onReasoning,
+                    onDone = { terminal = it },
+                )
+            }
+            readSseLines(channel) { line ->
+                when {
+                    line.startsWith(":") -> Unit
+
+                    line.startsWith("event:") -> event = line.removePrefix("event:").trim()
+
+                    line.startsWith("data:") -> {
+                        if (data.isNotEmpty()) data.append('\n')
+                        data.append(line.removePrefix("data:").trimStart())
+                    }
+
+                    line.isEmpty() -> flushEvent()
+                }
+            }
+            // Some proxies close immediately after the final data line instead of
+            // forwarding SSE's terminating blank line. Preserve that last complete
+            // frame rather than returning an empty or stale reply.
+            flushEvent()
         }
-        // Some proxies close immediately after the final data line instead of
-        // forwarding SSE's terminating blank line. Preserve that last complete
-        // frame rather than returning an empty or stale reply.
-        flushEvent()
+    } catch (typed: GatewayStreamErrorException) {
+        throw typed
+    } catch (typed: GatewayStreamRefusedException) {
+        throw typed
+    } catch (cancel: CancellationException) {
+        throw cancel
+    } catch (failure: Exception) {
+        // Connect refused / DNS / TLS / timeout before the response: nothing is
+        // running on the gateway, so this must not be treated as a dropped socket
+        // over a live turn.
+        if (!gotResponse) throw GatewayStreamRefusedException(null, failure)
+        throw failure
     }
     // EOF is not success until the gateway confirms the detached turn with a
     // terminal frame. Fail so askGateway() reconciles the canonical transcript
@@ -172,6 +199,34 @@ internal suspend fun streamGatewayChat(
         reasoning = done.reasoning.ifBlank { null },
     )
 }
+
+/**
+ * The gateway reported the turn failed. Distinct from a transport failure: the
+ * server spoke, so there is no detached run to recover — its message is the
+ * answer, and polling the transcript for one would only waste the 90s budget and
+ * then report a different (wrong) reason.
+ */
+internal class GatewayStreamErrorException(val gatewayMessage: String) : IllegalStateException(gatewayMessage)
+
+/**
+ * The stream failed in a way that makes transcript recovery pointless too: the
+ * connection never landed, or the gateway rejected the credentials.
+ *
+ * Deliberately narrow. Other non-2xx keep the generic failure path, because that
+ * path is also the compatibility fallback — a gateway without the streaming
+ * endpoint answers 404, and re-sending through the blocking `miniapp.chat.send`
+ * RPC is exactly the right response. What is NOT right is running that recovery
+ * when the transcript poll it depends on is guaranteed to fail the same way
+ * (offline, or a rejected token): it then spends its whole budget before
+ * reporting a misleading reason.
+ *
+ * [status] is 401/403 when the gateway rejected us, null when the connection
+ * itself failed.
+ */
+internal class GatewayStreamRefusedException(val status: Int?, cause: Throwable? = null) : IllegalStateException("stream refused${status?.let { " HTTP $it" }.orEmpty()}", cause)
+
+/** Statuses where the transcript RPC would be rejected the same way the stream was. */
+private fun isCredentialRejection(status: Int): Boolean = status == 401 || status == 403
 
 /**
  * The context every miniapp RPC body runs in.
@@ -334,7 +389,7 @@ private fun dispatchGatewayEvent(
 
         "error" -> {
             val message = decodeOrNull<ErrorEvent>(jsonCodec, data)?.error ?: "gateway stream error"
-            throw IllegalStateException(message)
+            throw GatewayStreamErrorException(message)
         }
     }
 }
