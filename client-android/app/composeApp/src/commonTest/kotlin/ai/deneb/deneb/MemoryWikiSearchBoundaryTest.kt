@@ -396,6 +396,26 @@ class MemoryWikiSearchBoundaryTest {
     }
 
     @Test
+    fun generatedCurrentFactsProfileUsesCanonicalUncachedReference() = runTest {
+        val f = gatewayClientFixture()
+        val pathOnlyRef = "사용자\\현행-사실"
+        f.transport.enqueueRpc(
+            json.encodeToString(
+                WikiPagePayload(path = CURRENT_FACT_PROFILE_PATH, title = "현행 사실", body = "current profile"),
+            ),
+        )
+
+        assertTrue(isSyntheticFactPath(pathOnlyRef))
+        assertEquals("current profile", f.client.fetchCurrentFactPage(pathOnlyRef)?.body)
+        assertEquals(
+            CURRENT_FACT_PROFILE_PATH,
+            f.transport.requests.single().rpcParams?.get("path")?.jsonPrimitive?.content,
+        )
+        assertNull(f.client.fetchWikiPage(pathOnlyRef))
+        assertEquals(1, f.transport.requests.size)
+    }
+
+    @Test
     fun currentFactReadFailsClosedForOldOrMalformedReferenceWithoutMirrorFallback() = runTest {
         val f = gatewayClientFixture()
         val oldRef = "@facts/fact-old.md"

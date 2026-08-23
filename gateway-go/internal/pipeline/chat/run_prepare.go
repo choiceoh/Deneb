@@ -342,7 +342,7 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 
 	var ctxFiles []prompt.ContextFile
 	if !deps.briefcaseMode {
-		ctxFiles = prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+		ctxFiles = loadFactAwareContextFiles(workspaceDir, params.SessionKey)
 	}
 
 	// Operator-edited 업무 persona (Settings prompt corner). "" override → default

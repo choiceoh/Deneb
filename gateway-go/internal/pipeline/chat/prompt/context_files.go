@@ -85,7 +85,7 @@ func LoadContextFiles(workspaceDir string, opts ...LoadContextOption) []ContextF
 	// Frozen snapshot: return cached files if this session already loaded.
 	if cfg.sessionKey != "" {
 		if frozen, ok := Cache.SessionSnapshot(cfg.sessionKey); ok {
-			return frozen
+			return filterFactDerivedContextFiles(frozen, cfg.excludeFactDerived)
 		}
 	}
 
@@ -100,6 +100,7 @@ func LoadContextFiles(workspaceDir string, opts ...LoadContextOption) []ContextF
 		files, resolved = loadContextFilesFromDisk(workspaceDir)
 		Cache.SetContextFiles(workspaceDir, files, resolved)
 	}
+	files = filterFactDerivedContextFiles(files, cfg.excludeFactDerived)
 
 	// Freeze for this session.
 	if cfg.sessionKey != "" {
@@ -111,7 +112,8 @@ func LoadContextFiles(workspaceDir string, opts ...LoadContextOption) []ContextF
 
 // loadContextConfig holds options for LoadContextFiles.
 type loadContextConfig struct {
-	sessionKey string // non-empty → use/populate frozen session snapshot
+	sessionKey         string // non-empty → use/populate frozen session snapshot
+	excludeFactDerived bool   // suppress generated USER.md/MEMORY.md while their projection is degraded
 }
 
 // LoadContextOption configures LoadContextFiles behavior.
@@ -124,6 +126,30 @@ type LoadContextOption func(*loadContextConfig)
 // invalidated by mid-session context file writes.
 func WithSessionSnapshot(sessionKey string) LoadContextOption {
 	return func(c *loadContextConfig) { c.sessionKey = sessionKey }
+}
+
+// WithoutFactDerivedFiles keeps rule/persona context available while omitting
+// generated USER.md and MEMORY.md projections whose revision is not approved.
+// The caller owns the canonical fact-health decision; this option only applies
+// the selective file boundary before a session snapshot is frozen.
+func WithoutFactDerivedFiles() LoadContextOption {
+	return func(c *loadContextConfig) { c.excludeFactDerived = true }
+}
+
+func filterFactDerivedContextFiles(files []ContextFile, exclude bool) []ContextFile {
+	if !exclude || len(files) == 0 {
+		return files
+	}
+	filtered := make([]ContextFile, 0, len(files))
+	for _, file := range files {
+		switch filepath.Base(filepath.Clean(file.Path)) {
+		case "USER.md", "MEMORY.md":
+			continue
+		default:
+			filtered = append(filtered, file)
+		}
+	}
+	return filtered
 }
 
 // ClearSessionSnapshot removes the frozen context files for a session.

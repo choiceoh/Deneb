@@ -200,6 +200,9 @@ internal suspend fun DenebGatewayClient.fetchCurrentFactPage(path: String): Curr
 
 private fun currentFactReference(path: String): String? {
     val ref = path.trim().replace('\\', '/').trimStart('/')
+    if (ref == CURRENT_FACT_PROFILE_PATH || ref == CURRENT_FACT_PROFILE_PATH.removeSuffix(".md")) {
+        return CURRENT_FACT_PROFILE_PATH
+    }
     if (!ref.startsWith("@facts/")) return null
     val claimID = ref.removePrefix("@facts/").removeSuffix(".md")
     return "@facts/$claimID.md".takeIf { claimID.isNotBlank() && '/' !in claimID }

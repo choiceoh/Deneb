@@ -485,7 +485,7 @@ func TestSearchOmitsTombstonedFact(t *testing.T) {
 	}
 	result, err := store.TombstoneFact(FactTombstoneInput{
 		Subject: "project:alpha", Key: "contract.deadline",
-		Authority: FactAuthorityAgent, Reason: "cancelled", At: base.Add(time.Hour),
+		Authority: FactAuthorityDirectUser, Reason: "explicit user forget", At: base.Add(time.Hour),
 	})
 	if err != nil || result.Status != FactStatusTombstoned {
 		t.Fatalf("TombstoneFact = %+v, err=%v", result, err)

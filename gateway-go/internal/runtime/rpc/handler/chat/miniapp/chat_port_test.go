@@ -31,7 +31,9 @@ func TestMethodsRejectTypedNilPort(t *testing.T) {
 
 func TestChatSendAppliesNativeTurnDeadline(t *testing.T) {
 	var remaining time.Duration
-	stub := &chatPortStub{runSync: func(ctx context.Context, _ chatport.SyncRequest) (*chatport.SyncResult, error) {
+	var captured chatport.SyncRequest
+	stub := &chatPortStub{runSync: func(ctx context.Context, req chatport.SyncRequest) (*chatport.SyncResult, error) {
+		captured = req
 		deadline, ok := ctx.Deadline()
 		if !ok {
 			t.Fatal("native sync turn has no deadline")
@@ -50,5 +52,18 @@ func TestChatSendAppliesNativeTurnDeadline(t *testing.T) {
 	}
 	if remaining < nativeSyncTurnDeadline-time.Second || remaining > nativeSyncTurnDeadline {
 		t.Fatalf("native turn deadline remaining = %v, want about %v", remaining, nativeSyncTurnDeadline)
+	}
+	if !captured.TrustedDirectUserInput || !captured.GateUntrustedTools {
+		t.Fatalf("native chat provenance = trusted:%v gate:%v, want both true", captured.TrustedDirectUserInput, captured.GateUntrustedTools)
+	}
+}
+
+func TestUntrustedCaptureDoesNotClaimDirectUserProvenance(t *testing.T) {
+	req := untrustedCaptureRequest("client:main", "captured text")
+	if !req.GateUntrustedTools {
+		t.Fatal("capture must retain the promptware gate")
+	}
+	if req.TrustedDirectUserInput {
+		t.Fatal("capture claimed direct-user provenance")
 	}
 }

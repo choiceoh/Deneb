@@ -215,7 +215,8 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 			AutoDeliveredOutput: true,
 			SkipRecall:          reqBody.SkipRecall,
 			// Block irreversible tools (exec, gmail send) if promptware enters the turn.
-			GateUntrustedTools: true,
+			GateUntrustedTools:     true,
+			TrustedDirectUserInput: true,
 			// Live progress for the client's waiting indicator: which tool is
 			// running, and a throttled "thinking" pulse before the first token.
 			OnToolEvent:  sinks.Tool,

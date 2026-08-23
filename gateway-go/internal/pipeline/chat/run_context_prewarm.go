@@ -2,10 +2,6 @@
 // (split out of run_exec.go per docs/research/improvement-ideas.md §1.1).
 package chat
 
-import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
-)
-
 // prewarmPromptWorkspace resolves the workspace dir and pre-warms the context
 // file snapshot for this session so disk I/O happens before the parallel prep
 // phase (no-op if already cached from a prior turn).
@@ -15,7 +11,7 @@ func prewarmPromptWorkspace(params RunParams, deps runDeps) string {
 		workspaceDir = resolveWorkspaceDirForPrompt()
 	}
 	if !deps.briefcaseMode {
-		prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+		loadFactAwareContextFiles(workspaceDir, params.SessionKey)
 	}
 	return workspaceDir
 }

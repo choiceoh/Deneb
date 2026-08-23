@@ -89,7 +89,7 @@ func TestFilterRecallFactLifecycleEvidenceScopesSharedShortValues(t *testing.T) 
 	}
 	if _, err := store.TombstoneFact(wiki.FactTombstoneInput{
 		Subject: "project:beta", Key: "quote.amount",
-		Authority: wiki.FactAuthorityAgent, At: base.Add(2 * time.Hour),
+		Authority: wiki.FactAuthorityDirectUser, At: base.Add(2 * time.Hour),
 	}); err != nil {
 		t.Fatal(err)
 	}
