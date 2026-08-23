@@ -639,12 +639,13 @@ func readWikiSource(store *wiki.Store, ref string, maxBytes int) (text, note str
 	if store == nil {
 		return "", "위키 비활성 — 이 자료를 읽을 수 없음"
 	}
-	page, err := store.ReadPage(normalizeWikiRef(ref))
+	relPath := normalizeWikiRef(ref)
+	page, err := store.ReadPage(relPath)
 	if err != nil || page == nil {
 		return "", fmt.Sprintf("위키 페이지 %q 읽기 실패 (이동/삭제됐을 수 있음)", ref)
 	}
 	switch {
-	case page.Meta.SupersededBy != "":
+	case wiki.IsEffectivelySuperseded(relPath, page.Meta):
 		note = "⚠ 대체됨(최신 사실은 " + page.Meta.SupersededBy + " 참조 — 옛 값일 수 있음)"
 	case page.Meta.Archived:
 		note = "⚠ 보관됨(비활성 문서 — 현행이 아닐 수 있음)"

@@ -84,6 +84,18 @@ func supersedePrecondition(oldPath, newPath string) error {
 	return nil
 }
 
+// IsEffectivelySuperseded reports whether a stored superseded_by relationship
+// is valid enough to retire the old page from current-state retrieval. Older
+// versions wrote invalid flags onto layout slots and raw evidence; those flags
+// remain useful audit history but must not remove the page from recall.
+func IsEffectivelySuperseded(relPath string, meta Frontmatter) bool {
+	successor := normalizePagePath(meta.SupersededBy)
+	if successor == "" {
+		return false
+	}
+	return supersedePrecondition(normalizePagePath(relPath), successor) == nil
+}
+
 func toSet(ss []string) map[string]struct{} {
 	m := make(map[string]struct{}, len(ss))
 	for _, s := range ss {

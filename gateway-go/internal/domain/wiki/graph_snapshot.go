@@ -223,8 +223,10 @@ func (b *graphSnapshotBuilder) addPage(relPath string, page *Page) {
 	// here would produce a non-clickable pseudo-location.
 	// A superseded page's facts stopped being current at its last write.
 	invalidAt := ""
-	if page.Meta.SupersededBy != "" {
+	supersededBy := ""
+	if IsEffectivelySuperseded(relPath, page.Meta) {
 		invalidAt = page.Meta.Updated
+		supersededBy = page.Meta.SupersededBy
 	}
 	b.graph.Nodes = append(b.graph.Nodes, graphifyNode{
 		Label:          title,
@@ -240,7 +242,7 @@ func (b *graphSnapshotBuilder) addPage(relPath string, page *Page) {
 		ValidAt:        page.Meta.Created,
 		UpdatedAt:      page.Meta.Updated,
 		InvalidAt:      invalidAt,
-		SupersededBy:   page.Meta.SupersededBy,
+		SupersededBy:   supersededBy,
 	})
 	b.pathToID[relPath] = id
 	b.pathToID[strings.TrimSuffix(relPath, ".md")] = id
@@ -331,7 +333,7 @@ func (b *graphSnapshotBuilder) addTagPairs(tag string, ids []string) {
 func (b *graphSnapshotBuilder) linkSupersededNodes() {
 	for i, info := range b.infos {
 		raw := info.page.Meta.SupersededBy
-		if raw == "" {
+		if raw == "" || !IsEffectivelySuperseded(info.relPath, info.page.Meta) {
 			continue
 		}
 		targetID := b.targetID(raw)

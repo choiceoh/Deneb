@@ -668,7 +668,7 @@ func semanticPageAdmitted(relPath string, page *Page) bool {
 	if page == nil || isGeneratedFactProjectionPage(relPath, page) {
 		return false
 	}
-	return strings.TrimSpace(page.Meta.SupersededBy) == ""
+	return !IsEffectivelySuperseded(relPath, page.Meta)
 }
 
 const wikiSemanticMaxChunks = textchunk.DefaultMaxChunks

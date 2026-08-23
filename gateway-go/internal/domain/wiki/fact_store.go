@@ -433,7 +433,7 @@ func (s *Store) loadSupersededPageStaleValues() error {
 	}
 	for _, relPath := range pages {
 		page, err := s.ReadPage(relPath)
-		if err != nil || page == nil || strings.TrimSpace(page.Meta.SupersededBy) == "" {
+		if err != nil || page == nil || !IsEffectivelySuperseded(relPath, page.Meta) {
 			continue
 		}
 		s.cacheSupersededPageStaleLocked(page)

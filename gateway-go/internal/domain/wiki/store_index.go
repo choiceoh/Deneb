@@ -177,7 +177,7 @@ func (s *Store) Tier1Pages(minImportance float64) []Tier1Result {
 			continue
 		}
 		page, err := s.ReadPage(path)
-		if err != nil || page.Meta.Archived || strings.TrimSpace(page.Meta.SupersededBy) != "" {
+		if err != nil || page.Meta.Archived || IsEffectivelySuperseded(path, page.Meta) {
 			continue
 		}
 		// Generated current-facts are injected through the revision-live fact

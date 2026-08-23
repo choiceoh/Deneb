@@ -377,16 +377,16 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 		staleFactValues = append(staleFactValues, factSnapshot.StaleValues...)
 		evidence = filterStaleFactEvidence(evidence, staleFactValues)
 		factRevision, activeFacts := factSnapshot.Revision, factSnapshot.Active
-		matchedSubjects = explicitlyMatchedFactSubjects(message, activeFacts)
+		matchedSubjects = explicitlyMatchedFactSubjects(searchMessage, activeFacts)
 		unmatchedSubjectValues = unmatchedNonSelfFactValues(activeFacts, matchedSubjects)
 		unmatchedSubjectAliases = unmatchedNonSelfFactAliases(activeFacts, matchedSubjects)
 		evidence = filterUnmatchedSubjectFactEvidence(evidence, unmatchedSubjectValues)
 		evidence = filterUnmatchedSubjectAliases(evidence, unmatchedSubjectAliases, matchedSubjects)
 		correctedRules = buildCorrectedFactRules(activeFacts, factSnapshot.CorrectedKeys)
 		evidence = filterCorrectedFactEvidence(evidence, correctedRules)
-		currentFacts = subjectAwareCurrentFactContext(factRevision, activeFacts, matchedSubjects, message, currentFactMaxChars)
+		currentFacts = subjectAwareCurrentFactContext(factRevision, activeFacts, matchedSubjects, searchMessage, currentFactMaxChars)
 		currentFactsResolveCue = strings.TrimSpace(currentFacts) != "" &&
-			currentFactsResolveMessage(message, activeFacts, matchedSubjects)
+			currentFactsResolveMessage(searchMessage, activeFacts, matchedSubjects)
 	}
 	// Recent-diary fallback ONLY for topicless cues ("아까 뭐였지?" — no signal
 	// terms, so nothing was searchable). A topical question that found nothing
@@ -399,6 +399,22 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	// The topicless fallback is gathered after the normal fan-out. Apply the
 	// same deny set again so a vague cue cannot bypass lifecycle filtering via
 	// the newest raw diary entries.
+	evidence = filterStaleFactEvidence(evidence, staleFactValues)
+	evidence = filterUnmatchedSubjectFactEvidence(evidence, unmatchedSubjectValues)
+	evidence = filterUnmatchedSubjectAliases(evidence, unmatchedSubjectAliases, matchedSubjects)
+	evidence = filterCorrectedFactEvidence(evidence, correctedRules)
+
+	// wiki↔메일 담당자 충돌: pull candidates without annotating either side,
+	// apply the fact guards, then annotate only surviving pairs. Annotation is
+	// filtered once more because the marker itself includes both email values.
+	if cue {
+		evidence = pullMissingMailAnalysisConflicts(ctx, deps.Wiki, evidence)
+	}
+	evidence = filterStaleFactEvidence(evidence, staleFactValues)
+	evidence = filterUnmatchedSubjectFactEvidence(evidence, unmatchedSubjectValues)
+	evidence = filterUnmatchedSubjectAliases(evidence, unmatchedSubjectAliases, matchedSubjects)
+	evidence = filterCorrectedFactEvidence(evidence, correctedRules)
+	evidence = annotateExistingWikiMailConflicts(deps.Wiki, evidence)
 	evidence = filterStaleFactEvidence(evidence, staleFactValues)
 	evidence = filterUnmatchedSubjectFactEvidence(evidence, unmatchedSubjectValues)
 	evidence = filterUnmatchedSubjectAliases(evidence, unmatchedSubjectAliases, matchedSubjects)
@@ -442,9 +458,6 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 		return currentFacts, truncated
 	}
 
-	// wiki↔메일 담당자 충돌: 둘 다 올리고 불일치만 표시. 점수 중재 없음
-	// (stale 위키가 이기면 안 된다). 검색은 cue 턴에서만 보강.
-	evidence = attachWikiMailConflicts(ctx, deps.Wiki, evidence, cue)
 	evidence = rankRecallEvidence(evidence, queries, searchMessage, cue, deps.now())
 	if logger != nil {
 		logger.Info("recall preflight: evidence injected",
@@ -1039,7 +1052,8 @@ func renderSelfFactContext(revision wiki.FactRevision, active []wiki.FactClaim, 
 		if claim.Status == wiki.FactStatusConflicted {
 			status = " [미해결 충돌]"
 		}
-		line := fmt.Sprintf("- %s (%s/%s%s): %s",
+		line := fmt.Sprintf(
+			"- %s (%s/%s%s): %s",
 			normalizeFactContextText(claim.Key, 128), claim.Kind, claim.Authority, status,
 			normalizeFactContextText(claim.Value, 0),
 		)
@@ -1090,7 +1104,8 @@ func renderSubjectFactContext(revision wiki.FactRevision, claims []wiki.FactClai
 		if claim.Status == wiki.FactStatusConflicted {
 			status = " [미해결 충돌]"
 		}
-		line := fmt.Sprintf("- [%s] %s (%s/%s%s): %s",
+		line := fmt.Sprintf(
+			"- [%s] %s (%s/%s%s): %s",
 			normalizeFactContextText(claim.Subject, 128),
 			normalizeFactContextText(claim.Key, 128),
 			claim.Kind, claim.Authority, status,

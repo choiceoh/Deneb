@@ -138,7 +138,7 @@ func newSearchDB(now func() time.Time, fieldBoost float64) *searchDB {
 func (s *searchDB) indexPage(relPath string, page *Page) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if isGeneratedFactProjectionPage(relPath, page) || page != nil && strings.TrimSpace(page.Meta.SupersededBy) != "" {
+	if isGeneratedFactProjectionPage(relPath, page) || page != nil && IsEffectivelySuperseded(relPath, page.Meta) {
 		// Historical pages remain on disk for direct reads, but keeping them in
 		// the candidate corpus lets a crowd of old exact matches displace the
 		// current page before the final validity filter can run.
@@ -170,7 +170,7 @@ func validityFactor(relPath string, page *Page, now time.Time) float64 {
 	if meta.Archived {
 		f *= 0.3
 	}
-	if meta.SupersededBy != "" {
+	if IsEffectivelySuperseded(relPath, meta) {
 		return 0 // historical only — latest-state wins (M4)
 	}
 	if meta.Updated != "" {

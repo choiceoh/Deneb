@@ -1357,3 +1357,50 @@ func TestStoreStartupRefreshesExistingIndexMetadataFromMarkdown(t *testing.T) {
 		t.Fatalf("stale index entry=%+v", entry)
 	}
 }
+
+func TestFoldDuplicateRejectsFactProjectionInEitherRoleWithoutMutation(t *testing.T) {
+	store, wikiDir, _ := newFactTestStore(t)
+	if _, err := store.UpsertFact(FactInput{
+		Subject: "self", Key: "communication.language", Value: "한국어",
+		Kind: FactKindPreference, Authority: FactAuthorityDirectUser,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ordinaryPath := "기타/fold-target.md"
+	ordinary := NewPage("일반 페이지", "기타", nil)
+	ordinary.Body = "접기 전 본문"
+	if err := store.WritePage(ordinaryPath, ordinary); err != nil {
+		t.Fatal(err)
+	}
+
+	projectionDiskPath := filepath.Join(wikiDir, filepath.FromSlash(factProfilePagePath))
+	ordinaryDiskPath := filepath.Join(wikiDir, filepath.FromSlash(ordinaryPath))
+	projectionBefore, err := os.ReadFile(projectionDiskPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ordinaryBefore, err := os.ReadFile(ordinaryDiskPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, pair := range [][2]string{
+		{factProfilePagePath, ordinaryPath},
+		{ordinaryPath, factProfilePagePath},
+	} {
+		if err := store.FoldDuplicate(pair[0], pair[1]); err == nil {
+			t.Fatalf("FoldDuplicate(%q, %q) accepted reserved projection", pair[0], pair[1])
+		}
+	}
+	projectionAfter, err := os.ReadFile(projectionDiskPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ordinaryAfter, err := os.ReadFile(ordinaryDiskPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(projectionBefore, projectionAfter) || !bytes.Equal(ordinaryBefore, ordinaryAfter) {
+		t.Fatal("rejected FoldDuplicate changed a page")
+	}
+}

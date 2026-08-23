@@ -239,17 +239,17 @@ func TestBuildRecallPreflightReturnsFencedWikiEvidence(t *testing.T) {
 }
 
 func TestRecallWikiStalenessMarkerFormatsByFrontmatterState(t *testing.T) {
-	if m := recallWikiStalenessMarker(wiki.Frontmatter{}); m != "" {
+	if m := recallWikiStalenessMarker("업무/current.md", wiki.Frontmatter{}); m != "" {
 		t.Fatalf("current page must have no marker, got %q", m)
 	}
-	if m := recallWikiStalenessMarker(wiki.Frontmatter{SupersededBy: "거래/hyundai-v2.md"}); !strings.Contains(m, "대체됨") || !strings.Contains(m, "거래/hyundai-v2.md") {
+	if m := recallWikiStalenessMarker("업무/old.md", wiki.Frontmatter{SupersededBy: "거래/hyundai-v2.md"}); !strings.Contains(m, "대체됨") || !strings.Contains(m, "거래/hyundai-v2.md") {
 		t.Fatalf("superseded marker must name replacement, got %q", m)
 	}
-	if m := recallWikiStalenessMarker(wiki.Frontmatter{Archived: true}); !strings.Contains(m, "보관됨") {
+	if m := recallWikiStalenessMarker("업무/archive.md", wiki.Frontmatter{Archived: true}); !strings.Contains(m, "보관됨") {
 		t.Fatalf("archived marker missing, got %q", m)
 	}
 	// Superseded wins over archived — it names the live replacement.
-	if m := recallWikiStalenessMarker(wiki.Frontmatter{Archived: true, SupersededBy: "x.md"}); !strings.Contains(m, "대체됨") {
+	if m := recallWikiStalenessMarker("업무/old.md", wiki.Frontmatter{Archived: true, SupersededBy: "x.md"}); !strings.Contains(m, "대체됨") {
 		t.Fatalf("superseded must take priority over archived, got %q", m)
 	}
 }

@@ -210,6 +210,10 @@ func NormalizeProjectPagePath(relPath string) string {
 	return wiki.NormalizeProjectPagePath(relPath)
 }
 
+func IsEffectivelySuperseded(relPath string, meta Frontmatter) bool {
+	return wiki.IsEffectivelySuperseded(relPath, meta)
+}
+
 func ValidateCategory(cat string) bool {
 	return wiki.ValidateCategory(cat)
 }

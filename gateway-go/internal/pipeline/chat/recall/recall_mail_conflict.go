@@ -28,14 +28,16 @@ func attachWikiMailConflicts(ctx context.Context, store *wiki.Store, evidence []
 	if store == nil || len(evidence) == 0 {
 		return evidence
 	}
-	evidence = annotateExistingWikiMailConflicts(store, evidence)
 	if cue {
 		evidence = pullMissingMailAnalysisConflicts(ctx, store, evidence)
 	}
-	return evidence
+	return annotateExistingWikiMailConflicts(store, evidence)
 }
 
 func annotateExistingWikiMailConflicts(store *wiki.Store, evidence []recallEvidence) []recallEvidence {
+	if store == nil || len(evidence) == 0 {
+		return evidence
+	}
 	for i := range evidence {
 		if evidence[i].Kind != "wiki" || !isPersonWikiPath(evidence[i].Source) {
 			continue
@@ -64,6 +66,9 @@ func annotateExistingWikiMailConflicts(store *wiki.Store, evidence []recallEvide
 }
 
 func pullMissingMailAnalysisConflicts(ctx context.Context, store *wiki.Store, evidence []recallEvidence) []recallEvidence {
+	if store == nil || len(evidence) == 0 {
+		return evidence
+	}
 	if ctx != nil && ctx.Err() != nil {
 		return evidence
 	}
@@ -99,16 +104,14 @@ func pullMissingMailAnalysisConflicts(ctx context.Context, store *wiki.Store, ev
 			if addr == "" || !mailAboutPerson(title, mailText, addr) {
 				continue
 			}
-			note := personMailConflict(wikiEmails, addr)
-			if note == "" {
+			if personMailConflict(wikiEmails, addr) == "" {
 				continue
 			}
-			evidence[i].Note = prefixConflict(evidence[i].Note, note)
 			evidence = append(evidence, recallEvidence{
 				Kind:   "wiki",
 				Source: h.Path,
 				Query:  evidence[i].Query,
-				Note:   prefixConflict(strings.TrimSpace(h.Content), note),
+				Note:   strings.TrimSpace(h.Content),
 				Score:  evidence[i].Score,
 				At:     h.UpdatedAt,
 			})

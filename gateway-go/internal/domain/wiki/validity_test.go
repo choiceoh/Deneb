@@ -3,6 +3,7 @@ package wiki
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -95,6 +96,79 @@ func TestSearch_ExcludesSupersededPageAndPersistsAcrossRestart(t *testing.T) {
 	}
 	if _, err := store2.ReadPage("운영시스템/port-old.md"); err != nil {
 		t.Errorf("historical page is no longer directly readable: %v", err)
+	}
+}
+
+func TestEffectiveSupersessionPreservesBadLayoutFlagsAcrossRestart(t *testing.T) {
+	root := t.TempDir()
+	wikiDir, diaryDir := filepath.Join(root, "wiki"), filepath.Join(root, "diary")
+	store, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	const (
+		layoutPath  = "프로젝트/pl2-live-epc-001/로그.md"
+		layoutValue = "레이아웃생존값4821"
+		stalePath   = "기타/정상대체-구.md"
+		staleValue  = "정상대체옛값7312"
+	)
+	layout := NewPage("살아 있는 프로젝트 로그", "프로젝트", nil)
+	layout.Meta.Importance = 1
+	layout.Meta.SupersededBy = "프로젝트/pl2-live-epc-001/대표.md"
+	layout.Body = layoutValue
+	stale := NewPage("정상적인 구버전", "기타", nil)
+	stale.Meta.Importance = 1
+	stale.Meta.SupersededBy = "기타/정상대체-신.md"
+	stale.Body = staleValue
+	for path, page := range map[string]*Page{layoutPath: layout, stalePath: stale} {
+		if err := store.WritePage(path, page); err != nil {
+			t.Fatalf("WritePage(%s): %v", path, err)
+		}
+	}
+
+	assertCurrentness := func(t *testing.T, s *Store, phase string) {
+		t.Helper()
+		if IsEffectivelySuperseded(layoutPath, layout.Meta) {
+			t.Fatalf("%s: invalid layout flag became effective", phase)
+		}
+		if !IsEffectivelySuperseded(stalePath, stale.Meta) {
+			t.Fatalf("%s: ordinary supersession lost", phase)
+		}
+		if !semanticPageAdmitted(layoutPath, layout) || semanticPageAdmitted(stalePath, stale) {
+			t.Fatalf("%s: semantic admission disagrees with effective supersession", phase)
+		}
+		got, err := s.Search(context.Background(), layoutValue, 5)
+		if err != nil || len(got) != 1 || got[0].Path != layoutPath {
+			t.Fatalf("%s: live layout page missing from search: %+v err=%v", phase, got, err)
+		}
+		if got, err := s.Search(context.Background(), staleValue, 5); err != nil || len(got) != 0 {
+			t.Fatalf("%s: ordinary superseded page resurfaced: %+v err=%v", phase, got, err)
+		}
+		tier1 := s.Tier1Pages(0.5)
+		seenLayout, seenStale := false, false
+		for _, result := range tier1 {
+			seenLayout = seenLayout || result.Path == layoutPath
+			seenStale = seenStale || result.Path == stalePath
+		}
+		if !seenLayout || seenStale {
+			t.Fatalf("%s: Tier1 currentness mismatch: %+v", phase, tier1)
+		}
+	}
+	assertCurrentness(t, store, "live")
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer reopened.Close()
+	assertCurrentness(t, reopened, "reopen")
+	staleValues := strings.Join(reopened.RecallFactSnapshot().StaleValues, "\n")
+	if strings.Contains(staleValues, layoutValue) || !strings.Contains(staleValues, staleValue) {
+		t.Fatalf("reopen stale deny mismatch: %q", staleValues)
 	}
 }
 

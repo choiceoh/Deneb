@@ -325,7 +325,7 @@ func (t *wikiResearchTask) selectTarget(state *wikiResearchState) *wikiResearchC
 		if err != nil || page == nil {
 			continue
 		}
-		if page.Meta.Archived || page.Meta.SupersededBy != "" {
+		if page.Meta.Archived || wiki.IsEffectivelySuperseded(p, page.Meta) {
 			continue
 		}
 		if strings.TrimSpace(page.Body) == "" {
