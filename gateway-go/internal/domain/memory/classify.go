@@ -539,6 +539,25 @@ func maskQuotedProfilePayloads(message string) string {
 }
 
 // FactKeyFromText builds a stable-ish key for supersession (latest-state).
+// FactKindForKey returns the kind a profile axis key carries, and whether the key
+// is one of those axes at all.
+//
+// The axis table defines key and kind as a pair on purpose: a key like
+// communication.response_length IS a preference, whatever sentence produced it.
+// Callers that derive the kind separately (a section heading, say) need this to
+// avoid claiming a different kind for the same identity — which the fact store
+// rejects, and which took the gateway down on 2026-08-23 when a bullet under
+// "## 사용자 모델" was filed as identity against a preference key.
+func FactKindForKey(key string) (string, bool) {
+	trimmed := strings.ToLower(strings.TrimSpace(key))
+	for _, axis := range profileFactAxes {
+		if axis.key == trimmed {
+			return axis.kind, true
+		}
+	}
+	return "", false
+}
+
 func FactKeyFromText(text string) string {
 	lower := strings.ToLower(strings.TrimSpace(text))
 	for _, axis := range profileFactAxes {

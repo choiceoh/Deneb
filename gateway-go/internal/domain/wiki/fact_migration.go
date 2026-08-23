@@ -349,11 +349,18 @@ func legacyProjectionName(name string) string {
 }
 
 func legacyFactKind(key, section, value string) FactKind {
-	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "identity.address":
-		return FactKindIdentity
-	case "communication.language":
-		return FactKindPreference
+	// A profile-axis key carries its own kind; the section heading must not
+	// override it. Deriving the two independently is what produced the
+	// "kind is preference, not identity" conflict: a bullet under "## 사용자 모델"
+	// mentioning 장황한 설명 got key communication.response_length (a preference
+	// axis) but kind identity from its heading, and the store refused it.
+	if axisKind, ok := memory.FactKindForKey(key); ok {
+		switch axisKind {
+		case "identity":
+			return FactKindIdentity
+		case "preference":
+			return FactKindPreference
+		}
 	}
 	lower := strings.ToLower(section + " " + value)
 	switch {
