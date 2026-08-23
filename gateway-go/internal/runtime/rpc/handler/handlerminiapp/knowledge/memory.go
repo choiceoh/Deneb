@@ -137,7 +137,20 @@ func memoryGetPage(deps MemoryDeps) rpcutil.HandlerFunc {
 		Updated    string   `json:"updated,omitempty"`
 		Due        string   `json:"due,omitempty"`
 		Importance float64  `json:"importance,omitempty"`
-		Body       string   `json:"body"`
+		// Structural metadata a reader needs to judge a page: which deal stage
+		// it is in, whose account it belongs to, where the site is, what kind of
+		// business it is, and whether it is still current. The clients showed
+		// only the body, so a page with an empty stage or a stale
+		// superseded_by flag looked exactly like a healthy one.
+		Stage        string   `json:"stage,omitempty"`
+		Client       string   `json:"client,omitempty"`
+		Sites        []string `json:"sites,omitempty"`
+		Kinds        []string `json:"kinds,omitempty"`
+		Program      string   `json:"program,omitempty"`
+		Sources      []string `json:"sources,omitempty"`
+		SupersededBy string   `json:"supersededBy,omitempty"`
+		Archived     bool     `json:"archived,omitempty"`
+		Body         string   `json:"body"`
 	}
 	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		rel := strings.TrimSpace(p.Path)
@@ -172,18 +185,26 @@ func memoryGetPage(deps MemoryDeps) rpcutil.HandlerFunc {
 			return rpcerr.NotFound("wiki page " + rpcutil.TruncateForError(rel)).Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, out{
-			Path:       rel,
-			Title:      page.Meta.Title,
-			Summary:    page.Meta.Summary,
-			Category:   page.Meta.Category,
-			Code:       page.Meta.Code,
-			Tags:       page.Meta.Tags,
-			Related:    page.Meta.Related,
-			Created:    page.Meta.Created,
-			Updated:    page.Meta.Updated,
-			Due:        page.Meta.Due,
-			Importance: page.Meta.Importance,
-			Body:       page.Body,
+			Path:         rel,
+			Title:        page.Meta.Title,
+			Summary:      page.Meta.Summary,
+			Category:     page.Meta.Category,
+			Code:         page.Meta.Code,
+			Tags:         page.Meta.Tags,
+			Related:      page.Meta.Related,
+			Created:      page.Meta.Created,
+			Updated:      page.Meta.Updated,
+			Due:          page.Meta.Due,
+			Importance:   page.Meta.Importance,
+			Stage:        page.Meta.Stage,
+			Client:       page.Meta.Client,
+			Sites:        page.Meta.Sites,
+			Kinds:        page.Meta.Kinds,
+			Program:      page.Meta.Program,
+			Sources:      page.Meta.Sources,
+			SupersededBy: page.Meta.SupersededBy,
+			Archived:     page.Meta.Archived,
+			Body:         page.Body,
 		})
 	})
 }
