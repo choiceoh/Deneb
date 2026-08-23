@@ -78,8 +78,8 @@ func TestMatchCitedPaths(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := matchCitedPaths(tt.answer, paths); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("matchCitedPaths(%q) = %v, want %v", tt.answer, got, tt.want)
+			if got := matchCitedPaths(tt.answer, paths, nil); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("matchCitedPaths(%q, nil) = %v, want %v", tt.answer, got, tt.want)
 			}
 		})
 	}

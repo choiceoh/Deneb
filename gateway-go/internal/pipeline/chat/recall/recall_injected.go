@@ -67,7 +67,7 @@ func RecordAnswerCitations(store *wiki.Store, sessionKey, answer string, logger 
 	if store == nil || len(injected) == 0 {
 		return
 	}
-	cited := matchCitedPaths(answer, injected)
+	cited := matchCitedPaths(answer, injected, pageIdentityResolver(store))
 	if len(cited) == 0 {
 		return
 	}
@@ -97,7 +97,7 @@ const citeTitleMinRunes = 3
 // when the title is specific enough. Under-counting by design — cite is
 // best-effort telemetry, and a false positive would grant unearned utility
 // credit to a page the answer never engaged.
-func matchCitedPaths(answer string, paths []string) []string {
+func matchCitedPaths(answer string, paths []string, identity func(string) (title, code string)) []string {
 	answer = strings.TrimSpace(answer)
 	if answer == "" || len(paths) == 0 {
 		return nil
@@ -113,16 +113,52 @@ func matchCitedPaths(answer string, paths []string) []string {
 			out = append(out, p)
 			continue
 		}
-		title := path.Base(trimmed)
-		if _, generic := citeGenericTitles[title]; generic {
+		if citeNameMatches(answer, path.Base(trimmed)) {
+			out = append(out, p)
 			continue
 		}
-		if utf8.RuneCountInString(title) < citeTitleMinRunes {
+		// Filename matching cannot see mail analyses: their filename is the Gmail
+		// message id (61% of injected client paths in the 30-day ledger are
+		// uuid/hash shaped), so an answer about that mail never contains anything
+		// path-like. The page's own title — the mail subject, the project's
+		// name — is what an answer quotes, and the frozen project code is a
+		// distinctive token answers use verbatim.
+		if identity == nil {
 			continue
 		}
-		if strings.Contains(answer, title) {
+		title, code := identity(p)
+		if citeNameMatches(answer, title) || (code != "" && strings.Contains(answer, code)) {
 			out = append(out, p)
 		}
 	}
 	return out
+}
+
+// citeNameMatches applies the same conservatism to any name-shaped token: long
+// enough to be distinctive, not one of the words every page carries.
+func citeNameMatches(answer, name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" || utf8.RuneCountInString(name) < citeTitleMinRunes {
+		return false
+	}
+	if _, generic := citeGenericTitles[name]; generic {
+		return false
+	}
+	return strings.Contains(answer, name)
+}
+
+// pageIdentityResolver reads the title and project code of an injected page.
+// Bounded by construction: recall injects at most a handful of pages per turn,
+// and the reads happen after delivery.
+func pageIdentityResolver(store *wiki.Store) func(string) (string, string) {
+	if store == nil {
+		return nil
+	}
+	return func(relPath string) (string, string) {
+		page, err := store.ReadPage(relPath)
+		if err != nil || page == nil {
+			return "", ""
+		}
+		return strings.TrimSpace(page.Meta.Title), strings.TrimSpace(page.Meta.Code)
+	}
 }
