@@ -100,12 +100,20 @@ func formatMorningDiarySummary(dateStr string, results []any) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "🌅 모닝레터 수집 (%s)\n\n", dateStr)
 
-	if w, ok := results[0].(weatherData); ok && w.OK {
-		fmt.Fprintf(&sb, "- 날씨: %s°C (체감 %s°C), %s, 습도 %s%%", w.TempC, w.FeelsLikeC, w.Condition, w.Humidity)
-		if w.MaxRainPct > 0 {
-			fmt.Fprintf(&sb, ", 강수확률 %d%% (%s)", w.MaxRainPct, w.MaxRainTime)
+	if w, ok := results[0].(weatherData); ok {
+		if w.OK {
+			cond := strings.TrimSpace(w.Condition)
+			if cond == "" {
+				cond = "상태 미확인"
+			}
+			fmt.Fprintf(&sb, "- 날씨: %s°C (체감 %s°C), %s, 습도 %s%%", w.TempC, w.FeelsLikeC, cond, w.Humidity)
+			if w.MaxRainPct > 0 {
+				fmt.Fprintf(&sb, ", 강수확률 %d%% (%s)", w.MaxRainPct, w.MaxRainTime)
+			}
+			sb.WriteString("\n")
+		} else {
+			sb.WriteString("- 날씨: 조회 실패\n")
 		}
-		sb.WriteString("\n")
 	}
 
 	if x, ok := results[1].(exchangeData); ok && x.OK {
@@ -116,8 +124,10 @@ func formatMorningDiarySummary(dateStr string, results []any) string {
 		fmt.Fprintf(&sb, "- 동: $%.0f/톤\n", c.PricePerTon)
 	}
 
-	if cal, ok := results[3].(calendarData); ok && cal.OK && len(cal.Events) > 0 {
-		fmt.Fprintf(&sb, "- 일정: %d건\n", len(cal.Events))
+	if len(results) > 3 {
+		if cal, ok := results[3].(calendarData); ok && cal.OK && len(cal.Events) > 0 {
+			fmt.Fprintf(&sb, "- 일정: %d건\n", len(cal.Events))
+		}
 	}
 
 	if len(results) > 9 {
@@ -126,12 +136,16 @@ func formatMorningDiarySummary(dateStr string, results []any) string {
 		}
 	}
 
-	if em, ok := results[4].(emailData); ok && em.OK && len(em.Messages) > 0 {
-		fmt.Fprintf(&sb, "- 메일: %d건\n", len(em.Messages))
+	if len(results) > 4 {
+		if em, ok := results[4].(emailData); ok && em.OK && len(em.Messages) > 0 {
+			fmt.Fprintf(&sb, "- 메일: %d건\n", len(em.Messages))
+		}
 	}
 
-	if dl, ok := results[5].(deadlineData); ok && dl.OK && len(dl.Items) > 0 {
-		fmt.Fprintf(&sb, "- 임박 마감: %d건\n", len(dl.Items))
+	if len(results) > 5 {
+		if dl, ok := results[5].(deadlineData); ok && dl.OK && len(dl.Items) > 0 {
+			fmt.Fprintf(&sb, "- 임박 마감: %d건\n", len(dl.Items))
+		}
 	}
 	if len(results) > 7 {
 		if gw, ok := results[7].(groupwarePendingData); ok && gw.OK && gw.Count > 0 {
@@ -343,6 +357,14 @@ func fetchGroupwareCC(ctx context.Context) any {
 }
 
 func fetchWeather(ctx context.Context) any {
+	got := fetchWeatherOnce(ctx)
+	if w, ok := got.(weatherData); ok && !w.OK && w.Error == "parse error" {
+		return fetchWeatherOnce(ctx)
+	}
+	return got
+}
+
+func fetchWeatherOnce(ctx context.Context) any {
 	req, err := http.NewRequestWithContext(ctx, "GET",
 		"https://wttr.in/Gwangju,South+Korea?format=j1", nil)
 	if err != nil {
@@ -358,24 +380,34 @@ func fetchWeather(ctx context.Context) any {
 	if err != nil {
 		return weatherData{Error: "read error"}
 	}
+	return parseWttrWeather(body)
+}
 
+type wttrCurrentCondition struct {
+	TempC      string `json:"temp_C"`
+	FeelsLikeC string `json:"FeelsLikeC"`
+	Humidity   string `json:"humidity"`
+	LangKo     []struct {
+		Value string `json:"value"`
+	} `json:"lang_ko"`
+	WeatherDesc []struct {
+		Value string `json:"value"`
+	} `json:"weatherDesc"`
+}
+
+type wttrDay struct {
+	MinTempC string `json:"mintempC"`
+	MaxTempC string `json:"maxtempC"`
+	Hourly   []struct {
+		ChanceOfRain string `json:"chanceofrain"`
+		Time         string `json:"time"`
+	} `json:"hourly"`
+}
+
+func parseWttrWeather(body []byte) weatherData {
 	var raw struct {
-		CurrentCondition []struct {
-			TempC      string `json:"temp_C"`
-			FeelsLikeC string `json:"FeelsLikeC"`
-			Humidity   string `json:"humidity"`
-			LangKo     []struct {
-				Value string `json:"value"`
-			} `json:"lang_ko"`
-		} `json:"current_condition"`
-		Weather []struct {
-			MinTempC string `json:"mintempC"`
-			MaxTempC string `json:"maxtempC"`
-			Hourly   []struct {
-				ChanceOfRain string `json:"chanceofrain"`
-				Time         string `json:"time"`
-			} `json:"hourly"`
-		} `json:"weather"`
+		CurrentCondition []wttrCurrentCondition `json:"current_condition"`
+		Weather          []wttrDay              `json:"weather"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil || len(raw.CurrentCondition) == 0 {
 		return weatherData{Error: "parse error"}
@@ -388,8 +420,13 @@ func fetchWeather(ctx context.Context) any {
 		FeelsLikeC: cc.FeelsLikeC,
 		Humidity:   cc.Humidity,
 	}
-	if len(cc.LangKo) > 0 {
+	if len(cc.LangKo) > 0 && strings.TrimSpace(cc.LangKo[0].Value) != "" {
 		d.Condition = cc.LangKo[0].Value
+	} else if len(cc.WeatherDesc) > 0 {
+		d.Condition = strings.TrimSpace(cc.WeatherDesc[0].Value)
+	}
+	if strings.TrimSpace(d.TempC) == "" {
+		return weatherData{Error: "empty temperature"}
 	}
 	if len(raw.Weather) > 0 {
 		w := raw.Weather[0]

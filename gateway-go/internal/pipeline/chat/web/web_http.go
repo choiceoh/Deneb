@@ -112,9 +112,23 @@ func fetchYouTube(ctx context.Context, spill tooldeps.SpilloverStore, url string
 // extractYouTube runs transcript extraction under its own bounded deadline so
 // summarization (which uses the parent ctx) is not capped by the fetch timeout.
 func extractYouTube(ctx context.Context, url string) (*media.YouTubeResult, error) {
-	ytCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
-	defer cancel()
-	return media.ExtractYouTubeTranscript(ytCtx, url)
+	// Captions (and a first ASR try) stay inside 90s so a hung yt-dlp cannot
+	// eat the whole turn. If that budget returns metadata without a transcript
+	// — live streams, caption-less talks — retry ASR on the parent deadline.
+	capCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	result, err := media.ExtractYouTubeTranscript(capCtx, url)
+	cancel()
+	if err != nil {
+		return nil, err
+	}
+	if result.HasTranscript() {
+		return result, nil
+	}
+	asr, asrErr := media.ExtractYouTubeAudioTranscript(ctx, url)
+	if asrErr == nil && asr != nil && asr.HasTranscript() {
+		return asr, nil
+	}
+	return result, nil
 }
 
 // classifyFetchError maps transport and HTTP errors to agent-readable codes.

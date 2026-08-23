@@ -51,6 +51,7 @@ type WatchResult struct {
 	Chapters    []YouTubeChapter // section markers (native YouTube extraction only)
 	StartSec    float64          // analyzed window start (0 = from beginning)
 	EndSec      float64          // analyzed window end (0 = to end)
+	IsLive      bool             // live or was-live stream (captions often missing)
 }
 
 // WatchOptions configures a WatchVideo call.
@@ -153,6 +154,7 @@ func watchYouTube(ctx context.Context, url string, opts WatchOptions) (*WatchRes
 		IsYouTube:   true,
 		StartSec:    opts.StartSec,
 		EndSec:      opts.EndSec,
+		IsLive:      meta.IsLive || meta.WasLive,
 	}
 
 	// Subtitles — reuse the youtube.go downloader (best-effort; frames still
@@ -190,9 +192,6 @@ func watchYouTube(ctx context.Context, url string, opts WatchOptions) (*WatchRes
 
 	// Cheap path: captions/ASR only — skip the video download + ffmpeg work.
 	if opts.TranscriptOnly {
-		if strings.TrimSpace(result.Transcript) == "" {
-			return nil, fmt.Errorf("transcript-only watch: no captions or ASR transcript available")
-		}
 		return result, nil
 	}
 
@@ -200,11 +199,17 @@ func watchYouTube(ctx context.Context, url string, opts WatchOptions) (*WatchRes
 	// keep ffmpeg seeking fast — we only need representative frames.
 	videoPath, err := downloadYouTubeVideo(ctx, ytdlpPath, url, tmpDir)
 	if err != nil {
+		if strings.TrimSpace(result.Transcript) != "" {
+			return result, nil
+		}
 		return nil, fmt.Errorf("video download: %w", err)
 	}
 
 	frames, timestamps, err := extractFramesAtWindow(ctx, videoPath, meta.Duration, opts)
 	if err != nil {
+		if strings.TrimSpace(result.Transcript) != "" {
+			return result, nil
+		}
 		return nil, fmt.Errorf("frame extraction: %w", err)
 	}
 	result.Frames = frames

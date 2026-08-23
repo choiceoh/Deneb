@@ -45,6 +45,18 @@ func TestSummarizeYouTubeResultReturnsMarkerWhenTranscriptMissing(t *testing.T) 
 	}
 }
 
+func TestSummarizeYouTubeResultExplainsLiveWithoutCaptions(t *testing.T) {
+	r := sampleResult("")
+	r.IsLive = true
+	out := summarizeYouTubeResult(context.Background(), nil, r)
+	if !strings.Contains(out, "라이브라 자막 트랙이 없습니다") {
+		t.Fatalf("expected live talk fallback, got:\n%s", out)
+	}
+	if strings.Contains(out, "(자막 없음)") {
+		t.Fatalf("live result should not use the generic no-caption marker:\n%s", out)
+	}
+}
+
 func TestFormatYouTubeSummary(t *testing.T) {
 	r := sampleResult(strings.Repeat("가", 5000))
 	out := formatYouTubeSummary(r, "  핵심 요약 내용  ", "sp_123")

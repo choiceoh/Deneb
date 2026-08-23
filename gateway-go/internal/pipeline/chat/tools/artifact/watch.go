@@ -36,7 +36,7 @@ type watchParams struct {
 	Task   string  `json:"task,omitempty"`   // what to analyze (default: general analysis)
 	Start  float64 `json:"start,omitempty"`  // optional window start (seconds)
 	End    float64 `json:"end,omitempty"`    // optional window end (seconds)
-	Detail string  `json:"detail,omitempty"` // "frames" (default) | "transcript"
+	Detail string  `json:"detail,omitempty"` // "transcript" (default) | "frames"
 }
 
 const (
@@ -117,10 +117,16 @@ func ToolWatch(workspaceDir string, fetchYouTube YouTubeFetcher) toolport.ToolFu
 			if textAnalysis := summarizeWatchTranscript(ctx, &p, result); textAnalysis != "" {
 				return formatWatchTextResult(result, textAnalysis), nil
 			}
+			if strings.TrimSpace(result.Transcript) == "" {
+				return formatWatchNoTranscript(result), nil
+			}
 			return "", fmt.Errorf("자막/전사 분석에 실패했습니다")
 		}
 
 		if len(result.Frames) == 0 {
+			if textAnalysis := summarizeWatchTranscript(ctx, &p, result); textAnalysis != "" {
+				return formatWatchTextResult(result, textAnalysis), nil
+			}
 			return "", fmt.Errorf("영상에서 프레임을 추출하지 못했습니다 (ffmpeg 설치 여부 확인)")
 		}
 
@@ -219,6 +225,24 @@ func formatWatchTextResult(result *media.WatchResult, analysis string) string {
 	fmt.Fprintf(&b, "_%s_\n\n", strings.Join(meta, " · "))
 	b.WriteString(strings.TrimSpace(analysis))
 	b.WriteString("\n")
+	return b.String()
+}
+
+func formatWatchNoTranscript(result *media.WatchResult) string {
+	var b strings.Builder
+	b.WriteString("## 🎬 영상 분석 (자막/음성 기반)\n\n")
+	if result.Title != "" {
+		fmt.Fprintf(&b, "**%s**", result.Title)
+		if result.Channel != "" {
+			fmt.Fprintf(&b, " — %s", result.Channel)
+		}
+		b.WriteString("\n")
+	}
+	if result.IsLive {
+		b.WriteString("라이브라 자막 트랙이 없습니다. 오디오 전사를 시도했지만 받지 못했어요 — 방송이 끝나면 다시 주시거나, 보고 싶은 구간(초)을 지정해 주세요.\n")
+		return b.String()
+	}
+	b.WriteString("자막을 받지 못했어요. 라이브가 아니면 detail=frames로 화면을 보거나, 구간(초)을 지정해 다시 시도해 주세요.\n")
 	return b.String()
 }
 

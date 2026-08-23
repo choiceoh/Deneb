@@ -71,6 +71,20 @@ func fallbackForEmptyFinalReply() string {
 	return "도구 실행은 끝났는데 모델이 빈 응답으로 턴을 마쳤어요. 다시 한 번 요청해 주세요."
 }
 
+// enrichStopFallback appends a compact tool-activity remnant so a timeout or
+// abort does not throw away work the model already finished. The base message
+// stays unchanged when no tools ran, so existing exact-string tests hold.
+func enrichStopFallback(msg string, activities []agent.ToolActivity) string {
+	if msg == "" {
+		return ""
+	}
+	summary := formatToolActivitySummary(activities)
+	if summary == "" {
+		return msg
+	}
+	return msg + "\n\n이미 실행한 도구는 남겼어요 — " + summary + ". 다음 요청에서 이어서 정리할 수 있어요."
+}
+
 // fallbackForStopReason returns a user-visible Korean message for abnormal
 // terminations where the agent produced no text output. Empty string means
 // no fallback needed (e.g., end_turn is a normal termination — tool-only
@@ -102,10 +116,29 @@ func fallbackForStopReason(stopReason string) string {
 	}
 }
 
+// persistTimeoutRemnant writes the user-visible fallback (plus tool remnant)
+// into the transcript when a run dies empty. Without this the next turn has
+// no memory of watch/mail work that already finished before the deadline.
+func persistTimeoutRemnant(deps runDeps, sessionKey string, result *agent.AgentResult, fallbackMsg string, logger *slog.Logger) {
+	if deps.transcript == nil || result == nil || strings.TrimSpace(fallbackMsg) == "" {
+		return
+	}
+	switch result.StopReason {
+	case "timeout", "max_turns", "max_turns_graceful", "error":
+	default:
+		if len(result.ToolActivities) == 0 {
+			return
+		}
+	}
+	text := "[SYSTEM: 직전 턴이 빈 응답으로 끝났습니다. 사용자에게 아래 안내를 이미 보냈고, 모은 도구 결과는 이어서 쓰면 됩니다.]\n" + fallbackMsg
+	msg := NewTextChatMessage("user", text, time.Now().UnixMilli())
+	if err := deps.transcript.Append(sessionKey, msg); err != nil {
+		logger.Warn("failed to persist timeout remnant", "error", err, "session", sessionKey)
+	}
+}
+
 // persistInterruptedContext saves a context note to the transcript when a run
-// is aborted while tools were executing. This ensures the next run has context
-// about what was being done, preventing the "amnesia" bug where the assistant
-// forgets its in-progress work when the user sends a message mid-execution.
+// is aborted while tools were executing, so the next run remembers the work.
 func persistInterruptedContext(deps runDeps, sessionKey string, result *agent.AgentResult, logger *slog.Logger) {
 	if deps.transcript == nil || len(result.InterruptedToolNames) == 0 {
 		return

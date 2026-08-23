@@ -400,3 +400,32 @@ func TestLetterDiarySummariesIncludeOnlyHealthyNonEmptySections(t *testing.T) {
 		t.Fatalf("evening summary = %s", evening)
 	}
 }
+
+func TestLetterDiarySummarySurfacesFailedWeather(t *testing.T) {
+	morning := formatMorningDiarySummary("2026-08-18", []any{
+		weatherData{Error: "parse error"},
+		exchangeData{OK: true, USDKRW: 1386},
+		copperData{OK: true, PricePerTon: 14522},
+	})
+	if !strings.Contains(morning, "날씨: 조회 실패") {
+		t.Fatalf("failed weather hidden: %s", morning)
+	}
+	if strings.Contains(morning, "날씨: °C") || strings.Contains(morning, ", ,") {
+		t.Fatalf("blank weather line leaked: %s", morning)
+	}
+}
+
+func TestParseWttrWeatherFallsBackToEnglishDescAndRejectsEmptyTemp(t *testing.T) {
+	got := parseWttrWeather([]byte(`{"current_condition":[{"temp_C":"23","FeelsLikeC":"27","humidity":"96","lang_ko":[{"value":" "}],"weatherDesc":[{"value":"Mist"}]}]}`))
+	if !got.OK || got.Condition != "Mist" {
+		t.Fatalf("lang_ko empty should fall back to weatherDesc: %+v", got)
+	}
+	empty := parseWttrWeather([]byte(`{"current_condition":[{"temp_C":"","FeelsLikeC":"27","humidity":"96"}]}`))
+	if empty.OK || empty.Error != "empty temperature" {
+		t.Fatalf("empty temp should fail closed: %+v", empty)
+	}
+	broken := parseWttrWeather([]byte(`not-json`))
+	if broken.OK || broken.Error != "parse error" {
+		t.Fatalf("bad json: %+v", broken)
+	}
+}

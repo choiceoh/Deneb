@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
@@ -95,5 +96,26 @@ func TestFormatToolActivitySummary(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestEnrichStopFallbackKeepsBareMessageWithoutTools(t *testing.T) {
+	base := fallbackForStopReason("timeout")
+	if got := enrichStopFallback(base, nil); got != base {
+		t.Fatalf("got %q, want exact timeout fallback", got)
+	}
+}
+
+func TestEnrichStopFallbackAppendsToolRemnant(t *testing.T) {
+	base := fallbackForStopReason("timeout")
+	got := enrichStopFallback(base, []agent.ToolActivity{{Name: "watch"}, {Name: "watch"}, {Name: "web"}})
+	if !strings.Contains(got, base) {
+		t.Fatalf("missing base fallback: %q", got)
+	}
+	if !strings.Contains(got, "Tools used: watch ×2, web") {
+		t.Fatalf("missing remnant: %q", got)
+	}
+	if !strings.Contains(got, "이미 실행한 도구는 남겼어요") {
+		t.Fatalf("missing remnant notice: %q", got)
 	}
 }

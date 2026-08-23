@@ -96,6 +96,8 @@ func FormatYouTubeResult(r *YouTubeResult) string {
 			body = ts
 		}
 		fmt.Fprintf(&b, "\n### 자막 (%s)\n\n%s\n", lang, body)
+	} else if r.IsLive {
+		b.WriteString("\n라이브라 자막 트랙이 없습니다. 오디오 전사를 시도했지만 받지 못했어요 — 방송이 끝나면 다시 주시거나, 보고 싶은 구간(초)을 지정해 주세요.\n")
 	} else {
 		b.WriteString("\n(자막 없음)\n")
 	}

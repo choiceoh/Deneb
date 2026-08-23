@@ -281,9 +281,12 @@ func deliverEmptyRunReply(params RunParams, deps runDeps, result *agent.AgentRes
 		"inputTokens", result.Usage.InputTokens,
 		"outputTokens", result.Usage.OutputTokens)
 
-	fallbackMsg := fallbackForStopReason(result.StopReason)
+	fallbackMsg := enrichStopFallback(fallbackForStopReason(result.StopReason), result.ToolActivities)
 	if fallbackMsg == "" && isEmptyFinalResult(result) {
 		fallbackMsg = fallbackForEmptyFinalReply()
+	}
+	if fallbackMsg != "" {
+		persistTimeoutRemnant(deps, params.SessionKey, result, fallbackMsg, logger)
 	}
 	if fallbackMsg != "" && deps.callbacks.replyFunc != nil {
 		replyCtx, replyCancel := context.WithTimeout(context.Background(), 10*time.Second)

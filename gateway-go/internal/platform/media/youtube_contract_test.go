@@ -15,6 +15,23 @@ import (
 	"unicode/utf8"
 )
 
+func TestFormatYouTubeResultExplainsLiveWithoutCaptions(t *testing.T) {
+	got := FormatYouTubeResult(&YouTubeResult{Title: "Talk", IsLive: true})
+	if !strings.Contains(got, "라이브라 자막 트랙이 없습니다") {
+		t.Fatalf("live talk notice missing:\n%s", got)
+	}
+	if strings.Contains(got, "(자막 없음)") {
+		t.Fatalf("generic marker leaked:\n%s", got)
+	}
+}
+
+func TestYoutubeResultFromMetaMarksWasLive(t *testing.T) {
+	got := youtubeResultFromMeta(&ytMetadata{Title: "Talk", WasLive: true, Duration: 3540}, "https://youtu.be/L8UDNXubKFs")
+	if !got.IsLive || got.Title != "Talk" || got.DurationSec != 3540 {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 func TestYouTubeResultHasTranscriptContract(t *testing.T) {
 	tests := []struct {
 		name       string
