@@ -126,6 +126,31 @@ func TestDetectDuplicates_RejectsAutoMergeAcrossDifferentMessageIDsButMergesSame
 	})
 }
 
+func TestDetectDuplicates_SkipsSiblingProjectFuzzy(t *testing.T) {
+	idx := newIndex()
+	idx.updateEntry("프로젝트/pl2-kia-epc-001/대표.md", &Page{Meta: Frontmatter{Title: "solar-farm-a"}})
+	idx.updateEntry("프로젝트/pl2-kia-epc-002/대표.md", &Page{Meta: Frontmatter{Title: "solar-farm-b"}})
+	for _, f := range detectDuplicates(idx.Entries) {
+		if f.Type == "duplicate" {
+			t.Fatalf("sibling deals must not fuzzy-match: %+v", f)
+		}
+	}
+
+	// Same project splintered into two folder spellings still merges.
+	idx2 := newIndex()
+	idx2.updateEntry("프로젝트/영산고-태양광/대표.md", &Page{Meta: Frontmatter{Title: "영산고 태양광", Importance: 0.7}})
+	idx2.updateEntry("프로젝트/영산고태양광/대표.md", &Page{Meta: Frontmatter{Title: "영산고-태양광", Importance: 0.5}})
+	found := false
+	for _, f := range detectDuplicates(idx2.Entries) {
+		if f.Fix != nil && f.Fix.Kind == "merge" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("normalized-title twins of the same name must still merge")
+	}
+}
+
 // TestDetectStaleSuperseded_ArchivesPastThresholdSkipsRecentAndIdempotent: a page
 // superseded and untouched for over the threshold gets an archive Fix, and
 // applying it flips Archived.
@@ -261,5 +286,48 @@ func TestDetectDuplicates_KoreanNamesOneSyllableApartAreNotDuplicates(t *testing
 	}
 	if !isSimilar("solar-farm-a", "solar-farm-b") {
 		t.Error("isSimilar on long latin ids regressed")
+	}
+}
+
+func TestDetectStalePersonStubs_ArchivesOldUnusedKeepsRecalled(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	old := time.Now().AddDate(0, 0, -(personStubArchiveAfterDays + 5)).Format("2006-01-02")
+	stub := NewPage("김스텁", "인물", nil)
+	stub.Meta.Created = old
+	stub.Meta.Updated = old
+	stub.Meta.Summary = "주소록 기반 자동 생성"
+	stub.Body = "# 김스텁\n\n## 변경 이력\n- 드림 사이클 반복 언급으로 자동 생성 (주소록 연동)\n"
+	if err := store.WritePage("인물/김스텁.md", stub); err != nil {
+		t.Fatal(err)
+	}
+	fresh := NewPage("최신스텁", "인물", nil)
+	fresh.Meta.Summary = "주소록 기반 자동 생성"
+	if err := store.WritePage("인물/최신스텁.md", fresh); err != nil {
+		t.Fatal(err)
+	}
+	curated := NewPage("김실장", "인물", nil)
+	curated.Meta.Created = old
+	curated.Meta.Summary = "남도에코 실장"
+	if err := store.WritePage("인물/김실장.md", curated); err != nil {
+		t.Fatal(err)
+	}
+
+	wd := &WikiDreamer{store: store, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	findings := wd.detectStalePersonStubs()
+	if len(findings) != 1 || findings[0].PageA != "인물/김스텁.md" || findings[0].Fix == nil || findings[0].Fix.Kind != "archive" {
+		t.Fatalf("want one archive fix on the old unused stub, got %+v", findings)
+	}
+	if n := wd.applyVerifyFixes(findings); n != 1 {
+		t.Fatalf("apply=%d, want 1", n)
+	}
+	got := testMustRead(t, store, "인물/김스텁.md")
+	if !got.Meta.Archived {
+		t.Fatal("old stub must be archived")
 	}
 }

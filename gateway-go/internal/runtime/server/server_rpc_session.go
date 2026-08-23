@@ -346,6 +346,11 @@ func (s *Server) configureSessionChatCallbacks(chatCfg *chat.HandlerConfig) {
 			s.wikiDreamer.NotePreferenceSignal()
 		}
 	}
+	chatCfg.ProjectSignalFn = func() {
+		if s.wikiDreamer != nil {
+			s.wikiDreamer.NoteProjectSignal()
+		}
+	}
 	chatCfg.DeliverablePublisher = func(text string) (bool, error) {
 		return s.proactiveRelay.PublishDeliverable(text)
 	}

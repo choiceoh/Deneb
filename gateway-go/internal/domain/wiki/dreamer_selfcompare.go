@@ -159,9 +159,17 @@ func (wd *WikiDreamer) judgeDreamCycles(ctx context.Context, cycle *dreamCycle) 
 	ctx, cancel := context.WithTimeout(ctx, dreamCompareTimeout)
 	defer cancel()
 
+	demand := "없음"
+	if diaryHasProjectDemand(cycle.synthInput) {
+		demand = "있음"
+	}
 	prompt := fmt.Sprintf(`아래는 위키 드리머(일지→위키 합성)의 직전 사이클과 이번 사이클의 제안 리포트입니다.
 두 사이클은 서로 다른 일지를 소화했으므로 절대 커버리지가 아니라 **소화 과정의 품질**을 비교하세요:
 라우팅 정확성(올바른 카테고리/슬롯), 중복 없음, 요약·근거 품질, 출처 규율, 과잉/과소 제안.
+
+과소제안의 정의: 이번 입력에 프로젝트수요가 있는데 프로젝트 페이지를 하나도 쓰지 않은 경우만.
+직전보다 제안 수가 적다는 이유만으로는 과소제안이 아니다.
+이번 사이클 입력의 프로젝트수요: %s
 
 ## 직전 사이클
 %s
@@ -172,6 +180,7 @@ func (wd *WikiDreamer) judgeDreamCycles(ctx context.Context, cycle *dreamCycle) 
 ## 출력 (JSON만, 다른 텍스트 없이)
 {"winner":"current|previous|tie","weaknesses":["이번 사이클의 약점 태그(최대 3)"],"rationale":"한두 문장"}
 weaknesses 태그는 다음 고정 어휘에서만 고르세요: %s. 해당 없으면 빈 배열.`,
+		demand,
 		renderDreamProposalForJudge(cycle.prevProposal, cycle.prevProposal.Applied.Created+cycle.prevProposal.Applied.Updated),
 		renderDreamProposalForJudge(&cycle.proposal, cycle.created+cycle.updated),
 		strings.Join(dreamWeaknessVocab, ", "))
@@ -181,7 +190,44 @@ weaknesses 태그는 다음 고정 어휘에서만 고르세요: %s. 해당 없�
 	if err != nil {
 		return dreamCompareVerdict{}, fmt.Errorf("selfcompare LLM call: %w", err)
 	}
-	return parseDreamCompareVerdict(resp)
+	verdict, perr := parseDreamCompareVerdict(resp)
+	if perr != nil {
+		return dreamCompareVerdict{}, perr
+	}
+	return refineDreamCompareVerdict(verdict, cycle), nil
+}
+
+// refineDreamCompareVerdict drops a 과소제안 tag when this cycle actually
+// wrote a 프로젝트 page — the judge used to stamp it whenever the proposal
+// count fell vs the previous cycle, which trained the rules loop to "write
+// more 기타" (2026-08-23: 16/51 과소제안, two of three revisions).
+func refineDreamCompareVerdict(v dreamCompareVerdict, cycle *dreamCycle) dreamCompareVerdict {
+	if cycle == nil || !proposalWroteProject(cycle) {
+		return v
+	}
+	kept := v.Weaknesses[:0]
+	for _, w := range v.Weaknesses {
+		if w == "과소제안" {
+			continue
+		}
+		kept = append(kept, w)
+	}
+	v.Weaknesses = kept
+	return v
+}
+
+func proposalWroteProject(cycle *dreamCycle) bool {
+	for _, p := range cycle.proposal.Proposed {
+		if categoryFromPath(p.Path) == "프로젝트" {
+			return true
+		}
+	}
+	for _, u := range cycle.updates {
+		if updateCategory(u) == "프로젝트" {
+			return true
+		}
+	}
+	return false
 }
 
 // renderDreamProposalForJudge renders one proposal report compactly.

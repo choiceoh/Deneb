@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	// critiqueMinUpdates skips the pass for tiny batches: one or two proposals
-	// are not worth a model call, and the guards + verify already cover them.
+	// critiqueMinUpdates is the size at which every batch is reviewed.
+	// Smaller batches still run when they create a page or write 기타
+	// (see critiqueNeeded) — those used to skip the filter (2026-08-23).
 	critiqueMinUpdates = 3
 	// critiqueMaxTokens budgets the verdict array (short: index + verdict +
 	// reason per proposal). llmRequest's headroom mode scales it on reasoning
@@ -48,7 +49,7 @@ type critiqueVerdict struct {
 // on every error path — the proposals pass through unfiltered rather than risk
 // losing a good cycle to a flaky critic.
 func (wd *WikiDreamer) critiqueUpdates(ctx context.Context, updates []wikiUpdate) ([]wikiUpdate, int) {
-	if wd.client == nil || len(updates) < critiqueMinUpdates {
+	if wd.client == nil || !critiqueNeeded(updates) {
 		return updates, 0
 	}
 	ctx, cancel := context.WithTimeout(ctx, critiqueTimeout)

@@ -118,6 +118,8 @@ type wikiUpdate struct {
 	Client     string         `json:"client"`     // 거래처 — canonical single-level 계열사 name (기아·금호타이어); digest grouping + recall anchor key — 프로젝트 대표페이지 전용. Fill-only on update: an operator-set value is never overwritten
 	Sites      flexStringList `json:"sites"`      // 프로젝트 현장 (canonical "광역약칭 시/군 읍/면/동 [리]"); matching keys for recall anchor + meeting harvest — 프로젝트 대표페이지 전용
 	Kinds      flexStringList `json:"kinds"`      // 프로젝트 특성 2단 enum ("1차" 또는 "1차/2차" — page.go:projectKinds, 복수) — 대표페이지 전용
+	Stage      string         `json:"stage"`      // 프로젝트 사업 단계 (page.go:projectStages). Overwrite on update when the diary confirms progress
+	Program    string         `json:"program"`    // 형제 딜 사업군 슬러그. Fill-only on update, like Client
 }
 
 // parseWikiUpdates parses the synthesis response array leniently: one malformed
@@ -577,6 +579,12 @@ func newPageFromUpdate(u wikiUpdate, code, episodeRef string) *Page {
 	if len(u.Kinds) > 0 {
 		page.Meta.Kinds = normalizeKinds(u.Kinds)
 	}
+	if stage := normalizeStage(u.Stage); stage != "" {
+		page.Meta.Stage = stage
+	}
+	if program := strings.TrimSpace(u.Program); program != "" {
+		page.Meta.Program = program
+	}
 	// Stamp the episode that synthesized this page — the first link in its
 	// provenance chain back to the raw diary span.
 	if episodeRef != "" {
@@ -888,6 +896,15 @@ func (wd *WikiDreamer) mergeDreamUpdate(existing *Page, u wikiUpdate, code, epis
 	if len(u.Kinds) > 0 {
 		existing.Meta.Kinds = normalizeKinds(append(append([]string{}, existing.Meta.Kinds...), u.Kinds...))
 	}
+	// Stage tracks live progress — overwrite when synthesis names a
+	// canonical value. Program is fill-only like Client: an operator-set
+	// venture slug stays authoritative.
+	if stage := normalizeStage(u.Stage); stage != "" {
+		existing.Meta.Stage = stage
+	}
+	if u.Program != "" && existing.Meta.Program == "" {
+		existing.Meta.Program = strings.TrimSpace(u.Program)
+	}
 	// Append this cycle's episode to the provenance chain so a merged fact
 	// stays traceable to every diary span that shaped it (bounded newest-window
 	// at write time).
@@ -1062,7 +1079,8 @@ func normalizeCategoryPath(path, category string) (string, string) {
 func (wd *WikiDreamer) resetCounters() {
 	wd.cmu.Lock()
 	wd.turnCount = 0
-	wd.prefSignals = 0 // the cycle consumed (or backed off on) the pending 선호 capsules
+	wd.prefSignals = 0    // the cycle consumed (or backed off on) the pending 선호 capsules
+	wd.projectSignals = 0 // same for deal-number capsules (견적/단가/카톡 보고)
 	wd.lastDream = time.Now()
 	last := wd.lastDream
 	wd.cmu.Unlock()

@@ -118,14 +118,63 @@ var trailingBoilerplateRe = regexp.MustCompile(`(?m)^##\s*관련\s*문서\s*$`)
 //
 // Returns body unchanged when nothing new remains.
 func mergeUpdateContent(body, content string) string {
-	fresh := dropDuplicateLines(content, body)
+	rest, replacements := liftReplaceableSections(content)
+	out := body
+	for _, sec := range replacements {
+		out = upsertSection(out, sec.heading, sec.content)
+	}
+	fresh := dropDuplicateLines(rest, out)
 	if strings.TrimSpace(fresh) == "" {
-		return body
+		if len(replacements) == 0 {
+			return body
+		}
+		return out
 	}
-	if loc := trailingBoilerplateRe.FindStringIndex(body); loc != nil {
-		return strings.TrimRight(body[:loc[0]], "\n") + "\n\n" + fresh + "\n\n" + body[loc[0]:]
+	if loc := trailingBoilerplateRe.FindStringIndex(out); loc != nil {
+		return strings.TrimRight(out[:loc[0]], "\n") + "\n\n" + fresh + "\n\n" + out[loc[0]:]
 	}
-	return body + "\n\n" + fresh
+	return out + "\n\n" + fresh
+}
+
+// replaceableDreamHeadings are snapshot sections: the incoming draft is the
+// current truth, so append would stack yesterday's "현재 상태" under today's.
+var replaceableDreamHeadings = []string{"현재 상태", "핵심 숫자"}
+
+type liftedSection struct {
+	heading string
+	content string
+}
+
+// liftReplaceableSections pulls ## 현재 상태 / ## 핵심 숫자 out of the
+// proposed content so mergeUpdateContent can upsert them instead of appending.
+func liftReplaceableSections(content string) (rest string, sections []liftedSection) {
+	if !strings.Contains(content, "## ") {
+		return content, nil
+	}
+	preamble, h2 := (&Page{Body: content}).SplitByH2()
+	if len(h2) == 0 {
+		return content, nil
+	}
+	replace := make(map[string]string, len(replaceableDreamHeadings))
+	for _, name := range replaceableDreamHeadings {
+		replace[name] = name
+	}
+	var kept strings.Builder
+	if strings.TrimSpace(preamble) != "" {
+		kept.WriteString(strings.TrimRight(preamble, "\n"))
+		kept.WriteString("\n\n")
+	}
+	for _, sec := range h2 {
+		heading := strings.TrimSpace(sec.Heading)
+		if _, ok := replace[heading]; ok {
+			sections = append(sections, liftedSection{heading: heading, content: strings.TrimSpace(sec.Content)})
+			continue
+		}
+		kept.WriteString("## " + sec.Heading + "\n\n")
+		kept.WriteString(strings.TrimRight(sec.Content, "\n"))
+		kept.WriteString("\n\n")
+	}
+	return strings.TrimSpace(kept.String()), sections
 }
 
 // dropDuplicateLines removes content lines that already appear verbatim as a

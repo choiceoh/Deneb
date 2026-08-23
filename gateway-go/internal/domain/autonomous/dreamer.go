@@ -67,6 +67,12 @@ type DreamReport struct {
 	// rejected before the apply stage (dreamer_critique.go). 0 when the pass is
 	// disabled or found nothing to drop.
 	CritiqueDropped int `json:"critiqueDropped,omitempty"`
+	// StaleDuesClosed counts frontmatter dues cleared this cycle because they
+	// were 7+ days past and the diary did not mention the page.
+	StaleDuesClosed int `json:"staleDuesClosed,omitempty"`
+	// StaleDueAlert is the top-5 closed-then-remaining overdue dues for the
+	// dream notification (title + date + age).
+	StaleDueAlert []string `json:"staleDueAlert,omitempty"`
 	// MoreBacklog is true when the cycle consumed a capped chunk and unprocessed
 	// diary/memory input remains — the autonomous service drains it with a
 	// near-term re-trigger instead of waiting the full interval.

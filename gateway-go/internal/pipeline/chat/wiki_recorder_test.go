@@ -93,6 +93,42 @@ func TestMaybeRecordRunDiaryEmitsPreferenceSignalBeforeDreamTrigger(t *testing.T
 	}
 }
 
+// TestMaybeRecordRunDiaryEmitsProjectSignalBeforeDreamTrigger pins the
+// deal-number fast path: a 견적/단가 turn nudges projectSignalFn BEFORE
+// the dream increment, and "당진 프로젝트 진행상황" must not.
+func TestMaybeRecordRunDiaryEmitsProjectSignalBeforeDreamTrigger(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	events := make(chan string, 4)
+	deps := runDeps{
+		memory:          MemoryDeps{Wiki: store},
+		dreamTurnFn:     func(context.Context) { events <- "dream" },
+		projectSignalFn: func() { events <- "project" },
+	}
+	result := &agent.AgentResult{Text: "공급가액 기준으로 정리했습니다.", StopReason: "end_turn", Turns: 1}
+
+	maybeRecordRunDiary(deps, RunParams{SessionKey: "client:main", Message: "광주 캐노피 재견적 단가 확인해줘"}, result, nil)
+	if got := waitDiaryEvent(t, events); got != "project" {
+		t.Fatalf("first event = %q, want project (must precede the dream-turn increment)", got)
+	}
+	if got := waitDiaryEvent(t, events); got != "dream" {
+		t.Fatalf("second event = %q, want dream", got)
+	}
+
+	status := &agent.AgentResult{Text: "공정 일정 기준으로 정리했습니다.", StopReason: "end_turn", Turns: 1}
+	maybeRecordRunDiary(deps, RunParams{SessionKey: "client:main", Message: "당진 프로젝트 진행상황 알려줘"}, status, nil)
+	if got := waitDiaryEvent(t, events); got != "dream" {
+		t.Fatalf("bare 프로젝트 근황 must not emit project signal, got %q", got)
+	}
+	select {
+	case got := <-events:
+		t.Fatalf("unexpected extra event %q after status-only turn", got)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
 func waitDiaryEvent(t *testing.T, ch chan string) string {
 	t.Helper()
 	select {

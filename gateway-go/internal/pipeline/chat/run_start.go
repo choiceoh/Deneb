@@ -250,6 +250,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		memory:               h.memory,
 		dreamTurnFn:          h.dreamTurnFn,
 		preferenceSignalFn:   h.preferenceSignalFn,
+		projectSignalFn:      h.projectSignalFn,
 		deliverablePublisher: h.deliverablePublisher,
 		translateThinking:    h.translateThinking,
 		agentLog:             h.agentLog,

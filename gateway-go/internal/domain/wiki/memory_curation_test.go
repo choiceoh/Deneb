@@ -81,7 +81,7 @@ func TestScanWorkspaceMemory_FiltersConsumedAndDisablesOnEmptyWorkspace(t *testi
 	writeMemoryFixture(t, dir)
 	wd := &WikiDreamer{workspaceDir: dir}
 
-	scan := wd.scanWorkspaceMemory("")
+	scan := wd.scanWorkspaceMemory("", "")
 	if scan == nil {
 		t.Fatal("expected sections to scan")
 	}
@@ -96,16 +96,16 @@ func TestScanWorkspaceMemory_FiltersConsumedAndDisablesOnEmptyWorkspace(t *testi
 	}
 
 	// Already consumed through the old entries → only the fresh one remains.
-	scan2 := wd.scanWorkspaceMemory("2026-04-07 01:55")
+	scan2 := wd.scanWorkspaceMemory("2026-04-07 01:55", "")
 	if scan2 == nil || scan2.Sections != 1 {
 		t.Fatalf("want 1 unconsumed section, got %+v", scan2)
 	}
-	// Fully consumed → nothing to scan.
-	if got := wd.scanWorkspaceMemory(scan.ConsumedThrough); got != nil {
+	// Fully consumed + known category hash → nothing to scan.
+	if got := wd.scanWorkspaceMemory(scan.ConsumedThrough, scan.CategoryHash); got != nil {
 		t.Errorf("expected nil scan when fully consumed, got %+v", got)
 	}
 	// No workspace → disabled.
-	if got := (&WikiDreamer{}).scanWorkspaceMemory(""); got != nil {
+	if got := (&WikiDreamer{}).scanWorkspaceMemory("", ""); got != nil {
 		t.Error("empty workspaceDir must disable scanning")
 	}
 }
@@ -115,7 +115,7 @@ func TestCurateWorkspaceMemory_DropsConsumedSectionsPreservesRestAndBackup(t *te
 	original := writeMemoryFixture(t, dir)
 	wd := &WikiDreamer{workspaceDir: dir}
 
-	scan := wd.scanWorkspaceMemory("")
+	scan := wd.scanWorkspaceMemory("", "")
 	if scan == nil {
 		t.Fatal("scan failed")
 	}
@@ -151,7 +151,7 @@ func TestCurateWorkspaceMemory_SkipsOnConcurrentChange(t *testing.T) {
 	dir := t.TempDir()
 	writeMemoryFixture(t, dir)
 	wd := &WikiDreamer{workspaceDir: dir}
-	scan := wd.scanWorkspaceMemory("")
+	scan := wd.scanWorkspaceMemory("", "")
 	if scan == nil {
 		t.Fatal("scan failed")
 	}
@@ -346,4 +346,47 @@ func testReadFile(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(data)
+}
+
+func TestScanWorkspaceMemory_CategoryHashRefreshWithoutAdvancingCursor(t *testing.T) {
+	dir := t.TempDir()
+	// No timestamped sections — the 2026-06-11 compressed MEMORY.md shape.
+	content := "# Memory\n\n## 결정사항\n\n- [0.9] 크론을 시한부 클론으로.\n\n## 선호도\n\n- 한국어.\n"
+	if err := os.WriteFile(filepath.Join(dir, memoryFileName), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wd := &WikiDreamer{workspaceDir: dir}
+
+	// Unknown hash → queue categories, leave the stamp cursor untouched.
+	scan := wd.scanWorkspaceMemory("2026-04-07 10:43", "")
+	if scan == nil || !scan.CategoryRefresh {
+		t.Fatalf("want category refresh, got %+v", scan)
+	}
+	if scan.ConsumedThrough != "2026-04-07 10:43" {
+		t.Fatalf("cursor must stay put, got %q", scan.ConsumedThrough)
+	}
+	if !strings.Contains(scan.Content, "시한부 클론") {
+		t.Fatal("category body missing from synth input")
+	}
+	if scan.CategoryHash == "" {
+		t.Fatal("hash must be recorded so the next cycle can skip")
+	}
+
+	// Same hash → already distilled.
+	if got := wd.scanWorkspaceMemory("2026-04-07 10:43", scan.CategoryHash); got != nil {
+		t.Fatalf("unchanged categories must not re-queue, got %+v", got)
+	}
+
+	// Edit a standing note → hash changes → one more pass. Cursor still stays.
+	updated := strings.Replace(content, "한국어.", "한국어. 산문.", 1)
+	if err := os.WriteFile(filepath.Join(dir, memoryFileName), []byte(updated), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	scan2 := wd.scanWorkspaceMemory("2026-04-07 10:43", scan.CategoryHash)
+	if scan2 == nil || !scan2.CategoryRefresh || scan2.ConsumedThrough != "2026-04-07 10:43" {
+		t.Fatalf("changed categories must refresh without bumping cursor, got %+v", scan2)
+	}
+	if scan2.CategoryHash == scan.CategoryHash {
+		t.Fatal("hash must change after an edit")
+	}
 }

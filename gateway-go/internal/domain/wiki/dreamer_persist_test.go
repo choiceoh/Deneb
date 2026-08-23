@@ -100,6 +100,42 @@ func TestShouldDream_PreferenceSignalAcceleratesCadenceWithFloor(t *testing.T) {
 	}
 }
 
+func TestShouldDream_ProjectSignalAcceleratesCadenceWithFloor(t *testing.T) {
+	dir := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	t.Cleanup(func() { _ = store.Close() })
+	wd := NewWikiDreamer(store, nil, "", Config{}, logger)
+	ctx := context.Background()
+
+	setLastDream := func(v time.Time) {
+		wd.cmu.Lock()
+		wd.lastDream = v
+		wd.cmu.Unlock()
+	}
+
+	setLastDream(time.Now().Add(-wikiDreamPrefMinInterval - time.Minute))
+	if wd.ShouldDream(ctx) {
+		t.Fatal("without a project signal, the sub-8h window must not trigger")
+	}
+
+	wd.NoteProjectSignal()
+	if !wd.ShouldDream(ctx) {
+		t.Fatal("pending project signal past the min interval must trigger")
+	}
+
+	setLastDream(time.Now())
+	if wd.ShouldDream(ctx) {
+		t.Fatal("project signal must respect the min-interval floor")
+	}
+
+	wd.resetCounters()
+	setLastDream(time.Now().Add(-wikiDreamPrefMinInterval - time.Minute))
+	if wd.ShouldDream(ctx) {
+		t.Fatal("resetCounters must clear the pending project signal")
+	}
+}
+
 // TestRunDream_FailureBacksOffOneInterval guards the hot-loop fix: a cycle
 // that cannot synthesize (nil/wedged LLM) must still advance lastDream, or
 // ShouldDream stays true and the 30-min timer retries a doomed 10-minute

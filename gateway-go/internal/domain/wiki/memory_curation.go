@@ -24,6 +24,8 @@
 package wiki
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"os"
@@ -109,14 +111,35 @@ type memoryScanResult struct {
 	Content         string // labeled chunk appended to the synthesis input
 	ConsumedThrough string // new high-water stamp once the cycle completes
 	Sections        int
+	CategoryHash    string // SHA-256 of untimestamped category sections
+	CategoryRefresh bool   // true when this scan is a category-only re-distill
 	fileSize        int64
 	fileMod         time.Time
 }
 
+// memoryCategoryHash fingerprints the untimestamped category sections so a
+// MEMORY.md with no new stamps (the 2026-06-11 compression case) can still
+// trigger one distillation when those standing notes change.
+func memoryCategoryHash(sections []memorySection) string {
+	var sb strings.Builder
+	for _, sec := range sections {
+		if sec.stamp == "" {
+			sb.WriteString(sec.raw)
+		}
+	}
+	if sb.Len() == 0 {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(sb.String()))
+	return hex.EncodeToString(sum[:])
+}
+
 // scanWorkspaceMemory collects timestamped sections newer than
-// consumedThrough, oldest first, up to memoryScanMaxBytes. Returns nil when
-// there is nothing to consume (no workspace, no file, no new sections).
-func (wd *WikiDreamer) scanWorkspaceMemory(consumedThrough string) *memoryScanResult {
+// consumedThrough, oldest first, up to memoryScanMaxBytes. When there are
+// no new stamps but the category-section hash differs from prevCategoryHash,
+// the category sections are queued once instead. The timestamp cursor is
+// never advanced to "now" — that would skip a later same-day stamp.
+func (wd *WikiDreamer) scanWorkspaceMemory(consumedThrough, prevCategoryHash string) *memoryScanResult {
 	if wd.workspaceDir == "" {
 		return nil
 	}
@@ -130,6 +153,7 @@ func (wd *WikiDreamer) scanWorkspaceMemory(consumedThrough string) *memoryScanRe
 		return nil
 	}
 	_, sections := parseMemorySections(string(data))
+	catHash := memoryCategoryHash(sections)
 
 	var sb strings.Builder
 	high := consumedThrough
@@ -150,14 +174,46 @@ func (wd *WikiDreamer) scanWorkspaceMemory(consumedThrough string) *memoryScanRe
 			break
 		}
 	}
-	if count == 0 {
+	if count > 0 {
+		return &memoryScanResult{
+			Content: "\n\n=== 워크스페이스 MEMORY.md 자동기록 (다이어리와 동일하게 위키 페이지로 증류할 것) ===\n" +
+				sb.String(),
+			ConsumedThrough: high,
+			Sections:        count,
+			CategoryHash:    catHash,
+			fileSize:        info.Size(),
+			fileMod:         info.ModTime(),
+		}
+	}
+
+	if catHash == "" || catHash == prevCategoryHash {
+		return nil
+	}
+	var cats strings.Builder
+	catCount := 0
+	for _, sec := range sections {
+		if sec.stamp != "" {
+			continue
+		}
+		if cats.Len()+len(sec.raw) > memoryScanMaxBytes && catCount > 0 {
+			break
+		}
+		cats.WriteString(sec.raw)
+		catCount++
+		if cats.Len() >= memoryScanMaxBytes {
+			break
+		}
+	}
+	if catCount == 0 {
 		return nil
 	}
 	return &memoryScanResult{
-		Content: "\n\n=== 워크스페이스 MEMORY.md 자동기록 (다이어리와 동일하게 위키 페이지로 증류할 것) ===\n" +
-			sb.String(),
-		ConsumedThrough: high,
-		Sections:        count,
+		Content: "\n\n=== 워크스페이스 MEMORY.md 카테고리 섹션 (스탬프 없음 — 해시 변경으로 재증류) ===\n" +
+			cats.String(),
+		ConsumedThrough: consumedThrough, // do not bump the stamp cursor
+		Sections:        catCount,
+		CategoryHash:    catHash,
+		CategoryRefresh: true,
 		fileSize:        info.Size(),
 		fileMod:         info.ModTime(),
 	}
