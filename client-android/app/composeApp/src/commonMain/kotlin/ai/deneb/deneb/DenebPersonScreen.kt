@@ -57,6 +57,9 @@ fun DenebPersonScreen(
     var ctx by remember(sender) { mutableStateOf<SenderContext?>(null) }
     var loadFailed by remember(sender) { mutableStateOf(false) }
     var recent by remember(sender) { mutableStateOf<List<MailMessage>?>(null) }
+    var dossier by remember(sender) {
+        mutableStateOf<ai.deneb.deneb.generated.PersonDossierOut?>(null)
+    }
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
 
@@ -68,6 +71,7 @@ fun DenebPersonScreen(
         loadFailed = c == null
         val email = c?.email?.ifBlank { sender } ?: sender
         recent = client.fetchRecentFromSender(email)
+        dossier = client.fetchPersonDossier(email, c?.displayName.orEmpty())
     }
     LaunchedEffect(sender) { load() }
 
@@ -180,7 +184,56 @@ fun DenebPersonScreen(
                 }
             }
 
-            if (c.recentCount == 0 && c.wikiHits.isEmpty() && c.wikiFacts.isBlank() && mail.isNullOrEmpty()) {
+            if (!dossier?.calls.isNullOrEmpty()) {
+                DenebSectionLabel("통화·알림 ${dossier?.calls?.size}")
+                dossier?.calls?.forEach { call ->
+                    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                        Text(
+                            call.text,
+                            style = DenebType.rowTitle,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Text(
+                            listOfNotNull(
+                                call.type.ifBlank { null },
+                                call.source.ifBlank { null },
+                            ).joinToString(" · ").ifBlank { "기록" },
+                            style = DenebType.rowSubtitle,
+                            color = denebHint(),
+                        )
+                    }
+                }
+            }
+
+            if (!dossier?.wikiRefs.isNullOrEmpty()) {
+                DenebSectionLabel("관련 문서 ${dossier?.wikiRefs?.size}")
+                dossier?.wikiRefs?.forEach { ref ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (ref.path.isNotBlank()) {
+                                    Modifier.clickable {
+                                        haptics.tap()
+                                        onOpenWiki(ref.path)
+                                    }
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .padding(vertical = 8.dp),
+                    ) {
+                        Text(ref.path, style = DenebType.rowTitle, color = MaterialTheme.colorScheme.onBackground)
+                        if (ref.summary.isNotBlank()) {
+                            Text(ref.summary, style = DenebType.rowSubtitle, color = denebHint())
+                        }
+                    }
+                }
+            }
+
+            if (c.recentCount == 0 && c.wikiHits.isEmpty() && c.wikiFacts.isBlank() && mail.isNullOrEmpty() &&
+                dossier?.calls.isNullOrEmpty() && dossier?.wikiRefs.isNullOrEmpty()
+            ) {
                 Spacer(Modifier.height(12.dp))
                 Text(
                     "알려진 컨텍스트가 없습니다.",

@@ -181,6 +181,11 @@ internal data class TodoListPayload(val todos: List<TodoOut> = emptyList())
 @Serializable
 internal data class PeopleListPayload(val people: List<PersonRow> = emptyList())
 
+// Person dossier envelope. The dossier shape (PersonDossierOut) is generated
+// from the Go struct so the screen shares one source of truth with the gateway.
+@Serializable
+internal data class PersonDossierPayload(val dossier: ai.deneb.deneb.generated.PersonDossierOut? = null)
+
 @Serializable
 internal data class ContactsListPayload(val contacts: List<ContactRow> = emptyList())
 

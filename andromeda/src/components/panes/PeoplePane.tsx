@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react";
 import type { Person } from "@/types";
+import type { PersonDossierOut } from "@/gen/miniappWire";
+import { callRpc } from "@/gateway";
 import { fmtDate } from "@/format";
 import { ellipsis } from "@/theme";
 import { useListPane } from "@/useListPane";
@@ -69,14 +72,34 @@ export function PeoplePane() {
 
 // Person detail card. Surfaces the merged Gmail/wiki facts and, when the person has
 // a 인물 wiki page, jumps to it via the shared openWiki channel (workspaceContext).
+// The dossier fetch (miniapp.person.dossier) adds the cross-source joins the index
+// rows can't carry: 통화·알림 history and wiki pages mentioning the person.
 function PersonCard({ person, onClose }: { person: Person; onClose: () => void }) {
-  const { openWiki } = useWorkspace();
+  const { openWiki, cfg } = useWorkspace();
+  const [dossier, setDossier] = useState<PersonDossierOut | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    void callRpc<{ dossier?: PersonDossierOut }>(cfg, "miniapp.person.dossier", {
+      email: person.email ?? "",
+      name: person.name ?? "",
+    })
+      .then((payload) => {
+        if (mounted) setDossier(payload?.dossier ?? null);
+      })
+      .catch(() => {}); // best-effort — the merged facts above still render
+    return () => {
+      mounted = false;
+    };
+  }, [cfg, person.email, person.name]);
+
   const openPage = () => {
     if (person.wikiPath) {
       openWiki(person.wikiPath);
       onClose();
     }
   };
+  const calls = dossier?.calls ?? [];
+  const wikiRefs = dossier?.wikiRefs ?? [];
   return (
     <Modal
       title={person.name ?? person.email}
@@ -99,6 +122,16 @@ function PersonCard({ person, onClose }: { person: Person; onClose: () => void }
       {person.lastSeen && <Detail label="최근 연락" value={fmtDate(person.lastSeen)} />}
       {person.lastSubject && <Detail label="최근 제목" value={person.lastSubject} />}
       {person.wikiSummary && <Detail label="위키 메모" value={person.wikiSummary} multiline />}
+      {calls.length > 0 && (
+        <Detail
+          label={`통화·알림 ${calls.length}`}
+          value={calls.map((c) => `${c.source || c.type || "기록"} — ${c.text}`).join("\n")}
+          multiline
+        />
+      )}
+      {wikiRefs.length > 0 && (
+        <Detail label={`관련 문서 ${wikiRefs.length}`} value={wikiRefs.map((r) => r.path).join("\n")} multiline />
+      )}
     </Modal>
   );
 }

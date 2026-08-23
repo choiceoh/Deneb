@@ -49,7 +49,7 @@
 | 20 | 대용량 파일 전송 처리 (다운로드 링크 폴백) | P3 | M |
 | 21 | Trust Inbox: 자율 변경 통합 승인 대기열 (안드로이드 워크피드) — ✅ 구현됨 | P1 | M |
 | 22 | 개인 MCP 브로커 — tailnet 경유 읽기 전용 노출 | P2 | M |
-| 23 | 인물·거래 도시에 (Business Dossier) | P2 | M |
+| 23 | 인물·거래 도시에 (Business Dossier) — ✅ 구현됨 | P2 | M |
 | 24 | 주간 기억 다이제스트 + dreamer 피드백 루프 — ✅ 구현됨 | P2 | S |
 
 ---
@@ -349,7 +349,7 @@
 
 ---
 
-### 4.8 인물·거래 도시에 (Business Dossier) — **P2 / M · ideation**
+### 4.8 인물·거래 도시에 (Business Dossier) — **P2 / M · implemented 2026-08-23**
 
 **무엇.** 사람·프로젝트·거래별 종합 카드 — 최근 메일 요약, 통화·알림 이력, 관련 위키 페이지(인물/거래/프로젝트 로그), 답장 대기 약속 — 를 한 화면 타임라인으로.
 
@@ -505,7 +505,7 @@
 - 4.3 Tool reasoning 1-line trace
 - 4.4 Cadence editor
 - 6.1 Live-test 시간 단축
-- 4.8 인물·거래 도시에 Business Dossier (ideation)
+- 4.8 인물·거래 도시에 Business Dossier (implemented 2026-08-23)
 - 4.9 주간 기억 다이제스트 + dreamer 피드백 (implemented 2026-08-23)
 - 5.5 개인 MCP 브로커 (ideation — §8 개정 전제)
 
@@ -545,6 +545,7 @@
 | 2026-08-23 | ZCode (GLM-5.3) | 운영자 요청 4개 제안 추가 (모두 ideation) — 4.7 Trust Inbox(안드로이드), 4.8 Business Dossier, 4.9 주간 기억 다이제스트, 5.5 개인 MCP 브로커(§8 긴장 명시) |
 | 2026-08-23 | ZCode (GLM-5.3) | 4.7 Trust Inbox 구현 — 자기교정 감시 태스크(신규 후보 승인/거절 카드) + dream 카드 확인 액션 + 안드로이드 알림 tray 승인/거절 버튼. 기존 auto-apply 표면(meta·graduation·evolve verdict) 카드는 이미 존재해 재활용 |
 | 2026-08-23 | ZCode (GLM-5.3) | 4.9 주간 기억 다이제스트 구현 — DreamReport 롤업(`dream-reports.jsonl`) + 주간 다이제스트 카드(확인/틀린 기억 알리기 → 정정 턴) |
+| 2026-08-23 | ZCode (GLM-5.3) | 4.8 Business Dossier 구현 — `miniapp.person.dossier` RPC(메일 롤업 + phoneledger 통화·알림 + 위키 전문검색 조인) + 안드로이드 사람 화면·안드로메다 PersonCard 도시에 섹션 |
 
 ---
 

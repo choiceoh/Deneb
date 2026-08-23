@@ -331,6 +331,24 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("nodes"),
         ),
         contract(
+            name = "PersonDossierCallOut",
+            serializer = PersonDossierCallOut.serializer(),
+            empty = PersonDossierCallOut(),
+            fields = listOf("ts", "type", "source", "text"),
+        ),
+        contract(
+            name = "PersonDossierOut",
+            serializer = PersonDossierOut.serializer(),
+            empty = PersonDossierOut(),
+            fields = listOf("email", "name", "wikiPath", "wikiSummary", "mailCount", "lastMailAt", "recentSubjects", "calls", "wikiRefs"),
+        ),
+        contract(
+            name = "PersonDossierWikiRefOut",
+            serializer = PersonDossierWikiRefOut.serializer(),
+            empty = PersonDossierWikiRefOut(),
+            fields = listOf("path", "summary"),
+        ),
+        contract(
             name = "PersonRow",
             serializer = PersonRow.serializer(),
             empty = PersonRow(),

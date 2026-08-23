@@ -27,11 +27,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/phoneledger"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
@@ -681,7 +683,8 @@ func (s *Server) earlyKnowledgeMethods(hub *rpcutil.GatewayHub) []map[string]rpc
 			Client: func() (miniknowledge.PeopleClient, error) {
 				return gmail.DefaultClient()
 			},
-			WikiStore: wikiStore,
+			WikiStore:      wikiStore,
+			PhoneLedgerDir: filepath.Join(config.ResolveStateDir(), phoneledger.Dirname),
 		}),
 	}
 }

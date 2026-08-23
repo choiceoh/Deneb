@@ -399,6 +399,21 @@ suspend fun DenebGatewayClient.fetchSenderContext(sender: String): SenderContext
     )
 }
 
+/** Fetch the cross-source person dossier (mail rollup + 통화·알림 + wiki refs). */
+suspend fun DenebGatewayClient.fetchPersonDossier(
+    email: String,
+    name: String = "",
+): ai.deneb.deneb.generated.PersonDossierOut? {
+    if (email.isBlank() && name.isBlank()) return null
+    return callRpc<PersonDossierPayload>(
+        "miniapp.person.dossier",
+        buildJsonObject {
+            if (email.isNotBlank()) put("email", email)
+            if (name.isNotBlank()) put("name", name)
+        },
+    )?.dossier
+}
+
 /** Recent messages from a specific sender (`list_recent` with a from: query). */
 suspend fun DenebGatewayClient.fetchRecentFromSender(email: String, limit: Int = 15): List<MailMessage> {
     if (email.isBlank()) return emptyList()
