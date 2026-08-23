@@ -9,7 +9,10 @@ Wants=nemotron-vllm.service
 [Service]
 Type=simple
 ExecStart=/usr/bin/python3 %h/deneb/scripts/deploy/nemotron-embed-server.py --port 8002 --backend http://127.0.0.1:8003
-Restart=on-failure
+# SIGTERM is a clean stop to on-failure, so an external kill left :8002 dead
+# (2026-08-23: backend on :8003 recovered, adapter stayed down). always still
+# honors systemctl stop; it only respawns unexpected exits.
+Restart=always
 RestartSec=10
 
 [Install]
