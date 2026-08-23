@@ -36,6 +36,29 @@ class HttpTeardownExceptionHandlerTest {
     }
 
     @Test
+    fun matchesNetworkOnMainThreadVariantAnywhereInCauseChain() {
+        // The build-785 shape: same synchronous close, but the reader was between
+        // reads so the drain ran on the main thread and StrictMode vetoed it.
+        // Matched by class name because commonMain cannot reference the Android type.
+        assertTrue(isHttpTeardownCrash(NetworkOnMainThreadException()))
+        assertTrue(
+            isHttpTeardownCrash(
+                RuntimeException(
+                    "Exception in completion handler",
+                    RuntimeException("parent cancelled child", NetworkOnMainThreadException()),
+                ),
+            ),
+        )
+        // Name match is exact — a differently-named network error still crashes.
+        assertFalse(isHttpTeardownCrash(NetworkOnSomeOtherThreadException()))
+    }
+
+    /** Stands in for `android.os.NetworkOnMainThreadException`, matched by simple name. */
+    private class NetworkOnMainThreadException : RuntimeException("network on main thread")
+
+    private class NetworkOnSomeOtherThreadException : RuntimeException("unrelated")
+
+    @Test
     fun handlerContainsTeardownRaisedByCancel() {
         // Reproduces the crash mechanism: a completion handler that throws while
         // the job is cancelled. kotlinx.coroutines wraps the throw and delivers it

@@ -2,13 +2,16 @@ package ai.deneb.ui.dynamicui
 
 import android.annotation.SuppressLint
 import android.graphics.Color
+import android.view.ViewGroup
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -87,43 +90,67 @@ actual fun DenebHtmlView(
 ) {
     var heightDp by remember { mutableIntStateOf(MIN_HEIGHT_DP) }
     val send by rememberUpdatedState(onSendPrompt)
+    // Bumped when the renderer dies, to rebuild the WebView from scratch. The dead
+    // one cannot be reused: every later call on it throws.
+    var rendererGeneration by remember { mutableIntStateOf(0) }
 
-    AndroidView(
-        modifier = modifier.height(heightDp.dp),
-        factory = { ctx ->
-            WebView(ctx).apply {
-                settings.javaScriptEnabled = true
-                settings.blockNetworkLoads = true
-                settings.blockNetworkImage = true
-                settings.allowFileAccess = false
-                settings.allowContentAccess = false
-                setBackgroundColor(Color.WHITE)
-                isVerticalScrollBarEnabled = false
-                webViewClient = object : WebViewClient() {
-                    // The document is the whole world — no navigation escapes it.
-                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?) = true
+    key(rendererGeneration) {
+        AndroidView(
+            modifier = modifier.height(heightDp.dp),
+            factory = { ctx ->
+                WebView(ctx).apply {
+                    settings.javaScriptEnabled = true
+                    settings.blockNetworkLoads = true
+                    settings.blockNetworkImage = true
+                    settings.allowFileAccess = false
+                    settings.allowContentAccess = false
+                    setBackgroundColor(Color.WHITE)
+                    isVerticalScrollBarEnabled = false
+                    webViewClient = object : WebViewClient() {
+                        // The document is the whole world — no navigation escapes it.
+                        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?) = true
+
+                        // Returning false here (the default) tells the system to kill the
+                        // whole app, and on Android O+ every WebView in a process shares one
+                        // renderer — so a card rendering an assistant reply could take the
+                        // app down, and would also defeat the in-app browser's own recovery.
+                        // Claim the death, drop the dead view, rebuild from the same html.
+                        override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                            (view?.parent as? ViewGroup)?.removeView(view)
+                            view?.destroy()
+                            rendererGeneration++
+                            return true
+                        }
+                    }
+                    addJavascriptInterface(
+                        object {
+                            @JavascriptInterface
+                            fun send(text: String) {
+                                post { send?.invoke(text.trim().takeIf { it.isNotEmpty() } ?: return@post) }
+                            }
+
+                            @JavascriptInterface
+                            fun height(h: Int) {
+                                post { heightDp = (h + 8).coerceIn(MIN_HEIGHT_DP, MAX_HEIGHT_DP) }
+                            }
+                        },
+                        "DenebNative",
+                    )
                 }
-                addJavascriptInterface(
-                    object {
-                        @JavascriptInterface
-                        fun send(text: String) {
-                            post { send?.invoke(text.trim().takeIf { it.isNotEmpty() } ?: return@post) }
-                        }
-
-                        @JavascriptInterface
-                        fun height(h: Int) {
-                            post { heightDp = (h + 8).coerceIn(MIN_HEIGHT_DP, MAX_HEIGHT_DP) }
-                        }
-                    },
-                    "DenebNative",
-                )
-            }
-        },
-        update = { web ->
-            if (web.tag != html) {
-                web.tag = html
-                web.loadDataWithBaseURL(null, PRELUDE + html, "text/html", "utf-8", null)
-            }
-        },
-    )
+            },
+            update = { web ->
+                if (web.tag != html) {
+                    web.tag = html
+                    web.loadDataWithBaseURL(null, PRELUDE + html, "text/html", "utf-8", null)
+                }
+            },
+            // A card scrolls out of the transcript far more often than the browser tab
+            // closes; without this each disposal leaks a live WebView (and its renderer
+            // share) for the rest of the session.
+            onRelease = { web ->
+                (web.parent as? ViewGroup)?.removeView(web)
+                web.destroy()
+            },
+        )
+    }
 }

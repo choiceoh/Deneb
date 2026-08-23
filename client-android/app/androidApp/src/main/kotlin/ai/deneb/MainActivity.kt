@@ -3,7 +3,6 @@ package ai.deneb
 import ai.deneb.data.AppSettings
 import ai.deneb.data.AttachmentRoute
 import ai.deneb.data.DataRepository
-import ai.deneb.data.MAX_RAW_IMAGE_BYTES
 import ai.deneb.data.ThemeMode
 import ai.deneb.data.attachmentExtension
 import ai.deneb.data.documentCaptureMime
@@ -49,7 +48,9 @@ import io.github.vinceglb.filekit.dialogs.init
 import io.github.vinceglb.filekit.extension
 import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.readBytes
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import nl.marc_apps.tts.TextToSpeechEngine
 import nl.marc_apps.tts.rememberTextToSpeechOrNull
 import org.koin.android.ext.android.get
@@ -260,64 +261,69 @@ class MainActivity : ComponentActivity() {
     // inline into the turn. Matches andromeda, which sends even one file as a batch.
     private suspend fun sendSingleFileBatch(bytes: ByteArray, filename: String, mime: String, caption: String = "") {
         if (bytes.isEmpty()) return
-        if (!isWithinAttachmentSize(attachmentExtension(filename, mime), bytes.size.toLong())) return
+        if (!isWithinAttachmentSize(attachmentExtension(filename, mime), bytes.size.toLong())) {
+            // Say so rather than dropping in silence: the user shared the file and
+            // would otherwise watch nothing happen at all.
+            toast("${filename.ifBlank { "파일" }}은(는) 너무 커서 보내지 못했습니다")
+            return
+        }
         (get<DataRepository>() as? DenebGatewayClient)?.captureBatch(listOf(attachmentFor(bytes, filename, mime)), caption)
     }
 
     // Build an upload attachment, downsampling a captured photo first: a full-resolution
     // camera shot is 10-15MB, and a batch of them base64-encoded would bloat memory and
-    // the turn payload while ~2048px stays readable for the gateway's OCR. An image too
-    // large to decode safely (past MAX_RAW_IMAGE_BYTES) and every non-image are sent as-is.
+    // the turn payload while ~2048px stays readable for the gateway's OCR. Every image is
+    // downsampled regardless of encoded size — compressImageBytes decodes through a bounds
+    // pass, so even a 200MP file never allocates its full-resolution bitmap; non-images
+    // are sent as-is.
     private suspend fun attachmentFor(bytes: ByteArray, filename: String, mime: String): DenebAttachment {
-        val prepared = if (mime.startsWith("image/") && bytes.size <= MAX_RAW_IMAGE_BYTES) {
-            compressImageBytes(bytes, mime)
-        } else {
-            bytes
-        }
+        val prepared = if (mime.startsWith("image/")) compressImageBytes(bytes, mime) else bytes
         return DenebAttachment(prepared, filename, mime)
+    }
+
+    private fun toast(message: String) {
+        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
     }
 
     private fun captureFile(bytes: ByteArray, filename: String, mime: String) {
         lifecycleScope.launch { sendSingleFileBatch(bytes, filename, mime) }
     }
 
-    // captureFromUri reads a picked file's bytes and routes them to the gateway:
-    // image -> PaddleOCR, audio -> VibeVoice-ASR. Backs the drawer's 이미지 OCR /
-    // 녹음 전사 actions, reusing the same capture paths as the share sheet.
-    private fun captureFromUri(uri: Uri, fallbackMime: String, audio: Boolean) {
-        val mime = contentResolver.getType(uri) ?: fallbackMime
-        val name = sharedDisplayName(uri) ?: if (audio) "recording" else "image"
-        val ext = attachmentExtension(name, mime)
-        uriContentLength(uri)?.let { len ->
-            if (!isWithinAttachmentSize(ext, len)) return
-        }
+    // Reads a shared/picked content URI off the main thread, refusing anything past
+    // the attachment cap BEFORE pulling it into memory. The stat is best-effort (a
+    // provider may not report a size), so the read is re-checked against the actual
+    // byte count afterwards.
+    private suspend fun readSharedBytes(uri: Uri, sizeExtension: String): ByteArray? = withContext(Dispatchers.IO) {
+        val declared = runCatching {
+            contentResolver.openFileDescriptor(uri, "r")?.use { fd -> fd.statSize.takeIf { it > 0 } }
+        }.getOrNull()
+        if (declared != null && !isWithinAttachmentSize(sizeExtension, declared)) return@withContext null
         val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
-        if (bytes == null || bytes.isEmpty()) return
-        if (!isWithinAttachmentSize(ext, bytes.size.toLong())) return
-        captureFile(bytes, name, mime)
+        bytes?.takeIf { it.isNotEmpty() && isWithinAttachmentSize(sizeExtension, it.size.toLong()) }
     }
-
-    // Best-effort content length before loading a shared URI into memory.
-    private fun uriContentLength(uri: Uri): Long? = runCatching {
-        contentResolver.openFileDescriptor(uri, "r")?.use { fd ->
-            fd.statSize.takeIf { it > 0 }
-        }
-    }.getOrNull()
 
     // Files staged in the composer, sent together on submit -> ONE batch turn: read each,
     // derive its per-type MIME, and hand the set to captureBatch so the agent reads and
     // cross-references them together. The composer text is the caption.
     private fun captureFilesBatch(files: List<PlatformFile>, caption: String) {
         lifecycleScope.launch {
+            val skipped = mutableListOf<String>()
             val attachments = files.mapNotNull { file ->
                 val bytes = runCatching { file.readBytes() }.getOrNull()
                 if (bytes == null || bytes.isEmpty()) {
+                    skipped += file.name
                     null
                 } else if (!isWithinAttachmentSize(file.extension, bytes.size.toLong())) {
+                    skipped += file.name
                     null
                 } else {
                     attachmentFor(bytes, file.name, pickedFileMime(file.name))
                 }
+            }
+            // The composer already cleared its chips and caption by the time we get
+            // here, so a silent return would look like the send simply vanished.
+            if (skipped.isNotEmpty()) {
+                toast("보내지 못한 첨부: ${skipped.joinToString(", ")}")
             }
             if (attachments.isEmpty()) return@launch
             (get<DataRepository>() as? DenebGatewayClient)?.captureBatch(attachments, caption)
@@ -442,63 +448,47 @@ class MainActivity : ComponentActivity() {
         else -> false
     }
 
-    // Shared image -> gateway OCR -> chat. Reads the image bytes (a temporary read
-    // grant rides with the share) and hands them to the gateway, which OCRs via the
-    // PaddleOCR sidecar and runs one agent turn over the extracted text.
-    private fun handleSharedImage(intent: Intent) {
-        @Suppress("DEPRECATION")
-        val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-        } else {
-            intent.getParcelableExtra(Intent.EXTRA_STREAM)
-        }
-        if (uri == null) return
-        val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
-        if (bytes == null || bytes.isEmpty()) return
-        val mime = intent.type ?: "image/*"
-        captureFile(bytes, sharedDisplayName(uri) ?: "image", mime)
-        intent.removeExtra(Intent.EXTRA_STREAM)
+    @Suppress("DEPRECATION")
+    private fun sharedStreamUri(intent: Intent): Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+    } else {
+        intent.getParcelableExtra(Intent.EXTRA_STREAM)
     }
 
-    // Shared audio -> gateway VibeVoice-ASR -> chat. Reads the recording bytes (a
-    // temporary read grant rides with the share) and hands them to the gateway,
-    // which transcribes via the ASR sidecar (speaker labels + timestamps) and runs
-    // one agent turn over the transcript. A voice memo or a meeting recording
-    // shared from a recorder/files app — long-form capture the on-device speech
-    // shortcut (음성 캡처) couldn't do (nor could the retired Telegram bot).
-    private fun handleSharedAudio(intent: Intent) {
-        @Suppress("DEPRECATION")
-        val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-        } else {
-            intent.getParcelableExtra(Intent.EXTRA_STREAM)
-        }
-        if (uri == null) return
-        val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
-        if (bytes == null || bytes.isEmpty()) return
-        val mime = intent.type ?: "audio/*"
-        captureFile(bytes, sharedDisplayName(uri) ?: "recording", mime)
+    // One shared file -> gateway capture -> chat, with the read off the main thread.
+    // These handlers run straight from onCreate/onNewIntent, and a share can point at
+    // a cloud-backed provider that streams the bytes over the network — reading that
+    // inline blocks the first frame and can ANR before the UI ever appears.
+    private fun handleSharedSingle(intent: Intent, fallbackMime: String, defaultName: (String) -> String) {
+        val uri = sharedStreamUri(intent) ?: return
+        val mime = intent.type ?: fallbackMime
         intent.removeExtra(Intent.EXTRA_STREAM)
+        lifecycleScope.launch {
+            val name = withContext(Dispatchers.IO) { sharedDisplayName(uri) } ?: defaultName(mime)
+            val bytes = readSharedBytes(uri, attachmentExtension(name, mime))
+            if (bytes == null) {
+                toast("$name 을(를) 보내지 못했습니다")
+                return@launch
+            }
+            sendSingleFileBatch(bytes, name, mime)
+        }
     }
+
+    // Shared image -> gateway OCR -> chat. The gateway OCRs via the PaddleOCR sidecar
+    // and runs one agent turn over the extracted text.
+    private fun handleSharedImage(intent: Intent) = handleSharedSingle(intent, "image/*") { "image" }
+
+    // Shared audio -> gateway VibeVoice-ASR -> chat. The gateway transcribes via the
+    // ASR sidecar (speaker labels + timestamps) and runs one agent turn over the
+    // transcript. A voice memo or a meeting recording shared from a recorder/files
+    // app — long-form capture the on-device speech shortcut (음성 캡처) couldn't do
+    // (nor could the retired Telegram bot).
+    private fun handleSharedAudio(intent: Intent) = handleSharedSingle(intent, "audio/*") { "recording" }
 
     // Shared document (PDF/CSV) -> gateway extraction -> chat. A contract PDF shared
     // from mail/KakaoTalk lands in the chat as extracted text plus one agent turn —
     // this fires immediately (no composer to stage into, unlike the in-app picker).
-    private fun handleSharedDocument(intent: Intent) {
-        @Suppress("DEPRECATION")
-        val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-        } else {
-            intent.getParcelableExtra(Intent.EXTRA_STREAM)
-        }
-        if (uri == null) return
-        val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
-        if (bytes == null || bytes.isEmpty()) return
-        val mime = intent.type ?: "application/pdf"
-        val name = sharedDisplayName(uri) ?: ("shared" + sharedDocumentExt(mime))
-        captureFile(bytes, name, mime)
-        intent.removeExtra(Intent.EXTRA_STREAM)
-    }
+    private fun handleSharedDocument(intent: Intent) = handleSharedSingle(intent, "application/pdf") { mime -> "shared" + sharedDocumentExt(mime) }
 
     // Fallback extension when the share carries no display name. The gateway dispatches
     // by filename whenever the MIME is generic (octet-stream), so a wrong extension —
@@ -538,12 +528,11 @@ class MainActivity : ComponentActivity() {
         val client = get<DataRepository>() as? DenebGatewayClient ?: return
         lifecycleScope.launch {
             val files = uris.mapIndexedNotNull { index, uri ->
-                val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
-                if (bytes == null || bytes.isEmpty()) {
-                    null
-                } else {
-                    attachmentFor(bytes, sharedDisplayName(uri) ?: "image-${index + 1}", mime)
-                }
+                val name = withContext(Dispatchers.IO) { sharedDisplayName(uri) } ?: "image-${index + 1}"
+                // Size-checked like every other share path: an image share is not a
+                // reason to skip the cap, it is the most common way to blow past it.
+                val bytes = readSharedBytes(uri, attachmentExtension(name, mime)) ?: return@mapIndexedNotNull null
+                attachmentFor(bytes, name, mime)
             }
             if (files.isNotEmpty()) client.captureBatch(files)
         }

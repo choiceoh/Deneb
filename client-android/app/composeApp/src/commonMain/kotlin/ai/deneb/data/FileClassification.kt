@@ -5,9 +5,22 @@ package ai.deneb.data
 // capture turn accepts (it caps again server-side).
 const val MAX_BATCH_FILES = 20
 
-// Skip downsampling (and decoding) a picked image larger than this: it is sent
-// as-is, so a pathological multi-gigabyte file can't OOM the device on decode.
+// Ceiling on the ENCODED size of a picked image. Images bypass the payload cap
+// because they are downsampled before upload, but the file still has to be read
+// into memory to be decoded, so this bounds that read. Well above real camera
+// output (a 200MP JPEG is ~30MB) — it exists to refuse pathological files.
 const val MAX_RAW_IMAGE_BYTES = 50_000_000
+
+// Largest total attachment payload one capture batch may carry.
+//
+// The per-file cap is not enough on its own: captureBatch holds every file's raw
+// bytes AND its base64 text AND the assembled JSON body at the same time, so a
+// batch peaks at roughly 4-5x its raw size. Twenty 25MB documents therefore ask
+// for well over a gigabyte on a ~256MB heap — that is how build 838 died, with
+// a 105MB single allocation inside the request serializer. Capping the raw total
+// bounds that peak; the gateway independently rejects bodies over 128MiB, so a
+// batch the client cannot build was never going to be accepted anyway.
+const val MAX_BATCH_BYTES = 40_000_000L
 
 private val textExtensions = setOf(
     "txt", "md", "json", "csv", "xml", "yaml", "yml",
@@ -135,12 +148,19 @@ fun attachmentExtension(filename: String, mime: String = ""): String {
 
 /**
  * Whether a file of this [extension] at [sizeBytes] is within the upload cap.
- * Images are always allowed at pick time (downsampled before send). Non-images
- * require a known positive size — a failed stat/read must not fall through as 0,
- * which would bypass the cap and OOM the device on a multi‑GB pick.
+ *
+ * Images get the far looser [MAX_RAW_IMAGE_BYTES] ceiling rather than the payload
+ * cap, because they are downsampled before send — what leaves the device is a
+ * ~2048px JPEG regardless of what was picked. The ceiling still exists because
+ * the encoded file is read into memory whole before that downsample, and it sits
+ * far above any real photo (a 200MP JPEG is ~30MB), so it rejects pathological
+ * files without rejecting camera output.
+ *
+ * Non-images require a known positive size — a failed stat/read must not fall
+ * through as 0, which would bypass the cap and OOM the device on a multi‑GB pick.
  */
 fun isWithinAttachmentSize(extension: String, sizeBytes: Long): Boolean {
-    if (extension.lowercase() in imageExtensions) return true
+    if (extension.lowercase() in imageExtensions) return sizeBytes <= MAX_RAW_IMAGE_BYTES
     if (sizeBytes <= 0) return false
     return sizeBytes <= MAX_ATTACHMENT_BYTES
 }

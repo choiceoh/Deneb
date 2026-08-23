@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.DenebLog
 import ai.deneb.data.AppSettings
 import ai.deneb.data.Conversation
 import ai.deneb.data.DataRepository
@@ -20,6 +21,7 @@ import io.github.vinceglb.filekit.PlatformFile
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -115,7 +117,20 @@ class DenebGatewayClient private constructor(
 
     // Background scope for fire-and-forget refreshes behind synchronous
     // DataRepository entry points (loadConversations / loadConversation).
-    internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    //
+    // The handler is not optional. Nothing awaits these launches, so on Android an
+    // exception escaping one is an uncaught exception on a process-wide scope —
+    // i.e. a crash — and the work here is not only RPC (which callRpc already
+    // contains): it decodes cached transcripts and writes settings, where a
+    // corrupt blob or a full disk would otherwise take the app down while the user
+    // was just scrolling. Log and keep the other children alive (SupervisorJob).
+    internal val scope = CoroutineScope(
+        SupervisorJob() +
+            Dispatchers.Default +
+            CoroutineExceptionHandler { _, error ->
+                DenebLog.error("DenebGatewayClient", "background task failed", error)
+            },
+    )
 
     internal val _chatHistory = MutableStateFlow<List<History>>(emptyList())
     override val chatHistory: StateFlow<List<History>> = _chatHistory

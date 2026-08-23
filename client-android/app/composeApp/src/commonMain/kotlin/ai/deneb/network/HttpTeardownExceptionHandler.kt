@@ -5,15 +5,19 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 
 /**
  * Containment for the Android platform-okhttp stream-teardown crash (crash
- * reporter builds 609–614; #3337 → #3340 fixed it for TaskScheduler only).
+ * reporter builds 609–614 and 785; #3337 → #3340 fixed it for TaskScheduler only).
  *
  * Cancelling a coroutine that owns an in-flight ktor(Android engine) request
- * runs ktor's cleanup handler synchronously on the cancelling thread. That
- * close drains the HttpURLConnection response stream while the reader thread
- * is blocked inside the same stream's AsyncTimeout, and the platform okhttp
- * (com.android.okhttp.okio.AsyncTimeout) is not safe against the concurrent
- * enter — it throws `IllegalStateException: Unbalanced enter/exit`.
- * kotlinx.coroutines wraps that in CompletionHandlerException and delivers it
+ * runs ktor's cleanup handler synchronously on the cancelling thread: ktor's
+ * RawSourceChannel registers `invokeOnCompletion { closeSource() }`, and that
+ * close drains the HttpURLConnection response stream on whichever thread called
+ * `cancel()`. Draining is a socket read, so cancelling from the main thread
+ * fails one of two ways — the reader thread is parked in the same stream's
+ * AsyncTimeout and the platform okhttp (com.android.okhttp.okio.AsyncTimeout) is
+ * not safe against the concurrent enter (`IllegalStateException: Unbalanced
+ * enter/exit`), or the read happens on the main thread outright and StrictMode
+ * raises `NetworkOnMainThreadException`. See [isHttpTeardownCrash].
+ * kotlinx.coroutines wraps either in CompletionHandlerException and delivers it
  * via handleCoroutineException on the CANCELLED coroutine's context; it is
  * never thrown out of `cancel()` itself (why a runCatching around cancel()
  * cannot catch it — proven live by build 611). The only interception point is
@@ -37,16 +41,33 @@ fun httpTeardownTolerantHandler(tag: String): CoroutineExceptionHandler = Corout
 }
 
 /**
- * The teardown signature: an [IllegalStateException] with the AsyncTimeout
- * concurrency message anywhere in the cause chain. Message-matched because the
- * throwing class (com.android.okhttp / okio AsyncTimeout) is platform-internal
- * and unavailable to reference; the type+message pair is unique to this race.
+ * The teardown has two signatures anywhere in the cause chain, both produced by
+ * the same synchronous close described above — which one you get depends on what
+ * the reader thread was doing when the close raced it:
+ *
+ * 1. [IllegalStateException] carrying okio's AsyncTimeout concurrency message —
+ *    the reader was parked inside the timeout (typical for an idle SSE stream).
+ *    Message-matched because the throwing class (com.android.okhttp / okio
+ *    AsyncTimeout) is platform-internal and unavailable to reference; the
+ *    type+message pair is unique to this race.
+ * 2. `android.os.NetworkOnMainThreadException` — the reader was between reads, so
+ *    the close drained the socket itself, on the main thread, which StrictMode
+ *    then vetoes (typical for a short RPC cancelled mid-body; build 785). Matched
+ *    by class name: commonMain cannot reference an Android platform type, and the
+ *    name is specific enough that no other throwable shares it.
+ *
+ * Matching by class name (rather than message) keeps this narrow: a
+ * RuntimeException that merely quotes the AsyncTimeout message is not a teardown
+ * and must still crash.
  */
 internal fun isHttpTeardownCrash(exception: Throwable): Boolean {
     var current: Throwable? = exception
     var depth = 0
     while (current != null && depth < 16) {
         if (current is IllegalStateException && current.message?.contains("Unbalanced enter/exit") == true) {
+            return true
+        }
+        if (current::class.simpleName == "NetworkOnMainThreadException") {
             return true
         }
         current = current.cause

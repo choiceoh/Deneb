@@ -1,6 +1,8 @@
 package ai.deneb.deneb
 
 import ai.deneb.contacts.ContactData
+import ai.deneb.data.MAX_BATCH_BYTES
+import ai.deneb.data.MAX_BATCH_FILES
 import ai.deneb.ui.chat.History
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.update
@@ -152,6 +154,43 @@ suspend fun DenebGatewayClient.captureDocument(
  */
 class DenebAttachment(val bytes: ByteArray, val filename: String, val mimeType: String)
 
+/** What [fitCaptureBatch] kept, and the names of what it had to leave behind. */
+internal class CaptureBatchFit(val accepted: List<DenebAttachment>, val dropped: List<String>)
+
+/**
+ * Trims a batch to what the device can actually serialize, in order.
+ *
+ * Enforced here rather than at the pickers because every attachment path —
+ * composer multi-select, single file, share sheet — funnels through
+ * [captureBatch], and the pickers' own limits do not compose: the per-file cap
+ * exempts images entirely, and the picker's 20-file limit is per pick, so
+ * repeated picks stage an unbounded set. Dropping is deliberately in-order and
+ * reported by name: silently truncating a batch would let the agent answer about
+ * "the files" while quietly missing some, which is worse than saying so.
+ */
+internal fun fitCaptureBatch(
+    files: List<DenebAttachment>,
+    budgetBytes: Long = MAX_BATCH_BYTES,
+    maxFiles: Int = MAX_BATCH_FILES,
+): CaptureBatchFit {
+    val accepted = mutableListOf<DenebAttachment>()
+    val dropped = mutableListOf<String>()
+    var total = 0L
+    for (file in files) {
+        // Empty bytes mean an unreadable pick, not an oversized one; those are
+        // dropped without a name (the caller reports the read failure itself).
+        if (file.bytes.isEmpty()) continue
+        val size = file.bytes.size.toLong()
+        if (accepted.size >= maxFiles || total + size > budgetBytes) {
+            dropped += file.filename.trim().ifBlank { "첨부" }
+            continue
+        }
+        accepted += file
+        total += size
+    }
+    return CaptureBatchFit(accepted, dropped)
+}
+
 /**
  * Attach N files in ONE turn. The gateway (`miniapp.capture.batch`) materializes
  * each file to its agent-readable memory store and runs a single agent turn over a
@@ -162,12 +201,28 @@ class DenebAttachment(val bytes: ByteArray, val filename: String, val mimeType: 
 @OptIn(ExperimentalEncodingApi::class)
 suspend fun DenebGatewayClient.captureBatch(files: List<DenebAttachment>, caption: String = ""): Boolean {
     if (clientToken.isEmpty()) return false
-    val usable = files.filter { it.bytes.isNotEmpty() }
-    if (usable.isEmpty()) return false
+    val fit = fitCaptureBatch(files)
+    val usable = fit.accepted
+    if (usable.isEmpty()) {
+        // Nothing fit. Only say so when something was actually turned away for
+        // size — an all-empty list is an unreadable pick the caller reports.
+        if (fit.dropped.isNotEmpty()) {
+            _chatHistory.update {
+                it + History(
+                    role = History.Role.ASSISTANT,
+                    content = "⚠️ 첨부가 너무 커서 보내지 못했습니다: ${fit.dropped.joinToString(", ")}",
+                )
+            }
+        }
+        return false
+    }
     val trimmedCaption = caption.trim()
     val label = buildString {
         append("📎 첨부 ${usable.size}개")
         usable.forEach { append("\n• ${it.filename.trim().ifBlank { "첨부" }}") }
+        if (fit.dropped.isNotEmpty()) {
+            append("\n(용량 초과로 제외: ${fit.dropped.joinToString(", ")})")
+        }
         if (trimmedCaption.isNotBlank()) {
             append("\n\n")
             append(trimmedCaption)

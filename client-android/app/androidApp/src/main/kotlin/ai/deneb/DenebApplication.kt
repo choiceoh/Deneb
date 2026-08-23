@@ -5,6 +5,7 @@ import ai.deneb.data.TaskScheduler
 import ai.deneb.deneb.DENEB_VERSION_CODE
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.sandbox.sandboxModule
+import ai.deneb.ui.chat.composables.clearImageDecodeCache
 import android.app.Application
 import org.koin.android.ext.android.inject
 import org.koin.android.ext.koin.androidContext
@@ -40,5 +41,13 @@ class DenebApplication : Application() {
             gatewayClient?.chatTurnActive,
             gatewayClient?.fcmDeliveryReady,
         ).install()
+    }
+
+    // Decoded chat attachments are the largest thing this process holds that it can
+    // rebuild for free (they re-decode from the transcript). Hand them back before
+    // the system starts choosing which process to kill.
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= TRIM_MEMORY_RUNNING_LOW) clearImageDecodeCache()
     }
 }
