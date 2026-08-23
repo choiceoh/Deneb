@@ -205,6 +205,9 @@ suspend fun DenebGatewayClient.syncNativeState(): Boolean {
     // below refreshes now rather than waiting out DenebGatewayClient.HOME_WARM_INTERVAL —
     // the home glance (and an open mail tab) should reflect the change immediately.
     if (calendarChanged || mailChanged) lastHomeWarm = null
+    // The home warm flag only refreshes the "다가오는 일정" summary; the month grid
+    // reads its own range cache, so it needs to be told too.
+    if (calendarChanged) invalidateCalendar()
     // Reaching here means the gateway answered the pull, so it's reachable: warm the
     // rest of the home so the offline shell stays RECENT, not just last-visited. The
     // feed is already current (incremental sync events + the cold-prime above), but

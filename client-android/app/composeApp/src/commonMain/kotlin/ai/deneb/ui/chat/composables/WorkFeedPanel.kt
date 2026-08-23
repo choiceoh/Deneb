@@ -229,6 +229,23 @@ internal fun WorkFeedRow(
     // icons side by side — strip the leading emoji/symbol run from the title.
     val title = if (item.title.isBlank()) stringResource(Res.string.work_feed_title) else stripLeadingIcon(item.title)
     val haptics = rememberHaptics()
+    var confirmTrash by remember { mutableStateOf(false) }
+    if (confirmTrash) {
+        AlertDialog(
+            onDismissRequest = { confirmTrash = false },
+            title = { Text("삭제할까요?") },
+            text = { Text("이 카드를 영구히 삭제합니다. 되돌릴 수 없습니다.\n보관만 하려면 '보관'을 사용하세요.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmTrash = false
+                        onRunAction(item.id, "trash")
+                    },
+                ) { Text("삭제") }
+            },
+            dismissButton = { TextButton(onClick = { confirmTrash = false }) { Text("취소") } },
+        )
+    }
     val titleStyle = if (item.status == "unread") DenebType.rowTitleStrong else DenebType.rowTitle
     DenebRow(
         onClick = {
@@ -311,9 +328,12 @@ internal fun WorkFeedRow(
                             haptics.confirm()
                             onRunAction(item.id, "ack")
                         }
+                        // 휴지통 is a permanent delete on the gateway (ActionTrash drops
+                        // the item from the store) and sits one 32dp target away from
+                        // 보관, which is merely an ack. Confirm before destroying.
                         FeedActionButton(Icons.Outlined.Delete, "휴지통") {
                             haptics.confirm()
-                            onRunAction(item.id, "trash")
+                            confirmTrash = true
                         }
                     }
                 }
@@ -766,8 +786,12 @@ private fun sourcePainter(source: WorkFeedSourceIcon): Painter = when (source) {
 /** A compact trailing quick-action icon button (보관 / 휴지통), muted to denebHint. */
 @Composable
 private fun FeedActionButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+    // 48dp target, 16dp glyph: the visual weight stays the same as before, but the
+    // hit area no longer sits below the platform minimum next to a destructive
+    // neighbour. (A caller-side Modifier.size clamps M3's own minimum, which is how
+    // it ended up at 32dp.)
     IconButton(
-        modifier = Modifier.handCursor().size(32.dp),
+        modifier = Modifier.handCursor().size(48.dp),
         onClick = onClick,
     ) {
         Icon(

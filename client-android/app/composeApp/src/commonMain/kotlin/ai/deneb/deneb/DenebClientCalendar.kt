@@ -81,7 +81,7 @@ suspend fun DenebGatewayClient.createCalendarEvent(
 ): String? = rpcWrite(
     "miniapp.calendar.create",
     calendarWriteParams(summary, description, location, allDay, startIso, endIso, timeZone),
-)
+).also { if (it == null) invalidateCalendar() }
 
 /** Edit a locally-stored event (`miniapp.calendar.update`). Same return contract
  *  as [createCalendarEvent]; the gateway rejects non-local (Google) IDs. */
@@ -97,11 +97,12 @@ suspend fun DenebGatewayClient.updateCalendarEvent(
 ): String? = rpcWrite(
     "miniapp.calendar.update",
     calendarWriteParams(summary, description, location, allDay, startIso, endIso, timeZone, id),
-)
+).also { if (it == null) invalidateCalendar() }
 
 /** Delete a locally-stored event (`miniapp.calendar.delete`). Null on success,
  *  a Korean error message otherwise (e.g. when the id is a read-only Google event). */
 suspend fun DenebGatewayClient.deleteCalendarEvent(id: String): String? = rpcWrite("miniapp.calendar.delete", buildJsonObject { put("id", id) })
+    .also { if (it == null) invalidateCalendar() }
 
 /** Refresh the pending calendar proposals (the bell). Returns false on a fetch
  *  failure so the screen can tell a real "no proposals" from a network error. */

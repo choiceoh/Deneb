@@ -301,7 +301,12 @@ suspend fun DenebGatewayClient.fetchPeople(force: Boolean = false): List<PersonH
         ) ?: return@getOrLoad null
         p.people
             .filter { it.email.isNotBlank() || it.name.isNotBlank() }
-            .distinctByLast { it.email.ifBlank { it.name } }
+            // Identity key, in order of how well it identifies a person: email, then
+            // the wiki page, then the name. Falling straight from email to name
+            // collapsed two 인물 pages that share a title (동명이인) into one — the
+            // list keys rows by wikiPath, so the second person simply vanished
+            // before it ever got there.
+            .distinctByLast { it.email.ifBlank { it.wikiPath.ifBlank { it.name } } }
             .map {
                 PersonHit(
                     name = it.name.ifBlank { it.email },

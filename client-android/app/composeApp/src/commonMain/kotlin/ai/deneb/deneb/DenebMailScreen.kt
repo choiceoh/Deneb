@@ -109,6 +109,7 @@ fun DenebMailScreen(
     var selecting by remember { mutableStateOf(false) }
     val selected = remember { mutableStateListOf<String>() }
     var busy by remember { mutableStateOf(false) }
+    var bulkError by remember { mutableStateOf<String?>(null) }
     var loadingMore by remember { mutableStateOf(false) }
     // Full-mailbox mail search: the field holds what the user types; activeQuery
     // is the query the current list actually came from (null = default recent mail).
@@ -150,15 +151,45 @@ fun DenebMailScreen(
         selected.clear()
     }
 
-    fun bulk(action: suspend (String) -> Unit) {
+    // Every bulk RPC reports whether it worked; the results used to be discarded and
+    // the selection cleared regardless, so a failed 보관/휴지통 looked exactly like a
+    // successful one until the list refreshed and the mail was still there.
+    fun bulk(action: suspend (String) -> Boolean) {
         if (busy) return
         haptics.confirm()
         val ids = selected.toList()
         scope.launch {
             busy = true
-            ids.forEach { action(it) }
+            bulkError = null
+            val failedIds = ids.filterNot { action(it) }
             busy = false
-            clearSelection()
+            if (failedIds.isEmpty()) {
+                clearSelection()
+            } else {
+                // Keep the ones that failed selected so the retry is one tap.
+                selected.clear()
+                selected.addAll(failedIds)
+                bulkError = "${failedIds.size}건을 처리하지 못했습니다. 연결을 확인하고 다시 시도해 주세요."
+            }
+        }
+    }
+
+    // System back should close whatever the user opened here before leaving the tab.
+    // Gated on the live-tab flag: the mail tab stays composed while another tab is
+    // showing, and a hidden tab must never intercept back.
+    val tabActive = ai.deneb.ui.LocalLiveTabActive.current
+    ai.deneb.PlatformBackHandler(enabled = tabActive && (selecting || searchVisible || filtersVisible || legendVisible)) {
+        when {
+            legendVisible -> legendVisible = false
+
+            filtersVisible -> filtersVisible = false
+
+            selecting -> clearSelection()
+
+            else -> {
+                searchVisible = false
+                searchText = ""
+            }
         }
     }
 
@@ -444,7 +475,12 @@ fun DenebMailScreen(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("${selected.size}개 선택", style = MaterialTheme.typography.titleSmall)
+                    Column {
+                        Text("${selected.size}개 선택", style = MaterialTheme.typography.titleSmall)
+                        bulkError?.let { message ->
+                            Text(message, style = DenebType.meta, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = { bulk { client.markMailRead(it) } }, enabled = !busy) { Text("읽음") }
                     TextButton(onClick = { bulk { client.archiveMail(it) } }, enabled = !busy) { Text("보관") }

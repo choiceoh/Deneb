@@ -88,18 +88,21 @@ fun DenebCategoryPagesScreen(
         val fetched = client.fetchCategoryPages(category)
         if (fetched == null) loadFailed = pages == null else pages = fetched
         // One categories fetch feeds both the sub-folder rows and the move
-        // picker's options.
-        val cats = client.fetchCategories()?.categories ?: emptyList()
-        // Sub-folders under this category (the next path segment) so a project
-        // that accrues several documents drills down instead of cluttering the
-        // top-level list.
-        subFolders = subCategories(category, cats)
-        categoryAlias = cats.firstOrNull { it.name == category }?.displayName.orEmpty()
-        // Top-level taxonomy categories (first path segment) — the reclassify targets.
-        topCategories = cats.map { it.name.substringBefore('/') }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .sorted()
+        // picker's options. Null-guarded like `pages` above: a single failed fetch
+        // used to blank the sub-folders, the Korean alias AND the move targets,
+        // which reads as "this category has nothing in it".
+        client.fetchCategories()?.categories?.let { cats ->
+            // Sub-folders under this category (the next path segment) so a project
+            // that accrues several documents drills down instead of cluttering the
+            // top-level list.
+            subFolders = subCategories(category, cats)
+            categoryAlias = cats.firstOrNull { it.name == category }?.displayName.orEmpty()
+            // Top-level taxonomy categories (first path segment) — the reclassify targets.
+            topCategories = cats.map { it.name.substringBefore('/') }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .sorted()
+        }
     }
     LaunchedEffect(category) { load() }
 

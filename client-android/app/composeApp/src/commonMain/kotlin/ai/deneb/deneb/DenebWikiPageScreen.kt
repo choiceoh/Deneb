@@ -225,7 +225,10 @@ fun DenebWikiPageScreen(
                                 if (ok) {
                                     editing = false
                                     status = "저장됨"
-                                    page = client.fetchWikiPage(path)
+                                    // Through loadPage, not a bare fetch: a null here
+                                    // left page == null with loadFailed == false, i.e.
+                                    // the loading skeleton forever, with no retry.
+                                    loadPage()
                                 } else {
                                     status = "저장 실패"
                                 }

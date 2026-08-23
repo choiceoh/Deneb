@@ -312,6 +312,24 @@ class DenebGatewayClient private constructor(
     /** Last-known events for [key] regardless of age — the cold-start stale paint. */
     internal fun peekCalendarRange(key: String): List<CalendarEvent>? = sectionCaches.calendarRanges.peek(key)
 
+    // Bumped whenever calendar data changed under the screen: an add/edit/delete
+    // from a pushed route, or a `calendar.changed` sync event. The screen keys a
+    // reload on it.
+    //
+    // Needed because the calendar is an always-alive tab. Before LiveTabPane, popping
+    // the add screen recomposed the calendar and it refetched; now the tab never
+    // leaves composition, its per-month cache survives, and OnLiveTabActivation does
+    // not fire (the tab was never deactivated — the add screen was pushed OVER it).
+    // So a saved event stayed invisible until pull-to-refresh.
+    private val _calendarVersion = MutableStateFlow(0)
+    val calendarVersion: StateFlow<Int> = _calendarVersion.asStateFlow()
+
+    /** Drops cached ranges and tells the calendar screen to refetch. */
+    internal fun invalidateCalendar() {
+        sectionCaches.calendarRanges.clear()
+        _calendarVersion.update { it + 1 }
+    }
+
     // Native-client handshake snapshot: gateway version, active model, and
     // feature flags exposed by miniapp.client.hello.
     internal val _clientStatus = MutableStateFlow<ClientStatus?>(null)

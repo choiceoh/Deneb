@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,6 +57,7 @@ fun DenebPersonScreen(
 ) {
     var ctx by remember(sender) { mutableStateOf<SenderContext?>(null) }
     var loadFailed by remember(sender) { mutableStateOf(false) }
+    var detailsFailed by remember(sender) { mutableStateOf(false) }
     var recent by remember(sender) { mutableStateOf<List<MailMessage>?>(null) }
     var dossier by remember(sender) {
         mutableStateOf<ai.deneb.deneb.generated.PersonDossierOut?>(null)
@@ -72,6 +74,10 @@ fun DenebPersonScreen(
         val email = c?.email?.ifBlank { sender } ?: sender
         recent = client.fetchRecentFromSender(email)
         dossier = client.fetchPersonDossier(email, c?.displayName.orEmpty())
+        // fetchPersonDossier returns null on a failed call and on "no dossier"
+        // alike, so a dropped connection here would otherwise read as "this person
+        // has no context" — a statement about the person, not about the network.
+        detailsFailed = dossier == null && c != null
     }
     LaunchedEffect(sender) { load() }
 
@@ -236,10 +242,13 @@ fun DenebPersonScreen(
             ) {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "알려진 컨텍스트가 없습니다.",
+                    if (detailsFailed) "상세 정보를 불러오지 못했습니다." else "알려진 컨텍스트가 없습니다.",
                     style = DenebType.body,
                     color = denebHint(),
                 )
+                if (detailsFailed) {
+                    TextButton(onClick = { scope.launch { load() } }) { Text("다시 시도") }
+                }
             }
             Spacer(Modifier.height(24.dp))
         }

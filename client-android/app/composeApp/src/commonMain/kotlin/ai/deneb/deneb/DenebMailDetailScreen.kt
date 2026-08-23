@@ -106,6 +106,7 @@ fun DenebMailDetailScreen(
     var detail by remember(messageId) { mutableStateOf<MailDetail?>(null) }
     var analysis by remember(messageId) { mutableStateOf<MailAnalysis?>(null) }
     var analyzing by remember(messageId) { mutableStateOf(false) }
+    var trashing by remember { mutableStateOf(false) }
     var analysisFailed by remember(messageId) { mutableStateOf(false) }
     var analysisExpanded by remember(messageId) { mutableStateOf(false) }
     var askText by remember(messageId) { mutableStateOf("") }
@@ -209,8 +210,18 @@ fun DenebMailDetailScreen(
             FilledTonalButton(
                 onClick = {
                     haptics.reject()
-                    scope.launch { if (client.trashMail(mail.id)) onBack() else actionMsg = "휴지통 이동 실패" }
+                    // Guarded: without it a double tap sent the RPC twice and could
+                    // navigate up twice — the screen stays composed through the pop
+                    // transition, so the second tap is easy to land.
+                    if (trashing) return@FilledTonalButton
+                    trashing = true
+                    scope.launch {
+                        val ok = client.trashMail(mail.id)
+                        trashing = false
+                        if (ok) onBack() else actionMsg = "휴지통 이동 실패"
+                    }
                 },
+                enabled = !trashing,
                 modifier = Modifier.weight(1f),
             ) { Text("휴지통") }
             FilledTonalButton(
