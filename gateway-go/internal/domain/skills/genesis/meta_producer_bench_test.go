@@ -93,3 +93,59 @@ func TestShadowCandidateBodyEmptyOnSkipOrUnparsableJSON(t *testing.T) {
 		}
 	}
 }
+
+// The verdict must cite its own evidence: flip notes come first in the capped
+// Notes and are the only notes a flip rejection quotes — the ledger carried
+// "flipped 1 case(s): <skill>: one-sided skip/unparsable" verdicts whose cited
+// note described an unrelated, unscored scenario. A scenario where NEITHER
+// side produced a candidate is labelled as such, not "one-sided".
+func TestRunProducerShadowBenchKeepsFlipNotesFirstAndLabelsBothSidesSkip(t *testing.T) {
+	scenarios := []producerShadowScenario{
+		{Skill: "both-empty", UserPrompt: "both", Cases: []SkillValidationCaseRecord{{ID: "c0", SkillName: "both-empty", RequiredSubstrings: []string{"x"}}}},
+		{Skill: "one-sided", UserPrompt: "one", Cases: []SkillValidationCaseRecord{{ID: "c1", SkillName: "one-sided", RequiredSubstrings: []string{"x"}}}},
+		{Skill: "err-a", UserPrompt: "err", Cases: []SkillValidationCaseRecord{{ID: "c2", SkillName: "err-a", RequiredSubstrings: []string{"x"}}}},
+		{Skill: "err-b", UserPrompt: "err", Cases: []SkillValidationCaseRecord{{ID: "c3", SkillName: "err-b", RequiredSubstrings: []string{"x"}}}},
+		shadowScenario("case-flip", "required step"),
+	}
+	genFn := func(_ context.Context, systemPrompt, userPrompt string) (string, error) {
+		switch userPrompt {
+		case "both":
+			return "not json", nil
+		case "one":
+			if systemPrompt == "incumbent" {
+				return producerResp("body"), nil
+			}
+			return `{"skip": true}`, nil
+		case "err":
+			return "", fmt.Errorf("boom")
+		}
+		if systemPrompt == "incumbent" {
+			return producerResp("body with required step"), nil
+		}
+		return producerResp("body missing it"), nil
+	}
+	out := runProducerShadowBench(context.Background(), "incumbent", "proposal", scenarios, genFn)
+	if out.Flips != 1 || out.Skills != 1 {
+		t.Fatalf("bench = %+v", out)
+	}
+	if len(out.Notes) == 0 || !strings.Contains(out.Notes[0], "sk: flip on") {
+		t.Fatalf("flip note must lead the capped notes: %v", out.Notes)
+	}
+	if joined := strings.Join(out.Notes, " | "); !strings.Contains(joined, "both-empty: both sides skip/unparsable") {
+		t.Fatalf("both-sides label missing: %v", out.Notes)
+	}
+	if r := producerBenchDecision(out); !strings.Contains(r, "sk: flip on") || strings.Contains(r, "skip/unparsable") {
+		t.Fatalf("decision must cite flip notes only: %q", r)
+	}
+}
+
+// An unbenched producer proposal (no scenario scored) is low-confidence for the
+// right reason — not a "measured" 0.00→0.00 margin.
+func TestMetaLowConfidenceReasonNamesUnscoredShadowBench(t *testing.T) {
+	if got := metaLowConfidenceReason(nil, nil, &producerBenchOutcome{Skills: 0}, nil); !strings.Contains(got, "scored no scenario") {
+		t.Fatalf("reason = %q", got)
+	}
+	if got := metaLowConfidenceReason(nil, nil, &producerBenchOutcome{Skills: 2, IncumbentScore: 60, ProposalScore: 70}, nil); got != "" {
+		t.Fatalf("improving margin must not be low-confidence: %q", got)
+	}
+}

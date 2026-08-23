@@ -128,9 +128,12 @@ type MetaRevisionRecord struct {
 // ledgered as MetaRevisionRecord.Action entries (adopted/rejected/
 // operator_reverted) — this is a read-side aggregate, not a new signal source.
 type operatorUtilitySignals struct {
-	Adopted7d      int     `json:"adopted7d"`
-	Rejected7d     int     `json:"rejected7d"`
-	Reverted7d     int     `json:"reverted7d"`
+	Adopted7d  int `json:"adopted7d"`
+	Rejected7d int `json:"rejected7d"`
+	Reverted7d int `json:"reverted7d"`
+	// Expired7d counts proposals whose verdict window closed with no operator
+	// decision — "no verdict" is its own label, not silence.
+	Expired7d      int     `json:"expired7d,omitempty"`
 	AdoptionRate   float64 `json:"adoptionRate"` // adopted/(adopted+rejected), 0 when no verdicts
 	LastDecisionAt int64   `json:"lastDecisionAt,omitempty"`
 }
@@ -321,6 +324,9 @@ func (t *Tracker) operatorUtilitySignals() operatorUtilitySignals {
 			out.Rejected7d++
 		case "operator_reverted", "auto_reverted":
 			out.Reverted7d++
+		case metaActionExpired:
+			out.Expired7d++
+			continue // not a decision — it must not move LastDecisionAt
 		default:
 			continue // cycle records (Action=="") are not feed-card verdicts
 		}
@@ -348,6 +354,9 @@ type MetaEvolutionTask struct {
 	// the operator; adopted=true: auto-adopted notification with a revert veto).
 	// Best-effort: surfacing failures never affect the cycle.
 	OnProposal func(artifact, epoch, reason, path string, adopted bool)
+	// OnProposalExpired, when set, lets the server settle the feed card of a
+	// proposal whose operator verdict never came (see expireStaleProposals).
+	OnProposalExpired func(artifact, path, reason string)
 	// OnReverted, when set, notifies the operator that the meta rollback watch
 	// reverted an adoption.
 	OnReverted func(artifact, reason string)
@@ -406,6 +415,96 @@ func (t *MetaEvolutionTask) Interval() time.Duration {
 	return 7 * 24 * time.Hour
 }
 
+// metaActionExpired is the ledger action for a proposal whose verdict window
+// closed without an operator decision. It is not a verdict: nothing was
+// adopted or rejected on the merits, the proposal was simply discarded so the
+// lane can re-propose from fresh evidence instead of holding a stale card.
+const metaActionExpired = "expired"
+
+// defaultMetaVerdictExpiryDays bounds how long a propose-only / low-confidence
+// proposal may wait for an operator verdict. 2026-07-13 → 08-22: the feed-card
+// verdict channel produced 0 adopt / 0 reject for the whole calibration
+// window while low-confidence revisions sat in "운영자 verdict 대기" — and a
+// later proposal for the same artifact silently overwrote the pending file
+// under the old card. Override with DENEB_META_VERDICT_EXPIRY_DAYS.
+const defaultMetaVerdictExpiryDays = 7
+
+func metaVerdictExpiry() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("DENEB_META_VERDICT_EXPIRY_DAYS")); v != "" {
+		if days, err := strconv.Atoi(v); err == nil && days > 0 {
+			return time.Duration(days) * 24 * time.Hour
+		}
+	}
+	return defaultMetaVerdictExpiryDays * 24 * time.Hour
+}
+
+// pendingProposalSince returns when the artifact's current proposal started
+// waiting: the newest ledger row that PROPOSED it (Proposed && no action), or
+// the .proposed file's mtime when the ledger has no such row (legacy files).
+func (t *MetaEvolutionTask) pendingProposalSince(artifact string, fileMod time.Time) time.Time {
+	if revs, err := t.Tracker.RecentMetaRevisions(50); err == nil {
+		for _, r := range revs { // newest first
+			if r.Artifact != artifact {
+				continue
+			}
+			if r.Proposed && r.Action == "" {
+				return time.UnixMilli(r.CreatedAt)
+			}
+		}
+	}
+	return fileMod
+}
+
+// expireStaleProposals discards every pending .proposed older than the verdict
+// window: the file is removed (RejectProposal), the ledger records
+// metaActionExpired, and OnProposalExpired lets the server settle the card.
+// Deterministic, no LLM; runs at the top of every cycle so the lane never
+// holds more than one verdict window of stale work.
+func (t *MetaEvolutionTask) expireStaleProposals(logger *slog.Logger, now time.Time) int {
+	if t.Meta == nil || t.Tracker == nil {
+		return 0
+	}
+	expiry := metaVerdictExpiry()
+	names := make([]string, 0, len(generation.DefaultMetaArtifacts()))
+	for name := range generation.DefaultMetaArtifacts() {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	expired := 0
+	for _, name := range names {
+		path, mod, ok := t.Meta.ProposalInfo(name)
+		if !ok {
+			continue
+		}
+		since := t.pendingProposalSince(name, mod)
+		if now.Sub(since) < expiry {
+			continue
+		}
+		if err := t.Meta.RejectProposal(name); err != nil {
+			logger.Warn("meta-evolution: stale proposal could not be discarded", "artifact", name, "error", err)
+			continue
+		}
+		days := int(expiry / (24 * time.Hour))
+		reason := fmt.Sprintf("verdict expired after %dd without operator decision — proposal discarded (pending since %s); the lane may re-propose from fresh evidence",
+			days, since.UTC().Format("2006-01-02"))
+		fromVersion := t.Meta.Version(name, generation.DefaultMetaArtifacts()[name])
+		if err := t.Tracker.LogMetaRevision(MetaRevisionRecord{
+			Artifact:    name,
+			FromVersion: fromVersion,
+			Action:      metaActionExpired,
+			Reason:      reason,
+		}); err != nil {
+			logger.Warn("meta-evolution: expiry ledger write failed", "artifact", name, "error", err)
+		}
+		logger.Info("meta-evolution: pending proposal expired without verdict", "artifact", name, "pendingSince", since.UTC().Format(time.RFC3339))
+		if t.OnProposalExpired != nil {
+			t.OnProposalExpired(name, path, reason)
+		}
+		expired++
+	}
+	return expired
+}
+
 // Run executes one propose-only cycle.
 func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	if t.Evolver == nil || t.Meta == nil || t.Tracker == nil {
@@ -415,6 +514,9 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	// Verdict windows close before a new cycle starts: a stale pending proposal
+	// must not survive into (and be silently overwritten by) this cycle.
+	t.expireStaleProposals(logger, time.Now())
 
 	t.maybeRevertAdoption(logger)
 	t.maybeRevertStormPoisonedEvaluatorAdoption(logger)
@@ -1218,6 +1320,11 @@ func (t *MetaEvolutionTask) assembleGenesisEvidence() string {
 func metaLowConfidenceReason(inc, prop *judgeBenchOutcome, shadow *producerBenchOutcome, gen *genesisBenchOutcome) string {
 	if inc != nil && prop != nil && prop.rate() <= inc.rate() {
 		return fmt.Sprintf("judge bench margin %.2f→%.2f (no measurable improvement)", inc.rate(), prop.rate())
+	}
+	if shadow != nil && shadow.Skills == 0 {
+		// Nothing was scored: an unbenched proposal must not read as a measured
+		// flat margin ("0.00→0.00").
+		return "shadow bench scored no scenario (skips or unparsable outputs on both sides)"
 	}
 	if shadow != nil && shadow.ProposalScore <= shadow.IncumbentScore {
 		return fmt.Sprintf("shadow bench margin %.2f→%.2f (no measurable improvement)", shadow.IncumbentScore, shadow.ProposalScore)

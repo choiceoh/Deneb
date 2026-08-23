@@ -124,20 +124,31 @@ func shadowCandidateBody(text string) string {
 func runProducerShadowBench(ctx context.Context, incumbentPrompt, proposalPrompt string, scenarios []producerShadowScenario, gen producerShadowGenFn) producerBenchOutcome {
 	var out producerBenchOutcome
 	var incSum, propSum float64
+	// Flip notes are the verdict's evidence and must never be crowded out of
+	// the capped Notes by skip/error notes from earlier scenarios — the ledger
+	// showed "flipped 1 case(s): <skill>: one-sided skip/unparsable" verdicts
+	// whose cited note had nothing to do with the flip.
+	var flipNotes, otherNotes []string
 	for _, sc := range scenarios {
 		incText, err := gen(ctx, incumbentPrompt, sc.UserPrompt)
 		if err != nil {
-			out.Notes = append(out.Notes, fmt.Sprintf("%s: incumbent generation error: %v", sc.Skill, err))
+			otherNotes = append(otherNotes, fmt.Sprintf("%s: incumbent generation error: %v", sc.Skill, err))
 			continue
 		}
 		propText, err := gen(ctx, proposalPrompt, sc.UserPrompt)
 		if err != nil {
-			out.Notes = append(out.Notes, fmt.Sprintf("%s: proposal generation error: %v", sc.Skill, err))
+			otherNotes = append(otherNotes, fmt.Sprintf("%s: proposal generation error: %v", sc.Skill, err))
 			continue
 		}
 		incBody, propBody := shadowCandidateBody(incText), shadowCandidateBody(propText)
+		if incBody == "" && propBody == "" {
+			// Neither side produced a candidate: the scenario says nothing about
+			// relative quality (it was mislabelled "one-sided" before).
+			otherNotes = append(otherNotes, fmt.Sprintf("%s: both sides skip/unparsable", sc.Skill))
+			continue
+		}
 		if incBody == "" || propBody == "" {
-			out.Notes = append(out.Notes, fmt.Sprintf("%s: one-sided skip/unparsable (incumbent=%v proposal=%v)", sc.Skill, incBody != "", propBody != ""))
+			otherNotes = append(otherNotes, fmt.Sprintf("%s: one-sided skip/unparsable (incumbent=%v proposal=%v)", sc.Skill, incBody != "", propBody != ""))
 			continue
 		}
 		incByCase := scoreSkillValidationCasesByCase(incBody, sc.Cases)
@@ -148,7 +159,7 @@ func runProducerShadowBench(ctx context.Context, incumbentPrompt, proposalPrompt
 			prop.add(propByCase[i])
 			if incByCase[i].Total > 0 && incByCase[i].casePasses() && !propByCase[i].casePasses() {
 				out.Flips++
-				out.Notes = append(out.Notes, fmt.Sprintf("%s: flip on %s", sc.Skill, validationCaseLabel(sc.Cases[i])))
+				flipNotes = append(flipNotes, fmt.Sprintf("%s: flip on %s", sc.Skill, validationCaseLabel(sc.Cases[i])))
 			}
 		}
 		out.Skills++
@@ -159,10 +170,23 @@ func runProducerShadowBench(ctx context.Context, incumbentPrompt, proposalPrompt
 		out.IncumbentScore = incSum / float64(out.Skills)
 		out.ProposalScore = propSum / float64(out.Skills)
 	}
+	out.Notes = append(append(out.Notes, flipNotes...), otherNotes...)
 	if len(out.Notes) > 4 {
 		out.Notes = out.Notes[:4]
 	}
 	return out
+}
+
+// producerFlipNotes returns the flip notes only — the evidence a flip verdict
+// must cite (skip/error notes describe scenarios the verdict did not score).
+func producerFlipNotes(out producerBenchOutcome) []string {
+	var flips []string
+	for _, n := range out.Notes {
+		if strings.Contains(n, ": flip on ") {
+			flips = append(flips, n)
+		}
+	}
+	return flips
 }
 
 // producerBenchDecision is the deterministic promotion rule for a
@@ -176,7 +200,7 @@ func producerBenchDecision(out producerBenchOutcome) string {
 	}
 	if out.Flips > 0 {
 		return fmt.Sprintf("shadow replay flipped %d previously-passing case(s): %s",
-			out.Flips, strings.Join(out.Notes, "; "))
+			out.Flips, strings.Join(producerFlipNotes(out), "; "))
 	}
 	if out.ProposalScore < out.IncumbentScore-producerBenchScoreEpsilon {
 		return fmt.Sprintf("shadow replay mean score regressed (%.1f < incumbent %.1f - %.1f)",

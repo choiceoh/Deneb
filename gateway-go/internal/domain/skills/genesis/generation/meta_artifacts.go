@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Meta artifacts — P1 of the RSI roadmap
@@ -253,6 +254,21 @@ func (m *MetaArtifacts) RevertAdoption(name string) (string, error) {
 	}
 	sum := sha256.Sum256([]byte(content))
 	return hex.EncodeToString(sum[:])[:12], nil
+}
+
+// ProposalInfo reports whether <name>.proposed exists, with its path and
+// modification time — the pending-verdict inventory the slow loop's expiry
+// sweep walks.
+func (m *MetaArtifacts) ProposalInfo(name string) (string, time.Time, bool) {
+	if m == nil || m.dir == "" {
+		return "", time.Time{}, false
+	}
+	path := filepath.Join(m.dir, name+".proposed")
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return "", time.Time{}, false
+	}
+	return path, info.ModTime(), true
 }
 
 // RejectProposal discards <name>.proposed without touching the live artifact.
