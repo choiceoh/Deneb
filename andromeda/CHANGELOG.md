@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.118](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.117...andromeda-v0.0.118) (2026-08-23)
+
+
+### ✨ Features
+
+* **chat:** 채팅 모델 전환을 해당 세션에만 적용 ([#4631](https://github.com/choiceoh/Deneb/issues/4631)) ([bf4fec7](https://github.com/choiceoh/Deneb/commit/bf4fec761f96ebf1ed034ebde58f9eef8214c162))
+
 ## [0.0.117](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.116...andromeda-v0.0.117) (2026-08-23)
 
 
