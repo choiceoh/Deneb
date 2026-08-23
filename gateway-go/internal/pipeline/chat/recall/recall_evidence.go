@@ -203,6 +203,13 @@ func recallWikiEvidenceResult(ctx context.Context, store *wiki.Store, queries []
 	}
 	queryLabel := queries[0]
 	for _, r := range report.Results {
+		if r.FactID != "" {
+			// Chat preflight renders canonical facts in its trusted, live
+			// <current-facts> block with subject isolation. Store.Search also
+			// exposes them for miniapp/knowledge callers, but duplicating the same
+			// claim here as untrusted wiki evidence wastes budget and blurs trust.
+			continue
+		}
 		if _, ok := seen[r.Path]; ok {
 			continue
 		}
@@ -211,6 +218,14 @@ func recallWikiEvidenceResult(ctx context.Context, store *wiki.Store, queries []
 		subjectID := ""
 		if page, err := store.ReadPage(r.Path); err == nil && page != nil {
 			if page.Meta.SupersededBy != "" {
+				// Keep an internal-only marker long enough for Build to scrub
+				// matching legacy diary/transcript/file rows. The marker itself is
+				// never ranked or rendered, so history remains stored but cannot be
+				// mistaken for current evidence.
+				evidence = append(evidence, recallEvidence{
+					Kind: "superseded", Source: r.Path,
+					StaleValue: strings.TrimSpace(page.Body + "\n" + r.Content),
+				})
 				continue
 			}
 			// Only explicit subject_id gates recall — do not infer from PID, or

@@ -52,6 +52,9 @@ func (s *Store) Forget(relPath, reason string) (ForgetResult, error) {
 	// prune FTS/master-index/backlinks/semantic under the unclean key, leaving the
 	// page searchable. filepath.Clean collapses it to the indexed key.
 	relPath = normalizePagePath(filepath.Clean(relPath))
+	if err := rejectFactProjectionMutation("forget", relPath); err != nil {
+		return ForgetResult{}, err
+	}
 	// Refuse the store's own bookkeeping files — forgetting them corrupts the
 	// wiki (log.md holds the tombstone we are about to write).
 	if _, reserved := reservedForgetFiles[relPath]; reserved {

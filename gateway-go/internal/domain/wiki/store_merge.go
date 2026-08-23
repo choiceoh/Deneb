@@ -19,6 +19,9 @@ import (
 func (s *Store) MarkSuperseded(oldPath, newPath string) error {
 	oldPath = normalizePagePath(oldPath)
 	newPath = normalizePagePath(newPath)
+	if err := rejectFactProjectionMutation("mark superseded", oldPath, newPath); err != nil {
+		return err
+	}
 	if oldPath == "" || newPath == "" || oldPath == newPath {
 		return nil
 	}
@@ -32,11 +35,20 @@ func (s *Store) MarkSuperseded(oldPath, newPath string) error {
 		return fmt.Errorf("wiki: mark superseded: %w", err)
 	}
 	if page.Meta.SupersededBy == newPath {
+		s.dropSemanticVector(oldPath)
+		s.cacheSupersededPageStale(page)
 		return nil
 	}
 	page.Meta.SupersededBy = newPath
 	page.Meta.Updated = time.Now().Format("2006-01-02")
-	return s.writePageInternal(oldPath, page, true)
+	if err := s.writePageInternal(oldPath, page, true); err != nil {
+		return err
+	}
+	// Superseded pages remain directly readable, but their lexical and semantic
+	// candidates must disappear immediately from all current-state searches.
+	s.dropSemanticVector(oldPath)
+	s.cacheSupersededPageStale(page)
+	return nil
 }
 
 // supersedePrecondition refuses the supersession relationships that are never
@@ -121,6 +133,9 @@ func (s *Store) MergePage(targetPath, sourcePath, mergedBody string, _ MergeOpti
 	// "merge" then deleted the page it had just written (self-merge data loss).
 	targetPath = normalizePagePath(targetPath)
 	sourcePath = normalizePagePath(sourcePath)
+	if err := rejectFactProjectionMutation("merge", targetPath, sourcePath); err != nil {
+		return MergeResult{}, err
+	}
 	if targetPath == sourcePath {
 		return MergeResult{}, fmt.Errorf("wiki: cannot merge a page into itself")
 	}

@@ -148,6 +148,10 @@ export interface WikiPage {
   tags?: string[];
   snippet?: string; // present on memory.search hits
   score?: number;
+  resultKind?: string; // "page" | "fact" for search hits
+  readOnly?: boolean; // fact-plane evidence cannot be mutated as a wiki page
+  factId?: string;
+  subjectId?: string;
   body?: string; // present on get_page
 }
 
@@ -190,6 +194,10 @@ export interface SearchHit {
   summary?: string;
   category?: string;
   snippet?: string;
+  resultKind?: string;
+  readOnly?: boolean;
+  factId?: string;
+  subjectId?: string;
 }
 
 // Notebook (노트북) — deal collections with cited source materials; opening one

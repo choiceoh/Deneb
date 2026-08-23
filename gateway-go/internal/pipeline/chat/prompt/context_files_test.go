@@ -258,3 +258,21 @@ func TestSessionSnapshotPreservesFrozenContentUntilCleared(t *testing.T) {
 		t.Fatalf("got %q, want fresh fact-v2 after clear", files[0].Content)
 	}
 }
+
+func TestClearAllContextSnapshotsInvalidatesEverySession(t *testing.T) {
+	Cache.Reset()
+	t.Cleanup(Cache.Reset)
+	Cache.SetSessionSnapshot("client:main", []ContextFile{{Path: "MEMORY.md", Content: "old"}})
+	Cache.SetSessionSnapshot("cron:daily", []ContextFile{{Path: "MEMORY.md", Content: "old"}})
+	Cache.SetTopicSnapshot("client:main", TopicKnowledge{Key: "keep-topic", Content: "still current"})
+
+	ClearAllContextSnapshots()
+	for _, key := range []string{"client:main", "cron:daily"} {
+		if _, ok := Cache.SessionSnapshot(key); ok {
+			t.Fatalf("context snapshot %q survived global fact invalidation", key)
+		}
+	}
+	if topic, ok := Cache.TopicSnapshot("client:main"); !ok || topic.Key != "keep-topic" {
+		t.Fatalf("independent topic snapshot was cleared: %+v ok=%v", topic, ok)
+	}
+}

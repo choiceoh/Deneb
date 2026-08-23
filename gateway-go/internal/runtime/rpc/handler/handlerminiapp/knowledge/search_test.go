@@ -101,6 +101,36 @@ func TestSearchAll_ReturnsResultsFromWikiDiaryAndGmailDomains(t *testing.T) {
 	}
 }
 
+func TestSearchAllPreservesFactIdentityAsReadOnlyWithoutPageLookup(t *testing.T) {
+	store := &fakeMemoryStore{
+		searchFn: func(_ context.Context, _ string, _ int) ([]wiki.SearchResult, error) {
+			return []wiki.SearchResult{{
+				Path:      "@facts/fact-456.md",
+				Content:   "project:alpha owner is B",
+				Score:     0.93,
+				FactID:    "fact-456",
+				SubjectID: "project:alpha",
+			}}, nil
+		},
+		searchDiaryFn: func(context.Context, string, int) ([]wiki.DiaryHit, error) { return nil, nil },
+		readPageFn: func(path string) (*wiki.Page, error) {
+			t.Fatalf("ReadPage called for fact hit %q", path)
+			return nil, nil
+		},
+	}
+	resp := searchAll(searchDepsFor(store, nil))(authedCtx(), reqWith(t, "miniapp.search.all", map[string]any{"query": "alpha"}))
+
+	var got SearchAllResult
+	decode(t, resp, &got)
+	if len(got.Wiki) != 1 {
+		t.Fatalf("wiki = %+v", got.Wiki)
+	}
+	hit := got.Wiki[0]
+	if hit.ResultKind != "fact" || !hit.ReadOnly || hit.FactID != "fact-456" || hit.SubjectID != "project:alpha" {
+		t.Fatalf("fact identity = %+v", hit)
+	}
+}
+
 func TestSearchAll_GmailMissingDegrades(t *testing.T) {
 	store := &fakeMemoryStore{
 		searchFn:      func(_ context.Context, _ string, _ int) ([]wiki.SearchResult, error) { return nil, nil },

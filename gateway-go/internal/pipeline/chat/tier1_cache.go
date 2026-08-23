@@ -22,19 +22,25 @@ package chat
 import "sync"
 
 var tier1SnapshotStore = struct {
-	mu    sync.RWMutex
-	store map[string]string // sessionKey → frozen tier-1 injection
+	mu         sync.RWMutex
+	store      map[string]string // sessionKey → frozen tier-1 injection
+	generation uint64
 }{store: make(map[string]string)}
 
 // cachedTier1Wiki returns the frozen tier-1 snapshot for the session.
 func cachedTier1Wiki(sessionKey string) (string, bool) {
+	value, ok, _ := cachedTier1WikiWithGeneration(sessionKey)
+	return value, ok
+}
+
+func cachedTier1WikiWithGeneration(sessionKey string) (string, bool, uint64) {
 	if sessionKey == "" {
-		return "", false
+		return "", false, 0
 	}
 	tier1SnapshotStore.mu.RLock()
 	defer tier1SnapshotStore.mu.RUnlock()
 	v, ok := tier1SnapshotStore.store[sessionKey]
-	return v, ok
+	return v, ok, tier1SnapshotStore.generation
 }
 
 // storeTier1Wiki records the session's tier-1 snapshot. First-write-wins;
@@ -51,6 +57,22 @@ func storeTier1Wiki(sessionKey, value string) {
 	tier1SnapshotStore.store[sessionKey] = value
 }
 
+func storeTier1WikiIfGeneration(sessionKey, value string, generation uint64) bool {
+	if sessionKey == "" || value == "" {
+		return false
+	}
+	tier1SnapshotStore.mu.Lock()
+	defer tier1SnapshotStore.mu.Unlock()
+	if generation != tier1SnapshotStore.generation {
+		return false
+	}
+	if _, ok := tier1SnapshotStore.store[sessionKey]; ok {
+		return false
+	}
+	tier1SnapshotStore.store[sessionKey] = value
+	return true
+}
+
 // clearTier1Wiki drops the session's snapshot. Called by /reset alongside
 // recall.ClearSession; safe for sessions that never stored one.
 func clearTier1Wiki(sessionKey string) {
@@ -60,4 +82,11 @@ func clearTier1Wiki(sessionKey string) {
 	tier1SnapshotStore.mu.Lock()
 	defer tier1SnapshotStore.mu.Unlock()
 	delete(tier1SnapshotStore.store, sessionKey)
+}
+
+func clearAllTier1Wiki() {
+	tier1SnapshotStore.mu.Lock()
+	defer tier1SnapshotStore.mu.Unlock()
+	tier1SnapshotStore.generation++
+	tier1SnapshotStore.store = make(map[string]string)
 }

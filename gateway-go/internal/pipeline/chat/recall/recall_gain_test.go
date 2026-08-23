@@ -342,11 +342,9 @@ func markerFlagsStale(out, stale, marker string) bool {
 // The wiki ADDS an explicit supersede marker that flags the stale value and
 // surfaces the corrected current one — a disambiguation signal diary-only lacks.
 //
-// What it does NOT claim: that curation scrubs the raw diary. The old diary entry
-// can still surface unmarked in BOTH modes; curation adds a signal to the context,
-// it does not rewrite history. So the guard asserts the wiki flags the stale value
-// and surfaces the new one, and that it never makes the unmarked-row count worse —
-// not that the stale mention disappears.
+// The raw diary remains immutable, but when a superseded wiki page is available
+// its retired body becomes a per-turn deny phrase. The curated path must therefore
+// surface the replacement while exposing the old value zero times.
 func TestRecallStaleBeliefGuardFlagsStaleValueWithMarker(t *testing.T) {
 	_, queries := recallGainCorpus()
 	var stale gainQuery
@@ -377,11 +375,8 @@ func TestRecallStaleBeliefGuardFlagsStaleValueWithMarker(t *testing.T) {
 	if rawSignal {
 		t.Errorf("diary-only unexpectedly carried a %q signal (corpus drift?)", supersedeMarker)
 	}
-	// The wiki's value: it flags the stale value and surfaces the corrected one.
-	// The wiki's value: surface the corrected fact, and either mark the stale
-	// wiki row OR hard-filter it (M4). Diary may still carry an unmarked stale
-	// line — curation must not make unmarked stale worse than diary-only.
-	// M4 hard-filters superseded wiki pages (path absent). Marker is the soft path.
+	// The wiki's value: surface the corrected fact and hard-filter both the
+	// superseded page and any raw evidence row that repeats its retired body.
 	wikiOmitsSupersededPage := !strings.Contains(wikiOut, "거래/acme-old.md")
 	if !wikiMarksOld && !wikiOmitsSupersededPage {
 		t.Errorf("wiki path neither flagged stale %q nor omitted superseded page 거래/acme-old.md", stale.staleOld)
@@ -389,10 +384,8 @@ func TestRecallStaleBeliefGuardFlagsStaleValueWithMarker(t *testing.T) {
 	if !wikiSurfacesNew {
 		t.Errorf("wiki path failed to surface the revised value %q", stale.wantAll[0])
 	}
-	// Honest limitation: curation adds a signal, it does not scrub the raw diary,
-	// so an unmarked stale row may persist — but the wiki must never make it worse.
-	if wikiUnmarked > rawUnmarked {
-		t.Errorf("wiki path increased unmarked stale rows (%d > %d): curation regressed the raw baseline", wikiUnmarked, rawUnmarked)
+	if wikiUnmarked != 0 || strings.Contains(wikiOut, stale.staleOld) {
+		t.Errorf("curated recall exposed superseded value %q (%d unmarked rows)", stale.staleOld, wikiUnmarked)
 	}
 }
 

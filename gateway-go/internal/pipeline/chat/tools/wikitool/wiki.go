@@ -982,6 +982,7 @@ func wikiStatusWithDoctor(ctx context.Context, store *wiki.Store) string {
 	sb.WriteString("\n\n## 검색 Doctor\n\n")
 	fmt.Fprintf(&sb, "- 전체 상태: %t\n", doctor.Healthy)
 	fmt.Fprintf(&sb, "- 어휘 인덱스: %d 문서\n", doctor.LexicalDocuments)
+	fmt.Fprintf(&sb, "- 팩트 파생 뷰: degraded=%t, revision=%d\n", doctor.FactProjection.Degraded, doctor.FactProjection.Revision)
 	fmt.Fprintf(&sb, "- 벡터 캐시: %d/%d (pending %d, stale %d)\n", doctor.Semantic.Indexed, doctor.Semantic.Expected, doctor.Semantic.Pending, doctor.Semantic.Stale)
 	if doctor.SemanticProbe.Attempted {
 		fmt.Fprintf(&sb, "- 임베딩 실측: healthy=%t, %dms, %d차원\n", doctor.SemanticProbe.Healthy, doctor.SemanticProbe.LatencyMS, doctor.SemanticProbe.Dimensions)

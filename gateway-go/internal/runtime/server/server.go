@@ -475,7 +475,12 @@ func New(addr string, opts ...Option) (*Server, error) {
 	if err := s.registerEarlyMethods(hub, denebDir); err != nil {
 		return nil, fmt.Errorf("register early methods: %w", err)
 	}
-	s.registerSessionRPCMethods() // chat pipeline init + handler creation
+	if err := s.registerSessionRPCMethods(); err != nil {
+		if s.lifecycleCancel != nil {
+			s.lifecycleCancel()
+		}
+		return nil, fmt.Errorf("register session RPC methods: %w", err)
+	}
 	if s.localAIHub != nil {
 		pilot.SetLocalAIHub(s.localAIHub)
 	}

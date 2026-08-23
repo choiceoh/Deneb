@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -9,8 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 )
 
-// clearSessionStores drops a key from every live snapshot store so a test can
-// simulate the empty-memory state of a freshly restarted process.
+// clearSessionStores drops a key from every live snapshot store to simulate a fresh process.
 func clearSessionStores(key string) {
 	clearTier1Wiki(key)
 	prompt.Cache.ClearSession(key)
@@ -183,6 +183,96 @@ func TestPromptSnapshot_GateRejectsNonRestorable(t *testing.T) {
 		if isRestorablePromptSnapshotSession(k) {
 			t.Errorf("%q should NOT be persistable", k)
 		}
+	}
+}
+
+func TestPromptSnapshot_FactInvalidationPersistsAndFencesInflightRefill(t *testing.T) {
+	const key = "client:main:fact-invalidation"
+	dir := t.TempDir()
+	p := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	topic := sampleTopic()
+	oldGeneration := p.currentGeneration()
+	p.recordAtGeneration(key, "old-tier1", sampleCtxFiles(), topic, oldGeneration)
+
+	p.clearFactDerived()
+	p.mu.Lock()
+	cleared := p.store[key]
+	p.mu.Unlock()
+	if cleared.Tier1Wiki != "" || len(cleared.ContextFiles) != 0 {
+		t.Fatalf("fact-derived fields survived clear: %+v", cleared)
+	}
+	if cleared.TopicKnowledge == nil || cleared.TopicKnowledge.Key != topic.Key {
+		t.Fatalf("independent topic was cleared: %+v", cleared.TopicKnowledge)
+	}
+
+	p.recordAtGeneration(key, "stale-tier1", sampleCtxFiles(), nil, oldGeneration)
+	p.mu.Lock()
+	staleRefill := p.store[key]
+	p.mu.Unlock()
+	if staleRefill.Tier1Wiki != "" || len(staleRefill.ContextFiles) != 0 {
+		t.Fatalf("pre-invalidation turn repopulated persisted facts: %+v", staleRefill)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, promptSnapshotFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted map[string]persistedPromptSnapshot
+	if err := json.Unmarshal(raw, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if snap := persisted[key]; snap.Tier1Wiki != "" || len(snap.ContextFiles) != 0 || snap.TopicKnowledge == nil {
+		t.Fatalf("on-disk invalidation = %+v", snap)
+	}
+
+	newGeneration := p.currentGeneration()
+	p.recordAtGeneration(key, "fresh-tier1", []prompt.ContextFile{{Path: "MEMORY.md", Content: "fresh"}}, nil, newGeneration)
+	p.mu.Lock()
+	fresh := p.store[key]
+	p.mu.Unlock()
+	if fresh.Tier1Wiki != "fresh-tier1" || len(fresh.ContextFiles) != 1 || fresh.ContextFiles[0].Content != "fresh" {
+		t.Fatalf("current generation did not refill persisted facts: %+v", fresh)
+	}
+}
+
+func TestPromptSnapshot_FactInvalidationBeforeAsyncLoadSanitizesDisk(t *testing.T) {
+	const key = "client:main:fact-invalidation-before-load"
+	dir := t.TempDir()
+	t.Cleanup(func() { clearSessionStores(key) })
+	topic := sampleTopic()
+
+	writer := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	writer.record(key, "stale-tier1", sampleCtxFiles(), topic)
+	clearSessionStores(key)
+
+	// Simulate a fact mutation after the server is ready but before its async
+	// session-restore goroutine calls load(). The in-memory mirror is empty in a
+	// fresh process, so the invalidation must be remembered and applied to disk.
+	reader := &promptSnapshotPersister{dir: dir, logger: discardLogger()}
+	reader.clearFactDerived()
+	if n := reader.load(func(string) bool { return true }); n != 1 {
+		t.Fatalf("load restored %d sessions, want topic-only survivor", n)
+	}
+	if got, ok := cachedTier1Wiki(key); ok || got != "" {
+		t.Fatalf("stale tier1 restored after clear-before-load: (%q, %v)", got, ok)
+	}
+	if got, ok := prompt.Cache.SessionSnapshot(key); ok || len(got) != 0 {
+		t.Fatalf("stale context files restored after clear-before-load: %#v", got)
+	}
+	if got, ok := prompt.Cache.TopicSnapshot(key); !ok || got.Key != topic.Key {
+		t.Fatalf("independent topic was not restored: %#v (ok=%v)", got, ok)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, promptSnapshotFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted map[string]persistedPromptSnapshot
+	if err := json.Unmarshal(raw, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if snap := persisted[key]; snap.Tier1Wiki != "" || len(snap.ContextFiles) != 0 || snap.TopicKnowledge == nil {
+		t.Fatalf("startup mirror was not sanitized: %+v", snap)
 	}
 }
 

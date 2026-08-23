@@ -169,6 +169,9 @@ export function CommandPalette() {
 
     // Wiki quick-open hits (async, above the generic handoffs).
     for (const [i, hit] of wikiHits.entries()) {
+      // Fact-plane results use synthetic paths and need a read-only renderer;
+      // the palette only supports page quick-open, so leave facts to 검색/위키.
+      if (hit.resultKind === "fact" || hit.readOnly) continue;
       const path = hit.path ?? hit.id;
       if (!path) continue;
       push(

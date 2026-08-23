@@ -35,6 +35,12 @@ func TestRecallSearchQueriesIgnoresCueNoiseWords(t *testing.T) {
 	}
 }
 
+func TestRecallSearchQueriesTreatsConjugatedMemoryCueAsTopicless(t *testing.T) {
+	if queries := searchQueries("그거 기억나?"); len(queries) != 0 {
+		t.Fatalf("conjugated memory cue must not disable recent-diary fallback, got %v", queries)
+	}
+}
+
 func TestRecallSearchQueriesNormalizesKoreanEndings(t *testing.T) {
 	queries := searchQueries("전에 Deneb 회상 개선해줘")
 	joined := strings.Join(queries, " ")

@@ -23,14 +23,15 @@ type RerankerStatus struct {
 }
 
 type SearchDoctorReport struct {
-	Healthy             bool                `json:"healthy"`
-	LexicalDocuments    int                 `json:"lexicalDocuments"`
-	Semantic            SemanticIndexStatus `json:"semantic"`
-	SemanticProbe       SearchProbeStatus   `json:"semanticProbe"`
-	Reranker            RerankerStatus      `json:"reranker"`
-	Chunking            string              `json:"chunking"`
-	SupportedStructures []string            `json:"supportedStructures"`
-	Recommendations     []string            `json:"recommendations,omitempty"`
+	Healthy             bool                 `json:"healthy"`
+	LexicalDocuments    int                  `json:"lexicalDocuments"`
+	FactProjection      FactProjectionStatus `json:"factProjection"`
+	Semantic            SemanticIndexStatus  `json:"semantic"`
+	SemanticProbe       SearchProbeStatus    `json:"semanticProbe"`
+	Reranker            RerankerStatus       `json:"reranker"`
+	Chunking            string               `json:"chunking"`
+	SupportedStructures []string             `json:"supportedStructures"`
+	Recommendations     []string             `json:"recommendations,omitempty"`
 }
 
 // SearchDoctor verifies the live model contracts in addition to inspecting
@@ -40,6 +41,7 @@ func (s *Store) SearchDoctor(ctx context.Context) SearchDoctorReport {
 		return SearchDoctorReport{Recommendations: []string{"configure_wiki_store"}}
 	}
 	report := SearchDoctorReport{
+		FactProjection:      s.FactProjectionStatus(),
 		Semantic:            s.SemanticStatus(),
 		Chunking:            semanticPreprocessingVersion,
 		SupportedStructures: []string{"markdown", "go", "kotlin", "paragraph-fallback"},
@@ -91,7 +93,11 @@ func (s *Store) SearchDoctor(ctx context.Context) SearchDoctorReport {
 	if report.Reranker.Enabled && !report.Reranker.Healthy {
 		report.Recommendations = append(report.Recommendations, "check_reranker_service")
 	}
+	if report.FactProjection.Degraded {
+		report.Recommendations = append(report.Recommendations, "repair_fact_projection")
+	}
 	report.Healthy = report.LexicalDocuments > 0 &&
+		!report.FactProjection.Degraded &&
 		(!report.Semantic.Enabled || (report.Semantic.Healthy && report.SemanticProbe.Healthy)) &&
 		(!report.Reranker.Enabled || report.Reranker.Healthy)
 	return report

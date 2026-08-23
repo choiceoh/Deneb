@@ -77,6 +77,25 @@ describe("CommandPalette", () => {
     expect(value.openWiki).toHaveBeenCalledWith("프로젝트/데네브.md");
   });
 
+  it("does not quick-open synthetic fact paths as wiki pages", async () => {
+    mocks.callRpc.mockResolvedValue({
+      results: [
+        {
+          path: "@facts/fact-123.md",
+          title: "Synthetic fact",
+          resultKind: "fact",
+          readOnly: true,
+          factId: "fact-123",
+        },
+      ],
+    });
+    const value = renderPalette();
+    await userEvent.type(screen.getByRole("textbox", { name: "명령 입력" }), "alpha");
+    await waitFor(() => expect(mocks.callRpc).toHaveBeenCalled());
+    expect(screen.queryByText("Synthetic fact", { selector: ".cmdk-label" })).not.toBeInTheDocument();
+    expect(value.openWiki).not.toHaveBeenCalled();
+  });
+
   it("hands a query off to 통합 검색 and to Deneb", async () => {
     const value = renderPalette();
     await userEvent.type(screen.getByRole("textbox", { name: "명령 입력" }), "면허 대여");

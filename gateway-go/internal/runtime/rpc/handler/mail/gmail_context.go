@@ -325,6 +325,11 @@ func senderWikiHits(ctx context.Context, storeFn func() (MemorySearcher, error),
 	}
 	rows = make([]senderWikiHitOut, 0, len(hits))
 	for _, h := range hits {
+		// Fact-plane hits carry synthetic paths and are not editable wiki pages.
+		// This page-only context card must never expose them as openable rows.
+		if h.FactID != "" {
+			continue
+		}
 		row := senderWikiHitOut{Path: h.Path}
 		if page, perr := store.ReadPage(h.Path); perr == nil && page != nil {
 			row.Title = page.Meta.Title

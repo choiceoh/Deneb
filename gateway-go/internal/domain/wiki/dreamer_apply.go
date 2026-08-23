@@ -742,6 +742,14 @@ func (wd *WikiDreamer) prepareDreamUpdate(u wikiUpdate) (wikiUpdate, bool) {
 			"path", u.Path, "title", u.Title)
 		return u, false
 	}
+	// This page is a projection of the append-only fact journal. Letting model
+	// synthesis append or overwrite it would create a second, unaudited writer
+	// and could reintroduce a superseded value until the next projection repair.
+	if u.Path == factProfilePagePath {
+		wd.logger.Warn("wiki-dream: skipped current-facts page (fact-plane maintained)",
+			"path", u.Path, "title", u.Title)
+		return u, false
+	}
 	return u, true
 }
 

@@ -76,12 +76,16 @@ type SearchDeps struct {
 //
 //deneb:wire
 type SearchWikiHit struct {
-	Path     string  `json:"path"`
-	Title    string  `json:"title,omitempty"`
-	Summary  string  `json:"summary,omitempty"`
-	Category string  `json:"category,omitempty"`
-	Snippet  string  `json:"snippet"`
-	Score    float64 `json:"score"`
+	Path       string  `json:"path"`
+	Title      string  `json:"title,omitempty"`
+	Summary    string  `json:"summary,omitempty"`
+	Category   string  `json:"category,omitempty"`
+	Snippet    string  `json:"snippet"`
+	Score      float64 `json:"score"`
+	ResultKind string  `json:"resultKind"`
+	ReadOnly   bool    `json:"readOnly"`
+	FactID     string  `json:"factId,omitempty"`
+	SubjectID  string  `json:"subjectId,omitempty"`
 }
 
 // SearchDiaryHit is one diary hit row. Mirrors the recent-diary entry
@@ -358,9 +362,18 @@ func runWikiSearch(ctx context.Context, deps SearchDeps, query string, limit int
 	out := make([]SearchWikiHit, 0, len(hits))
 	for _, h := range hits {
 		row := SearchWikiHit{
-			Path:    h.Path,
-			Snippet: truncateRunes(h.Content, maxMemorySnippetChars),
-			Score:   h.Score,
+			Path:       h.Path,
+			Snippet:    truncateRunes(h.Content, maxMemorySnippetChars),
+			Score:      h.Score,
+			ResultKind: "page",
+			FactID:     h.FactID,
+			SubjectID:  h.SubjectID,
+		}
+		if h.FactID != "" {
+			row.ResultKind = "fact"
+			row.ReadOnly = true
+			out = append(out, row)
+			continue
 		}
 		if page, perr := store.ReadPage(h.Path); perr == nil && page != nil {
 			row.Title = page.Meta.Title

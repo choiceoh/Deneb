@@ -6,9 +6,11 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
@@ -38,9 +40,18 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 )
 
+// wikiMemoryInitMu serializes enabled-wiki construction within one process.
+// Tests and embedding callers can construct more than one Server against the
+// same configured state path; fact import/projection use fixed atomic-temp names,
+// so overlapping cutovers would otherwise manufacture a startup failure that no
+// single production gateway can hit.
+var wikiMemoryInitMu sync.Mutex
+
 // initMemorySubsystem initializes model registry, session memory, and wiki.
-// All results are set on chatCfg and s.
-func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **modelrole.Registry) {
+// All results are set on chatCfg and s. An enabled wiki is part of the chat
+// correctness boundary: if its store or fact-plane cutover cannot initialize,
+// startup must stop instead of serving a hybrid legacy/canonical memory state.
+func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **modelrole.Registry) error {
 	// Model role registry.
 	chatCfg.DefaultModel = configresolve.DefaultModel(s.logger)
 	chatCfg.SubagentDefaultModel = configresolve.SubagentDefaultModel(s.logger)
@@ -74,10 +85,141 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 			"interleaved", interleaved)
 	}
 
+	// Wiki knowledge base.
+	if wikiCfg := wiki.ConfigFromEnv(); wikiCfg.Enabled {
+		wikiMemoryInitMu.Lock()
+		defer wikiMemoryInitMu.Unlock()
+		wikiStore, err := wiki.NewStore(wikiCfg.Dir, wikiCfg.DiaryDir)
+		if err != nil {
+			return fmt.Errorf("initialize enabled wiki store: %w", err)
+		}
+		closeOnCutoverFailure := func(cutoverErr error) error {
+			if closeErr := wikiStore.Close(); closeErr != nil {
+				s.logger.Warn("wiki close after fact-plane cutover failure", "error", closeErr)
+			}
+			return cutoverErr
+		}
+		// One-time fact-plane cutover: import fact-sized legacy context
+		// before MEMORY.md/USER.md become generated compatibility views.
+		// Import is source+value idempotent, so a restart after a partial
+		// migration resumes without duplicating committed facts.
+		workspaceDir := configresolve.WorkspaceDir()
+		var cutoverErr error
+		if strings.TrimSpace(workspaceDir) == "" {
+			cutoverErr = errors.New("workspace dir is empty")
+		}
+		imported := 0
+		if cutoverErr == nil {
+			imported, cutoverErr = wikiStore.ImportLegacyFactFiles(workspaceDir)
+			if cutoverErr != nil {
+				cutoverErr = fmt.Errorf("import legacy facts: %w", cutoverErr)
+			}
+		}
+		if cutoverErr == nil {
+			cutoverErr = wikiStore.SetFactProjectionDir(workspaceDir)
+			if cutoverErr != nil {
+				cutoverErr = fmt.Errorf("configure fact projections: %w", cutoverErr)
+			}
+		}
+		if cutoverErr != nil {
+			// Never serve a hybrid state where the journal advanced but frozen
+			// MEMORY/USER still carry the retired value. Keep the legacy context
+			// files untouched and disable wiki for this process; the idempotent
+			// migration resumes on the next clean startup.
+			return closeOnCutoverFailure(fmt.Errorf("initialize enabled wiki fact plane for workspace %q: %w", workspaceDir, cutoverErr))
+		}
+
+		s.wikiStore = wikiStore
+		chatCfg.Memory.Wiki = wikiStore
+		s.logger.Info("wiki knowledge base and fact plane enabled", "dir", wikiCfg.Dir,
+			"revision", wikiStore.LatestFactRevision(), "legacyImported", imported)
+
+		// Mirror meaningful wiki writes/deletes onto the native-sync stream so
+		// clients drop their page/category snapshots promptly instead of waiting
+		// out their TTL (the calendar observer's pattern). The store is the
+		// single choke point every writer funnels through: agent tools, miniapp
+		// RPCs, the dreamer. Append failure is Warn, not Error — clients heal
+		// via TTL revalidation, so no user-observable loss.
+		if s.nativeSyncStore != nil {
+			wikiStore.SetChangeObserver(s.ShutdownCtx(), func(relPath string) {
+				if _, err := s.nativeSyncStore.Append(nativesync.WikiChanged(relPath)); err != nil {
+					s.logger.Warn("native sync: wiki change append failed", "path", relPath, "error", err)
+				}
+			})
+		}
+
+		// Vocabulary-gap query expander (tiny role). Dormant unless
+		// DENEB_WIKI_QUERY_EXPANSION=backfill — the store only invokes it
+		// when that gate is on AND a query under-fills its result limit
+		// (domain/wiki/query_expansion.go), so this wiring is free at rest.
+		if tinyClient, tinyModel := (*regPtr).Client(modelrole.RoleTiny), (*regPtr).Model(modelrole.RoleTiny); tinyClient != nil && tinyModel != "" {
+			// Registry-aware thinking-off (dreamerLLMShape's three-way,
+			// scoped to the tiny role): a dual-mode reasoning tiny would
+			// otherwise spend the whole expansion budget on thinking.
+			var extraBody map[string]any
+			tinyCfg := (*regPtr).Config(modelrole.RoleTiny)
+			if directive := (*regPtr).ThinkingOffDirectiveFor(tinyCfg.ProviderID, tinyCfg.Model); directive != nil {
+				extraBody = map[string]any{
+					"chat_template_kwargs": map[string]any{directive.TemplateKwarg(): false},
+				}
+			}
+			wikiStore.SetQueryExpander(makeWikiQueryExpander(tinyClient, tinyModel, extraBody, s.logger))
+		}
+
+		// Wiki dreamer. This bounded JSON-synthesis lane favors the tiny
+		// model: on srv4 that is local dsv4-nothink, avoiding a dependency on
+		// the cloud lightweight provider for autonomous memory maintenance.
+		dreamClient := (*regPtr).Client(wikiDreamerModelRole)
+		dreamModel := (*regPtr).Model(wikiDreamerModelRole)
+		if dreamClient != nil && dreamModel != "" {
+			s.wikiDreamer = wiki.NewWikiDreamer(wikiStore, dreamClient, dreamModel, wikiCfg, s.logger)
+			// Shape the dreamer's raw LLM calls for the selected tiny model:
+			// thinking off on dual-mode reasoning models (deepseek-v4's
+			// chain-of-thought consumed the whole 4096-token synthesis
+			// budget — 2026-07-02/03 "empty content (finish_reason=length)"
+			// dream failures), reasoning headroom when no off-switch exists.
+			extra, synthMax := dreamerLLMShape(*regPtr)
+			s.wikiDreamer.SetLLMRequestShape(extra, synthMax)
+			// Let dream cycles consume + curate the auto-recorded
+			// workspace MEMORY.md (distill to wiki, keep a bounded buffer).
+			s.wikiDreamer.SetWorkspaceDir(configresolve.WorkspaceDir())
+			// RHI self-comparison + synthesis-rules revision (arXiv
+			// 2607.15524): production only — the revised
+			// wiki-dream-rules.md lives in the shared workspace a
+			// dev/live-test gateway must not mutate. Fail-closed.
+			if home, err := os.UserHomeDir(); err == nil {
+				if _, ok := s.productionStateDir(home); ok && os.Getenv("DENEB_DREAM_RULES_EVOLVE") != "0" {
+					s.wikiDreamer.SetRulesEvolution(true)
+				}
+			}
+			// Open loops are no longer auto-recorded as to-dos (operator approval
+			// first) — no open-loop sink is wired (the dreamer skips it when nil).
+			// Per-project latest-progress digests are written directly into each
+			// project 대표페이지's "## 현재 상태" section by the dream cycle itself
+			// (no sink — the dreamer owns the wiki store; see project_digest.go),
+			// and kept fresh between cycles by the mail-analysis sink.
+			// Mention-driven 인물 seeding from the contacts mirror.
+			if cs := s.contactsStore; cs != nil {
+				s.wikiDreamer.SetPersonDirectory(func() []wiki.PersonSeed {
+					all := cs.All()
+					seeds := make([]wiki.PersonSeed, 0, len(all))
+					for _, c := range all {
+						seeds = append(seeds, wiki.PersonSeed{
+							Name: c.Name, Org: c.Org, Phones: c.Phones, Emails: c.Emails,
+						})
+					}
+					return seeds
+				})
+			}
+			s.logger.Info("wiki-dream: enabled")
+		}
+	}
+
 	// Local mail store: file-backed mirror of the on-box IMAP archive so the
 	// mail_archive tool answers reads from memory (no per-call IMAP round-trip +
-	// re-parse + re-index). LMTP intake writes new mail here; cmd/mail-backfill
-	// seeds existing mail. Reads IMAP-fall back while the store is empty/missing.
+	// re-parse + re-index). Initialize it only after the fail-closed wiki cutover:
+	// its detached auto-backfill must not survive a New() call that returns an
+	// initialization error.
 	mailStoreDir := filepath.Join(config.ResolveStateDir(), "mailstore")
 	if ms, err := mailstore.New(mailStoreDir); err != nil {
 		s.logger.Warn("mailstore unavailable", "error", err)
@@ -90,97 +232,7 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 		s.maybeAutoBackfillMailStore(mailStoreDir)
 	}
 
-	// Wiki knowledge base.
-	if wikiCfg := wiki.ConfigFromEnv(); wikiCfg.Enabled {
-		wikiStore, err := wiki.NewStore(wikiCfg.Dir, wikiCfg.DiaryDir)
-		if err != nil {
-			s.logger.Warn("wiki store unavailable", "error", err)
-		} else {
-			s.wikiStore = wikiStore
-			chatCfg.Memory.Wiki = wikiStore
-			s.logger.Info("wiki knowledge base enabled", "dir", wikiCfg.Dir)
-
-			// Mirror meaningful wiki writes/deletes onto the native-sync stream so
-			// clients drop their page/category snapshots promptly instead of waiting
-			// out their TTL (the calendar observer's pattern). The store is the
-			// single choke point every writer funnels through: agent tools, miniapp
-			// RPCs, the dreamer. Append failure is Warn, not Error — clients heal
-			// via TTL revalidation, so no user-observable loss.
-			if s.nativeSyncStore != nil {
-				wikiStore.SetChangeObserver(s.ShutdownCtx(), func(relPath string) {
-					if _, err := s.nativeSyncStore.Append(nativesync.WikiChanged(relPath)); err != nil {
-						s.logger.Warn("native sync: wiki change append failed", "path", relPath, "error", err)
-					}
-				})
-			}
-
-			// Vocabulary-gap query expander (tiny role). Dormant unless
-			// DENEB_WIKI_QUERY_EXPANSION=backfill — the store only invokes it
-			// when that gate is on AND a query under-fills its result limit
-			// (domain/wiki/query_expansion.go), so this wiring is free at rest.
-			if tinyClient, tinyModel := (*regPtr).Client(modelrole.RoleTiny), (*regPtr).Model(modelrole.RoleTiny); tinyClient != nil && tinyModel != "" {
-				// Registry-aware thinking-off (dreamerLLMShape's three-way,
-				// scoped to the tiny role): a dual-mode reasoning tiny would
-				// otherwise spend the whole expansion budget on thinking.
-				var extraBody map[string]any
-				tinyCfg := (*regPtr).Config(modelrole.RoleTiny)
-				if directive := (*regPtr).ThinkingOffDirectiveFor(tinyCfg.ProviderID, tinyCfg.Model); directive != nil {
-					extraBody = map[string]any{
-						"chat_template_kwargs": map[string]any{directive.TemplateKwarg(): false},
-					}
-				}
-				wikiStore.SetQueryExpander(makeWikiQueryExpander(tinyClient, tinyModel, extraBody, s.logger))
-			}
-
-			// Wiki dreamer. This bounded JSON-synthesis lane favors the tiny
-			// model: on srv4 that is local dsv4-nothink, avoiding a dependency on
-			// the cloud lightweight provider for autonomous memory maintenance.
-			dreamClient := (*regPtr).Client(wikiDreamerModelRole)
-			dreamModel := (*regPtr).Model(wikiDreamerModelRole)
-			if dreamClient != nil && dreamModel != "" {
-				s.wikiDreamer = wiki.NewWikiDreamer(wikiStore, dreamClient, dreamModel, wikiCfg, s.logger)
-				// Shape the dreamer's raw LLM calls for the selected tiny model:
-				// thinking off on dual-mode reasoning models (deepseek-v4's
-				// chain-of-thought consumed the whole 4096-token synthesis
-				// budget — 2026-07-02/03 "empty content (finish_reason=length)"
-				// dream failures), reasoning headroom when no off-switch exists.
-				extra, synthMax := dreamerLLMShape(*regPtr)
-				s.wikiDreamer.SetLLMRequestShape(extra, synthMax)
-				// Let dream cycles consume + curate the auto-recorded
-				// workspace MEMORY.md (distill to wiki, keep a bounded buffer).
-				s.wikiDreamer.SetWorkspaceDir(configresolve.WorkspaceDir())
-				// RHI self-comparison + synthesis-rules revision (arXiv
-				// 2607.15524): production only — the revised
-				// wiki-dream-rules.md lives in the shared workspace a
-				// dev/live-test gateway must not mutate. Fail-closed.
-				if home, err := os.UserHomeDir(); err == nil {
-					if _, ok := s.productionStateDir(home); ok && os.Getenv("DENEB_DREAM_RULES_EVOLVE") != "0" {
-						s.wikiDreamer.SetRulesEvolution(true)
-					}
-				}
-				// Open loops are no longer auto-recorded as to-dos (operator approval
-				// first) — no open-loop sink is wired (the dreamer skips it when nil).
-				// Per-project latest-progress digests are written directly into each
-				// project 대표페이지's "## 현재 상태" section by the dream cycle itself
-				// (no sink — the dreamer owns the wiki store; see project_digest.go),
-				// and kept fresh between cycles by the mail-analysis sink.
-				// Mention-driven 인물 seeding from the contacts mirror.
-				if cs := s.contactsStore; cs != nil {
-					s.wikiDreamer.SetPersonDirectory(func() []wiki.PersonSeed {
-						all := cs.All()
-						seeds := make([]wiki.PersonSeed, 0, len(all))
-						for _, c := range all {
-							seeds = append(seeds, wiki.PersonSeed{
-								Name: c.Name, Org: c.Org, Phones: c.Phones, Emails: c.Emails,
-							})
-						}
-						return seeds
-					})
-				}
-				s.logger.Info("wiki-dream: enabled")
-			}
-		}
-	}
+	return nil
 }
 
 // initToolsAndDeps builds CoreToolDeps, registers core/plugin tools,
@@ -423,6 +475,9 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		knowledge.NewWikiAdapter(s.wikiStore),
 		filesAdapter,
 	)
+	knowledgeRouter.SetFactMutationObserver(func(knowledge.FactMutationResult) {
+		chat.ClearFactDerivedCaches()
+	})
 	toolwire.RegisterKnowledgeTool(chatCfg.Tools, knowledgeRouter)
 
 	// Recall preflight files source: surface relevant uploaded files as recall

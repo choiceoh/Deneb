@@ -2854,6 +2854,30 @@ class MiniappWireNullCompatibilityTest {
             field = "score",
         ),
         nullContract(
+            name = "SearchWikiHit.resultKind",
+            serializer = SearchWikiHit.serializer(),
+            empty = SearchWikiHit(),
+            field = "resultKind",
+        ),
+        nullContract(
+            name = "SearchWikiHit.readOnly",
+            serializer = SearchWikiHit.serializer(),
+            empty = SearchWikiHit(),
+            field = "readOnly",
+        ),
+        nullContract(
+            name = "SearchWikiHit.factId",
+            serializer = SearchWikiHit.serializer(),
+            empty = SearchWikiHit(),
+            field = "factId",
+        ),
+        nullContract(
+            name = "SearchWikiHit.subjectId",
+            serializer = SearchWikiHit.serializer(),
+            empty = SearchWikiHit(),
+            field = "subjectId",
+        ),
+        nullContract(
             name = "SelfCorrectionCandidate.id",
             serializer = SelfCorrectionCandidate.serializer(),
             empty = SelfCorrectionCandidate(),

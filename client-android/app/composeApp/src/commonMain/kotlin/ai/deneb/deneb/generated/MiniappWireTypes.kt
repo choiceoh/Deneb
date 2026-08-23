@@ -838,6 +838,10 @@ data class SearchWikiHit(
     val category: String = "",
     val snippet: String = "",
     val score: Double = 0.0,
+    val resultKind: String = "",
+    val readOnly: Boolean = false,
+    val factId: String = "",
+    val subjectId: String = "",
 )
 
 @Immutable

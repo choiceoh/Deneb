@@ -8,6 +8,11 @@ import { WikiPane } from "./WikiPane";
 let writeParams: Record<string, unknown> | null;
 let createParams: Record<string, unknown> | null;
 let moveParams: Record<string, unknown> | null;
+let memorySearchResults: unknown[];
+let getPageCalls: number;
+let factPageBody: string;
+let getPageFails: boolean;
+let lastGetPagePath: string;
 
 // Nested wiki paths exercising the folder tree (project slots + a mail bucket).
 const treePages = [
@@ -21,6 +26,11 @@ beforeEach(() => {
   writeParams = null;
   createParams = null;
   moveParams = null;
+  memorySearchResults = fx.pages;
+  getPageCalls = 0;
+  factPageBody = "# Current fact\n\nproject:alpha owner is B (current)";
+  getPageFails = false;
+  lastGetPagePath = "";
   if (!globalThis.crypto?.randomUUID) {
     vi.stubGlobal("crypto", { randomUUID: () => "test-uuid" });
   }
@@ -33,6 +43,8 @@ beforeEach(() => {
       };
       const reply = (payload: unknown) =>
         ({ ok: true, json: async () => ({ ok: true, payload }) }) as unknown as Response;
+      const replyError = (code: string, message: string) =>
+        ({ ok: true, json: async () => ({ ok: false, error: { code, message } }) }) as unknown as Response;
       switch (method) {
         case "miniapp.memory.categories":
           return reply({ categories: fx.wikiCategories, totalPages: fx.pages.length });
@@ -47,8 +59,14 @@ beforeEach(() => {
         case "miniapp.memory.diary_recent":
           return reply({ entries: fx.diaryEntries });
         case "miniapp.memory.search":
-          return reply({ results: fx.pages });
+          return reply({ results: memorySearchResults });
         case "miniapp.memory.get_page":
+          getPageCalls += 1;
+          lastGetPagePath = String(params.path ?? "");
+          if (String(params.path).startsWith("@facts/")) {
+            if (getPageFails) return replyError("NOT_FOUND", "fact no longer current");
+            return reply({ path: params.path, title: "Current fact", body: factPageBody });
+          }
           return reply({ path: params.path, title: "Andromeda 설계 노트", body: "# 설계\n\n본문 내용입니다." });
         case "miniapp.memory.write_page":
           writeParams = params;
@@ -208,5 +226,56 @@ describe("WikiPane", () => {
     // Switch to 편집 → the textarea appears with the body.
     await userEvent.click(screen.getByRole("button", { name: "편집" }));
     expect(await screen.findByDisplayValue(/본문 내용입니다/)).toBeInTheDocument();
+  });
+
+  it("revalidates a fact search hit before opening it read-only and disables page mutations", async () => {
+    memorySearchResults = [
+      {
+        path: "@facts/fact-123.md",
+        snippet: "project:alpha owner is A (stale cache)",
+        resultKind: "fact",
+        readOnly: true,
+        factId: "fact-123",
+        subjectId: "project:alpha",
+      },
+    ];
+    renderWithProviders(<WikiPane />, { connected: true });
+
+    await userEvent.type(screen.getByPlaceholderText("위키 검색..."), "alpha{enter}");
+    await userEvent.click(await screen.findByRole("button", { name: /project:alpha/ }));
+
+    expect(await screen.findByRole("heading", { name: "@facts/fact-123.md" })).toBeInTheDocument();
+    expect(screen.getByText(/owner is B \(current\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/owner is A/)).not.toBeInTheDocument();
+    expect(screen.getByText("읽기 전용", { selector: ".wiki-save-state" })).toBeInTheDocument();
+    expect(getPageCalls).toBe(1);
+    expect(lastGetPagePath).toBe("@facts/fact-123.md");
+    for (const action of ["편집", "저장", "되돌리기", "이동", "병합", "삭제"]) {
+      expect(screen.getByRole("button", { name: action })).toBeDisabled();
+    }
+  });
+
+  it("does not open a superseded fact ref and asks for a fresh search", async () => {
+    memorySearchResults = [
+      {
+        path: "@facts/fact-old.md",
+        snippet: "project:alpha owner is A (stale cache)",
+        resultKind: "fact",
+        readOnly: true,
+        factId: "fact-old",
+        subjectId: "project:alpha",
+      },
+    ];
+    getPageFails = true;
+    renderWithProviders(<WikiPane />, { connected: true });
+
+    await userEvent.type(screen.getByPlaceholderText("위키 검색..."), "alpha{enter}");
+    await userEvent.click(await screen.findByRole("button", { name: /project:alpha/ }));
+
+    expect(await screen.findByText("사실이 변경되었습니다. 다시 검색하세요.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "@facts/fact-old.md" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/owner is A/)).not.toBeInTheDocument();
+    expect(getPageCalls).toBe(1);
+    expect(lastGetPagePath).toBe("@facts/fact-old.md");
   });
 });

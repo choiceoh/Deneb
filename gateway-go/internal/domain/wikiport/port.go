@@ -66,6 +66,16 @@ type (
 	MergeResult             = wiki.MergeResult
 	SnapshotResult          = wiki.SnapshotResult
 	PersonSeed              = wiki.PersonSeed
+	FactRevision            = wiki.FactRevision
+	FactKind                = wiki.FactKind
+	FactAuthority           = wiki.FactAuthority
+	FactStatus              = wiki.FactStatus
+	FactInput               = wiki.FactInput
+	FactTombstoneInput      = wiki.FactTombstoneInput
+	FactClaim               = wiki.FactClaim
+	FactWriteResult         = wiki.FactWriteResult
+	FactSnapshot            = wiki.FactSnapshot
+	FactProjectionStatus    = wiki.FactProjectionStatus
 )
 
 const (
@@ -82,6 +92,23 @@ const (
 	QueryKindLex                = wiki.QueryKindLex
 	QueryKindVec                = wiki.QueryKindVec
 	QueryKindHyDE               = wiki.QueryKindHyDE
+	FactKindGeneric             = wiki.FactKindGeneric
+	FactKindPreference          = wiki.FactKindPreference
+	FactKindIdentity            = wiki.FactKindIdentity
+	FactKindAmount              = wiki.FactKindAmount
+	FactKindDeadline            = wiki.FactKindDeadline
+	FactKindContract            = wiki.FactKindContract
+	FactKindSystemState         = wiki.FactKindSystemState
+	FactAuthorityDirectUser     = wiki.FactAuthorityDirectUser
+	FactAuthorityPrimaryDoc     = wiki.FactAuthorityPrimaryDoc
+	FactAuthorityRuntime        = wiki.FactAuthorityRuntime
+	FactAuthorityAgent          = wiki.FactAuthorityAgent
+	FactAuthorityInference      = wiki.FactAuthorityInference
+	FactAuthorityLegacyImport   = wiki.FactAuthorityLegacyImport
+	FactStatusCurrent           = wiki.FactStatusCurrent
+	FactStatusConflicted        = wiki.FactStatusConflicted
+	FactStatusSuperseded        = wiki.FactStatusSuperseded
+	FactStatusTombstoned        = wiki.FactStatusTombstoned
 )
 
 // NormalizeSiteStatus accepts 후보/계약/개설/준공 or "" (미분류).

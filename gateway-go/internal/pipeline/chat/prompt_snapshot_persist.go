@@ -81,10 +81,17 @@ type persistedPromptSnapshot struct {
 // mirror with the same first-write-wins gate the live stores use, and load()
 // populates both.
 type promptSnapshotPersister struct {
-	mu     sync.Mutex
-	dir    string // state dir; "" disables persistence entirely (no-op)
-	logger *slog.Logger
-	store  map[string]persistedPromptSnapshot // sessionKey → frozen inputs
+	mu         sync.Mutex
+	writeMu    sync.Mutex
+	dir        string // state dir; "" disables persistence entirely (no-op)
+	logger     *slog.Logger
+	store      map[string]persistedPromptSnapshot // sessionKey → frozen inputs
+	generation uint64                             // incremented whenever shared fact projections invalidate
+	// factInvalidationPending carries a correction across the startup window
+	// where the on-disk mirror exists but load() has not populated store yet.
+	// Without it, clear-before-load sees an empty map and the later async restore
+	// can resurrect stale Tier1/MEMORY bytes from disk.
+	factInvalidationPending bool
 }
 
 // promptSnapshots is the process-wide singleton. The data it manages
@@ -113,6 +120,8 @@ func ConfigurePromptSnapshots(dir string, logger *slog.Logger) {
 // vanished sessions (deleted/expired) are pruned to bound the file. Returns the
 // number of sessions restored. Call after restoreAndWakeSessions.
 func LoadPromptSnapshots(isLive func(sessionKey string) bool) int {
+	factDerivedCacheMu.Lock()
+	defer factDerivedCacheMu.Unlock()
 	return promptSnapshots.load(isLive)
 }
 
@@ -120,8 +129,16 @@ func LoadPromptSnapshots(isLive func(sessionKey string) bool) int {
 // (first-write-wins per field) and rewrites the file when anything new appears.
 // Cheap and idempotent on the common path: once a session's fields are present,
 // every later turn is a no-op with no disk I/O.
-func recordPromptSnapshot(sessionKey, tier1 string, ctxFiles []prompt.ContextFile, topic *prompt.TopicKnowledge) {
-	promptSnapshots.record(sessionKey, tier1, ctxFiles, topic)
+func recordPromptSnapshot(sessionKey, tier1 string, ctxFiles []prompt.ContextFile, topic *prompt.TopicKnowledge, generation uint64) {
+	promptSnapshots.recordAtGeneration(sessionKey, tier1, ctxFiles, topic, generation)
+}
+
+func currentPromptSnapshotGeneration() uint64 {
+	return promptSnapshots.currentGeneration()
+}
+
+func clearFactPromptSnapshots() {
+	promptSnapshots.clearFactDerived()
 }
 
 // forgetPromptSnapshot drops a session's persisted snapshot. Called from
@@ -150,6 +167,16 @@ func (p *promptSnapshotPersister) cloneLocked() map[string]persistedPromptSnapsh
 }
 
 func (p *promptSnapshotPersister) record(sessionKey, tier1 string, ctxFiles []prompt.ContextFile, topic *prompt.TopicKnowledge) {
+	p.recordAtGeneration(sessionKey, tier1, ctxFiles, topic, p.currentGeneration())
+}
+
+func (p *promptSnapshotPersister) currentGeneration() uint64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.generation
+}
+
+func (p *promptSnapshotPersister) recordAtGeneration(sessionKey, tier1 string, ctxFiles []prompt.ContextFile, topic *prompt.TopicKnowledge, generation uint64) {
 	if sessionKey == "" || !isRestorablePromptSnapshotSession(sessionKey) {
 		return
 	}
@@ -160,13 +187,18 @@ func (p *promptSnapshotPersister) record(sessionKey, tier1 string, ctxFiles []pr
 	}
 	cur := p.store[sessionKey]
 	changed := false
-	if cur.Tier1Wiki == "" && tier1 != "" {
-		cur.Tier1Wiki = tier1
-		changed = true
-	}
-	if len(cur.ContextFiles) == 0 && len(ctxFiles) > 0 {
-		cur.ContextFiles = ctxFiles
-		changed = true
+	// A fact mutation may finish while a turn is still assembling its old
+	// Tier1/MEMORY bytes. Never let that in-flight turn repopulate the cleared
+	// restart-survival snapshot. Topic knowledge is independent and may persist.
+	if generation == p.generation {
+		if cur.Tier1Wiki == "" && tier1 != "" {
+			cur.Tier1Wiki = tier1
+			changed = true
+		}
+		if len(cur.ContextFiles) == 0 && len(ctxFiles) > 0 {
+			cur.ContextFiles = ctxFiles
+			changed = true
+		}
 	}
 	if cur.TopicKnowledge == nil && topic != nil && topic.Content != "" {
 		cp := *topic
@@ -181,12 +213,9 @@ func (p *promptSnapshotPersister) record(sessionKey, tier1 string, ctxFiles []pr
 		p.store = make(map[string]persistedPromptSnapshot)
 	}
 	p.store[sessionKey] = cur
-	path := p.filePathLocked()
-	logger := p.logger
-	snapshot := p.cloneLocked()
 	p.mu.Unlock()
 
-	writePromptSnapshotFile(path, snapshot, logger)
+	p.writeCurrent()
 }
 
 func (p *promptSnapshotPersister) forget(sessionKey string) {
@@ -203,12 +232,9 @@ func (p *promptSnapshotPersister) forget(sessionKey string) {
 		return
 	}
 	delete(p.store, sessionKey)
-	path := p.filePathLocked()
-	logger := p.logger
-	snapshot := p.cloneLocked()
 	p.mu.Unlock()
 
-	writePromptSnapshotFile(path, snapshot, logger)
+	p.writeCurrent()
 }
 
 func (p *promptSnapshotPersister) load(isLive func(string) bool) int {
@@ -236,6 +262,23 @@ func (p *promptSnapshotPersister) load(isLive func(string) bool) int {
 	}
 
 	p.mu.Lock()
+	sanitized := false
+	if p.factInvalidationPending {
+		for key, snap := range persisted {
+			if snap.Tier1Wiki == "" && len(snap.ContextFiles) == 0 {
+				continue
+			}
+			snap.Tier1Wiki = ""
+			snap.ContextFiles = nil
+			if snap.TopicKnowledge == nil {
+				delete(persisted, key)
+			} else {
+				persisted[key] = snap
+			}
+			sanitized = true
+		}
+		p.factInvalidationPending = false
+	}
 	if p.store == nil {
 		p.store = make(map[string]persistedPromptSnapshot, len(persisted))
 	}
@@ -258,10 +301,6 @@ func (p *promptSnapshotPersister) load(isLive func(string) bool) int {
 		p.store[key] = snap
 		toRestore = append(toRestore, pending{key, snap})
 	}
-	var rewrite map[string]persistedPromptSnapshot
-	if pruned > 0 {
-		rewrite = p.cloneLocked()
-	}
 	p.mu.Unlock()
 
 	// Push into the live stores outside the lock (concurrency rule: no external
@@ -270,11 +309,53 @@ func (p *promptSnapshotPersister) load(isLive func(string) bool) int {
 	for _, pr := range toRestore {
 		restoreSnapshotIntoStores(pr.key, pr.snap)
 	}
-	if rewrite != nil {
-		writePromptSnapshotFile(path, rewrite, logger)
-		logger.Info("prompt snapshot: pruned vanished sessions", "pruned", pruned)
+	if sanitized || pruned > 0 {
+		p.writeCurrent()
+		logger.Info("prompt snapshot: rewrote startup mirror",
+			"pruned", pruned, "factDerivedSanitized", sanitized)
 	}
 	return len(toRestore)
+}
+
+// clearFactDerived invalidates the persisted Tier1 and context-file fields
+// while preserving independent topic snapshots. Incrementing generation first
+// fences turns that began assembling stale fact-derived bytes before this call.
+func (p *promptSnapshotPersister) clearFactDerived() {
+	p.mu.Lock()
+	p.generation++
+	p.factInvalidationPending = true
+	changed := false
+	for key, snap := range p.store {
+		if snap.Tier1Wiki == "" && len(snap.ContextFiles) == 0 {
+			continue
+		}
+		snap.Tier1Wiki = ""
+		snap.ContextFiles = nil
+		if snap.TopicKnowledge == nil {
+			delete(p.store, key)
+		} else {
+			p.store[key] = snap
+		}
+		changed = true
+	}
+	p.mu.Unlock()
+	if changed {
+		p.writeCurrent()
+	}
+}
+
+// writeCurrent serializes disk writes and snapshots the latest mirror only
+// after acquiring the write lock. Thus an older caller can never overwrite a
+// newer invalidation with a stale clone it captured before waiting for I/O.
+func (p *promptSnapshotPersister) writeCurrent() {
+	p.writeMu.Lock()
+	defer p.writeMu.Unlock()
+	p.mu.Lock()
+	path := p.filePathLocked()
+	logger := p.logger
+	snapshot := p.cloneLocked()
+	p.mu.Unlock()
+	writePromptSnapshotFile(path, snapshot, logger)
 }
 
 // restoreSnapshotIntoStores pushes one persisted snapshot into the live stores,

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
@@ -202,53 +203,38 @@ func (s *Store) loadOrCreateIndex() (*Index, error) {
 	return idx, nil
 }
 
-func (s *Store) pruneGhostEntries() {
-	var ghosts []string
-	for relPath := range s.index.Entries {
-		abs := filepath.Join(s.dir, relPath)
-		if _, err := os.Stat(abs); os.IsNotExist(err) {
-			ghosts = append(ghosts, relPath)
-		}
-	}
-	if len(ghosts) == 0 {
-		return
-	}
-	for _, g := range ghosts {
-		delete(s.index.Entries, g)
-	}
-	_ = s.index.Save(filepath.Join(s.dir, "index.md")) // best-effort: index save is non-critical
-}
-
-// adoptOrphanPages indexes pages that exist on disk but are missing from the
-// master index — pruneGhostEntries' other half. A crash in the window between
-// a page's file write and its index save (they are two separate disk writes)
-// leaves the page findable by FTS (rebuilt from disk on startup) yet invisible
-// to every index consumer until the next dream-cycle rebuildIndex. Runs once
-// at NewStore, before any concurrency, so it touches s.index directly. Cost is
-// bounded: one walk (ListPages) plus a parse of only the missing pages.
-func (s *Store) adoptOrphanPages() {
+// reconcileIndexFromDisk rebuilds every index entry from the Markdown
+// canonical state while preserving the diary high-water cursor. It repairs all
+// three restart drift classes: ghost paths, orphan paths, and existing paths
+// whose metadata changed outside this process or survived an index-save failure.
+// NewStore calls it before concurrency starts, so no Store lock is required.
+func (s *Store) reconcileIndexFromDisk() error {
 	pages, err := s.ListPages("")
 	if err != nil {
-		return // best-effort: startup reconciliation must not fail the store
+		return err
 	}
-	adopted := 0
+	refreshed := newIndex()
+	refreshed.LastProcessed = s.index.LastProcessed
 	for _, rel := range pages {
 		rel = filepath.ToSlash(rel)
-		if _, ok := s.index.Entries[rel]; ok {
-			continue
-		}
 		page, perr := s.ReadPage(rel)
 		if perr != nil {
 			continue // unreadable/parse error: leave it out, same as rebuildIndex
 		}
-		s.index.updateEntry(rel, page)
-		adopted++
+		refreshed.updateEntry(rel, page)
 	}
-	if adopted == 0 {
-		return
+	oldCount := len(s.index.Entries)
+	changed := s.index.LastProcessed != refreshed.LastProcessed || !reflect.DeepEqual(s.index.Entries, refreshed.Entries)
+	s.index = refreshed
+	if changed {
+		if err := refreshed.Save(filepath.Join(s.dir, "index.md")); err != nil {
+			return err
+		}
 	}
-	slog.Info("wiki: adopted orphan pages into master index", "count", adopted)
-	_ = s.index.Save(filepath.Join(s.dir, "index.md")) // best-effort: index save is non-critical
+	if changed {
+		slog.Info("wiki: reconciled master index from markdown", "before", oldCount, "after", len(refreshed.Entries))
+	}
+	return nil
 }
 
 func ensureDirs(dir string) error {

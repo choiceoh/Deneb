@@ -45,20 +45,30 @@ type recallSnapshotKey struct {
 }
 
 var recallSnapshotStore = struct {
-	mu    sync.RWMutex
-	store map[recallSnapshotKey]string
+	mu         sync.RWMutex
+	store      map[recallSnapshotKey]string
+	generation uint64
 }{store: make(map[recallSnapshotKey]string)}
 
 // CachedSnapshot returns the frozen recall snapshot for (sessionKey,
 // fingerprint) if one has been recorded, plus a hit/miss flag.
 func CachedSnapshot(sessionKey, fingerprint string) (string, bool) {
+	value, ok, _ := CachedSnapshotWithGeneration(sessionKey, fingerprint)
+	return value, ok
+}
+
+// CachedSnapshotWithGeneration returns the cache value and the invalidation
+// generation observed atomically with that lookup. A caller that computes a
+// miss must pass the generation to StoreSnapshotIfGeneration so a concurrent
+// fact correction cannot be followed by a stale in-flight refill.
+func CachedSnapshotWithGeneration(sessionKey, fingerprint string) (string, bool, uint64) {
 	if sessionKey == "" {
-		return "", false
+		return "", false, 0
 	}
 	recallSnapshotStore.mu.RLock()
 	defer recallSnapshotStore.mu.RUnlock()
 	v, ok := recallSnapshotStore.store[recallSnapshotKey{sessionKey, fingerprint}]
-	return v, ok
+	return v, ok, recallSnapshotStore.generation
 }
 
 // StoreSnapshot records value as the snapshot for (sessionKey,
@@ -76,6 +86,26 @@ func StoreSnapshot(sessionKey, fingerprint, value string) {
 	recallSnapshotStore.store[key] = value
 }
 
+// StoreSnapshotIfGeneration records a computed snapshot only when no global
+// invalidation happened after its cache miss. It returns whether the snapshot
+// was accepted (an existing first-write-wins value also returns false).
+func StoreSnapshotIfGeneration(sessionKey, fingerprint, value string, generation uint64) bool {
+	if sessionKey == "" || value == "" {
+		return false
+	}
+	recallSnapshotStore.mu.Lock()
+	defer recallSnapshotStore.mu.Unlock()
+	if generation != recallSnapshotStore.generation {
+		return false
+	}
+	key := recallSnapshotKey{sessionKey, fingerprint}
+	if _, ok := recallSnapshotStore.store[key]; ok {
+		return false
+	}
+	recallSnapshotStore.store[key] = value
+	return true
+}
+
 // ClearSession drops every snapshot belonging to sessionKey across all
 // fingerprints. Called by /reset and safe to invoke for sessions that never
 // had a snapshot.
@@ -90,6 +120,16 @@ func ClearSession(sessionKey string) {
 			delete(recallSnapshotStore.store, k)
 		}
 	}
+}
+
+// ClearAll drops every frozen recall result. A corrected fact is global shared
+// state: a snapshot in another session can otherwise keep the superseded diary
+// row alive even after the canonical ledger advances.
+func ClearAll() {
+	recallSnapshotStore.mu.Lock()
+	defer recallSnapshotStore.mu.Unlock()
+	recallSnapshotStore.generation++
+	recallSnapshotStore.store = make(map[recallSnapshotKey]string)
 }
 
 // ShouldFreeze decides whether a preflight result may be stored

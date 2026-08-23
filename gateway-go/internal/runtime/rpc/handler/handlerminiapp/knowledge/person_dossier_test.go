@@ -53,6 +53,7 @@ func TestPersonDossierJoinsMailCallsAndWiki(t *testing.T) {
 				t.Errorf("wiki search = %q", q)
 			}
 			return []wiki.SearchResult{
+				{Path: "@facts/fact-789.md", Content: "김민지 담당자는 현행 사실", FactID: "fact-789", SubjectID: "person:minji"},
 				{Path: "프로젝트/거래/acme.md", Content: "김민지 부장과 단가 협의"},
 				{Path: "인물/김민지.md", Content: "자기 자신 — 제외"},
 			}, nil

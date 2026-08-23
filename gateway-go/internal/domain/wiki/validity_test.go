@@ -19,8 +19,8 @@ func TestValidityFactor_ScalesWithAgeArchivedAndSupersededStatus(t *testing.T) {
 		{"old-180d", Frontmatter{Updated: "2025-11-01"}, 0.85, 0.85},
 		{"old-365d", Frontmatter{Updated: "2024-01-01"}, 0.7, 0.7},
 		{"archived", Frontmatter{Archived: true, Updated: "2026-06-01"}, 0.3, 0.3},
-		{"superseded", Frontmatter{SupersededBy: "거래/new.md", Updated: "2026-06-01"}, 0.15, 0.15},
-		{"superseded-and-old", Frontmatter{SupersededBy: "x.md", Updated: "2024-01-01"}, 0.105, 0.104},
+		{"superseded", Frontmatter{SupersededBy: "거래/new.md", Updated: "2026-06-01"}, 0, 0},
+		{"superseded-and-old", Frontmatter{SupersededBy: "x.md", Updated: "2024-01-01"}, 0, 0},
 	}
 	for _, c := range cases {
 		got := validityFactor("", &Page{Meta: c.meta}, now)
@@ -30,11 +30,10 @@ func TestValidityFactor_ScalesWithAgeArchivedAndSupersededStatus(t *testing.T) {
 	}
 }
 
-// TestSearch_DemotesSupersededPageBelowReplacementAndPersistsAcrossRestart: a page
-// whose facts were replaced must rank below the page that replaced it, even
-// with near-identical text — the exact "year-old port number presented as
-// current" failure recall had.
-func TestSearch_DemotesSupersededPageBelowReplacementAndPersistsAcrossRestart(t *testing.T) {
+// TestSearch_ExcludesSupersededPageAndPersistsAcrossRestart: a page whose facts
+// were replaced remains directly readable as history but must not appear on a
+// current-state search surface — even when its old value is the query.
+func TestSearch_ExcludesSupersededPageAndPersistsAcrossRestart(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -73,11 +72,15 @@ func TestSearch_DemotesSupersededPageBelowReplacementAndPersistsAcrossRestart(t 
 	}
 
 	results, err := store.Search(context.Background(), "게이트웨이 포트", 5)
-	if err != nil || len(results) < 2 {
+	if err != nil || len(results) != 1 {
 		t.Fatalf("search: %v results=%+v", err, results)
 	}
 	if results[0].Path != "운영시스템/port-new.md" {
-		t.Errorf("superseded page outranks its replacement: %+v", results)
+		t.Errorf("search returned a superseded page: %+v", results)
+	}
+	oldOnly, err := store.Search(context.Background(), "18789", 5)
+	if err != nil || len(oldOnly) != 0 {
+		t.Fatalf("old-value search resurfaced superseded page: %+v err=%v", oldOnly, err)
 	}
 
 	// Restart: validity must rebuild from disk.
@@ -87,8 +90,11 @@ func TestSearch_DemotesSupersededPageBelowReplacementAndPersistsAcrossRestart(t 
 	}
 	t.Cleanup(func() { _ = store2.Close() })
 	results2, err := store2.Search(context.Background(), "게이트웨이 포트", 5)
-	if err != nil || len(results2) < 2 || results2[0].Path != "운영시스템/port-new.md" {
-		t.Errorf("validity demotion lost after restart: %+v err=%v", results2, err)
+	if err != nil || len(results2) != 1 || results2[0].Path != "운영시스템/port-new.md" {
+		t.Errorf("superseded exclusion lost after restart: %+v err=%v", results2, err)
+	}
+	if _, err := store2.ReadPage("운영시스템/port-old.md"); err != nil {
+		t.Errorf("historical page is no longer directly readable: %v", err)
 	}
 }
 

@@ -28,8 +28,12 @@ type SearchResult struct {
 	ExpandedEndLine int                `json:"expandedEndLine,omitempty"` // absolute 1-based inclusive end line of ExpandedContent
 	UpdatedAt       int64              `json:"updatedAt,omitempty"`       // page metadata timestamp, unix milli when parseable
 	Context         []string           `json:"context,omitempty"`         // hierarchical path/business context
-	Score           float64            `json:"score"`                     // relevance score (0-1)
-	Explain         *SearchExplanation `json:"explain,omitempty"`         // populated only for explicit diagnostic queries
+	FactID          string             `json:"factId,omitempty"`          // canonical fact claim ID for synthetic fact-plane hits
+	FactKey         string             `json:"factKey,omitempty"`
+	SubjectID       string             `json:"subjectId,omitempty"`
+	OriginRefs      []string           `json:"originRefs,omitempty"`
+	Score           float64            `json:"score"`             // relevance score (0-1)
+	Explain         *SearchExplanation `json:"explain,omitempty"` // populated only for explicit diagnostic queries
 }
 
 // SearchMode selects one retrieval stage for evaluation. The zero/auto mode is
@@ -134,6 +138,14 @@ func newSearchDB(now func() time.Time, fieldBoost float64) *searchDB {
 func (s *searchDB) indexPage(relPath string, page *Page) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if isGeneratedFactProjectionPage(relPath, page) || page != nil && strings.TrimSpace(page.Meta.SupersededBy) != "" {
+		// Historical pages remain on disk for direct reads, but keeping them in
+		// the candidate corpus lets a crowd of old exact matches displace the
+		// current page before the final validity filter can run.
+		s.idx.Remove(relPath)
+		s.validity[relPath] = 0
+		return
+	}
 	s.idx.UpsertFields(relPath, searchablePageFieldsWithBoost(page, s.fieldBoost, s.facetBoost)...)
 	if page != nil {
 		s.validity[relPath] = validityFactor(relPath, page, s.now())
@@ -148,11 +160,10 @@ func (s *searchDB) removePage(relPath string) {
 	delete(s.validity, relPath)
 }
 
-// validityFactor scores how current a page's facts are (0–1]. Archived and
-// superseded pages keep working for direct reads but should not outrank
-// living pages in recall; old "updated" stamps decay gently — operational
-// facts (ports, prices, configs) rot, and recall presenting a year-old fact
-// as current is exactly the failure this guards against.
+// validityFactor scores how current a page's facts are [0–1]. Archived pages
+// remain searchable with a penalty, while superseded pages receive zero and
+// are removed by applyValidity. They remain available through direct reads and
+// explicit history surfaces, but must never re-enter current-state search.
 func validityFactor(relPath string, page *Page, now time.Time) float64 {
 	meta := page.Meta
 	f := 1.0
@@ -160,7 +171,7 @@ func validityFactor(relPath string, page *Page, now time.Time) float64 {
 		f *= 0.3
 	}
 	if meta.SupersededBy != "" {
-		f *= 0.15 // hard demotion — latest-state wins (M4)
+		return 0 // historical only — latest-state wins (M4)
 	}
 	if meta.Updated != "" {
 		if t, err := time.Parse("2006-01-02", meta.Updated); err == nil {
@@ -199,19 +210,28 @@ func validityFactor(relPath string, page *Page, now time.Time) float64 {
 // while losing to any curated page on an equal keyword match.
 const personStubValidity = 0.45
 
-// applyValidity multiplies result scores by each page's validity factor and
-// re-sorts. Pages never indexed (factor missing) pass through unchanged.
+// applyValidity removes historical-only pages, multiplies the remaining result
+// scores by each page's validity factor, and re-sorts. Pages never indexed
+// (factor missing) pass through unchanged.
 func (s *searchDB) applyValidity(results []SearchResult) []SearchResult {
 	if len(results) == 0 {
 		return results
 	}
 	s.mu.RLock()
-	for i := range results {
-		if f, ok := s.validity[results[i].Path]; ok && f < 1.0 {
-			results[i].Score *= f
+	filtered := results[:0]
+	for _, result := range results {
+		if f, ok := s.validity[result.Path]; ok {
+			if f <= 0 {
+				continue
+			}
+			if f < 1.0 {
+				result.Score *= f
+			}
 		}
+		filtered = append(filtered, result)
 	}
 	s.mu.RUnlock()
+	results = filtered
 	sort.SliceStable(results, func(a, b int) bool {
 		if results[a].Score != results[b].Score {
 			return results[a].Score > results[b].Score
@@ -311,8 +331,11 @@ func (s *searchDB) rebuildIndex(dir string) error {
 				"path", rel, "error", err)
 			return nil //nolint:nilerr // skip unparseable files
 		}
-		s.idx.UpsertFields(rel, searchablePageFieldsWithBoost(page, s.fieldBoost, s.facetBoost)...)
-		s.validity[rel] = validityFactor(rel, page, s.now())
+		factor := validityFactor(rel, page, s.now())
+		s.validity[rel] = factor
+		if factor > 0 {
+			s.idx.UpsertFields(rel, searchablePageFieldsWithBoost(page, s.fieldBoost, s.facetBoost)...)
+		}
 		return nil
 	})
 }
@@ -528,10 +551,27 @@ func (s *Store) graphBoostPaths(ctx context.Context, query string) []string {
 // truncateResults cuts a validity-adjusted, re-sorted result list down to the
 // caller's limit — the final step of the over-fetch → demote → truncate order.
 func truncateResults(results []SearchResult, limit int) []SearchResult {
-	if len(results) > limit {
-		return results[:limit]
+	if limit <= 0 || len(results) <= limit {
+		return results
 	}
-	return results
+	selected := results[:limit]
+	for _, result := range selected {
+		if result.FactID == "" {
+			return selected
+		}
+	}
+	// Synthetic facts are a separate trusted lane in chat recall. Preserve one
+	// ordinary page when available so fact candidates cannot consume every
+	// evidence slot only to be skipped by the page-evidence renderer.
+	for _, result := range results[limit:] {
+		if result.FactID != "" {
+			continue
+		}
+		selected = append([]SearchResult(nil), selected...)
+		selected[len(selected)-1] = result
+		break
+	}
+	return selected
 }
 
 // SearchBatch runs Search for several queries while embedding them all in ONE
@@ -701,6 +741,7 @@ func (s *Store) composeSearchReport(
 	}
 
 	diagnostics.CandidateCount = searchCandidateCount(bm25, sem, graphPaths)
+	factSnapshot := s.RecallFactSnapshot()
 	baseScores := make(map[string]float64, len(results))
 	for _, result := range results {
 		baseScores[result.Path] = result.Score
@@ -708,9 +749,15 @@ func (s *Store) composeSearchReport(
 	if !options.skipValidity {
 		results = s.fts.applyValidity(results)
 	}
+	beforeLifecycle := len(results)
+	results = s.filterFactLifecycleSearchResults(results, factSnapshot)
+	if dropped := beforeLifecycle - len(results); dropped > 0 {
+		diagnostics.Dropped = appendDrop(diagnostics.Dropped, "superseded_fact_evidence", dropped)
+	}
 	var intentResults []SearchResult
 	if shouldIntentRerank(results, options) && loadIntent != nil {
 		intentResults = loadIntent()
+		intentResults = s.filterFactLifecycleSearchResults(intentResults, factSnapshot)
 	}
 	intentBonuses, applied := s.applyIntentRerank(results, intentResults, options)
 	diagnostics.IntentApplied = applied
@@ -723,6 +770,20 @@ func (s *Store) composeSearchReport(
 		rerankScores, rerankWeights, rerankDiagnostics = s.applyModelRerank(ctx, query, results, options.ForceRerank)
 	}
 	diagnostics.Rerank = rerankDiagnostics
+	var factResults []SearchResult
+	if !options.skipMetadata && (mode == SearchModeAuto || mode == SearchModeFull) {
+		factResults = searchActiveFactClaims(
+			query,
+			fetchLimit,
+			factSnapshot.Active,
+			factSearchAmbiguousSubjectSignatures(factSnapshot.Active),
+		)
+		results = mergeActiveFactSearchResults(results, factResults, fetchLimit)
+		diagnostics.CandidateCount += len(factResults)
+		for _, result := range factResults {
+			baseScores[result.Path] = result.Score
+		}
+	}
 
 	admitted := len(results)
 	results = truncateResults(results, limit)
@@ -737,6 +798,25 @@ func (s *Store) composeSearchReport(
 		s.attachResultMetadata(query, results)
 		diagnostics.ContextExpanded = s.attachLateContext(results)
 	}
+	// Revalidate at the final exposure boundary. A correction may commit while
+	// semantic/rerank work is in flight; using the newest atomic snapshot drops
+	// the old claim/page and adds the new canonical claim without mixing epochs.
+	latestFactSnapshot := s.RecallFactSnapshot()
+	beforeLifecycle = len(results)
+	results = s.filterFactLifecycleSearchResults(results, latestFactSnapshot)
+	if !options.skipMetadata && (mode == SearchModeAuto || mode == SearchModeFull) {
+		latestFacts := searchActiveFactClaims(
+			query,
+			fetchLimit,
+			latestFactSnapshot.Active,
+			factSearchAmbiguousSubjectSignatures(latestFactSnapshot.Active),
+		)
+		results = mergeActiveFactSearchResults(results, latestFacts, limit)
+	}
+	results = truncateResults(results, limit)
+	if dropped := beforeLifecycle - len(results); dropped > 0 {
+		diagnostics.Dropped = appendDrop(diagnostics.Dropped, "superseded_fact_late_context", dropped)
+	}
 	if admitted > len(results) {
 		diagnostics.Dropped = appendDrop(diagnostics.Dropped, "result_limit", admitted-len(results))
 	}
@@ -744,6 +824,7 @@ func (s *Store) composeSearchReport(
 	if options.Explain {
 		s.attachSearchExplanations(results, diagnostics.Fusion, bm25, sem, graphPaths, intentResults, baseScores, intentBonuses, applied)
 		attachRerankExplanations(results, rerankScores, rerankWeights)
+		markFactSearchExplanations(results)
 	}
 	return SearchReport{Results: results, Diagnostics: diagnostics}
 }

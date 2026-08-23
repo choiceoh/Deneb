@@ -180,6 +180,26 @@ func (c *PromptCache) ClearSession(key string) {
 	delete(c.sessTopicStore, key)
 }
 
+// ClearAllContextSnapshots invalidates the shared context-file cache and every
+// session's frozen AGENTS/SOUL/USER/MEMORY view. Fact-plane projections are
+// shared across sessions, so clearing only the session that performed a
+// correction would leave stale system-prompt facts frozen elsewhere.
+// Topic snapshots are independent files and intentionally remain intact.
+func (c *PromptCache) ClearAllContextSnapshots() {
+	// Hold both locks in the documented ctxMu -> sessMu order so a context load
+	// cannot observe the cleared shared cache while still returning an old
+	// per-session snapshot from the gap between two independent lock sections.
+	c.ctxMu.Lock()
+	c.sessMu.Lock()
+	c.ctxWorkspace = ""
+	c.ctxFiles = nil
+	c.ctxResolved = nil
+	c.ctxCachedAt = time.Time{}
+	c.sessStore = nil
+	c.sessMu.Unlock()
+	c.ctxMu.Unlock()
+}
+
 // ClearAllTopicSnapshots drops every session's frozen per-topic knowledge so the
 // next turn re-reads <key>.md from disk. It backs miniapp.topicdocs.write_current
 // with applyNow=true: topic background is shared across all session keys

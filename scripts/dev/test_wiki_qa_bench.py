@@ -89,6 +89,36 @@ class MatchingBoundaryTests(unittest.TestCase):
         self.assertFalse(wiki_qa.contains("용량 11,068 MW", "1,068"))
         self.assertFalse(wiki_qa.contains("unrelated", " |  | "))
 
+    def test_forbidden_values_unions_must_not_and_stale_values_stably(self) -> None:
+        case = {
+            "must_not": ["cancelled", "old owner", ""],
+            "stale_values": ["old owner", "8120만원"],
+        }
+        self.assertEqual(
+            wiki_qa.forbidden_values(case),
+            ["cancelled", "old owner", "8120만원"],
+        )
+
+    def test_baseline_detects_case_level_persistent_answer_regression(self) -> None:
+        baseline = {
+            "summary": {},
+            "cases": [{
+                "id": "owner-update",
+                "answer": {"runs": [{"passed": True}, {"passed": True}, {"passed": False}]},
+            }],
+        }
+        candidate = {
+            "summary": {},
+            "cases": [{
+                "id": "owner-update",
+                "answer": {"runs": [{"passed": False}, {"passed": False}, {"passed": False}]},
+            }],
+        }
+        self.assertIn(
+            "case owner-update persistent answer regression 2/3 -> 0/3",
+            wiki_qa.baseline_regressions(candidate, baseline, 1.0),
+        )
+
     def test_path_match_starts_only_at_segment_boundary_and_ignores_md_suffix(self) -> None:
         self.assertTrue(wiki_qa.path_hit("업무/영덕.md", "업무/영덕-구/현황.md"))
         self.assertTrue(wiki_qa.path_hit("영덕", "업무/영덕/현황"))
@@ -173,6 +203,15 @@ class ScoringFunctionTests(unittest.TestCase):
         self.assertEqual(elapsed, 299)
         self.assertEqual(text, "done but cancelled")
         self.assertEqual([call.args[0] for call in sleep.call_args_list], [1.5, 4, 1.5])
+
+    def test_stale_values_alone_grade_and_fail_an_answer(self) -> None:
+        case = {"question": "owner?", "stale_values": ["김민준"]}
+        response = {"payload": {"text": "담당자는 김민준입니다"}}
+        with mock.patch.object(wiki_qa, "rpc", side_effect=[{}, response]):
+            with mock.patch.object(wiki_qa.time, "sleep"):
+                with mock.patch.object(wiki_qa.time, "time", side_effect=[1.0, 1.1]):
+                    ok, _, _ = wiki_qa.score_answer(case, "gw", "t", "s", 5)
+        self.assertFalse(ok)
 
 
 class MainOutputTests(unittest.TestCase):
@@ -284,6 +323,122 @@ class MainOutputTests(unittest.TestCase):
         self.assertEqual(stderr.strip(), "no cases selected")
         recall.assert_not_called()
 
+    def test_answer_repeat_writes_private_safe_json_and_counts_stale_leaks(self) -> None:
+        report_path = Path(self.tmp.name) / "report.json"
+        lifecycle_case = {
+            "id": "lifecycle",
+            "category": "기억",
+            "difficulty": "hard",
+            "question": "현재 담당자는?",
+            "gold_paths": [],
+            "must_contain": ["박수진"],
+            "stale_values": ["김민준"],
+            "op_type": "update",
+        }
+        self.gold.write_text(json.dumps(lifecycle_case, ensure_ascii=False) + "\n", encoding="utf-8")
+        runs = [
+            (True, 100, "현재 담당자는 박수진입니다"),
+            (False, 300, "현재 담당자는 김민준입니다"),
+            (True, 200, "현재 담당자는 박수진입니다"),
+        ]
+        with mock.patch.object(wiki_qa, "score_answer", side_effect=runs):
+            rc, stdout, stderr = invoke_main(
+                wiki_qa,
+                self.base_args("answer") + ["--repeat", "3", "--json-out", str(report_path)],
+            )
+
+        self.assertEqual((rc, stderr), (0, ""))
+        self.assertIn("answer:✗ 2/3 p95=300ms forbidden=['김민준']", stdout)
+        self.assertIn("WIKI_QA_ANSWER=2/3 (66%)", stdout)
+        self.assertIn("WIKI_QA_STALE=1/3 (33%)", stdout)
+        self.assertIn("CURRENT_VALUE_RATE=2/3 (66%)", stdout)
+        self.assertIn("STALE_ANSWER_RATE=1/3 (33%)", stdout)
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(report["repeat"], 3)
+        self.assertEqual(report["summary"]["stale"], {"leaks": 1, "checked": 3, "pct": 100 / 3})
+        self.assertEqual(report["summary"]["current_value"], {"hits": 2, "checked": 3, "pct": 200 / 3})
+        self.assertEqual(report["summary"]["stale_answer"], {"leaks": 1, "checked": 3, "pct": 100 / 3})
+        self.assertEqual(report["cases"][0]["answer"]["runs"][1]["forbidden_hit_count"], 1)
+        self.assertFalse(report["cases"][0]["answer"]["runs"][1]["current_value_hit"])
+        self.assertTrue(report["cases"][0]["answer"]["runs"][1]["stale_answer_hit"])
+        self.assertNotIn("현재 담당자는", report_path.read_text(encoding="utf-8"))
+        self.assertNotIn("김민준", report_path.read_text(encoding="utf-8"))
+
+    def test_forget_leak_rate_is_scoped_to_forget_cases(self) -> None:
+        forget_case = {
+            "id": "forget-owner",
+            "category": "기억",
+            "question": "예전 담당자는?",
+            "gold_paths": [],
+            "must_not": ["김민준"],
+            "op_type": "forget",
+        }
+        self.gold.write_text(json.dumps(forget_case, ensure_ascii=False) + "\n", encoding="utf-8")
+        runs = [
+            (True, 100, "기억하고 있지 않습니다"),
+            (False, 200, "예전 담당자는 김민준입니다"),
+        ]
+        with mock.patch.object(wiki_qa, "score_answer", side_effect=runs):
+            rc, stdout, stderr = invoke_main(
+                wiki_qa,
+                self.base_args("answer") + ["--repeat", "2"],
+            )
+        self.assertEqual((rc, stderr), (0, ""))
+        self.assertIn("FORGET_LEAK_RATE=1/2 (50%)", stdout)
+        self.assertNotIn("STALE_ANSWER_RATE=", stdout)
+
+    def test_require_zero_stale_returns_one_on_any_forbidden_answer(self) -> None:
+        lifecycle_case = {
+            "id": "lifecycle",
+            "category": "기억",
+            "question": "현재 담당자는?",
+            "gold_paths": [],
+            "must_contain": ["박수진"],
+            "stale_values": ["김민준"],
+        }
+        self.gold.write_text(json.dumps(lifecycle_case, ensure_ascii=False) + "\n", encoding="utf-8")
+        with mock.patch.object(
+            wiki_qa,
+            "score_answer",
+            return_value=(False, 10, "현재 담당자는 김민준입니다"),
+        ):
+            rc, _, stderr = invoke_main(
+                wiki_qa,
+                self.base_args("answer") + ["--require-zero-stale"],
+            )
+        self.assertEqual(rc, 1)
+        self.assertIn("CUTOVER_GATE_FAIL: stale/forbidden leak 1건", stderr)
+
+    def test_require_zero_stale_rejects_an_empty_safety_set(self) -> None:
+        with mock.patch.object(wiki_qa, "score_answer", return_value=(True, 10, "answer")):
+            rc, _, stderr = invoke_main(
+                wiki_qa,
+                self.base_args("answer") + ["--ids", "hit", "--require-zero-stale"],
+            )
+        self.assertEqual(rc, 1)
+        self.assertIn("CUTOVER_GATE_FAIL: stale/forbidden 채점 케이스 0건", stderr)
+
+    def test_baseline_json_returns_one_when_answer_regresses_beyond_tolerance(self) -> None:
+        baseline_path = Path(self.tmp.name) / "baseline.json"
+        baseline_path.write_text(
+            json.dumps({
+                "summary": {
+                    "recall": {"passed": 0, "total": 0, "pct": None},
+                    "answer": {"passed": 1, "total": 1, "pct": 100.0},
+                    "stale": {"leaks": 0, "checked": 0, "pct": None},
+                }
+            }),
+            encoding="utf-8",
+        )
+        with mock.patch.object(wiki_qa, "score_answer", return_value=(False, 10, "wrong")):
+            rc, _, stderr = invoke_main(
+                wiki_qa,
+                self.base_args("answer")
+                + ["--ids", "hit", "--baseline-json", str(baseline_path), "--max-regression-pp", "0"],
+            )
+        self.assertEqual(rc, 1)
+        self.assertIn("CUTOVER_GATE_FAIL: answer 0.00% < baseline 100.00%", stderr)
+
     def test_when_gateway_default_prefers_explicit_qa_environment(self) -> None:
         with mock.patch.object(wiki_qa, "score_recall", return_value=(True, ["업무/hit"])) as recall:
             rc, _, _ = invoke_main(
@@ -309,7 +464,19 @@ class MainOutputTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(proc.returncode, 0)
-        for option in ("--mode", "--gold", "--gw", "--token-file", "--k", "--ids", "--limit"):
+        for option in (
+            "--mode",
+            "--gold",
+            "--gw",
+            "--token-file",
+            "--k",
+            "--ids",
+            "--limit",
+            "--repeat",
+            "--json-out",
+            "--baseline-json",
+            "--require-zero-stale",
+        ):
             self.assertIn(option, proc.stdout)
 
 

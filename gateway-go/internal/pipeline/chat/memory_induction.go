@@ -7,6 +7,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/memory"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
@@ -47,6 +48,61 @@ func maybeRunMemoryInduction(deps runDeps, params RunParams, result *agent.Agent
 		logger = slog.Default()
 	}
 	safego.GoWithSlog(logger, "memory-induction", func() {
+		// The fact plane is the canonical profile sink when wiki is available.
+		// Unlike the legacy MEMORY.md append path it resolves a stable fact key,
+		// permanently retains the old version, and projects only the winner.
+		if ind.Route == memory.RouteMemory && deps.memory.Wiki != nil {
+			if ind.Candidate.Forget {
+				factResult, err := deps.memory.Wiki.TombstoneFact(wiki.FactTombstoneInput{
+					Subject: ind.Candidate.SubjectID,
+					Key:     ind.Candidate.FactKey, Authority: wiki.FactAuthorityDirectUser,
+					Sources: []string{"session:" + sessionKey}, Actor: "chat-memory-induction",
+					Reason: "직접 사용자 삭제 요청",
+				})
+				if err != nil {
+					logger.Error("memory induction fact tombstone failed",
+						"error", err, "target", ind.Candidate.Target, "session", sessionKey)
+					return
+				}
+				if factResult.Committed {
+					ClearFactDerivedCaches()
+					logger.Info("memory induction tombstoned fact",
+						"revision", factResult.Revision, "resolution", factResult.Resolution,
+						"session", sessionKey, "projectionDegraded", factResult.ProjectionError != "")
+				}
+				return
+			}
+			factResult, err := deps.memory.Wiki.UpsertFact(wiki.FactInput{
+				Subject: ind.Candidate.SubjectID,
+				Key:     ind.Candidate.FactKey, Value: ind.Candidate.Text,
+				Kind:      wiki.FactKind(ind.Candidate.FactKind),
+				Authority: wiki.FactAuthorityDirectUser,
+				Sources:   []string{"session:" + sessionKey},
+				Actor:     "chat-memory-induction",
+				Reason:    "직접 사용자 발화",
+			})
+			if err != nil {
+				logger.Error("memory induction fact commit failed",
+					"error", err, "target", ind.Candidate.Target, "session", sessionKey)
+				return
+			}
+			if factResult.Committed {
+				// The legacy context and tier-1 snapshots intentionally freeze per
+				// session. A rare explicit correction is the exception: clear all
+				// three derived caches so the old value cannot coexist next turn.
+				ClearFactDerivedCaches()
+				logger.Info(
+					"memory induction committed fact",
+					"revision", factResult.Revision,
+					"status", factResult.Status,
+					"resolution", factResult.Resolution,
+					"session", sessionKey,
+					"projectionDegraded", factResult.ProjectionError != "",
+				)
+			}
+			return
+		}
+
 		res, err := memory.Apply(ind, memory.ApplyOptions{
 			WorkspaceDir:    workspace,
 			LedgerPath:      ledger,

@@ -207,7 +207,7 @@ func fillDossierWikiRefs(ctx context.Context, storeFn func() (MemorySearcher, er
 		if len(out.WikiRefs) >= dossierWikiRefsMax {
 			break
 		}
-		if r.Path == ownPath || r.Path == "" {
+		if r.FactID != "" || r.Path == ownPath || r.Path == "" {
 			continue
 		}
 		out.WikiRefs = append(out.WikiRefs, PersonDossierWikiRefOut{

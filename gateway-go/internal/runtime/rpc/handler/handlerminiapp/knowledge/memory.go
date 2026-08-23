@@ -48,6 +48,27 @@ type memoryPlanSearcher interface {
 	SearchPlan(ctx context.Context, plan wiki.QueryPlan, limit int) (wiki.SearchReport, error)
 }
 
+// MemorySearchHit is the public miniapp.memory.search row. Fact-plane hits use
+// the same ranked stream as wiki pages, but they are immutable evidence rather
+// than page paths: ResultKind and ReadOnly keep clients from sending their
+// synthetic paths to page mutation RPCs.
+type MemorySearchHit struct {
+	Path       string                  `json:"path"`
+	Line       int                     `json:"line,omitempty"`
+	EndLine    int                     `json:"endLine,omitempty"`
+	Title      string                  `json:"title,omitempty"`
+	Summary    string                  `json:"summary,omitempty"`
+	Category   string                  `json:"category,omitempty"`
+	Context    []string                `json:"context,omitempty"`
+	Snippet    string                  `json:"snippet"`
+	Score      float64                 `json:"score"`
+	ResultKind string                  `json:"resultKind"`
+	ReadOnly   bool                    `json:"readOnly"`
+	FactID     string                  `json:"factId,omitempty"`
+	SubjectID  string                  `json:"subjectId,omitempty"`
+	Explain    *wiki.SearchExplanation `json:"explain,omitempty"`
+}
+
 // memoryProjectAliaser is an optional extension implemented by *wiki.Store: the
 // Korean display name of the project owning a wiki path. Kept out of
 // MemorySearcher for the same reason as the other extensions here — test fakes
@@ -221,18 +242,6 @@ func memorySearch(deps MemoryDeps) rpcutil.HandlerFunc {
 		Intent  string             `json:"intent,omitempty"`
 		Rerank  bool               `json:"rerank,omitempty"`
 	}
-	type hitOut struct {
-		Path     string                  `json:"path"`
-		Line     int                     `json:"line,omitempty"`
-		EndLine  int                     `json:"endLine,omitempty"`
-		Title    string                  `json:"title,omitempty"`
-		Summary  string                  `json:"summary,omitempty"`
-		Category string                  `json:"category,omitempty"`
-		Context  []string                `json:"context,omitempty"`
-		Snippet  string                  `json:"snippet"`
-		Score    float64                 `json:"score"`
-		Explain  *wiki.SearchExplanation `json:"explain,omitempty"`
-	}
 	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		query := strings.TrimSpace(p.Query)
 		planRequested := strings.TrimSpace(p.Plan) != "" || len(p.Clauses) > 0 || len(p.Scopes) > 0
@@ -302,12 +311,19 @@ func memorySearch(deps MemoryDeps) rpcutil.HandlerFunc {
 			return rpcerr.WrapUnavailable("memory search failed", err).Response(req.ID)
 		}
 
-		out := make([]hitOut, 0, len(results))
+		out := make([]MemorySearchHit, 0, len(results))
 		for _, r := range results {
-			row := hitOut{
+			row := MemorySearchHit{
 				Path: r.Path, Line: r.Line, EndLine: r.EndLine,
 				Context: r.Context, Snippet: truncateRunes(r.Content, maxMemorySnippetChars),
 				Score: r.Score, Explain: r.Explain,
+				ResultKind: "page", FactID: r.FactID, SubjectID: r.SubjectID,
+			}
+			if r.FactID != "" {
+				row.ResultKind = "fact"
+				row.ReadOnly = true
+				out = append(out, row)
+				continue
 			}
 			// Best-effort title/summary lookup. If reading the page
 			// fails, fall through — Path + Snippet are still useful.
