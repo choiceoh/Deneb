@@ -25,7 +25,13 @@ func TestEnsureGitRepo_ReconcilesIgnoreListAndSetsGCPolicy(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = s.Close() })
 
-	// An old repo: created with a short ignore list plus an operator's own line.
+	// An EXISTING repo (the live case): .git already present, created with a
+	// short ignore list plus an operator's own line. ensureGitRepo used to
+	// return before touching anything when .git existed, so every setting added
+	// after creation silently never applied.
+	if out, err := s.git(context.Background(), "init", "-q"); err != nil {
+		t.Fatalf("git init: %v (%s)", err, out)
+	}
 	ignorePath := filepath.Join(dir, ".gitignore")
 	if err := os.WriteFile(ignorePath, []byte(".semantic-cache.json\n내-메모.txt\n"), 0o644); err != nil {
 		t.Fatalf("seed .gitignore: %v", err)

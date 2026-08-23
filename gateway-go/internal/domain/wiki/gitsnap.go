@@ -113,18 +113,22 @@ func (s *Store) gitSnapshotStat(ctx context.Context, hash string) string {
 // repo-local identity (no dependency on the host's global git config) and a
 // .gitignore for derived state files.
 func (s *Store) ensureGitRepo(ctx context.Context) error {
-	if _, err := os.Stat(filepath.Join(s.dir, ".git")); err == nil {
-		return nil
+	if _, err := os.Stat(filepath.Join(s.dir, ".git")); err != nil {
+		if out, ierr := s.git(ctx, "init", "-q"); ierr != nil {
+			return fmt.Errorf("git init: %w (%s)", ierr, out)
+		}
+		if out, cerr := s.git(ctx, "config", "user.name", "Deneb"); cerr != nil {
+			return fmt.Errorf("git config user.name: %w (%s)", cerr, out)
+		}
+		if out, cerr := s.git(ctx, "config", "user.email", "deneb@localhost"); cerr != nil {
+			return fmt.Errorf("git config user.email: %w (%s)", cerr, out)
+		}
 	}
-	if out, err := s.git(ctx, "init", "-q"); err != nil {
-		return fmt.Errorf("git init: %w (%s)", err, out)
-	}
-	if out, err := s.git(ctx, "config", "user.name", "Deneb"); err != nil {
-		return fmt.Errorf("git config user.name: %w (%s)", err, out)
-	}
-	if out, err := s.git(ctx, "config", "user.email", "deneb@localhost"); err != nil {
-		return fmt.Errorf("git config user.email: %w (%s)", err, out)
-	}
+	// Settings below run on EVERY call, not just at creation. The function used
+	// to return immediately when .git existed, so a repository created before a
+	// setting was introduced never received it — which is precisely how the
+	// ignore list went stale in the first place (the live wiki still carried the
+	// original five lines months later). Both operations are idempotent.
 	if err := s.reconcileGitIgnore(); err != nil {
 		return err
 	}
