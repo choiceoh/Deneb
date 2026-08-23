@@ -47,7 +47,7 @@ func TestRoutingHintMatchesBenchResidue(t *testing.T) {
 // The hint rides only on an already-emitted block, outside the fence.
 func TestAppendRoutingHintPlacement(t *testing.T) {
 	block := recallContextOpenTag + "\n내용\n" + recallContextCloseTag
-	out := appendRoutingHint(block, "SunKean 견적 총액 얼마였지?", nil)
+	out := appendRoutingHint(block, "SunKean 견적 총액 얼마였지?", "", nil)
 	if !strings.HasPrefix(out, block) {
 		t.Fatalf("hint must append after the block, got %q", out)
 	}
@@ -57,7 +57,7 @@ func TestAppendRoutingHintPlacement(t *testing.T) {
 	}
 
 	// Silent turns stay silent: an empty block gains no bytes.
-	if got := appendRoutingHint("", "견적 총액 얼마?", nil); got != "" {
+	if got := appendRoutingHint("", "견적 총액 얼마?", "", nil); got != "" {
 		t.Errorf("empty block must stay empty, got %q", got)
 	}
 }

@@ -91,11 +91,14 @@ func routingHintWithShape(message string) (hint, shape string) {
 // hint sits AFTER the fence close tag: it is trusted server guidance, not
 // recalled (untrusted) data, so it must not live inside the fence. Empty
 // blocks stay empty — silent auto-recall turns must stay silent.
-func appendRoutingHint(block, message string, logger *slog.Logger) string {
+func appendRoutingHint(block, message, sessionKey string, logger *slog.Logger) string {
 	if block == "" {
 		return block
 	}
 	hint, shape := routingHintWithShape(message)
+	// Park the shape either way: an empty one clears a previous turn's slot so
+	// its expectation is never attributed to this answer.
+	storeRoutingShape(sessionKey, shape)
 	if hint == "" {
 		return block
 	}

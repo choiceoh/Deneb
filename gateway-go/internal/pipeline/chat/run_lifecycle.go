@@ -110,11 +110,24 @@ func finishTurnSideEffects(deps runDeps, params RunParams, result *agent.AgentRe
 		answer = strings.TrimSpace(result.Text)
 	}
 	chatrecall.RecordAnswerCitations(deps.memory.Wiki, params.SessionKey, answer, logger)
+	// 라우팅 힌트 접지: when the preflight told this turn to sum the ledger or walk
+	// the graph instead of reading snippets, record whether it actually did. Log
+	// only — an unfollowed hint is a fact to read, not a failure to act on here.
+	chatrecall.RecordRoutingOutcome(params.SessionKey, toolNamesOf(result.ToolActivities), logger)
 	// Deliverable → 작업 피드 auto safety net: a document-analysis turn whose result
 	// the model did not publish itself gets filed as a doc_analysis card. Anchored
 	// on a hard signal (a document was ingested this turn), so ordinary chat never
 	// trips it.
 	maybeAutoPublishDeliverable(deps, params, result, logger)
+}
+
+// toolNamesOf projects a run's tool activities to their names, in call order.
+func toolNamesOf(activities []agent.ToolActivity) []string {
+	names := make([]string, 0, len(activities))
+	for _, a := range activities {
+		names = append(names, a.Name)
+	}
+	return names
 }
 
 // maybeAutoPublishDeliverable files the turn's final response as a doc_analysis
