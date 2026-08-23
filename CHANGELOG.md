@@ -1,5 +1,28 @@
 # Changelog
 
+## [5.3.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.2.0...deneb-v5.3.0) (2026-08-23)
+
+
+### ✨ Features
+
+* **backup:** include the recall gold sets and add a deterministic gold repointer ([#4638](https://github.com/choiceoh/Deneb/issues/4638)) ([71c80bc](https://github.com/choiceoh/Deneb/commit/71c80bccd920ec0d4670c88f8a416c3e4891d88c))
+* **chat:** 채팅 모델 전환을 해당 세션에만 적용 ([#4631](https://github.com/choiceoh/Deneb/issues/4631)) ([bf4fec7](https://github.com/choiceoh/Deneb/commit/bf4fec761f96ebf1ed034ebde58f9eef8214c162))
+* **feed:** wiki-maint 정비 카드(인물 연락처 불일치) + 다이제스트 품질 추이 스파크라인 ([#4635](https://github.com/choiceoh/Deneb/issues/4635)) ([39a30f1](https://github.com/choiceoh/Deneb/commit/39a30f174b6fd5086567c5ef3f0cf30ff2cc552a))
+* **wiki:** flag person pages filed twice under different name forms ([#4641](https://github.com/choiceoh/Deneb/issues/4641)) ([7ac6a60](https://github.com/choiceoh/Deneb/commit/7ac6a603694e2cfdf02422e18b33db7e6790e969))
+* **wiki:** surface homonym suspicions as a Trust Inbox card ([#4639](https://github.com/choiceoh/Deneb/issues/4639)) ([4220d38](https://github.com/choiceoh/Deneb/commit/4220d383c649f227c873668abe69d7906b572713))
+
+
+### 🐛 Bug Fixes
+
+* **dev:** sharpen CodeGraph explore reroute and attach folder docs ([#4630](https://github.com/choiceoh/Deneb/issues/4630)) ([409d8c9](https://github.com/choiceoh/Deneb/commit/409d8c99d70ccb00ebbf47c4d6f27ae23e2eee41))
+* **wiki:** apply repo hygiene settings to wikis that already have a .git (W11) ([#4637](https://github.com/choiceoh/Deneb/issues/4637)) ([deca19c](https://github.com/choiceoh/Deneb/commit/deca19c63e3b21541d20fc5eb06e6959106c7f0d))
+
+
+### ⚡ Performance
+
+* **embedindex:** store cached vectors in a float32 sidecar instead of JSON ([#4640](https://github.com/choiceoh/Deneb/issues/4640)) ([c5e5685](https://github.com/choiceoh/Deneb/commit/c5e56850c0233c7628a850712b0861f70cb89944))
+* **wiki:** move semantic vectors out of the JSON manifest into a float32 blob (W11) ([#4633](https://github.com/choiceoh/Deneb/issues/4633)) ([cb1b7f9](https://github.com/choiceoh/Deneb/commit/cb1b7f930c4a33f1c506568568ef2ad079fe66a6))
+
 ## [5.2.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.1.0...deneb-v5.2.0) (2026-08-23)
 
 
