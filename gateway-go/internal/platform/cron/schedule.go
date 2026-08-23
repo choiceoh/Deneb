@@ -113,8 +113,12 @@ func computeNextEveryMs(schedule StoreSchedule, nowMs int64) int64 {
 }
 
 // computeNextCronMs evaluates a cron expression to find the next run time.
-// Uses a simplified approach: parses common cron patterns natively.
-// For complex patterns, falls back to interval-based approximation.
+// Standard 5-field expressions (ranges, steps, lists, names, @aliases) are
+// evaluated natively; anything evaluateCronExpr cannot parse yields 0 — "no
+// next run". There is NO interval approximation (an older comment claimed one):
+// ParseSchedule rejects such expressions at creation, so a stored job can only
+// reach this path through legacy data, and the scheduler then leaves it
+// un-run rather than guessing a time.
 func computeNextCronMs(schedule StoreSchedule, nowMs int64) int64 {
 	expr := strings.TrimSpace(schedule.Expr)
 	if expr == "" {

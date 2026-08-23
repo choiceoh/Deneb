@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -32,9 +33,10 @@ func appendIndex(path string, s *Snapshot) error {
 	return nil
 }
 
-// readIndex parses the session's JSONL index. Corrupt trailing lines (e.g.
-// from a crash mid-write) are silently skipped so the manager can still
-// function after an abrupt shutdown.
+// readIndex parses the session's JSONL index. Corrupt lines (e.g. a torn
+// trailing write from a crash) are skipped so the manager can still function
+// after an abrupt shutdown — but never silently: each read that drops lines
+// logs how many, so a checkpoint that quietly went missing has a trace.
 func readIndex(path string) ([]*Snapshot, error) {
 	f, err := os.Open(path) //nolint:gosec // G304 — path is session-internal.
 	if err != nil {
@@ -46,6 +48,7 @@ func readIndex(path string) ([]*Snapshot, error) {
 	defer f.Close()
 
 	var snaps []*Snapshot
+	corrupt := 0
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	for scanner.Scan() {
@@ -55,10 +58,15 @@ func readIndex(path string) ([]*Snapshot, error) {
 		}
 		var s Snapshot
 		if err := json.Unmarshal(line, &s); err != nil {
-			continue // graceful degradation
+			corrupt++ // graceful degradation — reported below, not swallowed
+			continue
 		}
 		cp := s // avoid re-using loop variable address
 		snaps = append(snaps, &cp)
+	}
+	if corrupt > 0 {
+		slog.Default().Warn("checkpoint: index held corrupt lines — skipped (a snapshot may be unlisted)",
+			"path", path, "corruptLines", corrupt, "kept", len(snaps))
 	}
 	if err := scanner.Err(); err != nil {
 		return snaps, fmt.Errorf("checkpoint: scan index: %w", err)
