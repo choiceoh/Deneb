@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.119](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.118...andromeda-v0.0.119) (2026-08-23)
+
+
+### ✨ Features
+
+* **chat:** 대화 검색·고정·세션 복원과 모델 기본 되돌리기 ([#4644](https://github.com/choiceoh/Deneb/issues/4644)) ([eac149f](https://github.com/choiceoh/Deneb/commit/eac149fbfcd22807c8330a1596344ebfe5669af0))
+
 ## [0.0.118](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.117...andromeda-v0.0.118) (2026-08-23)
 
 
