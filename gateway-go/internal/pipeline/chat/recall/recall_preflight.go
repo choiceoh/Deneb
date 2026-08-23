@@ -377,7 +377,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 			recordRecallMiss(deps.Wiki, params.SessionKey, message, logger)
 			// The no-evidence notice also carries the routing hint: "찾은 게
 			// 없다"에서 끝내지 말고 맞는 도구로 가라는 다음 행선지.
-			return appendRoutingHint(formatRecallNoEvidence(), message), truncated
+			return appendRoutingHint(formatRecallNoEvidence(), message, logger), truncated
 		}
 		return "", truncated
 	}
@@ -403,7 +403,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	// temporal/graph — recall_route.go): the wiki evidence above usually EXISTS
 	// for these but is the wrong answer surface, so the hint rides along to
 	// nudge the right tool. Outside the fence — server guidance, not recall.
-	return appendRoutingHint(formatRecallEvidenceAt(evidence, deps.now()), message), truncated
+	return appendRoutingHint(formatRecallEvidenceAt(evidence, deps.now()), message, logger), truncated
 }
 
 func buildRecallSources(params Params, deps Deps, queries []string, message string) []recallSource {
