@@ -11,10 +11,12 @@ from unittest import mock
 
 from test_support import REPO_ROOT
 
+from codegraph_folder_docs import folder_docs
 from codegraph_mcp_proxy import (
     ExploreReroute,
     encode_message,
     explore_symbol,
+    extract_explore_symbol,
     is_node_miss,
     read_message,
     single_symbol_query,
@@ -30,6 +32,12 @@ class SymbolQueryTests(unittest.TestCase):
         self.assertEqual(single_symbol_query("how does the hub work"), "")
         self.assertEqual(single_symbol_query("miniapp.todo.create"), "")
 
+    def test_extracts_nl_and_dotted_rpc_names(self) -> None:
+        self.assertEqual(extract_explore_symbol("how does GatewayHub work"), "GatewayHub")
+        self.assertEqual(extract_explore_symbol("miniapp.todo.create"), "miniapp.todo.create")
+        self.assertEqual(extract_explore_symbol("GatewayHub GatewayTab"), "")
+        self.assertEqual(extract_explore_symbol("how does the hub work"), "")
+
 
 class ExploreRerouteTests(unittest.TestCase):
     def _explore(self, query: str, req_id: int = 1) -> dict:
@@ -40,11 +48,23 @@ class ExploreRerouteTests(unittest.TestCase):
             "params": {"name": "codegraph_explore", "arguments": {"query": query}},
         }
 
-    def test_nl_and_area_words_pass_through(self) -> None:
+    def test_nl_and_area_words_pass_through_with_maxfiles_cap(self) -> None:
         hub = ExploreReroute()
         msg = self._explore("how does gateway hub work")
-        self.assertEqual(hub.on_client(msg), [msg])
+        outgoing = hub.on_client(msg)
+        self.assertEqual(outgoing[0]["params"]["name"], "codegraph_explore")
+        self.assertEqual(outgoing[0]["params"]["arguments"]["query"], "how does gateway hub work")
+        self.assertEqual(outgoing[0]["params"]["arguments"]["maxFiles"], 6)
         self.assertEqual(explore_symbol(self._explore("auth")), "")
+        explicit = self._explore("how does gateway hub work")
+        explicit["params"]["arguments"]["maxFiles"] = 12
+        self.assertEqual(hub.on_client(explicit)[0]["params"]["arguments"]["maxFiles"], 12)
+
+    def test_nl_with_one_symbol_reroutes(self) -> None:
+        hub = ExploreReroute()
+        outgoing = hub.on_client(self._explore("how does GatewayHub work"))
+        self.assertEqual(outgoing[0]["params"]["name"], "codegraph_node")
+        self.assertEqual(outgoing[0]["params"]["arguments"]["symbol"], "GatewayHub")
 
     def test_symbol_hit_rewrites_to_node_and_restores_client_id(self) -> None:
         hub = ExploreReroute()
@@ -191,6 +211,65 @@ class WrapperContractTests(unittest.TestCase):
         self.assertIn("codegraph-serve.sh", trae["mcpServers"]["codegraph"]["args"][0])
         self.assertIn("codegraph-serve.sh", codex)
         self.assertNotIn("command = \"codegraph\"", codex)
+
+
+class FolderDocsTests(unittest.TestCase):
+    def test_attaches_nearest_claude_and_skips_traversal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "gateway-go").mkdir()
+            (root / "gateway-go" / "CLAUDE.md").write_text(
+                "# Runtime\n\n## Safety\nNever join `..`.\n\n## Other\nIgnore me.\n",
+                encoding="utf-8",
+            )
+            text = "see gateway-go/internal/runtime/server.go:10"
+            extra = folder_docs(text, str(root), "safety path")
+            self.assertIn("gateway-go/CLAUDE.md", extra)
+            self.assertIn("Never join", extra)
+            self.assertNotIn("Ignore me", extra)
+            self.assertEqual(folder_docs("see `gateway-go/../../etc/evil.go:1`", str(root), ""), "")
+
+    def test_reroute_appends_folder_docs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pkg").mkdir()
+            (root / "pkg" / "CLAUDE.md").write_text("pkg map\n", encoding="utf-8")
+            hub = ExploreReroute(root=str(root))
+            outgoing = hub.on_client(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "codegraph_explore", "arguments": {"query": "GatewayHub"}},
+                }
+            )
+            to_client, _ = hub.on_server(
+                {
+                    "jsonrpc": "2.0",
+                    "id": outgoing[0]["id"],
+                    "result": {"content": [{"type": "text", "text": "pkg/hub.go:1 type GatewayHub"}]},
+                }
+            )
+            self.assertIn("pkg/CLAUDE.md", to_client[0]["result"]["content"][0]["text"])
+
+
+class DoctorTests(unittest.TestCase):
+    def test_mcp_ok_on_this_repo_and_detects_clobber(self) -> None:
+        from codegraph_doctor import check_mcp, diagnose
+
+        mcp = check_mcp(str(REPO_ROOT))
+        self.assertTrue(mcp["ok"], mcp["detail"])
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cursor = root / ".cursor" / "mcp.json"
+            cursor.parent.mkdir()
+            cursor.write_text(
+                json.dumps({"mcpServers": {"codegraph": {"command": "codegraph", "args": ["serve", "--mcp"]}}}),
+                encoding="utf-8",
+            )
+            self.assertFalse(check_mcp(str(root))["ok"])
+            ids = {item["id"] for item in diagnose(str(root))}
+            self.assertEqual(ids, {"cli", "root", "index", "mcp"})
 
 
 if __name__ == "__main__":

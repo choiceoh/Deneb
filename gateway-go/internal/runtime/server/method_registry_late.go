@@ -187,6 +187,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		modelpicker.NewController(modelpicker.ControllerConfig{
 			Registry:    s.modelRegistry,
 			ChatHandler: s.chatHandler,
+			Sessions:    s.sessions,
 			Logger:      s.logger,
 			RoleHealthVerdicts: func() map[string]string {
 				if s.roleHealth == nil {

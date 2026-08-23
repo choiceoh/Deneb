@@ -194,6 +194,17 @@ describe("RPC convenience methods", () => {
       { method: "miniapp.mail.ask", params: { id: "mail-1", question: "question", history: [] } },
     ]);
   });
+
+  it("scopes models.set to a session when sessionKey is passed", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ ok: true, role: "main", current: "model-b" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await setModel(CFG, "model-b", "main", "client:main:alpha");
+    expect(requestAt(fetchMock).body?.params).toEqual({
+      id: "model-b",
+      role: "main",
+      sessionKey: "client:main:alpha",
+    });
+  });
 });
 
 describe("binary and stream transport", () => {

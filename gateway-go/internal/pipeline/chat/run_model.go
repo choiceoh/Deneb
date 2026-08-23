@@ -18,12 +18,13 @@ type modelResolution struct {
 //
 // Resolution order:
 //  1. Explicit model from params (role name or raw model ID)
-//  2. Sub-agent: session.Model → subagentDefaultModel
-//  3. defaultModel from config
-//  4. Registry main role fallback
-//  5. Second-pass role resolution for fallback values
-//  6. Provider prefix extraction ("google/gemini" → provider="google")
-//  7. Sub-agent provider remapping ("<provider>-subagent")
+//  2. Session override (chat picker) for any session
+//  3. Sub-agent default when spawned and still unset
+//  4. defaultModel from config
+//  5. Registry main role fallback
+//  6. Second-pass role resolution for fallback values
+//  7. Provider prefix extraction ("google/gemini" → provider="google")
+//  8. Sub-agent provider remapping ("<provider>-subagent")
 func resolveModel(
 	params RunParams,
 	deps runDeps,
@@ -46,14 +47,14 @@ func resolveModel(
 		}
 		// Raw model ID → no role mapping, no fallback chain (direct override).
 	}
-	if model == "" && sess != nil && sess.SpawnedBy != "" {
-		// Sub-agent: use explicit session model if set at spawn time,
-		// otherwise fall back to the configured subagent default model.
-		if sess.Model != "" {
-			model = sess.Model
-		} else if deps.subagentDefaultModel != "" {
-			model = deps.subagentDefaultModel
-		}
+	if model == "" && sess != nil && sess.Model != "" {
+		// Per-session override from the chat picker (or a spawn-time
+		// model). Must win over the global default so switching the
+		// model in one conversation cannot retarget every other session.
+		model = sess.Model
+	}
+	if model == "" && sess != nil && sess.SpawnedBy != "" && deps.subagentDefaultModel != "" {
+		model = deps.subagentDefaultModel
 	}
 	// Image turns route to the configured vision model (agents.visionModel →
 	// RoleVision) so a main model with no vision tower (e.g. DeepSeek-V4-Flash)

@@ -135,6 +135,9 @@ class ChatViewModel(
                 dataRepository.denebModels.collect { updateAvailableServices() }
             }
             viewModelScope.launch {
+                dataRepository.sessionModels.collect { updateAvailableServices() }
+            }
+            viewModelScope.launch {
                 dataRepository.denebWorkFeed.collect { feed ->
                     _state.update { it.copy(workFeed = feed.toImmutableList()) }
                 }
@@ -154,6 +157,9 @@ class ChatViewModel(
             _state.update { it.copy(isRestoring = false) }
         }
 
+        viewModelScope.launch {
+            dataRepository.currentConversationId.collect { updateAvailableServices() }
+        }
         viewModelScope.launch {
             dataRepository.fallbackStatus.collect { status ->
                 _state.update { it.copy(fallbackStatus = status) }
@@ -521,14 +527,15 @@ class ChatViewModel(
     }
 
     private fun selectService(instanceId: String) {
-        // The chat-input switcher lists gateway models; selecting one swaps the
-        // active role-model instance on the gateway client.
+        // The chat-input switcher lists gateway models; selecting one binds
+        // that model to the current conversation only.
         (dataRepository as? DenebGatewayClient)?.selectDenebModelInstance(instanceId)
     }
 
     private fun updateAvailableServices() {
+        val sessionKey = dataRepository.currentConversationId.value
         val entries = (dataRepository as? DenebGatewayClient)
-            ?.denebServiceEntries()
+            ?.denebServiceEntries(sessionKey)
             ?.toImmutableList()
             ?: persistentListOf()
         _state.update { it.copy(availableServices = entries, warning = null) }

@@ -47,7 +47,6 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   const [input, setInput] = useState("");
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const { models, model, setModel } = useModels(cfg, connected);
   // 첨부 배치 진행 state — busy가 파일 읽기 틈에 잠깐 내려가는 동안에도 세션 전환/삭제/
   // 새 대화를 막는다 (useSessions 인자로 들어가야 해서 파이프라인 훅 밖에 산다).
   const [attaching, setAttaching] = useState(false);
@@ -81,6 +80,8 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
       newKey: () => `client:main:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     },
   );
+  const sessionModel = sessions.find((s) => s.key === sessionKey)?.model ?? "";
+  const { models, model, setModel } = useModels(cfg, connected, sessionKey, sessionModel);
   const { ref: transcriptRef, onScroll, pin, atBottom, scrollToBottom } = useStickyScroll([turns, thinking]);
 
   useComposerBehavior(composeRef, { input, busy, hidden, focusOnReveal: true });

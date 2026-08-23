@@ -49,8 +49,9 @@ import kotlinx.serialization.json.put
  */
 
 // --- Model switcher → Deneb registry ------------------------------------
-// models.set updates the gateway's default model, so switching here changes
-// chat across the native app and every gateway-run automation.
+// Settings (`setRoleModel`) still writes the gateway default via models.set
+// with no sessionKey. The chat-input switcher passes sessionKey so only
+// that conversation's model changes.
 
 fun DenebGatewayClient.refreshModelsAsync() {
     scope.launch { refreshModels() }
@@ -136,14 +137,15 @@ suspend fun DenebGatewayClient.deleteCustomModel(id: String): Boolean {
 // --- Chat-input model switcher → Deneb registry --------------------------
 // the upstream chat input has a service/model switcher (ServiceSelector) driven by
 // ChatUiState.availableServices. When this client is active, ChatViewModel
-// sources that list from here so the switcher changes the gateway main model
-// instead of the upstream local providers.
+// sources that list from here so the switcher binds the current conversation's
+// model instead of the upstream local providers.
 
-/** Gateway models as switcher entries, the active (main) model first (the
- *  ServiceSelector renders the first entry as selected). */
-fun DenebGatewayClient.denebServiceEntries(): List<ServiceEntry> {
+/** Gateway models as switcher entries, the session (or global) selection first
+ *  (the ServiceSelector renders the first entry as selected). */
+fun DenebGatewayClient.denebServiceEntries(sessionKey: String? = null): List<ServiceEntry> {
     val models = _denebModels.value
-    val selectedId = models.firstOrNull { it.current }?.id
+    val selectedId = sessionKey?.let { _sessionModels.value[it] }?.takeIf { it.isNotBlank() }
+        ?: models.firstOrNull { it.current }?.id
     val ordered = models.filter { it.id == selectedId } + models.filterNot { it.id == selectedId }
     return ordered.map { model ->
         ServiceEntry(
@@ -202,12 +204,30 @@ private fun denebModelIcon(model: ModelOption) = with("${model.id} ${model.displ
     }
 }
 
-/** Switch the main model from a switcher tap (instanceId = prefixed model id).
- *  Mirrors [denebServiceEntries]' selection. */
+/** Bind [instanceId] to the current conversation only — not the global main role. */
 fun DenebGatewayClient.selectDenebModelInstance(instanceId: String) {
     val modelId = instanceId.removePrefix(DENEB_MODEL_PREFIX)
     if (modelId.isBlank() || modelId == instanceId) return
-    scope.launch { setRoleModel(modelId, "main") }
+    val key = sessionKey
+    if (key.isBlank()) return
+    scope.launch { setSessionModel(key, modelId) }
+}
+
+/** Persist a chat-picker choice on one session. Settings still uses [setRoleModel]. */
+suspend fun DenebGatewayClient.setSessionModel(sessionKey: String, id: String): Boolean {
+    val key = sessionKey.trim()
+    if (key.isEmpty() || id.isBlank()) return false
+    val ok = callRpc<JsonObject>(
+        "miniapp.models.set",
+        buildJsonObject {
+            put("id", id)
+            put("sessionKey", key)
+        },
+    ) != null
+    if (ok) {
+        _sessionModels.value = _sessionModels.value + (key to id)
+    }
+    return ok
 }
 
 // Prefix marking a switcher instanceId as a gateway model (vs. an upstream

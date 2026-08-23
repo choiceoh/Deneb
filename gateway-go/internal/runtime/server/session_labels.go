@@ -201,12 +201,17 @@ func (s *Server) startSessionLabelPersistence() {
 		return
 	}
 	pinsPath, pinsPathErr := sessionPinsStorePath()
+	modelsPath, modelsPathErr := sessionModelsStorePath()
 	safego.GoWithSlog(s.logger, "session-label-persist", func() {
 		ctx := s.ShutdownCtx()
 		last := loadSessionLabels(path)
 		var lastPins map[string]bool
 		if pinsPathErr == nil {
 			lastPins = loadSessionPins(pinsPath)
+		}
+		var lastModels map[string]string
+		if modelsPathErr == nil {
+			lastModels = loadSessionModels(modelsPath)
 		}
 		flush := func() {
 			live := s.sessions.List()
@@ -225,6 +230,23 @@ func (s *Server) startSessionLabelPersistence() {
 					s.logger.Warn("session labels: persist failed", "error", err)
 				} else {
 					last = merged
+				}
+			}
+			if modelsPathErr == nil {
+				modelSnap := snapshotSessionModels(live)
+				mergedModels := make(map[string]string, len(lastModels)+len(modelSnap))
+				for k, v := range lastModels {
+					mergedModels[k] = v
+				}
+				for k, v := range modelSnap {
+					mergedModels[k] = v
+				}
+				if !labelsEqual(mergedModels, lastModels) {
+					if err := saveSessionModels(modelsPath, mergedModels); err != nil {
+						s.logger.Warn("session models: persist failed", "error", err)
+					} else {
+						lastModels = mergedModels
+					}
 				}
 			}
 			// Pins ride the same sweep. Merge over the stored set so a pin whose

@@ -100,3 +100,29 @@ func TestRestoreAndWakeSessions_RestoresNativeSessions(t *testing.T) {
 		}
 	}
 }
+
+func TestRestoreAndWakeSessions_RestoresSessionModel(t *testing.T) {
+	tmpHome := t.TempDir()
+	transcriptDir := filepath.Join(tmpHome, ".deneb", "transcripts")
+	if err := os.MkdirAll(transcriptDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", tmpHome)
+	makeSessionTranscript(t, transcriptDir, "client:main:alpha")
+	modelsPath := filepath.Join(tmpHome, ".deneb", "session-models.json")
+	if err := os.WriteFile(modelsPath, []byte(`{"client:main:alpha":"kimi/kimi-k2.5"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	mgr := session.NewManager()
+	srv := newTestServerForRestore(mgr)
+	srv.restoreAndWakeSessions(context.Background())
+
+	got := mgr.Get("client:main:alpha")
+	if got == nil {
+		t.Fatal("expected client:main:alpha to be restored")
+	}
+	if got.Model != "kimi/kimi-k2.5" {
+		t.Fatalf("model = %q, want kimi/kimi-k2.5", got.Model)
+	}
+}

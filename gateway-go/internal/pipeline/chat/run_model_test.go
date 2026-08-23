@@ -63,3 +63,41 @@ func TestResolveModelReturnsRemappedProviderForNonCodingSubagent(t *testing.T) {
 		t.Errorf("initialRole = %q, want %q", got.initialRole, modelrole.RoleMain)
 	}
 }
+
+func TestResolveModelUsesSessionOverrideForDirectChat(t *testing.T) {
+	reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
+		MainModel: "zai/glm-main",
+	})
+	deps := runDeps{
+		registry:  reg,
+		callbacks: CallbackSnapshot{defaultModel: "zai/glm-main"},
+	}
+	sess := &session.Session{Model: "kimi/kimi-k2.5"}
+
+	got := resolveModel(RunParams{SessionKey: "client:main:alpha"}, deps, sess)
+	if got.model != "kimi-k2.5" {
+		t.Errorf("model = %q, want kimi-k2.5", got.model)
+	}
+	if got.providerID != "kimi" {
+		t.Errorf("providerID = %q, want kimi", got.providerID)
+	}
+}
+
+func TestResolveModelParamsOverrideSessionModel(t *testing.T) {
+	reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
+		MainModel: "zai/glm-main",
+	})
+	deps := runDeps{
+		registry:  reg,
+		callbacks: CallbackSnapshot{defaultModel: "zai/glm-main"},
+	}
+	sess := &session.Session{Model: "kimi/kimi-k2.5"}
+
+	got := resolveModel(RunParams{Model: "zai/glm-main"}, deps, sess)
+	if got.model != "glm-main" {
+		t.Errorf("model = %q, want glm-main (explicit params win)", got.model)
+	}
+	if got.providerID != "zai" {
+		t.Errorf("providerID = %q, want zai", got.providerID)
+	}
+}
