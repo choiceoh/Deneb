@@ -10,6 +10,7 @@ package wiki
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -49,6 +50,7 @@ func (s *Store) RotateProjectLog(project string) (int, error) {
 		return 0, nil // no log yet — nothing to rotate
 	}
 	_, sections := logPage.SplitByH2()
+	sections = mergeLogEntrySections(sections)
 	if len(sections) <= LogKeepSections {
 		return 0, nil
 	}
@@ -136,4 +138,47 @@ func trimRotatedLogSections(cur *Page, overflow []H2Section) *Page {
 	cur.Body = b.String()
 	cur.Meta.Updated = time.Now().Format("2006-01-02")
 	return cur
+}
+
+// logEntryHeader matches the layout's entry header: "## [YYYY-MM-DD] <op> | <주제>".
+var logEntryHeader = regexp.MustCompile(`^\[\d{4}-\d{2}-\d{2}\]\s+\S+\s*\|`)
+
+// mergeLogEntrySections folds sub-headings back into the entry that owns them,
+// so rotation counts ENTRIES rather than every H2 line.
+//
+// Only two writers emit the entry grammar; the dreamer and the wiki tool append
+// free-form markdown, and a long entry routinely carries its own "## 요지" /
+// "## 리스크" sub-headings (measured: 347 of 601 H2 lines across the live logs
+// are not entry headers). Counting those as sections made "newest 20" mean
+// roughly ten real entries, and worse, rotation could cut an entry in half —
+// the head staying in 로그.md while its own sub-sections moved to the archive.
+//
+// A log whose headers predate the grammar has no entry headers at all; then
+// every section is its own unit and rotation behaves exactly as before.
+func mergeLogEntrySections(sections []H2Section) []H2Section {
+	if len(sections) == 0 {
+		return sections
+	}
+	hasEntryHeader := false
+	for _, sec := range sections {
+		if logEntryHeader.MatchString(strings.TrimSpace(sec.Heading)) {
+			hasEntryHeader = true
+			break
+		}
+	}
+	if !hasEntryHeader {
+		return sections
+	}
+	merged := make([]H2Section, 0, len(sections))
+	for _, sec := range sections {
+		if logEntryHeader.MatchString(strings.TrimSpace(sec.Heading)) || len(merged) == 0 {
+			merged = append(merged, sec)
+			continue
+		}
+		// A sub-heading belongs to the entry above it: keep the text verbatim
+		// (heading line included) so rotation stays lossless.
+		last := &merged[len(merged)-1]
+		last.Content = strings.TrimRight(last.Content, "\n") + "\n\n## " + sec.Heading + "\n\n" + sec.Content
+	}
+	return merged
 }
