@@ -479,8 +479,27 @@ func detectDuplicates(entries map[string]IndexEntry) []verifyFinding {
 				}
 				dist := levenshtein(a.id, b.id)
 				if dist == 0 {
-					findings = append(findings, exactDupFinding(entries, a.path, b.path,
-						fmt.Sprintf("동일한 ID: \"%s\"", a.id)))
+					// An identical id is only auto-mergeable when the titles agree
+					// too. `id` is not a stable key on the producing side: the
+					// dreamer's update merge overwrites an existing page's id with
+					// whatever the LLM emitted, so one stamped id turns two
+					// unrelated pages into an "exact duplicate" and the fold
+					// silently destroys one (measured 2026-08: 5 of 8 auto-merges,
+					// including a project 대표 folded into a sibling project's 대표
+					// and a system page folded into an unrelated 기타 page). With
+					// mismatched titles the finding stays advisory and names the id
+					// collision itself as the thing to repair.
+					if norm := normalizeTitleKey(a.title); norm != "" && norm == normalizeTitleKey(b.title) {
+						findings = append(findings, exactDupFinding(entries, a.path, b.path,
+							fmt.Sprintf("동일한 ID: \"%s\"", a.id)))
+					} else {
+						findings = append(findings, verifyFinding{
+							Type: "duplicate",
+							Detail: fmt.Sprintf("동일한 ID(제목 상이): \"%s\" — \"%s\" ~ \"%s\" (id 충돌 수리 대상)",
+								a.id, a.title, b.title),
+							PageA: a.path, PageB: b.path,
+						})
+					}
 				} else {
 					findings = append(findings, verifyFinding{
 						Type:   "duplicate",
