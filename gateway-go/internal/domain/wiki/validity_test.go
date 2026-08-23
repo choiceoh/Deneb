@@ -23,7 +23,7 @@ func TestValidityFactor_ScalesWithAgeArchivedAndSupersededStatus(t *testing.T) {
 		{"superseded-and-old", Frontmatter{SupersededBy: "x.md", Updated: "2024-01-01"}, 0.105, 0.104},
 	}
 	for _, c := range cases {
-		got := validityFactor(c.meta, now)
+		got := validityFactor("", c.meta, now)
 		if got > c.max+1e-9 || got < c.min-1e-9 {
 			t.Errorf("%s: factor=%v want [%v,%v]", c.name, got, c.min, c.max)
 		}
@@ -149,4 +149,48 @@ func TestSearch_ValiditySurvivesRestart(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = reopened.Close() })
 	assertCurrentFirst(t, reopened, "post-restart")
+}
+
+func TestValidityFactor_DemotesUnlinkedMailAnalysis(t *testing.T) {
+	now := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	meta := Frontmatter{Updated: "2026-08-20"}
+	if got := validityFactor("프로젝트/메일분석/orphan@x.com.md", meta, now); got > 0.26 || got < 0.24 {
+		t.Errorf("unlinked mail factor=%v want 0.25", got)
+	}
+	if got := validityFactor("프로젝트/nde-sun-cbl-001/메일분석/orphan@x.com.md", meta, now); got != 1.0 {
+		t.Errorf("filed mail factor=%v want 1.0", got)
+	}
+}
+
+func TestSearch_DemotesUnlinkedMailBelowFiledTwin(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	body := "SunKean 케이블 납기 회신 — 8월 선적 일정 확인."
+	orphan := &Page{
+		Meta: Frontmatter{ID: "orphan-sunkean", Title: "SunKean 케이블 납기", Category: "프로젝트"},
+		Body: body,
+	}
+	filed := &Page{
+		Meta: Frontmatter{ID: "filed-sunkean", Title: "SunKean 케이블 납기", Category: "프로젝트"},
+		Body: body,
+	}
+	if err := store.WritePage("프로젝트/메일분석/a@sunkean.com.md", orphan); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WritePage("프로젝트/nde-sun-cbl-001/메일분석/a@sunkean.com.md", filed); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := store.Search(context.Background(), "SunKean 케이블 납기", 5)
+	if err != nil || len(results) < 2 {
+		t.Fatalf("search: %v results=%+v", err, results)
+	}
+	if results[0].Path != "프로젝트/nde-sun-cbl-001/메일분석/a@sunkean.com.md" {
+		t.Errorf("unlinked orphan outranked filed twin: %+v", results)
+	}
 }

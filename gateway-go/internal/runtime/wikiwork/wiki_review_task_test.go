@@ -84,6 +84,16 @@ func TestWikiReview_ObserveModeRecordsWithoutMerging(t *testing.T) {
 	}
 }
 
+func TestAppendObserved_DedupesByPayload(t *testing.T) {
+	st := &wikiReviewState{}
+	appendObserved(st, "2026-08-22 10:00 | mail-domain 프로젝트/메일분석/a@sunkean.com.md → nde-sun-cbl-001")
+	appendObserved(st, "2026-08-23 12:00 | mail-domain 프로젝트/메일분석/a@sunkean.com.md → nde-sun-cbl-001")
+	appendObserved(st, "2026-08-23 12:00 | mail-domain 프로젝트/메일분석/b@barocorp.com.md → pl1-sin-bes-001")
+	if len(st.Observed) != 2 {
+		t.Fatalf("Observed=%v want 2 unique payloads", st.Observed)
+	}
+}
+
 // TestWikiReviewRunMergesDuplicateAndIgnoresInventedPath: end-to-end with auto-merge
 // armed — two same-title pages, a fake verdict, and the duplicate is folded
 // (reversibly) while an invented path in the verdict is ignored.

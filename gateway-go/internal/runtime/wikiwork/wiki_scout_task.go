@@ -63,6 +63,9 @@ const (
 	// wikiScoutStatePrune drops attempt entries older than this so the state
 	// file stays bounded as questions come and go.
 	wikiScoutStatePrune = 60 * 24 * time.Hour
+	// wikiScoutExpireAfterDays drops questions the expiry pass should have
+	// already moved to 벤더 침묵 — a second gate if review hasn't run yet.
+	wikiScoutExpireAfterDays = wiki.OpenQuestionExpireAfterDays
 	// wikiScoutStateFile holds per-question last-attempt timestamps.
 	wikiScoutStateFile = "wiki-scout-state.json"
 	// wikiScoutSessionKey isolates these background turns from user sessions.
@@ -305,6 +308,9 @@ func filterScoutCooldown(qs []wiki.OpenQuestion, state *wikiScoutState, now time
 	cutoff := now.Add(-wikiScoutRetryAfter).UnixMilli()
 	var out []wiki.OpenQuestion
 	for _, q := range qs {
+		if q.AgeDays >= wikiScoutExpireAfterDays {
+			continue
+		}
 		if state.Attempted[scoutQuestionKey(q)] > cutoff {
 			continue
 		}

@@ -349,6 +349,18 @@ func IsMailAnalysisPath(relPath string) bool {
 		strings.Contains(p, "/"+legacyMailAnalysisDir+"/")
 }
 
+// IsUnlinkedMailAnalysisPath reports whether relPath is a mail analysis that
+// was never filed under a project folder — the category-level staging bucket
+// 프로젝트/메일분석/<id>.md (and the legacy mail-analyses/ equivalent). Filed
+// analyses (프로젝트/<name>/메일분석/…) return false.
+func IsUnlinkedMailAnalysisPath(relPath string) bool {
+	if !IsMailAnalysisPath(relPath) {
+		return false
+	}
+	_, ok := ProjectNameOf(relPath)
+	return !ok
+}
+
 // mailAnalysisMsgID returns a mail-analysis page's identifying Gmail message ID,
 // which the mail sink encodes as the filename stem (메일 1통 = 1페이지 — see
 // MailAnalysisPagePath). Empty for non-mail pages. Two mail-analysis pages are

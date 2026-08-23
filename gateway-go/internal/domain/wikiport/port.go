@@ -69,18 +69,19 @@ type (
 )
 
 const (
-	RepPageFile        = wiki.RepPageFile
-	LogPageFile        = wiki.LogPageFile
-	LogKeepSections    = wiki.LogKeepSections
-	RepSkeletonMarker  = wiki.RepSkeletonMarker
-	SearchModeAuto     = wiki.SearchModeAuto
-	SearchModeBM25     = wiki.SearchModeBM25
-	SearchModeSemantic = wiki.SearchModeSemantic
-	SearchModeHybrid   = wiki.SearchModeHybrid
-	SearchModeFull     = wiki.SearchModeFull
-	QueryKindLex       = wiki.QueryKindLex
-	QueryKindVec       = wiki.QueryKindVec
-	QueryKindHyDE      = wiki.QueryKindHyDE
+	RepPageFile                 = wiki.RepPageFile
+	LogPageFile                 = wiki.LogPageFile
+	LogKeepSections             = wiki.LogKeepSections
+	RepSkeletonMarker           = wiki.RepSkeletonMarker
+	OpenQuestionExpireAfterDays = wiki.OpenQuestionExpireAfterDays
+	SearchModeAuto              = wiki.SearchModeAuto
+	SearchModeBM25              = wiki.SearchModeBM25
+	SearchModeSemantic          = wiki.SearchModeSemantic
+	SearchModeHybrid            = wiki.SearchModeHybrid
+	SearchModeFull              = wiki.SearchModeFull
+	QueryKindLex                = wiki.QueryKindLex
+	QueryKindVec                = wiki.QueryKindVec
+	QueryKindHyDE               = wiki.QueryKindHyDE
 )
 
 // NormalizeSiteStatus accepts 후보/계약/개설/준공 or "" (미분류).
