@@ -232,3 +232,30 @@ class StageBreakdownTest(unittest.TestCase):
         self.assertEqual(s.stage_samples, [])
         self.assertEqual(health.latency_stage_extra([]), {})
         self.assertIn("n/a", health.latency_stage_detail([])[0])
+
+
+class McpStderrPassthroughTest(unittest.TestCase):
+    """MCP child stderr is another process's logging, not a gateway error."""
+
+    def test_child_stderr_lines_are_counted_but_not_scored(self) -> None:
+        lines = [
+            "2026-08-20T10:00:00+0900 host deneb-gateway[1]: agent loop complete agentMs=1000 turns=1 totalToolCalls=1 stopReason=done",
+            '2026-08-20T10:00:01+0900 host deneb-gateway[1]: mcp server stderr cmd=npx line="error: [TypeError: fetch failed] {"',
+            '2026-08-20T10:00:01+0900 host deneb-gateway[1]: mcp server stderr cmd=npx line="[cause]: Error: getaddrinfo EAI_AGAIN us.i.posthog.com"',
+        ]
+        signals = health.parse(lines)
+        self.assertEqual(signals.other_errors, 0)
+        self.assertEqual(signals.mcp_stderr_lines, 2)
+        _, dimensions = health.compute(signals)
+        error_rate = next(d for d in dimensions if d.name == "error-rate")
+        self.assertEqual(error_rate.score, 100.0)
+        self.assertEqual(error_rate.extra["mcp_stderr_lines"], 2)
+
+    def test_gateway_own_errors_still_count(self) -> None:
+        lines = [
+            "2026-08-20T10:00:00+0900 host deneb-gateway[1]: agent loop complete agentMs=1000 turns=1 totalToolCalls=1 stopReason=done",
+            "2026-08-20T10:00:02+0900 host deneb-gateway[1]: [autonomous] periodic task failed task=groupware-radar error=boom",
+        ]
+        signals = health.parse(lines)
+        self.assertEqual(signals.other_errors, 1)
+        self.assertEqual(signals.mcp_stderr_lines, 0)
