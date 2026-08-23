@@ -470,13 +470,23 @@ func (c *Client) spawnLocked() error {
 	// initialization errors quote. Exits on stderr EOF alongside the process.
 	// Lines are tagged with this spawn's generation so a dying predecessor
 	// cannot contaminate a successor's diagnosis ring during the TERM grace.
+	// Repeats collapse in the operator log only (every line still reaches the
+	// diagnosis ring): a server that retries a blocked telemetry host logged the
+	// same four lines 650+ times on 2026-08-17/18. The first occurrence is
+	// logged verbatim — that is where one-time OAuth instructions live.
 	safego.GoWithSlog(c.logger, "mcp-stderr", func() {
 		sc := bufio.NewScanner(stderr)
 		sc.Buffer(make([]byte, 64*1024), 256*1024)
+		dedupe := newStderrDeduper()
 		for sc.Scan() {
 			if line := strings.TrimSpace(sc.Text()); line != "" {
 				c.recordStderr(gen, line)
-				c.logger.Info("mcp server stderr", "cmd", c.argv[0], "line", line)
+				switch n := dedupe.observe(line); {
+				case n == 1:
+					c.logger.Info("mcp server stderr", "cmd", c.argv[0], "line", line)
+				case n%stderrRepeatLogEvery == 0:
+					c.logger.Info("mcp server stderr (repeating)", "cmd", c.argv[0], "line", line, "repeats", n)
+				}
 			}
 		}
 	})
