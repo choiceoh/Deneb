@@ -5,10 +5,14 @@ package ai.deneb.ui.chat.composables
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.ChatActions
 import ai.deneb.ui.chat.ConversationSummary
+import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebExpandIn
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebPressable
+import ai.deneb.ui.denebShrinkOut
 import ai.deneb.ui.handCursor
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,8 +27,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.OutlinedTextField
@@ -43,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,10 +86,10 @@ private val dateFormat = LocalDate.Format {
 /**
  * The right-side session selector, in the left drawer's typographic idiom
  * ([DenebDrawerSheet]): recent Deneb conversations as big ultralight words — the
- * active one in full weight, a live (interactive) one in the primary color — with
- * a quiet date below and a faint × to delete. No cards or borders, so left=nav and
- * right=sessions read as one family. Opened by the top-bar session button or a
- * right-edge swipe.
+ * active one in full weight — with a quiet date below. Search stays behind a
+ * top-right magnifying glass; pin and × appear only after a long-press on the
+ * session name. No cards or borders, so left=nav and right=sessions read as one
+ * family. Opened by the top-bar session button or a right-edge swipe.
  */
 @Composable
 fun DenebSessionDrawerSheet(
@@ -91,6 +100,8 @@ fun DenebSessionDrawerSheet(
     searchHits: ImmutableList<ConversationSummary> = kotlinx.collections.immutable.persistentListOf(),
     actions: ChatActions,
     onClose: () -> Unit,
+    initiallySearchOpen: Boolean = false,
+    initiallyRevealedSessionId: String? = null,
 ) {
     ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.background) {
         val snackbarHostState = remember { SnackbarHostState() }
@@ -112,28 +123,71 @@ fun DenebSessionDrawerSheet(
 
         Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Small quiet header, mirroring the topic drawer's "topics" label.
-                Text(
-                    text = stringResource(Res.string.chat_history_title),
-                    style = DenebType.rowTitle,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 40.dp, bottom = 12.dp),
-                )
+                val haptics = rememberHaptics()
+                val focusManager = LocalFocusManager.current
+                var searchOpen by remember { mutableStateOf(initiallySearchOpen) }
                 var searchQuery by remember { mutableStateOf("") }
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { next ->
-                        searchQuery = next
-                        actions.searchConversations(next)
-                    },
+                var revealedSessionId by remember { mutableStateOf(initiallyRevealedSessionId) }
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 28.dp, end = 28.dp, bottom = 8.dp),
-                    singleLine = true,
-                    placeholder = { Text("대화 검색", style = DenebType.hint) },
-                )
+                        .padding(start = 28.dp, end = 16.dp, top = 40.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(Res.string.chat_history_title),
+                        style = DenebType.rowTitle,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(
+                        modifier = Modifier.size(40.dp),
+                        onClick = {
+                            haptics.tap()
+                            if (searchOpen) {
+                                focusManager.clearFocus()
+                                searchOpen = false
+                                if (searchQuery.isNotEmpty()) {
+                                    searchQuery = ""
+                                    actions.searchConversations("")
+                                }
+                            } else {
+                                revealedSessionId = null
+                                searchOpen = true
+                            }
+                        },
+                    ) {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = if (searchOpen) "대화 검색 닫기" else "대화 검색 열기",
+                            tint = if (searchOpen) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                denebHint()
+                            },
+                        )
+                    }
+                }
+                AnimatedVisibility(
+                    visible = searchOpen,
+                    enter = denebExpandIn,
+                    exit = denebShrinkOut,
+                ) {
+                    DenebUnderlineSearchField(
+                        query = searchQuery,
+                        onQueryChange = { next ->
+                            searchQuery = next
+                            actions.searchConversations(next)
+                        },
+                        placeholder = "대화 검색",
+                        textStyle = DenebType.body,
+                        clearable = true,
+                        autoFocus = true,
+                        modifier = Modifier.padding(start = 28.dp, end = 28.dp, bottom = 8.dp),
+                    )
+                }
 
-                if (conversations.isEmpty() && searchHits.isEmpty()) {
+                if (conversations.isEmpty() && searchHits.isEmpty() && searchQuery.isBlank()) {
                     Text(
                         text = stringResource(Res.string.chat_history_empty),
                         style = DenebType.body,
@@ -165,8 +219,17 @@ fun DenebSessionDrawerSheet(
                             onSave = { label ->
                                 actions.renameConversation(target.id, label)
                                 renameTarget = null
+                                revealedSessionId = null
                             },
                             onDismiss = { renameTarget = null },
+                        )
+                    }
+                    if (merged.isEmpty() && needle.isNotEmpty()) {
+                        Text(
+                            text = "검색 결과가 없습니다",
+                            style = DenebType.body,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
                         )
                     }
                     LazyColumn(
@@ -177,9 +240,17 @@ fun DenebSessionDrawerSheet(
                             SessionItem(
                                 conversation = conversation,
                                 isActive = conversation.id == currentConversationId,
+                                actionsVisible = revealedSessionId == conversation.id,
                                 onClick = {
                                     actions.loadConversation(conversation.id)
                                     onClose()
+                                },
+                                onLongClick = {
+                                    revealedSessionId = if (revealedSessionId == conversation.id) {
+                                        null
+                                    } else {
+                                        conversation.id
+                                    }
                                 },
                                 // The 업무 home (client:main) is the permanent base
                                 // conversation where proactive reports are mirrored —
@@ -194,7 +265,10 @@ fun DenebSessionDrawerSheet(
                                 onPin = if (conversation.id == HOME_SESSION_ID) {
                                     null
                                 } else {
-                                    { actions.pinConversation(conversation.id, !conversation.pinned) }
+                                    {
+                                        actions.pinConversation(conversation.id, !conversation.pinned)
+                                        revealedSessionId = null
+                                    }
                                 },
                                 onResetModel = if (conversation.model.isBlank()) {
                                     null
@@ -221,13 +295,24 @@ fun DenebSessionDrawerSheet(
                                     SessionItem(
                                         conversation = conversation,
                                         isActive = conversation.id == currentConversationId,
+                                        actionsVisible = revealedSessionId == conversation.id,
                                         onClick = {
                                             actions.loadConversation(conversation.id)
                                             onClose()
                                         },
+                                        onLongClick = {
+                                            revealedSessionId = if (revealedSessionId == conversation.id) {
+                                                null
+                                            } else {
+                                                conversation.id
+                                            }
+                                        },
                                         onDelete = { actions.deleteConversation(conversation.id) },
                                         onRename = { renameTarget = conversation },
-                                        onPin = { actions.pinConversation(conversation.id, !conversation.pinned) },
+                                        onPin = {
+                                            actions.pinConversation(conversation.id, !conversation.pinned)
+                                            revealedSessionId = null
+                                        },
                                         onResetModel = if (conversation.model.isBlank()) {
                                             null
                                         } else {
@@ -255,13 +340,24 @@ fun DenebSessionDrawerSheet(
                                     SessionItem(
                                         conversation = conversation,
                                         isActive = conversation.id == currentConversationId,
+                                        actionsVisible = revealedSessionId == conversation.id,
                                         onClick = {
                                             actions.loadConversation(conversation.id)
                                             onClose()
                                         },
+                                        onLongClick = {
+                                            revealedSessionId = if (revealedSessionId == conversation.id) {
+                                                null
+                                            } else {
+                                                conversation.id
+                                            }
+                                        },
                                         onDelete = { actions.deleteConversation(conversation.id) },
                                         onRename = { renameTarget = conversation },
-                                        onPin = { actions.pinConversation(conversation.id, !conversation.pinned) },
+                                        onPin = {
+                                            actions.pinConversation(conversation.id, !conversation.pinned)
+                                            revealedSessionId = null
+                                        },
                                         onResetModel = if (conversation.model.isBlank()) {
                                             null
                                         } else {
@@ -307,28 +403,28 @@ fun DenebSessionDrawerSheet(
 private fun SessionItem(
     conversation: ConversationSummary,
     isActive: Boolean,
+    actionsVisible: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onDelete: (() -> Unit)?,
     onRename: () -> Unit,
     onPin: (() -> Unit)? = null,
     onResetModel: (() -> Unit)? = null,
 ) {
     val haptics = rememberHaptics()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .denebPressable(
-                onClick = {
-                    haptics.tap()
-                    onClick()
-                },
-                onLongClick = onRename,
-            )
-            .handCursor()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .denebPressable(
+                    onClick = {
+                        haptics.tap()
+                        onClick()
+                    },
+                    onLongClick = onLongClick,
+                )
+                .handCursor(),
+        ) {
             if (conversation.isHeartbeat) {
                 Text(
                     text = stringResource(Res.string.chat_history_heartbeat_label),
@@ -353,11 +449,18 @@ private fun SessionItem(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(
-                text = formatDate(conversation.updatedAt),
-                style = DenebType.meta,
-                color = denebHint(),
-            )
+            val date = formatDate(conversation.updatedAt)
+            val dateLine = listOfNotNull(
+                date.takeIf { it.isNotEmpty() },
+                "핀".takeIf { conversation.pinned },
+            ).joinToString(" · ")
+            if (dateLine.isNotEmpty()) {
+                Text(
+                    text = dateLine,
+                    style = DenebType.meta,
+                    color = denebHint(),
+                )
+            }
             if (conversation.id == HOME_SESSION_ID) {
                 Text(
                     text = "선제 보고가 모이는 업무 홈",
@@ -380,63 +483,78 @@ private fun SessionItem(
                 )
             }
         }
+        AnimatedVisibility(
+            visible = actionsVisible,
+            enter = denebExpandIn,
+            exit = denebShrinkOut,
+        ) {
+            SessionRowActions(
+                pinned = conversation.pinned,
+                onPin = onPin,
+                onRename = onRename,
+                onResetModel = onResetModel,
+                onDelete = onDelete,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SessionRowActions(
+    pinned: Boolean,
+    onPin: (() -> Unit)?,
+    onRename: () -> Unit,
+    onResetModel: (() -> Unit)?,
+    onDelete: (() -> Unit)?,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         if (onPin != null) {
-            Box(
-                modifier = Modifier
-                    .padding(start = 4.dp)
-                    .size(44.dp)
-                    .clickable(
-                        onClickLabel = if (conversation.pinned) "고정 해제" else "위에 고정",
-                        role = Role.Button,
-                    ) { onPin() }
-                    .handCursor(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (conversation.pinned) "고정" else "핀",
-                    style = DenebType.meta,
-                    color = if (conversation.pinned) {
-                        MaterialTheme.colorScheme.onBackground
-                    } else {
-                        denebHint()
-                    },
-                )
-            }
+            SessionAction(
+                label = if (pinned) "고정" else "핀",
+                onClickLabel = if (pinned) "고정 해제" else "위에 고정",
+                emphasized = pinned,
+                onClick = onPin,
+            )
         }
+        SessionAction(label = "이름", onClickLabel = "이름 변경", onClick = onRename)
         if (onResetModel != null) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clickable(onClickLabel = "기본 모델로", role = Role.Button) { onResetModel() }
-                    .handCursor(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "기본",
-                    style = DenebType.meta,
-                    color = denebHint(),
-                )
-            }
+            SessionAction(label = "기본", onClickLabel = "기본 모델로", onClick = onResetModel)
         }
-        // Faint × to delete (undo via snackbar), keeping the row text-first. The 44dp
-        // box gives a real touch target + a TalkBack label without a Material icon.
-        // Omitted for the permanent home (onDelete == null) so it has no delete affordance.
         if (onDelete != null) {
-            Box(
-                modifier = Modifier
-                    .padding(start = 8.dp)
-                    .size(44.dp)
-                    .clickable(onClickLabel = "대화 삭제", role = Role.Button) { onDelete() }
-                    .handCursor(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "×",
-                    fontSize = 18.sp,
-                    color = denebHint(),
-                )
-            }
+            SessionAction(label = "×", onClickLabel = "대화 삭제", onClick = onDelete)
         }
+    }
+}
+
+@Composable
+private fun SessionAction(
+    label: String,
+    onClickLabel: String,
+    emphasized: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .padding(end = 16.dp)
+            .height(44.dp)
+            .clickable(onClickLabel = onClickLabel, role = Role.Button, onClick = onClick)
+            .handCursor(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = if (label == "×") DenebType.rowTitle else DenebType.meta,
+            color = if (emphasized) {
+                MaterialTheme.colorScheme.onBackground
+            } else {
+                denebHint()
+            },
+        )
     }
 }
 
