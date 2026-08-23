@@ -248,3 +248,20 @@ func TestParseEmittedToolCallsStillAcceptsBareArray(t *testing.T) {
 		t.Fatalf("array call mismatch: %+v", calls)
 	}
 }
+
+func TestParseEmittedToolCallsErrorCarriesBodyHead(t *testing.T) {
+	// A wrong-shaped object and an empty body both report "missing tool_calls
+	// field"; only the body head tells the workout lane which one it hit.
+	_, err := parseEmittedToolCalls(`{"skip": true, "reason": "이 스킬은 도구를 쓰지 않습니다"}`)
+	if err == nil {
+		t.Fatal("expected a parse error for a plan without tool_calls")
+	}
+	if !strings.Contains(err.Error(), `"skip": true`) {
+		t.Fatalf("error should quote the body head, got %q", err.Error())
+	}
+
+	_, err = parseEmittedToolCalls("   \n\t ")
+	if err == nil || !strings.Contains(err.Error(), "<empty>") {
+		t.Fatalf("empty body should be reported as <empty>, got %v", err)
+	}
+}
