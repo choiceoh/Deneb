@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ApprovalsPane } from "./ApprovalsPane";
@@ -44,6 +44,44 @@ const approvals: GroupwareApprovalRow[] = [
   },
 ];
 
+type RpcCall = { method: string; params: Record<string, unknown> };
+
+function rpcResponse(payload: unknown, ok = true): Response {
+  return {
+    ok,
+    status: ok ? 200 : 500,
+    json: async () => (ok ? { ok: true, payload } : { ok: false, error: String(payload) }),
+  } as Response;
+}
+
+function installGateway(
+  calls: RpcCall[],
+  ask: (params: Record<string, unknown>) => Response | Promise<Response> = (params) =>
+    rpcResponse({ answer: `답변: ${params.question}` }),
+) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}")) as RpcCall;
+      const method = request.method ?? "";
+      const params = request.params ?? {};
+      calls.push({ method, params });
+      if (method === "miniapp.groupware.approvals.ask") return ask(params);
+      if (method === "miniapp.groupware.approvals.analysis_cached") {
+        return rpcResponse({ docId: params.docId, analysis: "기존 결재 분석", cached: true });
+      }
+      if (method === "miniapp.groupware.approvals.get") {
+        return rpcResponse({ docId: params.docId, body: "# 결재 본문\n\n검토할 내용" });
+      }
+      return rpcResponse({});
+    }),
+  );
+}
+
+function lastCall(calls: RpcCall[], method: string) {
+  return calls.filter((call) => call.method === method).at(-1);
+}
+
 function renderApprovals(rows = approvals, connected = true) {
   return renderWithProviders(<ApprovalsPane />, {
     connected,
@@ -52,6 +90,12 @@ function renderApprovals(rows = approvals, connected = true) {
 }
 
 beforeEach(() => localStorage.clear());
+
+afterEach(() => {
+  localStorage.clear();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("approvalDayMs", () => {
   it("normalizes Amaranth date stamps", () => {
@@ -169,5 +213,132 @@ describe("ApprovalsPane", () => {
     expect(screen.getByText("오늘 구매 품의")).toBeInTheDocument();
     expect(screen.getByText("어제 미결 발주")).toBeInTheDocument();
     expect(screen.queryByText("어제 휴가")).not.toBeInTheDocument();
+  });
+
+  it("keeps grounded Q&A separate from the analysis/body view and approval mutations", async () => {
+    const calls: RpcCall[] = [];
+    installGateway(calls);
+    renderApprovals();
+    await userEvent.click(await screen.findByText("오늘 구매 품의"));
+
+    const input = await screen.findByPlaceholderText("예: 전례 대비 단가가 왜 높아?");
+    await userEvent.click(screen.getByRole("button", { name: "본문" }));
+    expect(screen.getByText("이 결재에 질문")).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: "  핵심 위험은?  " } });
+    await userEvent.click(screen.getByRole("button", { name: "질문" }));
+    await screen.findByText("답변: 핵심 위험은?");
+    expect(lastCall(calls, "miniapp.groupware.approvals.ask")?.params).toEqual({
+      docId: "1",
+      title: "오늘 구매 품의",
+      folder: "pending",
+      question: "핵심 위험은?",
+      history: [],
+    });
+
+    fireEvent.change(input, { target: { value: "후속 확인은?" } });
+    await userEvent.click(screen.getByRole("button", { name: "질문" }));
+    await waitFor(() =>
+      expect(calls.filter((call) => call.method === "miniapp.groupware.approvals.ask")).toHaveLength(2),
+    );
+    expect(lastCall(calls, "miniapp.groupware.approvals.ask")?.params).toMatchObject({
+      question: "후속 확인은?",
+      history: [{ q: "핵심 위험은?", a: "답변: 핵심 위험은?" }],
+    });
+    expect(calls.some((call) => call.method === "miniapp.groupware.approvals.act")).toBe(false);
+  });
+
+  it("shows the in-flight state and retries a failed question without inventing a turn", async () => {
+    const calls: RpcCall[] = [];
+    let attempt = 0;
+    let finishFirst: ((response: Response) => void) | undefined;
+    installGateway(calls, (params) => {
+      attempt += 1;
+      if (attempt === 1) {
+        return new Promise<Response>((resolve) => {
+          finishFirst = resolve;
+        });
+      }
+      return rpcResponse({ answer: `복구 답변: ${params.question}` });
+    });
+    renderApprovals();
+    await userEvent.click(await screen.findByText("오늘 구매 품의"));
+    const input = await screen.findByPlaceholderText("예: 전례 대비 단가가 왜 높아?");
+    fireEvent.change(input, { target: { value: "단가 근거는?" } });
+    await userEvent.click(screen.getByRole("button", { name: "질문" }));
+    expect(screen.getByRole("button", { name: "답변 중…" })).toBeDisabled();
+    expect(input).toBeDisabled();
+
+    finishFirst?.(rpcResponse("qa unavailable", false));
+    expect(await screen.findByRole("alert")).toHaveTextContent("HTTP 500");
+    expect(screen.queryByText("단가 근거는?", { selector: ".mail-qa-q" })).not.toBeInTheDocument();
+    expect(input).toHaveValue("단가 근거는?");
+    await userEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+    expect(await screen.findByText("복구 답변: 단가 근거는?")).toBeInTheDocument();
+    expect(attempt).toBe(2);
+  });
+
+  it("starts a fresh Q&A history when another approval document is selected", async () => {
+    const calls: RpcCall[] = [];
+    installGateway(calls);
+    const rows: GroupwareApprovalRow[] = [
+      approvals[0],
+      {
+        docId: "4",
+        title: "두 번째 구매 품의",
+        drafter: "김대리",
+        date: ymd,
+        status: "결재대기",
+        folder: "pending",
+        canAct: true,
+      },
+    ];
+    renderApprovals(rows);
+    await userEvent.click(await screen.findByText("오늘 구매 품의"));
+    let input = await screen.findByPlaceholderText("예: 전례 대비 단가가 왜 높아?");
+    fireEvent.change(input, { target: { value: "첫 문서 질문" } });
+    await userEvent.click(screen.getByRole("button", { name: "질문" }));
+    await screen.findByText("답변: 첫 문서 질문");
+
+    await userEvent.click(screen.getByRole("button", { name: "닫기" }));
+    await userEvent.click(screen.getByText("두 번째 구매 품의"));
+    expect(screen.queryByText("답변: 첫 문서 질문")).not.toBeInTheDocument();
+    input = await screen.findByPlaceholderText("예: 전례 대비 단가가 왜 높아?");
+    fireEvent.change(input, { target: { value: "새 문서 질문" } });
+    await userEvent.click(screen.getByRole("button", { name: "질문" }));
+    await waitFor(() => expect(lastCall(calls, "miniapp.groupware.approvals.ask")?.params.docId).toBe("4"));
+    expect(lastCall(calls, "miniapp.groupware.approvals.ask")?.params.history).toEqual([]);
+  });
+
+  it("bounds the approval Q&A payload to eight recent turns and 2,000 Unicode code points", async () => {
+    const calls: RpcCall[] = [];
+    const oversizedAnswer = "답".repeat(2_001);
+    installGateway(calls, () => rpcResponse({ answer: oversizedAnswer }));
+    renderApprovals();
+    await userEvent.click(await screen.findByText("오늘 구매 품의"));
+    const input = await screen.findByPlaceholderText("예: 전례 대비 단가가 왜 높아?");
+
+    for (let index = 1; index <= 9; index += 1) {
+      fireEvent.change(input, { target: { value: `질문 ${index}` } });
+      await userEvent.click(screen.getByRole("button", { name: "질문" }));
+      await waitFor(() =>
+        expect(calls.filter((call) => call.method === "miniapp.groupware.approvals.ask")).toHaveLength(index),
+      );
+      await waitFor(() => expect(input).toHaveValue(""));
+    }
+
+    const oversizedQuestion = "😀".repeat(2_001);
+    fireEvent.change(input, { target: { value: oversizedQuestion } });
+    await userEvent.click(screen.getByRole("button", { name: "질문" }));
+    await waitFor(() =>
+      expect(calls.filter((call) => call.method === "miniapp.groupware.approvals.ask")).toHaveLength(10),
+    );
+
+    const params = lastCall(calls, "miniapp.groupware.approvals.ask")?.params;
+    expect(params?.question).toBe("😀".repeat(2_000));
+    const history = params?.history as Array<{ q: string; a: string }>;
+    expect(history).toHaveLength(8);
+    expect(history[0].q).toBe("질문 2");
+    expect(history[7].q).toBe("질문 9");
+    expect(history.every((turn) => Array.from(turn.a).length === 2_000)).toBe(true);
   });
 });

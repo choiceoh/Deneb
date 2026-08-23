@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -145,6 +146,13 @@ func TestCSVToMarkdownTruncatesRowsAndReportsOmission(t *testing.T) {
 	}
 	if strings.Contains(got, "row-500") || strings.Contains(got, "row-510") {
 		t.Fatal("rows beyond cap leaked")
+	}
+}
+
+func TestCSVToMarkdownRejectsAdversarialRaggedColumns(t *testing.T) {
+	data := []byte(strings.Repeat(",", maxCSVColumns) + "\nvalue\n")
+	if _, err := csvToMarkdown(data); !errors.Is(err, errDocumentExtractionLimit) {
+		t.Fatalf("error = %v, want CSV column amplification limit", err)
 	}
 }
 

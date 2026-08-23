@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NOTEBOOK_RPC, RESOURCE_DEFS, RESOURCE_MAP, refineResources, resourceDef } from "./resources";
+import { APPROVALS_RPC, NOTEBOOK_RPC, RESOURCE_DEFS, RESOURCE_MAP, refineResources, resourceDef } from "./resources";
 
 describe("resource registry", () => {
   it("when maps every def by name", () => {
@@ -37,6 +37,7 @@ describe("resource registry", () => {
       expect(resourceDef(name).list).toMatch(/^miniapp\./);
     }
     expect(resourceDef("approvals").list).toBe("miniapp.groupware.approvals.list");
+    expect(APPROVALS_RPC.ask).toBe("miniapp.groupware.approvals.ask");
   });
 
   it("wires notebook create, delete, and source pin RPCs", () => {

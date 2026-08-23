@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -85,6 +86,58 @@ func TestRepositorySearchPageReflectsOverlayReadAndArchiveUpdates(t *testing.T) 
 	}
 	if len(rows) != 1 || rows[0].ID != row.ID {
 		t.Fatalf("custom rows after archive = %#v, want archived row discoverable", rows)
+	}
+}
+
+func TestParseArchiveQueryNeutralizesIMAPCommandSeparators(t *testing.T) {
+	spec := parseArchiveQuery("from:\"sender@example.com\r\na99 STORE 1 +FLAGS (\\\\Deleted)\r\n\"", time.Now())
+	if strings.ContainsAny(spec.Criteria, "\r\n\x00") {
+		t.Fatalf("criteria retained IMAP command separator: %q", spec.Criteria)
+	}
+	if strings.Count(spec.Criteria, "FROM ") != 1 || !strings.HasPrefix(spec.Criteria, `FROM "`) || !strings.HasSuffix(spec.Criteria, `"`) {
+		t.Fatalf("criteria escaped the single quoted FROM argument: %q", spec.Criteria)
+	}
+}
+
+func TestRepositorySearchReportsPartialMailboxCoverage(t *testing.T) {
+	raw := archiveTestMessage("m1@example.com", "sender@example.com", "Needle", "needle evidence", "")
+	srv := newTestIMAPArchive(t, map[string]map[string][]byte{
+		"INBOX": {"1": []byte(raw)},
+		"Sent":  {},
+	})
+	srv.rejectExamine["Sent"] = true
+	repo := NewRepository(Config{
+		Addr: srv.addr, User: "u", Pass: "p", Mailboxes: []string{"INBOX", "Sent"}, Timeout: time.Second,
+	}, RepositoryOptions{StatePath: t.TempDir() + "/state.json"})
+
+	rows, err := repo.Search(context.Background(), "needle", 10)
+	if !errors.Is(err, ErrArchivePartial) {
+		t.Fatalf("Search error = %v, want partial", err)
+	}
+	if len(rows) != 1 || rows[0].ID != "m1@example.com" {
+		t.Fatalf("partial rows = %+v", rows)
+	}
+	page, _, err := repo.SearchPage(context.Background(), "needle", "", 10)
+	if err != nil || len(page) != 1 {
+		t.Fatalf("legacy SearchPage rows=%+v err=%v", page, err)
+	}
+}
+
+func TestRepositoryEvidenceSearchBoundsLargeMessageBodies(t *testing.T) {
+	body := "needle evidence\n" + strings.Repeat("attachment-like-payload", 20_000)
+	raw := archiveTestMessage("large@example.com", "sender@example.com", "Large", body, "")
+	srv := newTestIMAPArchive(t, map[string]map[string][]byte{
+		"INBOX": {"1": []byte(raw)},
+	})
+	repo := NewRepository(Config{
+		Addr: srv.addr, User: "u", Pass: "p", Mailboxes: []string{"INBOX"}, Timeout: time.Second,
+	}, RepositoryOptions{StatePath: t.TempDir() + "/state.json"})
+	rows, err := repo.Search(context.Background(), "needle", 10)
+	if !errors.Is(err, ErrArchivePartial) {
+		t.Fatalf("Search error = %v, want bounded-preview partial", err)
+	}
+	if len(rows) != 1 || rows[0].ID != "large@example.com" || !strings.Contains(rows[0].Snippet, "needle evidence") {
+		t.Fatalf("bounded rows = %+v", rows)
 	}
 }
 
@@ -540,10 +593,14 @@ func (s *testIMAPArchive) handle(conn net.Conn) {
 			_, _ = fmt.Fprintf(conn, "* SEARCH %s\r\n%s OK search\r\n", strings.Join(uids, " "), tag)
 		case strings.HasPrefix(upper, "UID FETCH "):
 			uidSet := strings.Fields(cmd[len("UID FETCH "):])[0]
+			previewLimit := testIMAPPreviewLimit(cmd)
 			for _, uid := range splitUIDSet(uidSet) {
 				raw := s.msgs[mailbox][uid]
 				if raw == nil {
 					continue
+				}
+				if previewLimit > 0 && len(raw) > previewLimit {
+					raw = raw[:previewLimit]
 				}
 				_, _ = fmt.Fprintf(conn, "* 1 FETCH (UID %s BODY[] {%d}\r\n%s)\r\n", uid, len(raw), raw)
 			}
@@ -555,6 +612,21 @@ func (s *testIMAPArchive) handle(conn net.Conn) {
 			_, _ = fmt.Fprintf(conn, "%s BAD unknown\r\n", tag)
 		}
 	}
+}
+
+func testIMAPPreviewLimit(command string) int {
+	const marker = "BODY.PEEK[]<0."
+	start := strings.Index(strings.ToUpper(command), marker)
+	if start < 0 {
+		return 0
+	}
+	rest := command[start+len(marker):]
+	end := strings.IndexByte(rest, '>')
+	if end < 0 {
+		return 0
+	}
+	limit, _ := strconv.Atoi(rest[:end])
+	return limit
 }
 
 func (s *testIMAPArchive) searchUIDs(mailbox, criteria string) []string {

@@ -778,6 +778,9 @@ data class SearchAllResult(
     val wiki: List<SearchWikiHit> = emptyList(),
     val diary: List<SearchDiaryHit> = emptyList(),
     val people: List<PersonRow> = emptyList(),
+    val files: List<SearchFileHit> = emptyList(),
+    val mail: List<SearchMailHit> = emptyList(),
+    val sources: SearchSourceStatus = SearchSourceStatus(),
 )
 
 @Immutable
@@ -788,6 +791,42 @@ data class SearchDiaryHit(
     val content: String = "",
     val at: Long = 0L,
     val score: Double = 0.0,
+)
+
+@Immutable
+@Serializable
+data class SearchFileHit(
+    val path: String = "",
+    val name: String = "",
+    val size: Long = 0L,
+    val snippet: String = "",
+    val score: Double = 0.0,
+    val startLine: Int = 0,
+    val endLine: Int = 0,
+    val kind: String = "",
+    val heading: String = "",
+)
+
+@Immutable
+@Serializable
+data class SearchMailHit(
+    val id: String = "",
+    val threadId: String = "",
+    val from: String = "",
+    val subject: String = "",
+    val date: String = "",
+    val snippet: String = "",
+    val mailbox: String = "",
+)
+
+@Immutable
+@Serializable
+data class SearchSourceStatus(
+    val wiki: String = "",
+    val diary: String = "",
+    val people: String = "",
+    val files: String = "",
+    val mail: String = "",
 )
 
 @Immutable

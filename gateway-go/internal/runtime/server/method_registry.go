@@ -45,6 +45,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/filesemindex"
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mailflow"
@@ -494,7 +495,7 @@ func (s *Server) earlyMailAndCalendarMethods(denebDir string) []map[string]rpcut
 
 func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub, denebDir string) []map[string]rpcutil.HandlerFunc {
 	approvalCache := groupware.NewApprovalAnalysisStore(filepath.Join(denebDir, "cache", "approval_analysis"))
-	approvalBodyCache := groupware.NewApprovalBodyStore(filepath.Join(denebDir, "cache", "approval_body"))
+	approvalGet := makeGroupwareApprovalGet(denebDir)
 	return []map[string]rpcutil.HandlerFunc{
 		s.earlyProjectMethods(hub),
 		handlerminiapp.OrgMethods(s.orgDeps()),
@@ -517,24 +518,7 @@ func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return groupware.ActApproval(ctx, cfg, docID, decision, comment)
 			},
-			Get: func(ctx context.Context, docID, folder string) (string, error) {
-				// Read-through body cache: repeated detail opens skip the
-				// Playwright roundtrip; the folder hint skips the 4-box scan
-				// on a cold open.
-				if body := approvalBodyCache.Load(docID); body != "" {
-					return body, nil
-				}
-				cfg, ok := groupware.FromEnv()
-				if !ok {
-					return "", fmt.Errorf("groupware credentials unset")
-				}
-				body, err := groupware.ReadApprovalByDocIDIn(ctx, cfg, docID, folder)
-				if err != nil {
-					return "", err
-				}
-				_ = approvalBodyCache.Save(docID, body)
-				return body, nil
-			},
+			Get: approvalGet,
 			Attach: func(ctx context.Context, docID, selector string) (string, error) {
 				cfg, ok := groupware.FromEnv()
 				if !ok {
@@ -672,6 +656,8 @@ func (s *Server) earlyKnowledgeMethods(hub *rpcutil.GatewayHub) []map[string]rpc
 }
 
 func (s *Server) earlyImprovementMethods(hub *rpcutil.GatewayHub) []map[string]rpcutil.HandlerFunc {
+	fileStore := localFileStoreOrNil(s.logger)
+	mailClient := s.miniappMailClientFactory(s.denebDir)
 	return []map[string]rpcutil.HandlerFunc{
 		s.earlySkillMethods(),
 		s.earlySelfImprovementMethods(),
@@ -686,6 +672,38 @@ func (s *Server) earlyImprovementMethods(hub *rpcutil.GatewayHub) []map[string]r
 			},
 			Client: func() (miniknowledge.PeopleClient, error) {
 				return gmail.DefaultClient()
+			},
+			Files: func(ctx context.Context, query string, limit int) ([]miniknowledge.SearchFileHit, error) {
+				return searchPersonalFiles(ctx, fileStore, func(ctx context.Context, query string, limit int) ([]filestore.ScoredEntry, error) {
+					if s.fileSemindex == nil {
+						return nil, miniknowledge.ErrSearchSourceUnavailable
+					}
+					hits, err := s.fileSemindex.EvidenceSearch(ctx, query, limit)
+					if errors.Is(err, filesemindex.ErrEvidenceIndexUnavailable) {
+						return nil, miniknowledge.ErrSearchSourceUnavailable
+					}
+					return hits, err
+				}, query, limit)
+			},
+			Mail: func(ctx context.Context, query string, limit int) ([]miniknowledge.SearchMailHit, error) {
+				if s.mailStore != nil && s.mailStore.Len() > 0 {
+					return searchPersonalMailMirror(ctx, s.mailStore, query, limit)
+				}
+				client, err := mailClient()
+				if err != nil {
+					if errors.Is(err, errNativeMailUnconfigured) {
+						return nil, miniknowledge.ErrSearchSourceUnavailable
+					}
+					return nil, err
+				}
+				hits, err := searchPersonalMail(ctx, client, query, limit)
+				if err != nil {
+					return hits, err
+				}
+				// An empty/uninitialized local mirror leaves only the smaller rolling
+				// IMAP corpus. Preserve useful legacy hits but never present that
+				// fallback as an exhaustive personal-mail search.
+				return hits, miniknowledge.ErrSearchSourcePartial
 			},
 		}),
 	}
@@ -720,7 +738,7 @@ func (s *Server) earlyMiniappGatewayMethods(hub *rpcutil.GatewayHub) map[string]
 				"gmail":           true,
 				"calendar":        true,
 				"wiki":            wikiReady,
-				"search":          wikiReady,
+				"search":          true,
 				"people":          true,
 				"crons":           hub.CronService() != nil,
 				"captureImage":    chatReady,

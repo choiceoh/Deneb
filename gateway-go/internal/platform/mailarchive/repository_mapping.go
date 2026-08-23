@@ -4,20 +4,21 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive/overlay"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailbody"
 )
 
-func detailToSummary(detail *gmail.MessageDetail, mailbox string, st overlay.MessageState) gmail.MessageSummary {
+func detailToSummary(detail *gmail.MessageDetail, mailbox string, st overlay.MessageState, evidenceQuery string) gmail.MessageSummary {
 	return gmail.MessageSummary{
 		ID:              detail.ID,
 		ThreadID:        detail.ThreadID,
 		From:            detail.From,
 		Subject:         detail.Subject,
 		Date:            detail.Date,
-		Snippet:         snippetFromBody(detail.Body),
+		Snippet:         snippetFromBodyAroundQuery(detail.Body, evidenceQuery),
 		Labels:          labelsForArchiveMessage(mailbox, st),
 		Mailbox:         mailbox,
 		HasAttachment:   len(detail.Attachments) > 0,
@@ -65,16 +66,42 @@ func cloneDetail(detail *gmail.MessageDetail) *gmail.MessageDetail {
 }
 
 func snippetFromBody(body string) string {
+	return snippetFromBodyAroundQuery(body, "")
+}
+
+func snippetFromBodyAroundQuery(body, query string) string {
 	if cleaned := strings.TrimSpace(mailbody.CleanForDisplay(body).Body); cleaned != "" {
 		body = cleaned
 	}
 	body = strings.TrimSpace(strings.Join(strings.Fields(body), " "))
-	const max = 360
-	if len([]rune(body)) <= max {
+	const maxRunes = 360
+	runes := []rune(body)
+	if len(runes) <= maxRunes {
 		return body
 	}
-	runes := []rune(body)
-	return string(runes[:max]) + "..."
+	query = strings.TrimSpace(strings.Join(strings.Fields(query), " "))
+	if query == "" {
+		return string(runes[:maxRunes]) + "..."
+	}
+	lowerBody := strings.ToLower(body)
+	byteIndex := strings.Index(lowerBody, strings.ToLower(query))
+	if byteIndex < 0 {
+		return string(runes[:maxRunes]) + "..."
+	}
+	matchStart := utf8.RuneCountInString(lowerBody[:byteIndex])
+	start := max(0, matchStart-120)
+	end := min(len(runes), start+maxRunes)
+	if end-start < maxRunes {
+		start = max(0, end-maxRunes)
+	}
+	snippet := string(runes[start:end])
+	if start > 0 {
+		snippet = "..." + snippet
+	}
+	if end < len(runes) {
+		snippet += "..."
+	}
+	return snippet
 }
 
 func archiveLocator(mailbox, uid string) string {

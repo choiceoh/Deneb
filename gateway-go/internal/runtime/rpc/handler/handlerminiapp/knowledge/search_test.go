@@ -2,7 +2,9 @@ package knowledge
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +26,15 @@ func searchDepsFor(store MemorySearcher, client PeopleClient) SearchDeps {
 func TestSearchMethods_BothNilReturnsNil(t *testing.T) {
 	if got := SearchMethods(SearchDeps{}); got != nil {
 		t.Errorf("SearchMethods(empty) = %v, want nil", got)
+	}
+}
+
+func TestSearchMethods_NewSourceAloneRegisters(t *testing.T) {
+	deps := SearchDeps{
+		Files: func(context.Context, string, int) ([]SearchFileHit, error) { return nil, nil },
+	}
+	if got := SearchMethods(deps); got == nil {
+		t.Fatal("SearchMethods(files only) = nil, want registered method")
 	}
 }
 
@@ -79,6 +90,15 @@ func TestSearchAll_ReturnsResultsFromWikiDiaryAndGmailDomains(t *testing.T) {
 	if len(got.People) != 1 || got.People[0].Email != "peter@example.com" {
 		t.Errorf("people = %+v, want only peter@example.com", got.People)
 	}
+	if got.Sources.Wiki != searchSourceOK || got.Sources.Diary != searchSourceOK || got.Sources.People != searchSourcePartial {
+		t.Errorf("core source states = %+v, want wiki/diary ok and people partial", got.Sources)
+	}
+	if got.Sources.Files != searchSourceUnavailable || got.Sources.Mail != searchSourceUnavailable {
+		t.Errorf("optional source states = %+v, want files/mail unavailable", got.Sources)
+	}
+	if got.Files == nil || got.Mail == nil {
+		t.Errorf("new result slices must be non-nil for backward-compatible empty rendering: files=%#v mail=%#v", got.Files, got.Mail)
+	}
 }
 
 func TestSearchAll_GmailMissingDegrades(t *testing.T) {
@@ -95,6 +115,9 @@ func TestSearchAll_GmailMissingDegrades(t *testing.T) {
 	}
 	if len(got.People) != 0 {
 		t.Errorf("People should be empty when client absent, got %+v", got.People)
+	}
+	if got.Sources.People != searchSourceUnavailable {
+		t.Errorf("people status = %q, want unavailable", got.Sources.People)
 	}
 }
 
@@ -117,6 +140,148 @@ func TestSearchAll_PerDomainFailureNonFatal(t *testing.T) {
 	if len(got.Diary) != 1 {
 		t.Errorf("diary should succeed independently, got %+v", got.Diary)
 	}
+	if got.Sources.Wiki != searchSourceError || got.Sources.Diary != searchSourceOK {
+		t.Errorf("source states = %+v, want wiki error and diary ok", got.Sources)
+	}
+}
+
+func TestSearchAll_PreservesFileLocatorFields(t *testing.T) {
+	want := SearchFileHit{
+		Path:      "/reports/forecast.md",
+		Name:      "forecast.md",
+		Snippet:   "revenue reaches 42",
+		Score:     0.87,
+		StartLine: 41,
+		EndLine:   48,
+		Kind:      "section",
+		Heading:   "Q4 forecast",
+	}
+	deps := SearchDeps{
+		Files: func(_ context.Context, query string, limit int) ([]SearchFileHit, error) {
+			if query != "revenue" || limit != defaultUnifiedSearchLimit {
+				t.Errorf("files callback args = %q/%d", query, limit)
+			}
+			return []SearchFileHit{want}, nil
+		},
+	}
+
+	resp := searchAll(deps)(authedCtx(), reqWith(t, "miniapp.search.all", map[string]any{"query": "revenue"}))
+	var got SearchAllResult
+	decode(t, resp, &got)
+	if len(got.Files) != 1 {
+		t.Fatalf("files = %+v, want one locator-bearing hit", got.Files)
+	}
+	hit := got.Files[0]
+	if hit != want {
+		t.Errorf("file hit = %+v, want %+v", hit, want)
+	}
+	if got.Sources.Files != searchSourceOK {
+		t.Errorf("files source status = %q, want ok", got.Sources.Files)
+	}
+}
+
+func TestSearchAll_PreservesHitsFromPartialFileSource(t *testing.T) {
+	deps := SearchDeps{
+		Files: func(context.Context, string, int) ([]SearchFileHit, error) {
+			return []SearchFileHit{{Path: "/partial.txt", Name: "partial.txt", Snippet: "usable evidence"}}, ErrSearchSourcePartial
+		},
+	}
+	resp := searchAll(deps)(authedCtx(), reqWith(t, "miniapp.search.all", map[string]any{"query": "evidence"}))
+	var got SearchAllResult
+	decode(t, resp, &got)
+	if got.Sources.Files != searchSourcePartial {
+		t.Fatalf("files status = %q, want partial", got.Sources.Files)
+	}
+	if len(got.Files) != 1 || got.Files[0].Path != "/partial.txt" {
+		t.Fatalf("partial file evidence was lost: %+v", got.Files)
+	}
+}
+
+func TestSearchAll_SourceTimeoutPreservesCompletedSources(t *testing.T) {
+	deps := SearchDeps{
+		Files: func(ctx context.Context, _ string, _ int) ([]SearchFileHit, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+		Mail: func(_ context.Context, _ string, _ int) ([]SearchMailHit, error) {
+			return []SearchMailHit{{ID: "mail-1", ThreadID: "thread-1", Subject: "Ready"}}, nil
+		},
+	}
+	ctx, cancel := context.WithTimeout(authedCtx(), 25*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	resp := searchAll(deps)(ctx, reqWith(t, "miniapp.search.all", map[string]any{"query": "ready"}))
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("timed-out source held unified search for %s", elapsed)
+	}
+
+	var got SearchAllResult
+	decode(t, resp, &got)
+	if got.Sources.Files != searchSourceTimeout {
+		t.Errorf("files source status = %q, want timeout", got.Sources.Files)
+	}
+	if got.Sources.Mail != searchSourceOK || len(got.Mail) != 1 || got.Mail[0].ID != "mail-1" {
+		t.Errorf("completed mail source was lost: status=%q hits=%+v", got.Sources.Mail, got.Mail)
+	}
+}
+
+func TestSearchAll_SourceErrorIsGenericAndPartialResultsSurvive(t *testing.T) {
+	const privateMarker = "should-not-leak-marker"
+	deps := SearchDeps{
+		Files: func(context.Context, string, int) ([]SearchFileHit, error) {
+			return nil, errors.New("backend rejected " + privateMarker)
+		},
+		Mail: func(context.Context, string, int) ([]SearchMailHit, error) {
+			return []SearchMailHit{
+				{
+					ID:       "mail-2",
+					ThreadID: "thread-2",
+					From:     "sender@example.com",
+					Subject:  "Forecast",
+					Date:     "2026-08-23T00:00:00Z",
+					Snippet:  "revenue forecast",
+					Mailbox:  "Archive",
+				},
+			}, nil
+		},
+	}
+
+	resp := searchAll(deps)(authedCtx(), reqWith(t, "miniapp.search.all", map[string]any{"query": "forecast"}))
+	var got SearchAllResult
+	decode(t, resp, &got)
+	if got.Sources.Files != searchSourceError {
+		t.Errorf("files source status = %q, want error", got.Sources.Files)
+	}
+	if got.Sources.Mail != searchSourceOK || len(got.Mail) != 1 || got.Mail[0].Mailbox != "Archive" {
+		t.Errorf("mail partial result = status %q, hits %+v", got.Sources.Mail, got.Mail)
+	}
+	raw, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if strings.Contains(string(raw), privateMarker) || strings.Contains(string(raw), "backend rejected") {
+		t.Fatalf("dependency error leaked into response: %s", raw)
+	}
+}
+
+func TestSearchAll_ClampsNewSourceLimitAndResultCount(t *testing.T) {
+	seenLimit := 0
+	deps := SearchDeps{
+		Files: func(_ context.Context, _ string, limit int) ([]SearchFileHit, error) {
+			seenLimit = limit
+			hits := make([]SearchFileHit, limit+3)
+			for i := range hits {
+				hits[i].Path = "/file"
+			}
+			return hits, nil
+		},
+	}
+	resp := searchAll(deps)(authedCtx(), reqWith(t, "miniapp.search.all", map[string]any{"query": "x", "limit": 100}))
+	var got SearchAllResult
+	decode(t, resp, &got)
+	if seenLimit != maxUnifiedSearchLimit || len(got.Files) != maxUnifiedSearchLimit {
+		t.Errorf("files limit = callback %d/result %d, want %d", seenLimit, len(got.Files), maxUnifiedSearchLimit)
+	}
 }
 
 func TestSearchAll_MissingQuery(t *testing.T) {
@@ -124,6 +289,20 @@ func TestSearchAll_MissingQuery(t *testing.T) {
 	resp := h(authedCtx(), reqWith(t, "miniapp.search.all", map[string]any{}))
 	if resp.Error == nil {
 		t.Fatal("expected error for missing query")
+	}
+}
+
+func TestSearchAll_RejectsOversizedQueryBeforeFanout(t *testing.T) {
+	called := false
+	h := searchAll(SearchDeps{Files: func(context.Context, string, int) ([]SearchFileHit, error) {
+		called = true
+		return nil, nil
+	}})
+	resp := h(authedCtx(), reqWith(t, "miniapp.search.all", map[string]any{
+		"query": strings.Repeat("가", maxUnifiedSearchQueryRunes+1),
+	}))
+	if resp.Error == nil || called {
+		t.Fatalf("error=%+v called=%v, want rejected before fanout", resp.Error, called)
 	}
 }
 

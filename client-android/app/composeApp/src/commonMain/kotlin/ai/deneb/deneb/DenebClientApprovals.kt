@@ -5,16 +5,21 @@ import ai.deneb.deneb.generated.GroupwareApprovalAnalysisOut
 import ai.deneb.deneb.generated.GroupwareApprovalGetResponse
 import ai.deneb.deneb.generated.GroupwareApprovalRow
 import ai.deneb.deneb.generated.GroupwareApprovalsListResponse
+import ai.deneb.deneb.generated.QATurn
 import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 /** First-page size persisted to settings (matches the approvals screen page). */
 internal const val APPROVALS_PERSIST_PAGE_SIZE = 20
 
 /** Gateway `maxApprovalsLimit` — requesting more is clamped server-side. */
 internal const val APPROVALS_MAX_LIMIT = 100
+
+private const val APPROVAL_QA_MAX_HISTORY_TURNS = 8
+private const val APPROVAL_QA_MAX_TEXT_CODE_POINTS = 2_000
 
 // Session-scoped list cache for undated first-page reads (TTL). Larger pages
 // and afterDocId loads always hit the network.
@@ -299,4 +304,50 @@ private fun GroupwareApprovalAnalysisOut.toApprovalAnalysis(): ApprovalAnalysis?
         createdAt = createdAt,
         durationMs = durationMs,
     )
+}
+
+/**
+ * Ask a grounded follow-up about one approval document. The gateway rebuilds
+ * the source packet from the document body, cached analysis and extractable
+ * attachments; this RPC never routes to the irreversible approval action.
+ */
+suspend fun DenebGatewayClient.askApproval(
+    docId: String,
+    question: String,
+    title: String = "",
+    folder: String = "",
+    history: List<Pair<String, String>> = emptyList(),
+): String? {
+    val id = docId.trim()
+    val q = boundApprovalQAText(question)
+    if (id.isEmpty() || q.isEmpty()) return null
+    return callRpc<AskPayload>(
+        "miniapp.groupware.approvals.ask",
+        buildJsonObject {
+            put("docId", id)
+            put("question", q)
+            if (title.isNotBlank()) put("title", title)
+            if (folder.isNotBlank()) put("folder", folder)
+            putJsonArray("history") {
+                history
+                    .takeLast(APPROVAL_QA_MAX_HISTORY_TURNS)
+                    .map { (pastQ, pastA) -> QATurn(q = boundApprovalQAText(pastQ), a = boundApprovalQAText(pastA)) }
+                    .filter { it.q.isNotEmpty() || it.a.isNotEmpty() }
+                    .forEach { turn -> add(jsonCodec.encodeToJsonElement(QATurn.serializer(), turn)) }
+            }
+        },
+    )?.answer?.ifBlank { null }
+}
+
+/** Match the gateway's Go-rune limit without splitting a UTF-16 surrogate pair. */
+internal fun boundApprovalQAText(value: String): String {
+    val text = value.trim()
+    var codePoints = 0
+    var end = 0
+    while (end < text.length && codePoints < APPROVAL_QA_MAX_TEXT_CODE_POINTS) {
+        val char = text[end]
+        end += if (char.isHighSurrogate() && end + 1 < text.length && text[end + 1].isLowSurrogate()) 2 else 1
+        codePoints++
+    }
+    return text.substring(0, end)
 }

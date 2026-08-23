@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { inferAttachmentMimeType } from "@/attachmentMime";
 import { clearCachedResource } from "@/cachedList";
 import { projectList } from "@/aiText";
@@ -6,6 +6,7 @@ import { fetchGatewayBlob, filesDownloadUrl } from "@/gateway";
 import { FILES_RPC } from "@/resources";
 import type { FileEntry } from "@/types";
 import { useCachedRpc } from "@/useCachedRpc";
+import { usePaneTarget } from "@/usePaneTarget";
 import { color, ellipsis, muted } from "@/theme";
 import { fmtDate } from "@/format";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
@@ -57,6 +58,24 @@ export function FilesPane() {
   // registered while hidden can't clobber the visible pane's AI context — the
   // provider only reads the "files" feed while 파일 is the current view.
   useRegisterPane(FILES_RESOURCE, aiText);
+
+  // Unified-search file hits navigate with PaneTarget.path. Open the exact file
+  // immediately instead of dropping the user at the file root with no visible
+  // indication of which evidence row they selected.
+  usePaneTarget(
+    "files",
+    useCallback((target) => {
+      const targetPath = target.path?.trim();
+      if (!targetPath) return false;
+      const name = targetPath.split("/").filter(Boolean).at(-1) ?? targetPath;
+      const size =
+        typeof target.size === "number" && Number.isFinite(target.size) && target.size >= 0 ? target.size : undefined;
+      setSelected({ tag: "file", name, pathDisplay: targetPath, size });
+      setPreviewing({ path: targetPath, name, size });
+      setPreviewDirty(false);
+      setConfirmClose(false);
+    }, []),
+  );
 
   useEffect(() => {
     if (!connected) return;

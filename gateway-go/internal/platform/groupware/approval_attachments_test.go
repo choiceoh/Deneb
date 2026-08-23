@@ -1,8 +1,11 @@
 package groupware
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestParseApprovalAttachmentList(t *testing.T) {
@@ -67,6 +70,53 @@ func TestSelectApprovalAttachmentsForAnalysis_ImageReceipt(t *testing.T) {
 	}
 }
 
+func TestSelectApprovalAttachmentsForQuestion_PrioritizesExplicitFourthFile(t *testing.T) {
+	refs := []ApprovalAttachmentRef{
+		{Index: 1, Name: "계약서.pdf"},
+		{Index: 2, Name: "견적서.xlsx"},
+		{Index: 3, Name: "회의록.docx"},
+		{Index: 4, Name: "현장사진대지.pdf"},
+		{Index: 5, Name: "참고자료.pdf"},
+	}
+	got := SelectApprovalAttachmentsForQuestion(refs, "4번 첨부 현장사진대지와 본문 수량이 같아?", 4)
+	if len(got) != 4 || got[0].Index != 4 {
+		t.Fatalf("explicit attachment was not prioritized: %+v", got)
+	}
+	seen := map[int]bool{}
+	for _, ref := range got {
+		if seen[ref.Index] {
+			t.Fatalf("duplicate attachment: %+v", got)
+		}
+		seen[ref.Index] = true
+	}
+}
+
+func TestSelectApprovalAttachmentsForQuestion_GenericAttachmentComparisonFillsListOrder(t *testing.T) {
+	refs := []ApprovalAttachmentRef{
+		{Index: 1, Name: "계약서.pdf"},
+		{Index: 2, Name: "일반메모.txt"},
+		{Index: 3, Name: "기타.bin"},
+		{Index: 4, Name: "별첨.pdf"},
+	}
+	got := SelectApprovalAttachmentsForQuestion(refs, "첨부 파일들을 서로 비교해 줘", 4)
+	if len(got) != 4 {
+		t.Fatalf("generic attachment question omitted listed files: %+v", got)
+	}
+}
+
+func TestSelectApprovalAttachmentsForQuestion_GeneralClauseQuestionFillsFourthFile(t *testing.T) {
+	refs := []ApprovalAttachmentRef{
+		{Index: 1, Name: "계약서-1.pdf"},
+		{Index: 2, Name: "계약서-2.pdf"},
+		{Index: 3, Name: "계약서-3.pdf"},
+		{Index: 4, Name: "일반별지.pdf"},
+	}
+	got := SelectApprovalAttachmentsForQuestion(refs, "지체상금 얼마야?", 4)
+	if len(got) != 4 || got[3].Index != 4 {
+		t.Fatalf("general question omitted fourth listed attachment: %+v", got)
+	}
+}
+
 func TestApprovalAttachmentExtractBody(t *testing.T) {
 	raw := "[그룹웨어 전자결재 · 선택 첨부]\ndocId: 1\n파일: a.pdf\n\n추출 본문\n계약금액 100만원"
 	if got := approvalAttachmentExtractBody(raw); got != "계약금액 100만원" {
@@ -74,5 +124,63 @@ func TestApprovalAttachmentExtractBody(t *testing.T) {
 	}
 	if got := approvalAttachmentExtractBody("헤더\n\n(텍스트 추출 결과 없음)"); got != "" {
 		t.Fatalf("empty note should drop, got=%q", got)
+	}
+}
+
+func TestSelectApprovalEvidence_RetainsQuestionMatchedMiddleWithinBound(t *testing.T) {
+	text := "문서 머리\n" +
+		strings.Repeat("초반", 9000) +
+		"\n지체상금은 계약금의 30퍼센트로 한다.\n" +
+		strings.Repeat("후반", 9000) +
+		"\n문서 꼬리"
+
+	got := SelectApprovalEvidence(text, "지체상금이 얼마야?", approvalAttachInjectRunes)
+	if utf8.RuneCountInString(got) > approvalAttachInjectRunes {
+		t.Fatalf("selected evidence = %d runes, want <= %d", utf8.RuneCountInString(got), approvalAttachInjectRunes)
+	}
+	for _, want := range []string{"문서 머리", "지체상금은 계약금의 30퍼센트", "문서 꼬리"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("selected evidence missing %q", want)
+		}
+	}
+}
+
+func TestSelectApprovalEvidence_ManyTokenQuestionIsBoundedAndKeepsLongestRelevantTerm(t *testing.T) {
+	var question strings.Builder
+	for i := 0; i < 250; i++ {
+		fmt.Fprintf(&question, "토큰%d ", i)
+	}
+	question.WriteString("초특급지체상금조항 ")
+	question.WriteString(strings.Repeat("장", approvalEvidenceMaxQuestionTermRunes+20))
+
+	terms := approvalEvidenceQuestionTerms(question.String())
+	if len(terms) > approvalEvidenceMaxQuestionTerms {
+		t.Fatalf("question terms = %d, want <= %d", len(terms), approvalEvidenceMaxQuestionTerms)
+	}
+	for _, term := range terms {
+		if got := utf8.RuneCountInString(term); got > approvalEvidenceMaxQuestionTermRunes {
+			t.Fatalf("question term = %d runes, want <= %d", got, approvalEvidenceMaxQuestionTermRunes)
+		}
+	}
+
+	clause := "초특급지체상금조항은 계약금의 45퍼센트다."
+	text := strings.Repeat("x", 2*1024*1024) + clause + strings.Repeat("y", 2*1024*1024)
+	got := SelectApprovalEvidenceContext(context.Background(), text, question.String(), approvalAttachInjectRunes)
+	if !strings.Contains(got, clause) {
+		t.Fatalf("many-token selection omitted longest relevant clause")
+	}
+}
+
+func TestSelectApprovalEvidenceContext_CanceledRequestStopsSelection(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	got := SelectApprovalEvidenceContext(
+		ctx,
+		strings.Repeat("x", 4*1024*1024),
+		strings.Repeat("토큰 ", 400),
+		approvalAttachInjectRunes,
+	)
+	if got != "" {
+		t.Fatalf("canceled selection returned %d runes", utf8.RuneCountInString(got))
 	}
 }

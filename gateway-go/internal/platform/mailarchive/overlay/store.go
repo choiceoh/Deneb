@@ -122,6 +122,36 @@ func (s *Store) RememberLocator(id, mailbox, uid string) error {
 	}, false)
 }
 
+// RememberLocators merges a search batch into the sidecar with one load and at
+// most one atomic write. Existing read/archive/trash flags are preserved.
+func (s *Store) RememberLocators(locators map[string]MessageState) error {
+	if s == nil || len(locators) == 0 {
+		return nil
+	}
+	mu := s.mutex()
+	mu.Lock()
+	defer mu.Unlock()
+	state := s.loadLocked()
+	changed := false
+	for id, locator := range locators {
+		if id == "" || locator.Mailbox == "" || locator.UID == "" {
+			continue
+		}
+		message := state.Messages[id]
+		if message.Mailbox == locator.Mailbox && message.UID == locator.UID {
+			continue
+		}
+		message.Mailbox = locator.Mailbox
+		message.UID = locator.UID
+		state.Messages[id] = message
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return s.saveLocked(state)
+}
+
 // MarkRead records the local read overlay for id.
 func (s *Store) MarkRead(id string) error {
 	return s.update(id, func(message MessageState) MessageState {

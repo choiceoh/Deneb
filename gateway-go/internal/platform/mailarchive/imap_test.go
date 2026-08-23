@@ -1,10 +1,32 @@
 package mailarchive
 
 import (
+	"bufio"
 	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"net"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestIMAPConnCloseOnContextInterruptsConnection(t *testing.T) {
+	client, server := net.Pipe()
+	defer server.Close()
+	c := &imapConn{conn: client, r: bufio.NewReader(client)}
+	ctx, cancel := context.WithCancel(context.Background())
+	stop := c.closeOnContext(ctx)
+	defer stop()
+	cancel()
+	if err := server.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.Read(make([]byte, 1)); err == nil {
+		t.Fatal("peer connection remained open after context cancellation")
+	}
+}
 
 func TestExtractLiteralPayload(t *testing.T) {
 	tests := []struct {
@@ -95,6 +117,53 @@ func TestDedupStringsDeduplicatesPreservingOrder(t *testing.T) {
 func TestQuoteEncodesBackslashesAndQuotes(t *testing.T) {
 	if got := quote(`a"b\c`); got != `"a\"b\\c"` {
 		t.Fatalf("quote escaping wrong: %s", got)
+	}
+	if got := quote("sender\r\na99 STORE 1 +FLAGS (\\Deleted)\x00"); strings.ContainsAny(got, "\r\n\x00") {
+		t.Fatalf("quote retained command-separating control bytes: %q", got)
+	}
+}
+
+func TestUIDSearchUsesUTF8CharsetAndFallsBackForLegacyServer(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+	c := &imapConn{conn: client, r: bufio.NewReader(client)}
+	serverDone := make(chan error, 1)
+	go func() {
+		r := bufio.NewReader(server)
+		for _, step := range []struct {
+			want  string
+			reply string
+		}{
+			{want: "a1 UID SEARCH CHARSET UTF-8 TEXT \"견적\"\r\n", reply: "a1 NO [BADCHARSET (US-ASCII)] unsupported\r\n"},
+			{want: "a2 UID SEARCH TEXT \"견적\"\r\n", reply: "* SEARCH 7 9\r\na2 OK done\r\n"},
+		} {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				serverDone <- err
+				return
+			}
+			if line != step.want {
+				serverDone <- fmt.Errorf("command = %q, want %q", line, step.want)
+				return
+			}
+			if _, err := io.WriteString(server, step.reply); err != nil {
+				serverDone <- err
+				return
+			}
+		}
+		serverDone <- nil
+	}()
+
+	uids, err := c.uidSearch(`TEXT "견적"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(uids, ",") != "7,9" {
+		t.Fatalf("uids = %v", uids)
+	}
+	if err := <-serverDone; err != nil {
+		t.Fatal(err)
 	}
 }
 

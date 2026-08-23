@@ -281,16 +281,55 @@ data class CronDetail(
     val autoDisabledAtMs: Long,
 )
 
-/** Unified search results across wiki, diary and people. */
+/** Unified search results across every personal source exposed by the gateway. */
 @Immutable
 data class SearchResults(
     val wiki: List<SearchHit>,
     val diary: List<SearchHit>,
     val people: List<PersonHit>,
+    val files: List<SearchFileResult> = emptyList(),
+    val mail: List<SearchMailResult> = emptyList(),
+    val sourceStatus: SearchSourceAvailability = SearchSourceAvailability(),
 )
 
 @Immutable
 data class SearchHit(val path: String, val title: String, val snippet: String, val category: String)
+
+/** File hit with the exact structural chunk that matched. */
+@Immutable
+data class SearchFileResult(
+    val path: String,
+    val name: String,
+    val size: Long = 0L,
+    val snippet: String,
+    val score: Double,
+    val startLine: Int = 0,
+    val endLine: Int = 0,
+    val kind: String = "",
+    val heading: String = "",
+)
+
+/** Mail-archive hit surfaced alongside wiki/file knowledge. */
+@Immutable
+data class SearchMailResult(
+    val id: String,
+    val threadId: String = "",
+    val from: String = "",
+    val subject: String = "",
+    val date: String = "",
+    val snippet: String = "",
+    val mailbox: String = "",
+)
+
+/** Per-source outcome (`ok|partial|unavailable|error|timeout`); blank means a legacy gateway omitted status. */
+@Immutable
+data class SearchSourceAvailability(
+    val wiki: String = "",
+    val diary: String = "",
+    val people: String = "",
+    val files: String = "",
+    val mail: String = "",
+)
 
 /** One row of the merged people directory: a recent Gmail counterparty, an 인물
  *  wiki person, or both (matched server-side — see miniapp.people.list). A row

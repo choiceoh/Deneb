@@ -96,6 +96,30 @@ func TestStoreSavesLocatorsAndMutationsAcrossReload(t *testing.T) {
 	}
 }
 
+func TestStoreRememberLocatorsBatchesAndPreservesFlags(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	store := overlay.NewStore(path)
+	if err := store.RememberLocator("one", "Old", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MarkArchived("one"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RememberLocators(map[string]overlay.MessageState{
+		"one": {Mailbox: "INBOX", UID: "10"},
+		"two": {Mailbox: "Sent", UID: "20"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := overlay.NewStore(path).Snapshot()
+	if one := snapshot["one"]; !one.Archived || !one.Read || one.Mailbox != "INBOX" || one.UID != "10" {
+		t.Fatalf("one = %+v", one)
+	}
+	if two := snapshot["two"]; two.Mailbox != "Sent" || two.UID != "20" {
+		t.Fatalf("two = %+v", two)
+	}
+}
+
 func TestStoreReadsExistingStateSchema(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
 	legacy := []byte(`{
