@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/recallops"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/lmtpd"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
@@ -216,7 +217,15 @@ func mailAnalysisAgentToolGate(name, _ string, input []byte) (bool, string) {
 			return true, mailAnalysisReadOnlyBlockReason
 		}
 	case "knowledge":
-		if strings.EqualFold(toolInputField(input, "op"), "record") {
+		// Mail analysis synthesizes attacker-authored content and does not enable
+		// the untrusted-tool gate, so this is the ONLY thing standing between mail
+		// promptware and a durable write. Cover every write op — a fact mutation
+		// steers later recalls just as a page write does — and resolve the op
+		// through the tool's own alias rules so `action`/`write`/`쓰기` cannot slip
+		// past. An unreadable payload is treated as a write; the tool rejects it
+		// anyway.
+		op := recallops.KnowledgeOpFromInput(input)
+		if op == "" || recallops.IsKnowledgeWriteOp(op) {
 			return true, mailAnalysisReadOnlyBlockReason
 		}
 	}

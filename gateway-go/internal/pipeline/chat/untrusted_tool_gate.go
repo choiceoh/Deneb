@@ -23,6 +23,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/recallops"
 	"github.com/choiceoh/deneb/gateway-go/pkg/promptguard"
 )
 
@@ -182,25 +183,18 @@ func isIrreversibleTool(name string, input []byte) bool {
 }
 
 // isKnowledgeFactMutation reports whether a knowledge tool call is one of the
-// two canonical fact mutations. Op parsing mirrors ToolKnowledge (op, then the
-// action alias); an unparsable payload is treated as a mutation so a malformed
-// call cannot slip past the gate.
+// two canonical fact mutations. Op resolution is the tool's own (op, then the
+// action alias, alias-normalized); an unparsable payload is treated as a
+// mutation so a malformed call cannot slip past the gate.
 func isKnowledgeFactMutation(input []byte) bool {
 	if len(input) == 0 {
 		return false
 	}
-	var payload struct {
-		Op     string `json:"op"`
-		Action string `json:"action"`
-	}
-	if err := json.Unmarshal(input, &payload); err != nil {
+	op := recallops.KnowledgeOpFromInput(input)
+	if op == "" {
 		return true
 	}
-	op := strings.ToLower(strings.TrimSpace(payload.Op))
-	if op == "" {
-		op = strings.ToLower(strings.TrimSpace(payload.Action))
-	}
-	return op == "assert_fact" || op == "forget_fact"
+	return recallops.IsKnowledgeFactMutationOp(op)
 }
 
 // readsExternalOrigin reports whether a tool returns content sourced from

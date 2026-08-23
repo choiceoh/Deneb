@@ -32,6 +32,7 @@ func TestIsIrreversibleToolReturnsExpectedClassification(t *testing.T) {
 		{"knowledge assert_fact gated", "knowledge", `{"op":"assert_fact","fact_key":"x","value":"y"}`, true},
 		{"knowledge forget_fact gated", "knowledge", `{"op":"forget_fact","fact_key":"x"}`, true},
 		{"knowledge action alias gated", "knowledge", `{"action":"assert_fact","fact_key":"x"}`, true},
+		{"knowledge write alias not a fact mutation", "knowledge", `{"op":"write","page":"인물/박부장"}`, false},
 		{"knowledge malformed payload gated", "knowledge", `{"op":`, true},
 	}
 	for _, tc := range cases {

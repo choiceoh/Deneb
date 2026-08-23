@@ -38,6 +38,11 @@ PR #4653은 모델이 부르는 `knowledge(op="assert_fact"|"forget_fact")`에 `
 - promptware로 오염된 턴에서는 두 mutation op이 비가역 도구 게이트에 걸려 실행되지
   않는다 (`exec`·`preference`·`wiki_forget`과 같은 등급). `knowledge`의 나머지 op은
   계속 열려 있어, 오염된 턴도 조회하고 상황을 설명할 수 있다.
+- **오염 게이트를 켜지 않는 합성 경로는 자체 게이트가 모든 쓰기 op을 막아야 한다.**
+  메일 분석 합성(`mailAnalysisAgentToolGate`)이 그 예다 — 외부가 작성한 본문을 읽으면서
+  `GateUntrustedTools`를 켜지 않으므로, 그 게이트가 유일한 방어선이다. op 판별은
+  도구 자신의 별칭 규칙(`recallops.KnowledgeOpFromInput`)을 공유해야 한다: `action`,
+  `write`, `쓰기` 같은 별칭을 못 보는 게이트는 막으려던 호출을 그대로 통과시킨다.
 
 ## Alternatives rejected
 
