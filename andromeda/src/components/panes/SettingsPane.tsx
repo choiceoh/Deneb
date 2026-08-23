@@ -1,6 +1,7 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { getPrompt, listPrompts, resetPrompt, saveConfig, updatePrompt } from "@/gateway";
 import { setString } from "@/storage";
+import { isComputerUseEnabled, setComputerUseEnabled } from "@/computer";
 import { moveItem } from "@/listReorder";
 import { useGatewayStatus } from "@/hooks";
 import { type LogLevel, getLogLevel, setLogLevel } from "@/log";
@@ -45,6 +46,7 @@ export function SettingsPane() {
   const { connected, cfg, setCfg, hiddenViews, toggleViewHidden, viewOrder, setViewOrder } = useWorkspace();
   const { status, check } = useGatewayStatus(cfg);
   const [level, setLevel] = useState<LogLevel>(getLogLevel());
+  const [computerUse, setComputerUse] = useState<boolean>(isComputerUseEnabled());
   const [updateMsg, setUpdateMsg] = useState("");
   // Version just installed and awaiting the relaunch decision — drives the
   // app-styled ConfirmModal (the old window.confirm in updater.ts never showed
@@ -231,6 +233,27 @@ export function SettingsPane() {
                   );
                 })}
               </div>
+            </Section>
+
+            <Section title="컴퓨터 조종">
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <input
+                  type="checkbox"
+                  checked={computerUse}
+                  onChange={(e) => {
+                    setComputerUseEnabled(e.target.checked);
+                    setComputerUse(e.target.checked);
+                  }}
+                  aria-label="데네브의 컴퓨터 조종 허용"
+                />
+                <span style={{ display: "grid", gap: 2 }}>
+                  <span>데네브의 컴퓨터 조종 허용</span>
+                  <span style={{ ...muted, fontSize: 12 }}>
+                    켜면 데네브가 이 PC의 화면을 캡처하고 마우스·키보드를 직접 조작할 수 있습니다(채팅에서 요청했을
+                    때만, 모든 동작은 능동 패널에 표시). 기본 꺼짐.
+                  </span>
+                </span>
+              </label>
             </Section>
 
             <Section title="로그 레벨">

@@ -4,10 +4,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 
-const mocks = vi.hoisted(() => ({ useEvents: vi.fn() }));
+const mocks = vi.hoisted(() => ({ useEvents: vi.fn(), handleComputerFrame: vi.fn() }));
 vi.mock("@/hooks", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/hooks")>();
   return { ...actual, useEvents: mocks.useEvents };
+});
+vi.mock("@/computer", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/computer")>();
+  return { ...actual, handleComputerFrame: mocks.handleComputerFrame };
 });
 
 import { ProactivePanel } from "./ProactivePanel";
@@ -67,5 +71,47 @@ describe("ProactivePanel workspace-command intercept", () => {
     const ev: ProactiveEvent = { id: "e3", kind: "mail", title: "급한 메일", raw: {} };
     expect(intercept(ev)).toBe(ev);
     expect(value.runCommand).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProactivePanel computer-use intercept", () => {
+  it("executes a pushed computer frame through the executor and shows a 컴퓨터 조종 nudge", () => {
+    mocks.handleComputerFrame.mockResolvedValue({ ok: true });
+    const { value, intercept } = mountAndGrabIntercept();
+    const nudge = intercept({
+      id: "c1",
+      kind: "computer",
+      ref: "cu-abc",
+      raw: { title: "컴퓨터 조종", body: "클릭", data: { action: "click", x: "10", y: "20", button: "left" } },
+    });
+
+    expect(mocks.handleComputerFrame).toHaveBeenCalledWith(testCfg, "cu-abc", {
+      action: "click",
+      x: 10,
+      y: 20,
+      button: "left",
+    });
+    expect(value.runCommand).not.toHaveBeenCalled();
+    expect(nudge?.kind).toBe("computer");
+    expect(nudge?.title).toBe("컴퓨터 조종");
+    expect(nudge?.body).toBe("클릭 (10,20)");
+  });
+
+  it("answers a malformed computer frame with a failure report instead of leaving the tool waiting", async () => {
+    mocks.handleComputerFrame.mockResolvedValue({ ok: false });
+    const { intercept } = mountAndGrabIntercept();
+    const nudge = intercept({ id: "c2", kind: "computer", ref: "cu-bad", raw: { data: { action: "click", x: "1" } } });
+
+    expect(nudge).toBeNull();
+    expect(mocks.handleComputerFrame).toHaveBeenCalledTimes(1);
+    const [, id, cmd, run] = mocks.handleComputerFrame.mock.calls[0] as [
+      unknown,
+      string,
+      unknown,
+      () => Promise<{ ok: boolean }>,
+    ];
+    expect(id).toBe("cu-bad");
+    expect(cmd).toEqual({ action: "cursor" });
+    await expect(run()).resolves.toMatchObject({ ok: false });
   });
 });

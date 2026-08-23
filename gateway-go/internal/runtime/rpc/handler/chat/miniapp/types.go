@@ -79,9 +79,28 @@ type Deps struct {
 	// IngestEvent queues a proactive judgment turn for a phone event.
 	// Optional; nil disables miniapp.event.ingest.
 	IngestEvent func(eventType, source, text string)
+	// ResolveComputerResult feeds the desktop's execution report for one
+	// computer-use command (the computer tool) back to the waiting dispatch.
+	// Returns false when nothing was waiting (late report / gateway restart).
+	// Optional; nil disables miniapp.computer.result.
+	ResolveComputerResult func(ComputerResult) bool
 	// SteerNative folds a mid-turn note into the active native run and
 	// persists it as a user transcript line. Optional; nil disables
 	// miniapp.chat.steer. Kept off ChatHandler so the native bridge stays
 	// free of the async chat.send/abort/steer contract.
 	SteerNative func(sessionKey, note string) bool
+}
+
+// ComputerResult is the desktop's report for one dispatched computer-use
+// command: ID echoes the push frame's Ref; Image is the decoded PNG of a
+// screenshot (nil for other actions); Text is a small textual payload such as
+// the cursor position.
+type ComputerResult struct {
+	ID     string
+	OK     bool
+	Error  string
+	Image  []byte
+	Width  int
+	Height int
+	Text   string
 }

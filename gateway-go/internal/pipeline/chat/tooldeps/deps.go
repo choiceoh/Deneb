@@ -233,6 +233,11 @@ type CoreToolDeps struct {
 	// WorkstationUsageHint surfaces the adoption-rate note appended to the
 	// workstation tool result (효용 원장 자기조정) — "" when nothing to say.
 	WorkstationUsageHint func(action string) string
+	// ComputerCommandSender executes one desktop computer-use command (screenshot/
+	// click/type/key/…) on the connected Andromeda host and returns the text the
+	// model should see (the vision description of a screenshot, or an ack).
+	// nil = no desktop channel wired, so the computer tool reports unavailable.
+	ComputerCommandSender func(ctx context.Context, action string, args map[string]string) (string, error)
 	// SkillsCatalogDirs are the skill catalog roots that live outside the
 	// workspace (managed ~/.deneb/skills, personal ~/.agents/skills). The
 	// read tool accepts them as extra allowed roots so the SKILL.md

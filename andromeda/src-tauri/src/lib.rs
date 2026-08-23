@@ -1,6 +1,18 @@
 use keyring::Entry;
 use std::fs;
 
+// Computer use (the gateway's `computer` tool): screenshot + mouse/keyboard on
+// the host OS. Desktop only — the frontend gates it behind an explicit setting.
+#[cfg(desktop)]
+mod computer;
+#[cfg(desktop)]
+use computer::computer_action;
+#[cfg(not(desktop))]
+#[tauri::command]
+async fn computer_action(_cmd: serde_json::Value) -> Result<serde_json::Value, String> {
+    Err("computer use is desktop-only".into())
+}
+
 // Service namespace for keychain entries (one token per account, e.g. session key).
 const SERVICE: &str = "ai.deneb.andromeda";
 
@@ -132,7 +144,8 @@ pub fn run() {
             token_set,
             token_get,
             token_from_file,
-            set_badge
+            set_badge,
+            computer_action
         ])
         .run(tauri::generate_context!())
         .expect("error while running Andromeda");

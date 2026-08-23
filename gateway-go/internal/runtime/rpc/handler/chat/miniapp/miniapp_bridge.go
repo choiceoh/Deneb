@@ -146,6 +146,11 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 	if deps.IngestEvent != nil {
 		m["miniapp.event.ingest"] = handleMiniappEventIngest(deps)
 	}
+	// Computer-use execution reports: the desktop answers a pushed `computer`
+	// frame (screenshot PNG / ack / failure) and the waiting tool call resumes.
+	if deps.ResolveComputerResult != nil {
+		m["miniapp.computer.result"] = handleMiniappComputerResult(deps)
+	}
 	return m
 }
 
@@ -1111,5 +1116,64 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 				"outputTokens": res.OutputTokens,
 			},
 		})
+	}
+}
+
+// computerResultMaxImageBytes bounds a decoded screenshot (a 4K PNG is a few
+// MB; anything near this is a bug or abuse, not a screen).
+const computerResultMaxImageBytes = 16 << 20
+
+// handleMiniappComputerResult is the desktop's execution report for one
+// dispatched computer-use command.
+//
+// Params:
+//   - id      (string, required): the push frame's Ref
+//   - ok      (bool)
+//   - error   (string, optional): failure detail when ok=false
+//   - image   (base64 PNG, optional; `data:` prefix tolerated): screenshot
+//   - width   (int), height (int): screenshot pixel size
+//   - text    (string, optional): small textual payload (cursor position)
+//
+// resolved=false is a successful RPC (the dispatch timed out or the gateway
+// restarted) so the desktop logs it and moves on.
+func handleMiniappComputerResult(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[struct {
+			ID     string `json:"id"`
+			OK     bool   `json:"ok"`
+			Error  string `json:"error"`
+			Image  string `json:"image"`
+			Width  int    `json:"width"`
+			Height int    `json:"height"`
+			Text   string `json:"text"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		id := strings.TrimSpace(p.ID)
+		if id == "" {
+			return rpcerr.MissingParam("id").Response(req.ID)
+		}
+		var img []byte
+		if raw := strings.TrimSpace(p.Image); raw != "" {
+			if strings.HasPrefix(raw, "data:") {
+				if i := strings.IndexByte(raw, ','); i > 0 {
+					raw = raw[i+1:]
+				}
+			}
+			decoded, err := base64.StdEncoding.DecodeString(raw)
+			if err != nil || len(decoded) == 0 {
+				return rpcerr.InvalidParams(fmt.Errorf("image is not valid base64")).Response(req.ID)
+			}
+			if len(decoded) > computerResultMaxImageBytes {
+				return rpcerr.InvalidParams(fmt.Errorf("image too large (%d bytes)", len(decoded))).Response(req.ID)
+			}
+			img = decoded
+		}
+		resolved := deps.ResolveComputerResult(ComputerResult{
+			ID: id, OK: p.OK, Error: strings.TrimSpace(p.Error),
+			Image: img, Width: p.Width, Height: p.Height, Text: strings.TrimSpace(p.Text),
+		})
+		return rpcutil.RespondOK(req.ID, map[string]any{"resolved": resolved})
 	}
 }

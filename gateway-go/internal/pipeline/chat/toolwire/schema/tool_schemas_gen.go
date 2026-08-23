@@ -1970,6 +1970,67 @@ func WorkstationToolSchema() map[string]any {
 	}
 }
 
+func ComputerToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "screenshot(화면 캡처→텍스트 서술) | click | double_click | right_click | move | drag | scroll | type | key | wait | cursor",
+			},
+			"amount": map[string]any{
+				"type":        "integer",
+				"description": "scroll 전용 — 스크롤 틱 수 1~50 (기본 3)",
+			},
+			"button": map[string]any{
+				"type":        "string",
+				"description": "click 전용 — left(기본)|right|middle",
+			},
+			"height": map[string]any{
+				"type":        "integer",
+				"description": "screenshot 확대 영역 높이",
+			},
+			"key": map[string]any{
+				"type":        "string",
+				"description": "key 전용 — 키 또는 조합: Return, Tab, Escape, Backspace, Delete, Up/Down/Left/Right, Home, End, PageUp, PageDown, F1~F12, Space, 글자 한 개; 수식키는 ctrl/alt/shift/cmd(meta)+ 로 묶음 (예: \"ctrl+c\", \"cmd+shift+t\", \"alt+Tab\")",
+			},
+			"scroll": map[string]any{
+				"type":        "string",
+				"description": "scroll 전용 — up|down(기본)|left|right",
+			},
+			"text": map[string]any{
+				"type":        "string",
+				"description": "type 전용 — 타이핑할 문자열 (최대 4000자)",
+			},
+			"to_x": map[string]any{
+				"type":        "integer",
+				"description": "drag 전용 — 끝점 X",
+			},
+			"to_y": map[string]any{
+				"type":        "integer",
+				"description": "drag 전용 — 끝점 Y",
+			},
+			"wait_ms": map[string]any{
+				"type":        "integer",
+				"description": "wait 전용 — 대기 밀리초 1~10000 (기본 1000)",
+			},
+			"width": map[string]any{
+				"type":        "integer",
+				"description": "screenshot 확대 영역 너비 (x,y,height와 함께)",
+			},
+			"x": map[string]any{
+				"type":        "integer",
+				"description": "직전 screenshot 이미지 기준 X 픽셀 (click/double_click/right_click/move/drag/scroll 필수, screenshot 확대 영역의 좌상단)",
+			},
+			"y": map[string]any{
+				"type":        "integer",
+				"description": "직전 screenshot 이미지 기준 Y 픽셀",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 func WorkfeedToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

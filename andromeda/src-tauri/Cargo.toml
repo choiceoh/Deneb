@@ -27,3 +27,13 @@ dirs = "6"
 tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-single-instance = "2"
+# Computer use (src/computer.rs): synthetic mouse/keyboard + screenshot
+# encode/downscale. image is png-only to keep the build lean.
+enigo = "0.6"
+image = { version = "0.25", default-features = false, features = ["png"] }
+base64 = "0.22"
+
+# X11 screen capture (GetImage) — enigo links x11rb already; declared so the
+# capture path can use it directly. Wayland falls back to CLI tools at runtime.
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+x11rb = "0.13"

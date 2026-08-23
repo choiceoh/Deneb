@@ -158,6 +158,11 @@ type Server struct {
 	// alongside pushHub. See server_phone_action.go.
 	phoneActions *phoneActionAwaiter
 
+	// computerActions correlates dispatched computer-use commands (the
+	// computer tool) with the desktop's execution reports
+	// (miniapp.computer.result). Created in New. See server_computer.go.
+	computerActions *computerAwaiter
+
 	// phoneEventLedger is the shared notification raw ledger — both phone-event
 	// entry doors (RPC bridge + HTTP loopback) record into one instance. The
 	// HTTP door (/api/event/ingest) builds its handler per request, so the lazy
@@ -362,6 +367,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		logger:              slog.Default(),
 		pushHub:             nativepush.NewHub(),
 		phoneActions:        newPhoneActionAwaiter(),
+		computerActions:     newComputerAwaiter(),
 		alertGate:           proactive.NewAlertGate(),
 		SessionManager: &SessionManager{
 			sessions:       session.NewManager(),
