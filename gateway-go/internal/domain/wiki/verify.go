@@ -785,45 +785,18 @@ func truncate(s string, n int) string {
 // operator resolves these by hand, so a wall of them is noise.
 const homonymFindingLimit = 5
 
-// detectHomonymPersonPages flags 인물 pages whose own contact details span two
-// employers — the signature of two people merged into one node.
-//
-// Detection only, never a Fix: splitting is the operator's call (a 2026-07-28
-// over-merge incident is why). The frontmatter identity backfill already
-// refuses to write ambiguous addresses, and contacts sync no longer merges
-// them into the body, but pages merged before those guards still carry both —
-// and a merged node quietly answers "그 사람 연락처" with the wrong company's
-// number.
+// detectHomonymPersonPages reports 인물 pages holding two identities as
+// advisory findings for the dream report. The scan itself lives on Store
+// (HomonymPersonPages) so the operator-facing card surface reads exactly the
+// same list.
 func (wd *WikiDreamer) detectHomonymPersonPages() []verifyFinding {
-	relPaths, err := wd.store.ListPages("인물")
-	if err != nil {
-		return nil
-	}
 	var findings []verifyFinding
-	for _, rp := range relPaths {
-		if len(findings) >= homonymFindingLimit {
-			break
-		}
-		rp = filepath.ToSlash(rp)
-		page, rerr := wd.store.ReadPage(rp)
-		if rerr != nil || page == nil || page.Meta.Archived {
-			continue
-		}
-		domains := companyEmailDomains(append(append([]string(nil), page.Meta.Emails...),
-			bodyEmailAddresses(page.Body)...))
-		if len(domains) < 2 {
-			continue
-		}
-		sort.Strings(domains)
-		title := page.Meta.Title
-		if title == "" {
-			title = strings.TrimSuffix(filepath.Base(rp), ".md")
-		}
+	for _, h := range wd.store.HomonymPersonPages(homonymFindingLimit) {
 		findings = append(findings, verifyFinding{
 			Type: "homonym",
 			Detail: fmt.Sprintf("%q 한 페이지에 회사 도메인 %s — 동명이인 병합 의심 (분리는 운영자 판단)",
-				title, strings.Join(domains, ", ")),
-			PageA: rp,
+				h.Title, strings.Join(h.Domains, ", ")),
+			PageA: h.PagePath,
 		})
 	}
 	return findings
