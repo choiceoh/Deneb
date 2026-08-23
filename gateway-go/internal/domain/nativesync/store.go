@@ -83,6 +83,12 @@ type PullResult struct {
 	Cursor    int64
 	LatestSeq int64
 	HasMore   bool
+	// Truncated reports that afterSeq falls below the retained window: events
+	// the client had not yet pulled were pruned by pruneIfNeededLocked, so the
+	// page delta cannot reconstruct them. The client must resync from current
+	// server state (full refresh) instead of applying the page incrementally —
+	// without this flag a stale cursor silently skips the pruned range.
+	Truncated bool
 }
 
 // Store persists native synchronization events as an append-only log.
@@ -189,6 +195,11 @@ func (s *Store) Pull(afterSeq int64, limit int) (PullResult, error) {
 		filtered = filtered[:limit]
 		hasMore = true
 	}
+	// Retention-truncation signal: seqs are contiguous (one per Append), so a
+	// cursor below the oldest retained seq means the (afterSeq, events[0].Seq)
+	// range was pruned before this client saw it. afterSeq == 0 is a fresh
+	// client baselining on the retained window, not a gap.
+	truncated := afterSeq > 0 && len(events) > 0 && events[0].Seq > afterSeq+1
 	cursor := afterSeq
 	if len(filtered) > 0 {
 		cursor = filtered[len(filtered)-1].Seq
@@ -198,6 +209,7 @@ func (s *Store) Pull(afterSeq int64, limit int) (PullResult, error) {
 		Cursor:    cursor,
 		LatestSeq: latest,
 		HasMore:   hasMore,
+		Truncated: truncated,
 	}, nil
 }
 
