@@ -122,10 +122,20 @@ func (s *LocalStore) rejectSymlinkComponents(abs string) error {
 	if rel == "." {
 		return nil
 	}
-	current := s.root
+	root, err := os.OpenRoot(s.root)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+
+	// Resolve every component through os.Root rather than rebuilding an
+	// absolute path from request-derived segments. Root.Lstat is confined to
+	// s.root by the standard library, while checking each prefix still lets us
+	// reject even an in-root symlink before a later operation follows it.
+	current := "."
 	for _, part := range strings.Split(rel, string(filepath.Separator)) {
 		current = filepath.Join(current, part)
-		info, statErr := os.Lstat(current)
+		info, statErr := root.Lstat(current)
 		if errors.Is(statErr, os.ErrNotExist) {
 			return nil
 		}
