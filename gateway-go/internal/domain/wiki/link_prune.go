@@ -10,8 +10,9 @@
 //	        → unique basename → unique title → unique frontmatter ID
 //	drop:   unresolvable, duplicates, self-references
 //
-// Body [[wikilinks]] are deliberately untouched (prose is the author's; graph
-// resolvers already handle title-form links). Runs from the wiki-review task
+// Body [[wikilinks]] get the repair half of the same ladder (PruneDeadWikiLinks):
+// an unambiguous rename is rewritten in place, anything ambiguous or truly gone
+// is left as prose for a human. Runs from the wiki-review task
 // every cycle; cheap (index-driven) and idempotent — after the first sweep it
 // only acts on fresh rot.
 package wiki
@@ -217,4 +218,108 @@ func (s *Store) PruneDeadRelatedLinks() (PruneStats, error) {
 			stats.PagesChanged, stats.Repointed, stats.Removed))
 	}
 	return stats, nil
+}
+
+// PruneDeadWikiLinks rewrites body [[links]] whose target moved, using the same
+// resolution ladder as the Related sweep, and reports what could not be
+// resolved.
+//
+// Related entries were repaired from the start; inline links never were, so
+// the 2026-07-19 rename of 61 project folders to deal codes left the bodies
+// pointing at retired paths (about a third of the wiki's inline links are dead,
+// most of them pre-rename project paths). Every one is a missing edge for
+// graph_snapshot's inline-link pass and a dead end for a reader.
+//
+// Deliberately conservative: only a target that resolves to exactly one live
+// page is rewritten, the link's alias/section suffix is preserved, and an
+// unresolvable link is counted, never deleted — removing a link would destroy
+// the author's statement that a relationship exists. Metadata-only in spirit,
+// so it preserves `updated` like the Related sweep.
+func (s *Store) PruneDeadWikiLinks() (PruneStats, error) {
+	pages, err := s.ListPages("")
+	if err != nil {
+		return PruneStats{}, fmt.Errorf("wiki: prune wikilinks: %w", err)
+	}
+	resolver := s.newLinkResolver(pages)
+	if resolver.indexEntries == 0 && len(pages) > 0 {
+		slog.Warn("wiki: wikilink prune skipped — index empty but pages exist", "pages", len(pages))
+		return PruneStats{}, nil
+	}
+
+	var stats PruneStats
+	for _, rp := range pages {
+		rp = strings.ReplaceAll(rp, "\\", "/")
+		repointed, unresolved := 0, 0
+		if err := s.UpdatePage(rp, func(cur *Page) (*Page, error) {
+			if cur == nil || !strings.Contains(cur.Body, "[[") {
+				return nil, nil
+			}
+			body, rep, dead := rewriteWikiLinks(cur.Body, rp, resolver)
+			repointed, unresolved = rep, dead
+			if body == cur.Body {
+				return nil, nil
+			}
+			// Rewriting a link to follow a rename says nothing new about the
+			// subject, so the page keeps its date (UpdatePageMetaOnly refuses
+			// body edits outright, which is right for frontmatter-only sweeps —
+			// this one edits prose but carries the same "no new knowledge"
+			// contract).
+			updated := cur.Meta.Updated
+			cur.Body = body
+			cur.Meta.Updated = updated
+			return cur, nil
+		}); err != nil {
+			stats.Failed++
+			slog.Warn("wiki: wikilink prune write failed", "path", rp, "error", err)
+			continue
+		}
+		stats.Repointed += repointed
+		stats.Removed += unresolved // reported as "still dead", not deleted
+		if repointed > 0 {
+			stats.PagesChanged++
+		}
+	}
+	return stats, nil
+}
+
+// rewriteWikiLinks rewrites [[target]] targets that resolve to a different live
+// page, preserving |alias and #section suffixes. Returns the new body, how many
+// links were repointed, and how many remain unresolved.
+func rewriteWikiLinks(body, self string, resolver *linkResolver) (string, int, int) {
+	repointed, unresolved := 0, 0
+	out := wikiLinkRe.ReplaceAllStringFunc(body, func(match string) string {
+		inner := strings.TrimSuffix(strings.TrimPrefix(match, "[["), "]]")
+		target, suffix := inner, ""
+		if i := strings.IndexAny(inner, "|#"); i >= 0 {
+			target, suffix = inner[:i], inner[i:]
+		}
+		trimmed := strings.TrimSpace(target)
+		if trimmed == "" {
+			return match
+		}
+		// Only PATH-shaped links are repaired. [[김부장]] is how a person writes
+		// a reference, the graph resolvers already match it by title, and
+		// expanding it to 인물/김부장.md would make the prose worse. A path, by
+		// contrast, is a machine reference that a rename silently broke.
+		if !strings.Contains(trimmed, "/") {
+			return match
+		}
+		resolved := resolver.resolve(trimmed)
+		if resolved == "" {
+			unresolved++
+			return match
+		}
+		// A link that already points at a live page — by path, title, or code —
+		// is left byte-identical: prose forms like [[김부장]] are how people
+		// write, and the graph resolvers already understand them.
+		if resolved == trimmed || resolved == normalizePagePath(trimmed) || resolved == self {
+			return match
+		}
+		if !resolver.exists[resolved] {
+			return match
+		}
+		repointed++
+		return "[[" + resolved + suffix + "]]"
+	})
+	return out, repointed, unresolved
 }

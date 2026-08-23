@@ -191,6 +191,16 @@ func (t *wikiReviewTask) Run(ctx context.Context) error {
 		t.logger.Info("wiki-review: dead links pruned",
 			"pages", prune.PagesChanged, "repointed", prune.Repointed, "removed", prune.Removed)
 	}
+	// Same ladder over body [[links]]: an unambiguous rename is rewritten, an
+	// ambiguous or vanished target stays as prose and is only counted.
+	bodyLinks, blerr := t.wikiStore.PruneDeadWikiLinks()
+	if blerr != nil {
+		t.logger.Warn("wiki-review: wikilink prune failed", "error", blerr)
+	} else if bodyLinks.PagesChanged > 0 || bodyLinks.Removed > 0 {
+		t.logger.Info("wiki-review: body wikilinks repaired",
+			"pages", bodyLinks.PagesChanged, "repointed", bodyLinks.Repointed,
+			"stillDead", bodyLinks.Removed)
+	}
 	// Retroactive mail filing: unlinked analyses whose project has since become
 	// known move into that project's 메일분석 slot (deterministic signals only).
 	// Domain-signal proposals (observe mode, until DENEB_MAIL_RECLASS_DOMAIN=1)
