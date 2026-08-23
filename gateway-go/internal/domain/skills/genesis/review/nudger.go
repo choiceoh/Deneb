@@ -50,7 +50,16 @@ const DefaultNudgeInterval = 3
 
 // nudgeGenerationTimeout caps a single background review so a stuck LLM
 // call cannot leak goroutines indefinitely.
-const nudgeGenerationTimeout = 90 * time.Second
+//
+// Sized from production, not from a round number. 2026-08-23 measurement over
+// 8 days: 31 of 50 review runs (62%) hit the old 90s budget, and the timed-out
+// ones reached the decision tool (skill_lifecycle) 0.48 times per run against
+// 1.1 for the runs that finished — i.e. most reviews were cut off before
+// recording anything. The runs that DID finish took p50 59s over 5.1 turns
+// (~12s/turn) while the cut-off ones were running ~25s/turn on the cloud coding
+// role, so a budget that fits the slow tail needs ~6 turns x ~25s plus headroom.
+// The fence is still a fence: a genuinely stuck call dies at 4 minutes.
+const nudgeGenerationTimeout = 240 * time.Second
 
 // maxNudgeBackoffShift caps the per-session review backoff. The fire
 // threshold for a session is interval << min(fires, maxNudgeBackoffShift),

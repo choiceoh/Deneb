@@ -101,3 +101,25 @@ func TestSkillReviewSessionKeyNormalizesUnsafeRunes(t *testing.T) {
 		}
 	}
 }
+
+type timeoutReviewChat struct{}
+
+func (*timeoutReviewChat) ChatReady() bool { return true }
+
+func (*timeoutReviewChat) RunSync(_ context.Context, _ chatport.SyncRequest) (*chatport.SyncResult, error) {
+	return &chatport.SyncResult{StopReason: "timeout", Turns: 3}, nil
+}
+
+// A review cut off at its budget recorded no lifecycle decision in the common
+// case, so it must surface as a failed review — reporting nil here is what kept
+// a 62% timeout rate invisible on /health.
+func TestRunSkillReviewReportsBudgetTimeoutAsFailure(t *testing.T) {
+	fork := NewReviewFork(&timeoutReviewChat{}, nil, nil, "provider/coding-model", nil)
+	err := fork.RunSkillReview(context.Background(), "client:main", generation.SessionContext{AllText: "user: 테스트"})
+	if err == nil {
+		t.Fatal("a timed-out review must not report success")
+	}
+	if !strings.Contains(err.Error(), "budget elapsed") {
+		t.Fatalf("error should name the budget, got %v", err)
+	}
+}
