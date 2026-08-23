@@ -49,6 +49,10 @@ const (
 	PushKindPhoneAction = "phone_action"
 	// PushKindWorkspace identifies a desktop workstation-control frame.
 	PushKindWorkspace = "workspace"
+	// PushKindComputer identifies a desktop computer-use command frame (the
+	// computer tool: screenshot/click/type on the host OS). Ref carries the
+	// dispatch id the desktop echoes back on miniapp.computer.result.
+	PushKindComputer = "computer"
 )
 
 // ClientKind identifies the device class behind an events subscription.

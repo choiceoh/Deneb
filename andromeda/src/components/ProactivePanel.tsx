@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { type WorkspaceCommand, describeCommand, isWorkspaceCommandKind, parseWorkspaceCommand } from "@/commands";
+import { describeComputerCommand, handleComputerFrame, isComputerCommandKind, parseComputerCommand } from "@/computer";
 import type { ProactiveEvent } from "@/events";
 import { fmtMailDate } from "@/format";
 import { type GatewayConfig, callRpc } from "@/gateway";
@@ -57,6 +58,29 @@ export function ProactivePanel({ cfg }: { cfg: GatewayConfig }) {
 
   const intercept = useCallback(
     (ev: ProactiveEvent): ProactiveEvent | null => {
+      // Computer use (host OS mouse/keyboard/screen): execute through the Tauri
+      // shell and report back; the nudge makes every action visible. A
+      // malformed frame is still answered (ok=false) so the waiting tool call
+      // fails fast instead of timing out.
+      if (isComputerCommandKind(ev.kind)) {
+        const nested = ev.raw.data;
+        const src =
+          nested && typeof nested === "object" && !Array.isArray(nested) ? (nested as Record<string, unknown>) : ev.raw;
+        const cmd = parseComputerCommand(src);
+        const id = ev.ref ?? "";
+        if (!cmd) {
+          nudgeLog.warn("malformed computer command dropped", JSON.stringify(ev.raw));
+          if (id)
+            void handleComputerFrame(cfg, id, { action: "cursor" }, async () => ({
+              ok: false,
+              error: "잘못된 명령 프레임",
+            }));
+          return null;
+        }
+        if (id) void handleComputerFrame(cfg, id, cmd);
+        else nudgeLog.warn("computer command without ref id — cannot report result");
+        return { ...ev, kind: "computer", title: ev.title ?? "컴퓨터 조종", body: describeComputerCommand(cmd) };
+      }
       if (!isWorkspaceCommandKind(ev.kind)) return ev;
       // The gateway's workstation tool carries the command in the frame's
       // `data` map (like phone_action frames); tolerate top-level fields too.
@@ -73,7 +97,7 @@ export function ProactivePanel({ cfg }: { cfg: GatewayConfig }) {
       return { ...ev, kind: "workspace", title: ev.title ?? "화면 조정", body: describeCommand(cmd) };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [runCommand],
+    [runCommand, cfg],
   );
   const { events, status, dismiss, clearAll } = useEvents(cfg, connected, intercept);
 

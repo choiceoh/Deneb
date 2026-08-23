@@ -59,6 +59,9 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				return chat.DescribeCapturedImage(ctx, img, mime, toolbind.OCRImage)
 			},
 			Transcribe: toolbind.TranscribeAudio,
+			// Computer-use round trip: the desktop's execution report resumes
+			// the waiting computer tool dispatch (server_computer.go).
+			ResolveComputerResult: s.resolveComputerResult,
 			// Document attach (pdf/doc/sheet) → in-house extractor (PDF/Excel/Word/
 			// PowerPoint/CSV/text, with a scanned-PDF / image OCR fallback).
 			ExtractDocument: toolbind.ExtractAttachmentText,

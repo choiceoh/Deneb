@@ -230,6 +230,26 @@ func RegisterWorkstationTool(registry toolport.ToolRegistrar, deps WorkstationDe
 	})
 }
 
+// RegisterComputerTool registers the desktop computer-use tool: Deneb operates
+// the host OS (screenshot → vision description, mouse, keyboard) through the
+// Andromeda shell. Deferred: a rare, deliberate capability — the model fetches
+// it when the user asks for real desktop operation, so the default prompt stays
+// free of a schema that most turns never need.
+func RegisterComputerTool(registry toolport.ToolRegistrar, send hostops.ComputerCommandFunc) {
+	registry.RegisterTool(toolport.ToolDef{
+		Name: "computer",
+		Description: "사용자의 데스크톱 컴퓨터를 Andromeda 데스크톱 앱을 통해 직접 조작한다 — 화면을 보고(screenshot) 마우스·키보드로 실제 OS 앱을 다룬다. " +
+			"workstation 도구(Andromeda 자체 화면 배치)와 다름: 이건 브라우저·엑셀·메신저 등 호스트 OS 전체가 대상. " +
+			"action: screenshot(화면 캡처 → 텍스트 서술; x,y,width,height로 영역 확대 가능) | click(x,y[,button]) | double_click(x,y) | right_click(x,y) | move(x,y) | drag(x,y→to_x,to_y) | scroll(x,y, scroll=up|down|left|right, amount) | type(text — 클립보드 없이 직접 타이핑, 한글 가능) | key(key — \"Return\", \"Tab\", \"Escape\", \"ctrl+c\", \"cmd+shift+t\" 식 조합) | wait(wait_ms) | cursor(현재 커서 위치). " +
+			"좌표는 항상 '직전 screenshot 이미지'의 픽셀 좌표계 — 행동 전 반드시 screenshot으로 현재 화면을 보고, 행동 뒤에는 다시 screenshot으로 결과를 확인하라(한 호출에 한 동작). " +
+			"규칙: ① 사용자가 명시적으로 컴퓨터 조작을 요청했을 때만 쓴다(선제 사용 금지) ② 삭제·결제·전송·게시처럼 되돌리기 어려운 클릭 전에는 멈추고 사용자에게 확인 ③ 비밀번호·인증번호는 입력하지 않는다 ④ 10회 안에 진전이 없으면 중단하고 상황을 보고. " +
+			"데스크톱 앱이 연결돼 있고 앱 설정에서 '컴퓨터 조종 허용'이 켜져 있어야 한다 — 꺼져 있거나 미연결이면 그 사실을 사용자에게 알린다.",
+		InputSchema: schema.ComputerToolSchema(),
+		Fn:          hostops.ToolComputer(send),
+		Deferred:    true,
+	})
+}
+
 // RegisterProcessTools registers exec and process management tools.
 func RegisterProcessTools(registry toolport.ToolRegistrar, d *tooldeps.ProcessDeps) {
 	registry.RegisterTool(toolport.ToolDef{

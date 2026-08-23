@@ -174,6 +174,11 @@ export const RSI_RPC = {
 
 // Observation plane (read-only) — gateway behavior aggregate + recent warn/error
 // logs. Mirrors the native Settings「관찰」tab (ConfigObserveTab).
+// Computer-use result report (the `computer` chat tool round trip — computer.ts).
+export const COMPUTER_RPC = {
+  result: "miniapp.computer.result",
+} as const;
+
 export const OBSERVE_RPC = {
   behavior: "miniapp.observe.behavior",
   logs: "miniapp.observe.logs",

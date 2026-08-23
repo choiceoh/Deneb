@@ -40,6 +40,7 @@ func RegisterCoreTools(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolD
 		Send: deps.WorkstationCommandSender,
 		Hint: deps.WorkstationUsageHint,
 	})
+	ops.RegisterComputerTool(registry, deps.ComputerCommandSender)
 	media.RegisterExtractionTools(registry, deps.AsrHotwords)
 	workflow.Register(registry)
 	domain.Register(registry, deps)

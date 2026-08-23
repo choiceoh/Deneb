@@ -52,12 +52,19 @@ func (s *Server) dispatchWorkstationCommand(_ context.Context, action string, ar
 // grounding for the workstation loop ("대대적 개선이 실제로 쓰이는가"를 2주 뒤
 // 숫자로 답하기 위한 원장). Best-effort; dispatch rate is human-scale.
 func (s *Server) recordWorkstationUsage(action string) {
+	s.recordUsageLedger("workstation_usage.json", action)
+}
+
+// recordUsageLedger is the shared per-action tally writer behind the
+// workstation and computer usage ledgers (cache/<file>). One mutex guards
+// both files — dispatch rate is human-scale, contention is irrelevant.
+func (s *Server) recordUsageLedger(file, action string) {
 	if s.denebDir == "" {
 		return
 	}
 	s.workstationUsageMu.Lock()
 	defer s.workstationUsageMu.Unlock()
-	path := filepath.Join(s.denebDir, "cache", "workstation_usage.json")
+	path := filepath.Join(s.denebDir, "cache", file)
 	usage := struct {
 		Total    int            `json:"total"`
 		ByAction map[string]int `json:"byAction"`
@@ -74,13 +81,13 @@ func (s *Server) recordWorkstationUsage(action string) {
 	usage.LastAt = time.Now().UTC().Format(time.RFC3339)
 	data, err := json.MarshalIndent(usage, "", "  ")
 	if err != nil {
-		s.logger.Warn("workstation usage ledger marshal failed", "error", err)
+		s.logger.Warn("usage ledger marshal failed", "file", file, "error", err)
 		return
 	}
 	// Atomic write: a mid-write crash must not truncate the two-week ledger
 	// (the next dispatch would silently reset the tally from zero).
 	if err := atomicfile.WriteFile(path, data, nil); err != nil {
-		s.logger.Warn("workstation usage ledger write failed", "path", path, "error", err)
+		s.logger.Warn("usage ledger write failed", "path", path, "error", err)
 	}
 }
 

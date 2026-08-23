@@ -27,7 +27,7 @@ var (
 // short title + single-line body, no markdown/URLs. Command frames
 // (phone_action / workspace) are left unchanged.
 func FormatHUDPush(ev Event) Event {
-	if ev.Kind == PushKindPhoneAction || ev.Kind == PushKindWorkspace {
+	if ev.Kind == PushKindPhoneAction || ev.Kind == PushKindWorkspace || ev.Kind == PushKindComputer {
 		return ev
 	}
 	title := strings.TrimSpace(ev.Title)
