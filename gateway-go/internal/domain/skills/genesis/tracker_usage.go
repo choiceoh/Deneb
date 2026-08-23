@@ -522,7 +522,12 @@ type EvolutionHealthSummary struct {
 	// that means L1 is alive but candidates have not cleared the gate yet. RSI
 	// assessors use this to distinguish DATA-GATED from IDLE (Python rsi_status
 	// parity).
-	Proposals7d             int    `json:"proposals7d"`
+	Proposals7d int `json:"proposals7d"`
+	// ProposalsSuppressed7d is the subset of Proposals7d that named a skill the
+	// evolver's deterministic gates refused at proposal time (thrash cooldown,
+	// rejection backoff, recency gate) — proposal-lane waste made visible: the
+	// reviewer keeps nominating a skill the loop cannot act on.
+	ProposalsSuppressed7d   int    `json:"proposalsSuppressed7d,omitempty"`
 	DistinctSkillsEvolved7d int    `json:"distinctSkillsEvolved7d"`
 	TopEvolvedSkill         string `json:"topEvolvedSkill,omitempty"`
 	TopEvolvedCount         int    `json:"topEvolvedCount,omitempty"`
@@ -596,6 +601,9 @@ func (t *Tracker) computeEvolutionHealthLocked(now time.Time) EvolutionHealthSum
 			s.CrossSkillRegressions7d++
 		case "evolution_proposal":
 			s.Proposals7d++
+			if e.Suppressed != "" {
+				s.ProposalsSuppressed7d++
+			}
 		case "genesis", "": // legacy genesis entries have no Type
 			s.Genesis7d++
 		}

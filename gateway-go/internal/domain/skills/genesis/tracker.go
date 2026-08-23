@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
@@ -135,6 +136,13 @@ type Tracker struct {
 	// skillsRoot overrides the managed skills root used to resolve candidate
 	// target paths (tests); empty means skills.DefaultManagedSkillsDir().
 	skillsRoot string
+
+	// metaLedgerImplausible is the count of meta-revision rows the latest
+	// RecentMetaRevisions read excluded as implausible (outside the
+	// metaRevisionPlausible time band); metaLedgerImplausibleLogged dedups the
+	// Warn so a dirty ledger is logged once per count, not once per read.
+	metaLedgerImplausible       atomic.Int64
+	metaLedgerImplausibleLogged atomic.Int64
 
 	// In-memory aggregated stats, rebuilt from JSONL on startup.
 	stats               map[string]*usageAgg

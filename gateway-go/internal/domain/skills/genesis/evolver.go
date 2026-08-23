@@ -771,6 +771,20 @@ func (e *Evolver) evolutionSuppressed(skillName string, now time.Time) (bool, st
 	return false, ""
 }
 
+// EvolutionSuppressed reports whether an unattended evolve of skillName would
+// be refused right now by the deterministic suppression gates (thrash cooldown,
+// rejection backoff, recency gate), and why. The proposal lane asks this BEFORE
+// executing a route=evolve proposal: a gated skill is answered with the gate
+// reason instead of an evolve attempt that can only end as a rejection row
+// (2026-08: 17 morning-letter proposals in 21 days, every one stopped by the
+// recency gate after it had already been executed).
+func (e *Evolver) EvolutionSuppressed(skillName string) (bool, string) {
+	if e == nil {
+		return false, ""
+	}
+	return e.evolutionSuppressed(strings.TrimSpace(skillName), time.Now())
+}
+
 // evolveUnderperformers finds and evolves skills with poor success rates.
 // Used as a periodic background task.
 func (e *Evolver) evolveUnderperformers(ctx context.Context) ([]EvolveResult, error) {

@@ -148,7 +148,32 @@ func (t *Tracker) LogMetaRevision(rec MetaRevisionRecord) error {
 	return jsonlstore.Append(t.metaRevisionLogPath(), rec)
 }
 
-// RecentMetaRevisions returns the newest ledger entries, newest first.
+// metaLedgerFloorMs is the earliest CreatedAt a meta-revision row can honestly
+// carry: the slow loop did not exist before P1 landed (2026-07-11, #3430), so a
+// row stamped earlier is not a revision — it is contamination. On 2026-08-16 a
+// genesis package test run wrote fixtures (createdAt≈1000, artifact "evolve.md",
+// action auto_adopted) into the production ledger; two days later the drift
+// brake read them as "20 consecutive adoptions of the same artifact" and froze
+// auto-adoption for a third time on evidence that was never real.
+var metaLedgerFloorMs = time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).UnixMilli()
+
+// metaLedgerFutureSlackMs is how far past "now" a row may be stamped before it
+// is implausible (clock skew tolerance; the ledger is append-only and local).
+const metaLedgerFutureSlackMs = int64(24 * time.Hour / time.Millisecond)
+
+// metaRevisionPlausible reports whether a ledger row sits inside the time band a
+// real revision can occupy. Every consumer reads the ledger through
+// RecentMetaRevisions, so this one predicate keeps the drift brake, the epoch
+// rotation, the class balance and the status surface on the same evidence.
+// Rows are excluded, never deleted — quarantining the file is an operator act.
+func metaRevisionPlausible(r MetaRevisionRecord, nowMs int64) bool {
+	return r.CreatedAt >= metaLedgerFloorMs && r.CreatedAt <= nowMs+metaLedgerFutureSlackMs
+}
+
+// RecentMetaRevisions returns the newest plausible ledger entries, newest first.
+// Implausible rows (outside the metaRevisionPlausible band) are skipped and
+// counted — see MetaLedgerImplausibleRows — so contaminated rows can never
+// again drive a freeze, a rotation, or a status line.
 func (t *Tracker) RecentMetaRevisions(limit int) ([]MetaRevisionRecord, error) {
 	if limit <= 0 {
 		limit = 10
@@ -157,11 +182,42 @@ func (t *Tracker) RecentMetaRevisions(limit int) ([]MetaRevisionRecord, error) {
 	if err != nil {
 		return nil, fmt.Errorf("genesis-tracker: load meta revisions: %w", err)
 	}
+	nowMs := time.Now().UnixMilli()
 	out := make([]MetaRevisionRecord, 0, min(limit, len(entries)))
-	for i := len(entries) - 1; i >= 0 && len(out) < limit; i-- {
-		out = append(out, entries[i])
+	implausible := 0
+	for i := len(entries) - 1; i >= 0; i-- {
+		if !metaRevisionPlausible(entries[i], nowMs) {
+			implausible++
+			continue
+		}
+		if len(out) < limit {
+			out = append(out, entries[i])
+		}
 	}
+	t.noteMetaLedgerImplausible(implausible)
 	return out, nil
+}
+
+// noteMetaLedgerImplausible records the exclusion count of the latest ledger
+// read and warns once per distinct count (not per read — the ledger is read on
+// every status call).
+func (t *Tracker) noteMetaLedgerImplausible(n int) {
+	t.metaLedgerImplausible.Store(int64(n))
+	if n == 0 {
+		return
+	}
+	if prev := t.metaLedgerImplausibleLogged.Swap(int64(n)); prev != int64(n) && t.logger != nil {
+		t.logger.Warn("meta-evolution ledger: implausible rows excluded from every consumer — quarantine them, they are contamination not revisions",
+			"rows", n, "floor", time.UnixMilli(metaLedgerFloorMs).UTC().Format("2006-01-02"))
+	}
+}
+
+// MetaLedgerImplausibleRows reports how many meta-revision rows the latest
+// ledger read excluded as implausible (0 = clean ledger). Surfaced on
+// rsi_status L2 so a contaminated ledger is visible instead of silently
+// shaping the loop.
+func (t *Tracker) MetaLedgerImplausibleRows() int {
+	return int(t.metaLedgerImplausible.Load())
 }
 
 // MetaAdoptionHealth is the evolution-health snapshot recorded with an

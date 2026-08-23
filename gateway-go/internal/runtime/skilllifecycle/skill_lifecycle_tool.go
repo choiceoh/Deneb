@@ -122,10 +122,26 @@ func (b *skillLifecycleBackend) ProposeSkillEvolution(ctx context.Context, req c
 	// applied OUTCOME (genesis/evolved/evolve_rejected) is recorded separately by
 	// the exec path below, so this stays a single proposal record — no double
 	// count. executed=false here reflects "not yet executed at log time".
+	// Gate-first: a route=evolve proposal naming a skill the evolver would refuse
+	// anyway (thrash cooldown, rejection backoff, recency gate) is answered with
+	// the gate reason instead of executed. Executing it only produced an
+	// evolve_rejected row that fed the rejection backoff — in 2026-08 the
+	// reviewer nominated morning-letter 17 times in 21 days and the recency gate
+	// stopped every attempt after the fact. The proposal is still recorded, with
+	// the suppression, so L1 status counts the waste; the review verdict usage
+	// still lands because the reviewer's judgment about the skill stands.
+	if route == "evolve" && b.evolver != nil && strings.TrimSpace(req.SkillName) != "" {
+		if gated, why := b.evolver.EvolutionSuppressed(req.SkillName); gated {
+			result.Suppressed = why
+			result.NextAction = "이 스킬은 지금 진화 게이트에 걸려 있어 실행하지 않았습니다: " + why +
+				". 이 세션이 이 스킬을 실제로 consult하지 않았다면 route=no-op로 다시 제안하고, 스킬이 쓰이게 만드는 게 목적이면 그 경로(크론 지시·진입 힌트)의 수정을 제안하세요."
+		}
+	}
+
 	b.recordReviewUsage(req, route)
 	b.logProposal(req, route, result)
 
-	if req.Execute {
+	if req.Execute && result.Suppressed == "" {
 		switch route {
 		case "genesis":
 			execResult, execErr := b.RunSkillGenesis(ctx, chattools.SkillGenesisRequest{
@@ -329,6 +345,7 @@ func (b *skillLifecycleBackend) logProposal(req chattools.SkillEvolutionProposal
 		Reason:     req.Reason,
 		Executed:   result.Executed,
 		Result:     resultText,
+		Suppressed: result.Suppressed,
 	}); err != nil && b.logger != nil {
 		b.logger.Warn("skill lifecycle: proposal log failed", "error", err)
 	}

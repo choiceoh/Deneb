@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The classifier is the L1.5-trap telemetry's foundation: structural means the
@@ -162,11 +163,16 @@ func TestAssembleEvidence_RevisionClassNudge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Plausible timestamps on purpose: this exact fixture shape (createdAt≈1000,
+	// "evolve.md", auto_adopted) is what leaked into the production ledger on
+	// 2026-08-16 and froze auto-adoption on 08-18. The ledger reader now drops
+	// rows outside the plausible time band, so the fixture must sit inside it.
+	base := time.Now().Add(-time.Minute).UnixMilli()
 	for i, v := range []string{"v1", "v2", "v3"} {
 		if err := tr.LogMetaRevision(MetaRevisionRecord{
 			Epoch: "producer", Artifact: "evolve.md", ToVersion: v,
 			Proposed: true, Action: "auto_adopted", RevisionClass: MetaRevisionClassParametric,
-			CreatedAt: int64(1000 + i),
+			CreatedAt: base + int64(i)*1000,
 		}); err != nil {
 			t.Fatal(err)
 		}
