@@ -17,8 +17,10 @@ package wiki
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"strings"
+	"time"
 )
 
 // QueryExpander turns a user intent into a small set of alternate Korean
@@ -53,6 +55,11 @@ func (s *Store) SetQueryExpander(fn QueryExpander) {
 // original hit so no downstream consumer can rank them above the primary
 // evidence. Returns results unchanged when the gate is off, no expander is
 // set, or the primary query already filled the limit.
+// expansionMinRemaining is the context budget below which the expansion call is
+// skipped: an LLM round trip plus the follow-up BM25 lookups do not fit, and
+// overrunning costs the primary results too.
+const expansionMinRemaining = 600 * time.Millisecond
+
 func (s *Store) backfillWithExpansion(ctx context.Context, intent string, results []SearchResult, limit int) []SearchResult {
 	if s == nil || s.queryExpander == nil || expansionMode() != "backfill" {
 		return results
@@ -60,7 +67,27 @@ func (s *Store) backfillWithExpansion(ctx context.Context, intent string, result
 	if limit <= 0 || len(results) >= limit || strings.TrimSpace(intent) == "" {
 		return results
 	}
+	// The expander is an LLM call inside the search path, and the recall
+	// preflight runs that path under a ~1.5s budget. If the remaining context
+	// is too small for a round trip, spending it here does not just lose the
+	// backfill — it can blow the deadline and discard the PRIMARY results the
+	// caller already has (measured: 15 of 87 preflights in 12 days reported
+	// wiki=0(deadline)). Skip and keep what we found.
+	if deadline, ok := ctx.Deadline(); ok {
+		if remaining := time.Until(deadline); remaining < expansionMinRemaining {
+			slog.Debug("wiki expansion skipped: insufficient context budget",
+				"remainingMs", remaining.Milliseconds(), "needMs", expansionMinRemaining.Milliseconds())
+			return results
+		}
+	}
+	started := time.Now()
 	terms := s.queryExpander(ctx, intent)
+	// One Info line per firing: expansion only runs on under-filled queries, so
+	// this is low volume — and until now nothing in the journal said whether
+	// production expansion fired at all, let alone whether it returned terms.
+	slog.Info("wiki query expansion fired",
+		"underFill", len(results), "limit", limit, "terms", len(terms),
+		"durMs", time.Since(started).Milliseconds())
 	if len(terms) > expansionMaxTerms {
 		terms = terms[:expansionMaxTerms]
 	}
