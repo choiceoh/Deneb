@@ -33,10 +33,16 @@ func TestRecategorizedPath_SwapsLeadingCategoryDirNoopOnSameOrInvalid(t *testing
 		path, newCat, want string
 	}{
 		{"기타/김부장.md", "인물", "인물/김부장.md"},
-		{"기타/김부장.md", "기타", ""},              // same category → no move
-		{"기타/김부장.md", "엉뚱", ""},              // invalid category → no move
-		{"김부장.md", "인물", ""},                 // no category segment → skip
-		{"프로젝트/거래/x.md", "업무", "업무/거래/x.md"}, // only the leading dir swaps
+		{"기타/김부장.md", "기타", ""}, // same category → no move
+		{"기타/김부장.md", "엉뚱", ""}, // invalid category → no move
+		{"김부장.md", "인물", ""},    // no category segment → skip
+		// A sub-folder is a layout slot, not a category: swapping the leading
+		// dir used to mint 업무/거래/ — a bucket nothing writes to or reads from.
+		{"프로젝트/거래/x.md", "업무", ""},
+		{"기타/거래/x.md", "프로젝트", ""},
+		// 프로젝트/ is folder-structured (프로젝트/<code>/대표.md); a page cannot be
+		// promoted into it by renaming its leading segment.
+		{"기타/김부장.md", "프로젝트", ""},
 	}
 	for _, c := range cases {
 		if got := recategorizedPath(c.path, c.newCat); got != c.want {
@@ -95,15 +101,16 @@ func TestApplyVerifyFixes_MergeFoldsPagePreservingBothBodies(t *testing.T) {
 	}
 }
 
-func TestApplyVerifyFixes_IgnoresAdvisoryAndCapsAppliedFixCount(t *testing.T) {
+func TestApplyVerifyFixes_IgnoresAdvisoryAndCapsMovesPerCycle(t *testing.T) {
 	s, wd := newVerifyStore(t)
 	// One advisory finding (no Fix) must be ignored entirely.
 	advisory := verifyFinding{Type: "misclassified", PageA: "기타/keep.md", Detail: "low-confidence"}
 	writePageT(t, s, "기타/keep.md", "keep", "기타", "stays put")
 
-	// Cap+1 high-confidence moves — the cap must hold, leaving exactly one behind.
+	// More moves than the per-cycle move cap: the cap must hold so a bad verdict
+	// list relocates a handful of reversible pages, not the whole category.
 	var names []string
-	for i := 0; i <= maxAutoVerifyFixes; i++ {
+	for i := 0; i <= maxAutoMovesPerCycle; i++ {
 		names = append(names, fmt.Sprintf("p%02d", i))
 	}
 	var findings []verifyFinding
@@ -118,8 +125,8 @@ func TestApplyVerifyFixes_IgnoresAdvisoryAndCapsAppliedFixCount(t *testing.T) {
 	findings = append([]verifyFinding{advisory}, findings...)
 
 	n := wd.applyVerifyFixes(findings, nil)
-	if n != maxAutoVerifyFixes {
-		t.Fatalf("applied = %d, want %d (cap)", n, maxAutoVerifyFixes)
+	if n != maxAutoMovesPerCycle {
+		t.Fatalf("applied = %d, want %d (move cap)", n, maxAutoMovesPerCycle)
 	}
 	// The advisory page is untouched.
 	if p, _ := s.ReadPage("기타/keep.md"); p == nil {

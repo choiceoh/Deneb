@@ -231,6 +231,31 @@ func IsDealLedgerPath(relPath string) bool {
 	return len(seg) >= 1 && seg[0] == dealDir
 }
 
+// IsLayoutManagedPath reports whether relPath's location is decided by this
+// package's layout rules rather than by the page's topic — anything under
+// 프로젝트/ (project folders and their slots), the per-counterparty 거래 ledger,
+// mail analyses, and ingested 자료 sources.
+//
+// Callers that relocate pages from a TOPIC judgement (the dream verify pass's
+// LLM misclassification check) must treat these as off-limits: the path is a
+// contract other code depends on. Concretely, 프로젝트/거래/<slug>.md is where
+// UpsertDealPage writes and the only place knownCounterparties reads, so an LLM
+// verdict of "정종호 is a person, not a project" moving that ledger under 인물/
+// both loses the recall anchor and guarantees a duplicate the next time an
+// approval capture re-mints the fixed path (measured 2026-08-23 over 14 days:
+// 21 auto-moves, every one a ledger or project slot, none of them correct).
+// Advisory findings on these paths stay useful — only the automatic move is
+// refused.
+func IsLayoutManagedPath(relPath string) bool {
+	if _, ok := ProjectNameOf(relPath); ok {
+		return true
+	}
+	return IsDealLedgerPath(relPath) ||
+		IsProjectRawDataPath(relPath) ||
+		IsMailAnalysisPath(relPath) ||
+		IsMaterialPath(relPath)
+}
+
 // NormalizeProjectPagePath enforces the project layout's path shape on a write:
 //
 //   - a flat "프로젝트/<name>.md" routes onto the 대표페이지 slot
