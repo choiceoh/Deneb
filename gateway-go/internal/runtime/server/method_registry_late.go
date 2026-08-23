@@ -28,7 +28,6 @@ import (
 	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/skill"
-	handlerwiki "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 )
@@ -179,11 +178,6 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			Chat:       s.chatHandler,
 			JobTracker: hub.JobTracker(),
 		}),
-		// --- Wiki knowledge base (feature-flagged, late-bound) ---
-		handlerwiki.Methods(handlerwiki.Deps{
-			Store: hub.Opt.WikiStore,
-		}),
-
 		// --- Native model picker (miniapp.models.*) ---
 		// Late on purpose: the Controller snapshots the registry and chat
 		// handler at construction, and both exist only after
