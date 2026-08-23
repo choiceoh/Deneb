@@ -338,10 +338,13 @@ def reopen_blocked(existing: list[dict[str, Any]], source: str, now_ms: int) -> 
     selfCorrectionSourceMatches): exact source, or the same source extended
     past a ":". A bare prefix cross-blocked source ids that are prefixes of
     one another, e.g. "…latency" vs "…latency-p99" (RSI code eval M7/F4).
-    A live twin (proposed/accepted) or an operator-ruled one (rejected/
-    superseded) blocks; an APPLIED twin re-opens only after the cooldown —
-    the bench still reporting the finding now IS the "recurred again" signal.
-    Past REOPEN_CAP twins the signature is permanently blocked (genesis
+    A live twin (proposed/accepted) blocks; a REJECTED twin is the operator's
+    standing veto and blocks for good. APPLIED and SUPERSEDED twins re-open
+    only after the cooldown — the bench still reporting the finding now IS
+    the "recurred again" signal. Superseded is a review-lane ruling, not a
+    veto: runtime-error-rate was superseded two minutes after filing on
+    2026-07-23 and the runtime lane then stayed dead for a month. Past
+    REOPEN_CAP twins the signature is permanently blocked (genesis
     selfCorrectionReopenCap parity).
     """
     source = source.strip()
@@ -361,11 +364,30 @@ def reopen_blocked(existing: list[dict[str, Any]], source: str, now_ms: int) -> 
     if source_twins > REOPEN_CAP:
         return f"reopen cap exceeded ({source_twins} twins > {REOPEN_CAP})"
     status = str(newest.get("status") or "proposed").lower()
-    if status != "applied":
+    if status not in ("applied", "superseded"):
         return f"{status} twin {newest.get('id')}"
-    if now_ms - int(newest.get("createdAt") or 0) < REOPEN_COOLDOWN_MS:
-        return f"applied twin {newest.get('id')} inside reopen cooldown"
+    settled_at = max(int(newest.get("createdAt") or 0), int(newest.get("updatedAt") or 0))
+    if now_ms - settled_at < REOPEN_COOLDOWN_MS:
+        return f"{status} twin {newest.get('id')} inside reopen cooldown"
     return None
+
+
+def classify_skips(skipped: list[tuple[dict[str, Any], str]]) -> dict[str, int]:
+    """Bucket skip reasons for the status drop: permanent (operator veto / reopen
+    cap), cooldown (applied/superseded twin still cooling), capped (per-run
+    cap), other (live twin). planned=0 with a non-empty skip list is a BLOCKED
+    lane, not a quiet one — the status file must say which."""
+    buckets = {"permanent": 0, "cooldown": 0, "capped": 0, "other": 0}
+    for _, reason in skipped:
+        if reason.startswith("rejected twin") or reason.startswith("reopen cap exceeded"):
+            buckets["permanent"] += 1
+        elif "inside reopen cooldown" in reason:
+            buckets["cooldown"] += 1
+        elif reason == "per-run cap reached":
+            buckets["capped"] += 1
+        else:
+            buckets["other"] += 1
+    return buckets
 
 
 def select_candidates(
@@ -938,12 +960,17 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         "fallbackReason": fallback_reason,
     }
     if not args.dry_run:
+        buckets = classify_skips(skipped)
         write_miner_status({
             "lastRunAtMs": now_ms,
             "structuralSource": bench_source,
             "fallbackReason": fallback_reason,
             "planned": summary["planned"],
             "filed": summary["filed"],
+            "skipped": summary["skipped"],
+            "blockedPermanent": buckets["permanent"],
+            "blockedCooldown": buckets["cooldown"],
+            "capped": buckets["capped"],
         }, err)
     if args.json:
         print(json.dumps(summary, ensure_ascii=False), file=out)

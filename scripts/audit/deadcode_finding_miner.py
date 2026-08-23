@@ -58,6 +58,7 @@ from health_finding_miner import (
     record_candidate,
     record_impact,
     select_candidates,
+    write_miner_status,
 )
 from tool_quality_miner import fetch_behavior
 
@@ -331,6 +332,21 @@ def repo_root() -> str:
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+def miner_status_path() -> str:
+    """FIXED under ~/.deneb/data (same convention as the health miner) so the Go
+    rsi-status reader and this writer agree. The miner used to write nothing:
+    the 2026-08-18 tooling failure of the weekly unit left no trace anywhere
+    the operator looks."""
+    return os.path.expanduser("~/.deneb/data/deadcode_finding_miner_status.json")
+
+
+def record_run_status(payload: dict[str, Any], stderr: TextIO, dry_run: bool) -> None:
+    """Best-effort status drop for rsi-status L4 (never on dry runs)."""
+    if dry_run:
+        return
+    write_miner_status(payload, stderr, path=miner_status_path())
+
+
 def run_deadcode_audit(root: str, stderr: TextIO) -> str:
     """Run deadcode-audit.sh and return its stdout.
 
@@ -387,6 +403,7 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
                 token = handle.read().strip()
 
     root = repo_root()
+    now_ms = int(time.time() * 1000)
     try:
         if args.audit_output:
             with open(args.audit_output, encoding="utf-8") as handle:
@@ -395,6 +412,8 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
             audit_output = run_deadcode_audit(root, err)
     except (OSError, GatewayError) as exc:
         print(f"deadcode-audit unavailable: {exc}", file=err)
+        record_run_status({"lastRunAtMs": now_ms, "ok": False, "error": str(exc)[-400:],
+                           "findings": 0, "planned": 0, "filed": 0}, err, args.dry_run)
         return 1
 
     findings = parse_new_findings(audit_output)
@@ -402,7 +421,6 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
     # prunes the filing list (observation asks the audit, not the filing policy).
     current_ids = finding_ids(findings)
     base_url = args.url.rstrip("/")
-    now_ms = int(time.time() * 1000)
     try:
         existing = fetch_existing(base_url, token)
     except GatewayError as exc:
@@ -493,6 +511,10 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         "impactRejected": len(impact_errors),
         "impacts": impact_evaluated,
     }
+    record_run_status({
+        "lastRunAtMs": now_ms, "ok": True, "error": "",
+        "findings": summary["findings"], "planned": summary["planned"], "filed": summary["filed"],
+    }, err, args.dry_run)
     if args.json:
         print(json.dumps(summary, ensure_ascii=False), file=out)
     else:
