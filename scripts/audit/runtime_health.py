@@ -48,6 +48,13 @@ LLM_HARD_RE = re.compile(
     r"giving up|request failed after|all retries exhausted"
 )
 LLM_RETRY_RE = re.compile(r"retrying LLM request|API error 429")
+# MCP child processes log their own stderr through the gateway verbatim — pino
+# JSON, npm notices, multi-line node stack traces, even third-party telemetry
+# beacons (posthog DNS failures). One child event becomes dozens of journal
+# lines, so counting them as gateway operational errors both double-counts and
+# blames Deneb for another process's logging. MCP failures that actually cost
+# work still land in tool-reliability as `tool complete … isError=true`.
+MCP_STDERR_RE = re.compile(r"mcp server stderr\b")
 ERR_LINE_RE = re.compile(r'''error=(?!<nil>|null|"")|\bfailed\b(?!=)''')
 
 ISO_DAY_RE = re.compile(r"^\s*(\d{4})-(\d{2})-(\d{2})(?:[T\s]|$)")
@@ -101,6 +108,7 @@ class Signals:
     llm_hard: int = 0
     llm_retries: int = 0
     other_errors: int = 0
+    mcp_stderr_lines: int = 0
     days: float = 7.0
     err_examples: dict = field(default_factory=dict)
     llm_examples: dict = field(default_factory=dict)
@@ -196,6 +204,9 @@ def parse(lines: Iterable[str]) -> Signals:
             if "stopReason=timeout" in line:
                 s.timeout_runs += 1
             continue
+        if MCP_STDERR_RE.search(line):
+            s.mcp_stderr_lines += 1
+            continue
         if TOOLERR_RE.search(line):
             s.tool_errors += 1
             continue
@@ -274,8 +285,21 @@ def compute(s: Signals) -> tuple[float, list[DimResult]]:
             "error-rate",
             16,
             100.0 * graded(err_per_run, ERR_PER_RUN_SOFT, ERR_PER_RUN_HARD),
-            [f"{s.other_errors} operational errors / {runs} runs = {err_per_run:.2f}/run"] + top(s.err_examples),
-            {"errors": s.other_errors, "per_run": round(err_per_run, 3)},
+            [f"{s.other_errors} operational errors / {runs} runs = {err_per_run:.2f}/run"]
+            + top(s.err_examples)
+            + (
+                [
+                    f"{s.mcp_stderr_lines} mcp child stderr lines passed through "
+                    "(not scored — MCP failures that cost work are tool errors)"
+                ]
+                if s.mcp_stderr_lines
+                else []
+            ),
+            {
+                "errors": s.other_errors,
+                "per_run": round(err_per_run, 3),
+                "mcp_stderr_lines": s.mcp_stderr_lines,
+            },
         ),
         DimResult(
             "llm-serving",

@@ -159,7 +159,26 @@ func parseEmittedToolCalls(raw string) ([]emittedToolCall, error) {
 	if err == nil {
 		err = fmt.Errorf("missing tool_calls field")
 	}
-	return nil, fmt.Errorf("parse tool-call plan: %w", err)
+	// Carry a body head into the error: "missing tool_calls field" alone cannot
+	// tell an empty response (reasoning ate the budget) from a wrong-shaped one
+	// (prose, a skip verdict, a differently-keyed object), and the caller only
+	// logs the error — the raw body is gone by then. 2026-08 the L1 workout lane
+	// hit this 8 times across 5 skills with no way to classify which.
+	return nil, fmt.Errorf("parse tool-call plan: %w (body: %s)", err, replayBodyHead(raw))
+}
+
+// replayBodyHead renders a one-line, bounded excerpt of an executor response for
+// diagnostics. Empty bodies say so explicitly — that is the interesting case.
+func replayBodyHead(raw string) string {
+	head := strings.Join(strings.Fields(raw), " ")
+	if head == "" {
+		return "<empty>"
+	}
+	const limit = 160
+	if len(head) > limit {
+		head = head[:limit] + "…"
+	}
+	return head
 }
 
 func recoverReplayPlanObject(raw string) (string, bool) {
