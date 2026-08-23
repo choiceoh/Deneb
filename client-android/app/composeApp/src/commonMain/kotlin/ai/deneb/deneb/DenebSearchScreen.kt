@@ -5,7 +5,9 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -63,6 +66,34 @@ internal data class SearchRunState(
     }
 }
 
+/** Inline fact-detail state. A new tap clears the previous payload before the
+ *  network request and advances [generation], so a corrected/forgotten fact's
+ *  late response cannot reappear after another tap or query edit. */
+internal data class CurrentFactDetailState(
+    val generation: Long = 0L,
+    val path: String = "",
+    val factId: String = "",
+    val subjectId: String = "",
+    val loading: Boolean = false,
+    val newSearchRequired: Boolean = false,
+    val detail: CurrentFactDetail? = null,
+) {
+    fun starting(hit: SearchHit): CurrentFactDetailState = CurrentFactDetailState(
+        generation = generation + 1,
+        path = hit.path,
+        factId = hit.factId,
+        subjectId = hit.subjectId,
+        loading = true,
+    )
+
+    fun cleared(): CurrentFactDetailState = CurrentFactDetailState(generation = generation + 1)
+
+    fun completed(requestGeneration: Long, requestPath: String, next: CurrentFactDetail?): CurrentFactDetailState {
+        if (!loading || generation != requestGeneration || path != requestPath) return this
+        return copy(loading = false, newSearchRequired = next == null, detail = next)
+    }
+}
+
 internal fun boundSearchQuery(value: String): String {
     var codePoints = 0
     var end = 0
@@ -75,6 +106,16 @@ internal fun boundSearchQuery(value: String): String {
 }
 
 internal fun searchFileNeedsDownloadConfirmation(hit: SearchFileResult): Boolean = hit.size > SEARCH_FILE_DIRECT_OPEN_MAX_BYTES
+
+/** The single click-routing boundary for wiki-group results. Fact hits remain
+ *  inline; only ordinary pages may reach editable wiki navigation. */
+internal fun openSearchWikiHit(
+    hit: SearchHit,
+    onOpenWiki: (String) -> Unit,
+    onOpenFact: (SearchHit) -> Unit,
+) {
+    if (hit.isCurrentFactHit()) onOpenFact(hit) else onOpenWiki(hit.path)
+}
 
 /**
  * Unified discovery (`miniapp.search.all`): one box searches wiki, diary,
@@ -96,6 +137,7 @@ fun DenebSearchScreen(
 ) {
     var query by remember { mutableStateOf("") }
     var runState by remember { mutableStateOf(SearchRunState()) }
+    var factDetailState by remember { mutableStateOf(CurrentFactDetailState()) }
     var pendingFileOpen by remember { mutableStateOf<SearchFileResult?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -108,6 +150,7 @@ fun DenebSearchScreen(
         // Otherwise a slow search can pair a new query with stale provenance.
         val started = runState.starting(q)
         runState = started
+        factDetailState = factDetailState.cleared()
         scope.launch {
             val r = client.searchAll(q)
             runState = runState.completed(started.generation, q, r)
@@ -124,6 +167,7 @@ fun DenebSearchScreen(
             query = query,
             onQueryChange = { value ->
                 val bounded = boundSearchQuery(value)
+                if (bounded != query) factDetailState = factDetailState.cleared()
                 query = bounded
                 runState = runState.queryEdited(bounded)
             },
@@ -142,6 +186,17 @@ fun DenebSearchScreen(
             },
             onOpenMail = onOpenMail,
             onOpenCategories = onOpenCategories,
+            factDetailState = factDetailState,
+            onOpenFact = { hit ->
+                // Do not toggle a cached detail. Every tap revalidates this
+                // immutable claim ID against the canonical fact plane.
+                val started = factDetailState.starting(hit)
+                factDetailState = started
+                scope.launch {
+                    val detail = client.fetchCurrentFactPage(hit.path)
+                    factDetailState = factDetailState.completed(started.generation, hit.path, detail)
+                }
+            },
         )
     }
 
@@ -173,7 +228,7 @@ fun DenebSearchScreen(
 }
 
 @Composable
-fun SearchContent(
+internal fun SearchContent(
     modifier: Modifier,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -186,6 +241,8 @@ fun SearchContent(
     onOpenFile: (SearchFileResult) -> Unit = {},
     onOpenMail: (String) -> Unit = {},
     onOpenCategories: () -> Unit,
+    factDetailState: CurrentFactDetailState = CurrentFactDetailState(),
+    onOpenFact: (SearchHit) -> Unit = {},
 ) {
     Column(
         // The scaffold's imePadding shrinks this weighted column above the soft
@@ -233,7 +290,16 @@ fun SearchContent(
                 if (r.wiki.isNotEmpty()) {
                     GroupHeader("위키", r.wiki.size)
                     r.wiki.forEach { hit ->
-                        ResultRow(hit.title, hit.snippet) { onOpenWiki(hit.path) }
+                        val isFact = hit.isCurrentFactHit()
+                        ResultRow(
+                            title = hit.title,
+                            snippet = if (isFact) hit.subjectId else hit.snippet,
+                            trailing = if (isFact) "읽기 전용" else null,
+                            onClick = { openSearchWikiHit(hit, onOpenWiki, onOpenFact) },
+                        )
+                        if (isFact && factDetailState.path == hit.path) {
+                            CurrentFactDetailPanel(factDetailState)
+                        }
                     }
                 }
                 if (r.files.isNotEmpty()) {
@@ -287,6 +353,59 @@ fun SearchContent(
                 Spacer(Modifier.height(24.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun CurrentFactDetailPanel(state: CurrentFactDetailState) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 12.dp),
+    ) {
+        Text(
+            "현재 사실 · 읽기 전용",
+            style = DenebType.sectionLabel,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.height(8.dp))
+        when {
+            state.loading -> Text(
+                "최신 상태 확인 중…",
+                style = DenebType.meta,
+                color = denebHint(),
+            )
+
+            state.newSearchRequired -> Text(
+                "이 사실 참조는 더 이상 최신이 아니거나 확인할 수 없습니다. 다시 검색해 주세요.",
+                style = DenebType.body,
+                color = denebHint(),
+            )
+
+            state.detail != null -> {
+                Text(
+                    state.detail.title,
+                    style = DenebType.rowTitleStrong,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                if (state.detail.summary.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        state.detail.summary,
+                        style = DenebType.meta,
+                        color = denebHint(),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                MarkdownContent(
+                    content = state.detail.body.ifBlank { "(내용 없음)" },
+                    isInteractive = false,
+                    baseStyle = DenebType.body,
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        HorizontalDivider(color = denebHairline(), thickness = 0.5.dp)
     }
 }
 

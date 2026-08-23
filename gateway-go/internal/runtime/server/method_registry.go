@@ -673,6 +673,12 @@ func (s *Server) earlyImprovementMethods(hub *rpcutil.GatewayHub) []map[string]r
 				}
 				return store, nil
 			},
+			FactLifecycle: func() miniknowledge.SearchFactLifecycle {
+				if store := hub.Opt.WikiStore; store != nil {
+					return store
+				}
+				return nil
+			},
 			Client: func() (miniknowledge.PeopleClient, error) {
 				return gmail.DefaultClient()
 			},

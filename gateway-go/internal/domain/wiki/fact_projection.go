@@ -26,6 +26,17 @@ func isGeneratedFactProjectionPage(relPath string, page *Page) bool {
 	return cleaned == factProfilePagePath && strings.Contains(page.Body, factGeneratedMarker)
 }
 
+// isCurrentOrdinaryPage is the shared admission rule for background model
+// inputs. Generated fact projections are compatibility views, archived pages
+// are history, and effectively superseded pages have a newer canonical owner;
+// none should be presented to the dreamer as an editable current wiki page.
+func isCurrentOrdinaryPage(relPath string, page *Page) bool {
+	return page != nil &&
+		!page.Meta.Archived &&
+		!IsEffectivelySuperseded(relPath, page.Meta) &&
+		!isGeneratedFactProjectionPage(relPath, page)
+}
+
 func rejectFactProjectionMutation(operation string, paths ...string) error {
 	for _, relPath := range paths {
 		cleaned := filepath.ToSlash(filepath.Clean(filepath.FromSlash(normalizePagePath(relPath))))

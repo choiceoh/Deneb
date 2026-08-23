@@ -67,7 +67,7 @@ func (wd *WikiDreamer) detectUserModelContradictions(ctx context.Context) []veri
 	for _, rp := range relPaths {
 		rp = filepath.ToSlash(rp) // ListPages walks with the OS separator
 		page, rerr := wd.store.ReadPage(rp)
-		if rerr != nil || page == nil || page.Meta.Archived {
+		if rerr != nil || !isCurrentOrdinaryPage(rp, page) {
 			continue
 		}
 		pages = append(pages, pageSnippet{path: rp, title: page.Meta.Title, body: clipRunes(page.Body, userModelBodyMaxRunes)})

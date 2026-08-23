@@ -155,7 +155,7 @@ type Provenance struct {
 	// evidence that produced its claims. It is distinct from Locator, which
 	// addresses the current projection itself.
 	OriginRefs []string
-	Freshness   Freshness
+	Freshness  Freshness
 }
 
 func fallbackDescriptor(layer Layer) SourceDescriptor {

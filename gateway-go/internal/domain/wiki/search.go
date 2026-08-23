@@ -332,6 +332,12 @@ func (s *searchDB) rebuildIndex(dir string) error {
 				"path", rel, "error", err)
 			return nil //nolint:nilerr // skip unparseable files
 		}
+		if isGeneratedFactProjectionPage(rel, page) {
+			// The fact journal supplies current synthetic hits. A generated
+			// compatibility page must not re-enter lexical search on restart,
+			// especially when a later projection repair is degraded.
+			return nil
+		}
 		factor := validityFactor(rel, page, s.now())
 		s.validity[rel] = factor
 		if factor > 0 {

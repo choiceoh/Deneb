@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -65,10 +66,20 @@ var (
 // nil means the source is unavailable, while a callback error is reported as
 // the generic source state "error" without exposing the error text.
 type SearchDeps struct {
-	Store  func() (MemorySearcher, error)
-	Client func() (PeopleClient, error)
-	Files  func(context.Context, string, int) ([]SearchFileHit, error)
-	Mail   func(context.Context, string, int) ([]SearchMailHit, error)
+	Store         func() (MemorySearcher, error)
+	Client        func() (PeopleClient, error)
+	Files         func(context.Context, string, int) ([]SearchFileHit, error)
+	Mail          func(context.Context, string, int) ([]SearchMailHit, error)
+	FactLifecycle func() SearchFactLifecycle
+}
+
+// SearchFactLifecycle is the final-exposure currentness guard implemented by
+// *wiki.Store. It is separate from MemorySearcher so the broad Mini App memory
+// fake contract does not grow retrieval-only methods. One RecallFactSnapshot
+// must feed both the text matcher and synthetic FactID validation.
+type SearchFactLifecycle interface {
+	RecallFactSnapshot() wiki.FactRecallSnapshot
+	FactLifecycleEvidencesAllowed([]wiki.FactLifecycleEvidence, wiki.FactRecallSnapshot) []bool
 }
 
 // SearchWikiHit is one wiki hit row — mirrors the per-domain
@@ -248,8 +259,139 @@ func searchAll(deps SearchDeps) rpcutil.HandlerFunc {
 		} else {
 			result.Sources.Mail = status
 		}
+		if deps.FactLifecycle != nil {
+			filterUnifiedSearchFactLifecycle(query, &result, deps.FactLifecycle())
+		}
 		return rpcutil.RespondOK(req.ID, result)
 	})
+}
+
+type unifiedSearchEvidenceSource uint8
+
+const (
+	unifiedSearchEvidenceWiki unifiedSearchEvidenceSource = iota
+	unifiedSearchEvidenceDiary
+	unifiedSearchEvidencePeople
+	unifiedSearchEvidenceFiles
+	unifiedSearchEvidenceMail
+)
+
+type unifiedSearchEvidenceTarget struct {
+	source unifiedSearchEvidenceSource
+	index  int
+}
+
+// filterUnifiedSearchFactLifecycle is deliberately the last transformation
+// before serialization. Source calls may span a concurrent correction or
+// forget, so their individually current results are not safe to merge until a
+// single newest fact snapshot revalidates the complete response epoch. The
+// snapshot read is the response's fact-currentness linearization point; a later
+// mutation belongs to the next request. Filtering after each source's limit is
+// intentionally safety-first and may underfill a bucket rather than backfill it
+// with unchecked lower-ranked rows.
+func filterUnifiedSearchFactLifecycle(query string, result *SearchAllResult, facts SearchFactLifecycle) {
+	if result == nil || facts == nil {
+		return
+	}
+	snapshot := facts.RecallFactSnapshot()
+	activeFactIDs := make(map[string]struct{}, len(snapshot.Active))
+	for _, claim := range snapshot.Active {
+		activeFactIDs[claim.ID] = struct{}{}
+	}
+
+	wikiAllowed := make([]bool, len(result.Wiki))
+	diaryAllowed := make([]bool, len(result.Diary))
+	peopleAllowed := make([]bool, len(result.People))
+	filesAllowed := make([]bool, len(result.Files))
+	mailAllowed := make([]bool, len(result.Mail))
+	evidence := make([]wiki.FactLifecycleEvidence, 0,
+		len(result.Wiki)+len(result.Diary)+len(result.People)+len(result.Files)+len(result.Mail))
+	targets := make([]unifiedSearchEvidenceTarget, 0, cap(evidence))
+	appendEvidence := func(source unifiedSearchEvidenceSource, index int, item wiki.FactLifecycleEvidence) {
+		item.Query = query
+		evidence = append(evidence, item)
+		targets = append(targets, unifiedSearchEvidenceTarget{source: source, index: index})
+	}
+
+	for index, hit := range result.Wiki {
+		if hit.FactID != "" {
+			_, wikiAllowed[index] = activeFactIDs[hit.FactID]
+			continue
+		}
+		appendEvidence(unifiedSearchEvidenceWiki, index, wiki.FactLifecycleEvidence{
+			Ref: hit.Path, SubjectID: hit.SubjectID,
+			Text: unifiedSearchEvidenceText(hit.Title, hit.Summary, hit.Category, hit.Snippet),
+		})
+	}
+	for index, hit := range result.Diary {
+		appendEvidence(unifiedSearchEvidenceDiary, index, wiki.FactLifecycleEvidence{
+			Ref: hit.File, Text: unifiedSearchEvidenceText(hit.Header, hit.Content),
+		})
+	}
+	for index, hit := range result.People {
+		ref := hit.WikiPath
+		if ref == "" {
+			ref = hit.Email
+		}
+		appendEvidence(unifiedSearchEvidencePeople, index, wiki.FactLifecycleEvidence{
+			Ref:  ref,
+			Text: unifiedSearchEvidenceText(hit.Name, hit.Email, hit.LastSeen, hit.LastSubject, hit.WikiSummary),
+		})
+	}
+	for index, hit := range result.Files {
+		appendEvidence(unifiedSearchEvidenceFiles, index, wiki.FactLifecycleEvidence{
+			Ref:  hit.Path,
+			Text: unifiedSearchEvidenceText(hit.Name, hit.Snippet, hit.Kind, hit.Heading),
+		})
+	}
+	for index, hit := range result.Mail {
+		appendEvidence(unifiedSearchEvidenceMail, index, wiki.FactLifecycleEvidence{
+			Ref:  unifiedSearchEvidenceText(hit.ID, hit.ThreadID),
+			Text: unifiedSearchEvidenceText(hit.From, hit.Subject, hit.Date, hit.Snippet, hit.Mailbox),
+		})
+	}
+
+	allowed := facts.FactLifecycleEvidencesAllowed(evidence, snapshot)
+	// A malformed optional adapter fails closed. Production *wiki.Store returns
+	// one decision per item; keeping the bounds check makes this boundary safe
+	// for test or future adapters without exposing unchecked personal evidence.
+	for decisionIndex, target := range targets {
+		if decisionIndex >= len(allowed) || !allowed[decisionIndex] {
+			continue
+		}
+		switch target.source {
+		case unifiedSearchEvidenceWiki:
+			wikiAllowed[target.index] = true
+		case unifiedSearchEvidenceDiary:
+			diaryAllowed[target.index] = true
+		case unifiedSearchEvidencePeople:
+			peopleAllowed[target.index] = true
+		case unifiedSearchEvidenceFiles:
+			filesAllowed[target.index] = true
+		case unifiedSearchEvidenceMail:
+			mailAllowed[target.index] = true
+		}
+	}
+
+	result.Wiki = retainUnifiedSearchRows(result.Wiki, wikiAllowed)
+	result.Diary = retainUnifiedSearchRows(result.Diary, diaryAllowed)
+	result.People = retainUnifiedSearchRows(result.People, peopleAllowed)
+	result.Files = retainUnifiedSearchRows(result.Files, filesAllowed)
+	result.Mail = retainUnifiedSearchRows(result.Mail, mailAllowed)
+}
+
+func unifiedSearchEvidenceText(fields ...string) string {
+	return strings.Join(fields, "\n")
+}
+
+func retainUnifiedSearchRows[T any](rows []T, allowed []bool) []T {
+	filtered := rows[:0]
+	for index, row := range rows {
+		if index < len(allowed) && allowed[index] {
+			filtered = append(filtered, row)
+		}
+	}
+	return filtered
 }
 
 func hasSearchSource(deps SearchDeps) bool {

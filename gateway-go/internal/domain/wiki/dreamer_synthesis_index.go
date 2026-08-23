@@ -70,3 +70,22 @@ func selectSynthesisIndexEntries(entries map[string]IndexEntry, anchors map[stri
 	}
 	return out
 }
+
+// currentOrdinaryIndexEntries resolves the metadata-only master index back to
+// pages before it enters an LLM prompt. This keeps history and the generated
+// current-fact compatibility view out of both synthesis and critique without
+// deleting them from the audit-oriented master index.
+func (wd *WikiDreamer) currentOrdinaryIndexEntries(entries map[string]IndexEntry) map[string]IndexEntry {
+	if wd == nil || wd.store == nil || len(entries) == 0 {
+		return nil
+	}
+	out := make(map[string]IndexEntry, len(entries))
+	for path, entry := range entries {
+		page, err := wd.store.ReadPage(path)
+		if err != nil || !isCurrentOrdinaryPage(path, page) {
+			continue
+		}
+		out[path] = entry
+	}
+	return out
+}

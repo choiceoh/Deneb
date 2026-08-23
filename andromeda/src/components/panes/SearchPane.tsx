@@ -240,27 +240,19 @@ export function SearchPane() {
 
   useRegisterPane(SEARCH_RESOURCE, searchAiText(searchedQuery, sections));
 
-  // Deep-link query (⌘K 팔레트 "통합 검색: q" · 데네브 workspace 커맨드): open with
-  // the query prefilled and already running. The latest `run` rides a ref
-  // (updated post-commit) so a long-mounted pane never fires a stale closure —
-  // e.g. after the gateway URL/token changed while this pane stayed mounted.
-  const runRef = useRef(run);
-  useEffect(() => {
-    runRef.current = run;
-  });
-  usePaneTarget(
-    "search",
-    useCallback((target) => {
-      if (!target.query) return;
-      const query = boundSearchQuery(target.query);
-      setQ(query);
-      void runRef.current(query);
-    }, []),
-  );
-
   function invalidateFactDetail() {
     factRequestSeqRef.current += 1;
     setFactDetail(null);
+  }
+
+  function applySearch(data: SearchCacheResponse, query: string) {
+    const next = normalizeSearch(data);
+    const total = next.reduce((count, section) => count + section.hits.length, 0);
+    const failed = next.filter((section) => section.status !== "ok").length;
+    setSections(next);
+    setSearchedQuery(query);
+    setFactDetail(null);
+    setStatus(failed > 0 ? `일부 검색 소스를 확인하지 못했습니다 · ${failed}곳` : total > 0 ? "" : "결과 없음");
   }
 
   async function run(raw = q) {
@@ -290,6 +282,24 @@ export function SearchPane() {
     }
   }
 
+  // Deep-link query (⌘K 팔레트 "통합 검색: q" · 데네브 workspace 커맨드): open with
+  // the query prefilled and already running. The latest `run` rides a ref
+  // (updated post-commit) so a long-mounted pane never fires a stale closure —
+  // e.g. after the gateway URL/token changed while this pane stayed mounted.
+  const runRef = useRef(run);
+  useEffect(() => {
+    runRef.current = run;
+  });
+  usePaneTarget(
+    "search",
+    useCallback((target) => {
+      if (!target.query) return;
+      const query = boundSearchQuery(target.query);
+      setQ(query);
+      void runRef.current(query);
+    }, []),
+  );
+
   function updateQuery(value: string) {
     const next = boundSearchQuery(value);
     setQ(next);
@@ -306,16 +316,6 @@ export function SearchPane() {
     setSections([]);
     setSearchedQuery("");
     setStatus("");
-  }
-
-  function applySearch(data: SearchCacheResponse, query: string) {
-    const next = normalizeSearch(data);
-    const total = next.reduce((count, section) => count + section.hits.length, 0);
-    const failed = next.filter((section) => section.status !== "ok").length;
-    setSections(next);
-    setSearchedQuery(query);
-    setFactDetail(null);
-    setStatus(failed > 0 ? `일부 검색 소스를 확인하지 못했습니다 · ${failed}곳` : total > 0 ? "" : "결과 없음");
   }
 
   async function openFact(hit: SearchDisplayHit) {

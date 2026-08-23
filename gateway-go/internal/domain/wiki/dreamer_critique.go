@@ -61,7 +61,9 @@ func (wd *WikiDreamer) critiqueUpdates(ctx context.Context, updates []wikiUpdate
 	ctx, cancel := context.WithTimeout(ctx, critiqueTimeout)
 	defer cancel()
 
-	indexContent := wd.store.SnapshotIndex().Render()
+	index := wd.store.SnapshotIndex()
+	index.Entries = wd.currentOrdinaryIndexEntries(index.Entries)
+	indexContent := index.Render()
 	demand := wd.store.RecallDemandTerms(time.Now(), critiqueDemandLimit)
 	prompt := buildCritiquePrompt(updates, indexContent, corrections, demand)
 	resp, err := wd.client.Complete(ctx, wd.llmRequest(critiqueSystem, prompt, critiqueMaxTokens))

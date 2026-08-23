@@ -329,7 +329,8 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 	// against the full index anyway.
 	now := time.Now()
 	index := wd.store.SnapshotIndex()
-	indexContent := index.RenderSynthesisSubset(selectSynthesisIndexEntries(index.Entries, wd.recalledAnchorSet(now), now))
+	ordinaryEntries := wd.currentOrdinaryIndexEntries(index.Entries)
+	indexContent := index.RenderSynthesisSubset(selectSynthesisIndexEntries(ordinaryEntries, wd.recalledAnchorSet(now), now))
 	processedHistory := formatProcessedDiaryCapsules(state.Recent)
 
 	polarisSection := ""
@@ -534,7 +535,7 @@ func (wd *WikiDreamer) rankedRecallAnchors(now time.Time) []recallAnchor {
 			break
 		}
 		page, err := wd.store.ReadPage(a.path)
-		if err != nil || page == nil || page.Meta.Archived {
+		if err != nil || !isCurrentOrdinaryPage(a.path, page) {
 			continue // recalled path since deleted/archived — skip
 		}
 		title := page.Meta.Title

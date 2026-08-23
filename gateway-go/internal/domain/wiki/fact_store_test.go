@@ -866,6 +866,15 @@ func TestFactProjectionRepairFailureOnReopenKeepsCanonicalFactsAndSearchServing(
 	if len(active) != 1 || active[0].Value != "답변은 간결하게" {
 		t.Fatalf("canonical Facts after reopen = %+v", active)
 	}
+	hits, err := reopened.Search(context.Background(), "답변은 간결하게", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, hit := range hits {
+		if hit.Path == factProfilePagePath && hit.FactID == "" {
+			t.Fatalf("degraded restart re-indexed generated projection as an ordinary page: %+v", hits)
+		}
+	}
 	assertFactSearchValue(t, reopened, "response length", "답변은 간결하게")
 
 	second, err := reopened.UpsertFact(FactInput{

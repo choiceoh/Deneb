@@ -80,17 +80,18 @@ func TestServerNewFailsClosedOnWikiCutoverFailure(t *testing.T) {
 			wikiDir := tt.prepare(t, stateDir, workspaceDir)
 
 			cmd := exec.Command(os.Args[0], "-test.run=^TestServerNewWikiCutoverFailureChild$")
-			cmd.Env = append(envWithout(
-				"HOME",
-				"DENEB_CONFIG_PATH",
-				"DENEB_PROFILE",
-				"DENEB_STATE_DIR",
-				"DENEB_WIKI_ENABLED",
-				"DENEB_WIKI_DIR",
-				"DENEB_WIKI_DIARY_DIR",
-				wikiCutoverFailureChildEnv,
-				"DENEB_TEST_WIKI_CUTOVER_WANT_ERROR",
-			),
+			cmd.Env = append(
+				envWithout(
+					"HOME",
+					"DENEB_CONFIG_PATH",
+					"DENEB_PROFILE",
+					"DENEB_STATE_DIR",
+					"DENEB_WIKI_ENABLED",
+					"DENEB_WIKI_DIR",
+					"DENEB_WIKI_DIARY_DIR",
+					wikiCutoverFailureChildEnv,
+					"DENEB_TEST_WIKI_CUTOVER_WANT_ERROR",
+				),
 				"HOME="+homeDir,
 				"DENEB_STATE_DIR="+stateDir,
 				"DENEB_WIKI_ENABLED=true",

@@ -293,7 +293,38 @@ data class SearchResults(
 )
 
 @Immutable
-data class SearchHit(val path: String, val title: String, val snippet: String, val category: String)
+data class SearchHit(
+    val path: String,
+    val title: String,
+    val snippet: String,
+    val category: String,
+    val resultKind: String = "",
+    val readOnly: Boolean = false,
+    val factId: String = "",
+    val subjectId: String = "",
+)
+
+/** A current fact fetched from its synthetic reference. Deliberately separate
+ *  from [WikiPage]: fact details must never enter the editable wiki cache or
+ *  its offline mirror. */
+@Immutable
+internal data class CurrentFactDetail(
+    val path: String,
+    val title: String,
+    val summary: String,
+    val body: String,
+)
+
+/** Synthetic fact references are virtual, read-only projections over the
+ *  canonical fact journal. Match path variants defensively so a hand-built
+ *  route cannot bypass the native client's cache/write boundary. */
+internal fun isSyntheticFactPath(path: String): Boolean {
+    val normalized = path.trim().replace('\\', '/').trimStart('/')
+    return normalized.startsWith("@facts/")
+}
+
+/** Older gateways may identify a fact through only one of these fields. */
+internal fun SearchHit.isCurrentFactHit(): Boolean = resultKind.equals("fact", ignoreCase = true) || readOnly || factId.isNotBlank() || isSyntheticFactPath(path)
 
 /** File hit with the exact structural chunk that matched. */
 @Immutable

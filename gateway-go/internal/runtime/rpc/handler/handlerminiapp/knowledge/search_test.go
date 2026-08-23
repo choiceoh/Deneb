@@ -4,13 +4,60 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
+
+type countingSearchFactLifecycle struct {
+	store         *wiki.Store
+	snapshotCalls int
+	matcherCalls  int
+	batchSizes    []int
+}
+
+func (l *countingSearchFactLifecycle) RecallFactSnapshot() wiki.FactRecallSnapshot {
+	l.snapshotCalls++
+	return l.store.RecallFactSnapshot()
+}
+
+func (l *countingSearchFactLifecycle) FactLifecycleEvidencesAllowed(
+	evidence []wiki.FactLifecycleEvidence,
+	snapshot wiki.FactRecallSnapshot,
+) []bool {
+	l.matcherCalls++
+	l.batchSizes = append(l.batchSizes, len(evidence))
+	return l.store.FactLifecycleEvidencesAllowed(evidence, snapshot)
+}
+
+func newSearchFactStore(t *testing.T) *wiki.Store {
+	t.Helper()
+	root := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(root, "wiki"), filepath.Join(root, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	return store
+}
+
+func upsertSearchFact(t *testing.T, store *wiki.Store, subject, key, value string, at time.Time) wiki.FactWriteResult {
+	t.Helper()
+	result, err := store.UpsertFact(wiki.FactInput{
+		Subject: subject, Key: key, Value: value,
+		Kind: wiki.FactKindSystemState, Authority: wiki.FactAuthorityRuntime, At: at,
+	})
+	if err != nil || !result.Committed {
+		t.Fatalf("UpsertFact(%s/%s=%q) = %+v, err=%v", subject, key, value, result, err)
+	}
+	return result
+}
 
 func searchDepsFor(store MemorySearcher, client PeopleClient) SearchDeps {
 	deps := SearchDeps{}
@@ -19,6 +66,69 @@ func searchDepsFor(store MemorySearcher, client PeopleClient) SearchDeps {
 	}
 	if client != nil {
 		deps.Client = func() (PeopleClient, error) { return client, nil }
+	}
+	return deps
+}
+
+func correctedFactSearchDeps(
+	t *testing.T,
+	lifecycle SearchFactLifecycle,
+	oldFactID string,
+	currentFactID string,
+) SearchDeps {
+	t.Helper()
+	store := &fakeMemoryStore{
+		searchFn: func(context.Context, string, int) ([]wiki.SearchResult, error) {
+			return []wiki.SearchResult{
+				{Path: "projects/alpha-stale.md", Content: "project:alpha release status A stale-alpha-marker"},
+				{Path: "projects/alpha-current.md", Content: "project:alpha release status B current-alpha-marker"},
+				{
+					Path: "@facts/" + oldFactID + ".md", Content: "project:alpha release status A stale-fact-marker",
+					FactID: oldFactID, SubjectID: "project:alpha",
+				},
+				{
+					Path: "@facts/" + currentFactID + ".md", Content: "project:alpha release status B current-fact-marker",
+					FactID: currentFactID, SubjectID: "project:alpha",
+				},
+			}, nil
+		},
+		readPageFn: func(path string) (*wiki.Page, error) {
+			return &wiki.Page{Meta: wiki.Frontmatter{Title: path}}, nil
+		},
+		searchDiaryFn: func(context.Context, string, int) ([]wiki.DiaryHit, error) {
+			return []wiki.DiaryHit{
+				{File: "diary/alpha-stale.md", Header: "project:alpha release status", Content: "A stale-alpha-marker"},
+				{File: "diary/alpha-current.md", Header: "project:alpha release status", Content: "B current-alpha-marker"},
+			}, nil
+		},
+	}
+	client := &fakePeopleClient{searchFn: func(context.Context, string, int) ([]gmail.MessageSummary, error) {
+		return []gmail.MessageSummary{
+			{
+				From:    "Project Alpha Stale <stale-alpha@example.com>",
+				Subject: "project:alpha release status A stale-alpha-marker",
+				Date:    "2026-08-23T01:00:00Z",
+			},
+			{
+				From:    "Project Alpha Current <current-alpha@example.com>",
+				Subject: "project:alpha release status B current-alpha-marker",
+				Date:    "2026-08-23T02:00:00Z",
+			},
+		}, nil
+	}}
+	deps := searchDepsFor(store, client)
+	deps.FactLifecycle = func() SearchFactLifecycle { return lifecycle }
+	deps.Files = func(context.Context, string, int) ([]SearchFileHit, error) {
+		return []SearchFileHit{
+			{Path: "files/alpha-stale.txt", Name: "project alpha release status", Snippet: "A stale-alpha-marker"},
+			{Path: "files/alpha-current.txt", Name: "project alpha release status", Snippet: "B current-alpha-marker"},
+		}, ErrSearchSourcePartial
+	}
+	deps.Mail = func(context.Context, string, int) ([]SearchMailHit, error) {
+		return []SearchMailHit{
+			{ID: "mail-stale", Subject: "project:alpha release status", Snippet: "A stale-alpha-marker"},
+			{ID: "mail-current", Subject: "project:alpha release status", Snippet: "B current-alpha-marker"},
+		}, nil
 	}
 	return deps
 }
@@ -128,6 +238,179 @@ func TestSearchAllPreservesFactIdentityAsReadOnlyWithoutPageLookup(t *testing.T)
 	hit := got.Wiki[0]
 	if hit.ResultKind != "fact" || !hit.ReadOnly || hit.FactID != "fact-456" || hit.SubjectID != "project:alpha" {
 		t.Fatalf("fact identity = %+v", hit)
+	}
+}
+
+func TestSearchAllFinalFactLifecycleFiltersCorrectionAndTombstoneAcrossSources(t *testing.T) {
+	store := newSearchFactStore(t)
+	base := time.Date(2026, 8, 23, 1, 0, 0, 0, time.UTC)
+	oldFact := upsertSearchFact(t, store, "project:alpha", "release.status", "A", base)
+	currentFact := upsertSearchFact(t, store, "project:alpha", "release.status", "B", base.Add(time.Hour))
+	lifecycle := &countingSearchFactLifecycle{store: store}
+	deps := correctedFactSearchDeps(t, lifecycle, oldFact.ClaimID, currentFact.ClaimID)
+
+	resp := searchAll(deps)(authedCtx(), reqWith(t, "miniapp.search.all", map[string]any{"query": "alpha"}))
+	var corrected SearchAllResult
+	decode(t, resp, &corrected)
+	if len(corrected.Wiki) != 2 || len(corrected.Diary) != 1 || len(corrected.People) != 1 ||
+		len(corrected.Files) != 1 || len(corrected.Mail) != 1 {
+		t.Fatalf("corrected result counts = wiki:%d diary:%d people:%d files:%d mail:%d; result=%+v",
+			len(corrected.Wiki), len(corrected.Diary), len(corrected.People), len(corrected.Files), len(corrected.Mail), corrected)
+	}
+	encoded, err := json.Marshal(corrected)
+	if err != nil {
+		t.Fatalf("marshal corrected result: %v", err)
+	}
+	if strings.Contains(string(encoded), "stale-alpha-marker") || !strings.Contains(string(encoded), "current-alpha-marker") {
+		t.Fatalf("correction boundary leaked stale or lost current evidence: %s", encoded)
+	}
+	if corrected.Sources.Wiki != searchSourceOK || corrected.Sources.Diary != searchSourceOK ||
+		corrected.Sources.People != searchSourcePartial || corrected.Sources.Files != searchSourcePartial ||
+		corrected.Sources.Mail != searchSourceOK {
+		t.Fatalf("correction changed source status: %+v", corrected.Sources)
+	}
+	if lifecycle.snapshotCalls != 1 {
+		t.Fatalf("RecallFactSnapshot calls after correction = %d, want 1", lifecycle.snapshotCalls)
+	}
+	if lifecycle.matcherCalls != 1 || len(lifecycle.batchSizes) != 1 || lifecycle.batchSizes[0] != 10 {
+		t.Fatalf("correction matcher calls/batches = %d/%v, want one 10-row batch", lifecycle.matcherCalls, lifecycle.batchSizes)
+	}
+
+	tombstone, err := store.TombstoneFact(wiki.FactTombstoneInput{
+		Subject: "project:alpha", Key: "release.status",
+		Authority: wiki.FactAuthorityRuntime, At: base.Add(2 * time.Hour),
+	})
+	if err != nil || !tombstone.Committed {
+		t.Fatalf("TombstoneFact = %+v, err=%v", tombstone, err)
+	}
+	resp = searchAll(deps)(authedCtx(), reqWith(t, "miniapp.search.all", map[string]any{"query": "alpha"}))
+	var forgotten SearchAllResult
+	decode(t, resp, &forgotten)
+	if len(forgotten.Wiki) != 0 || len(forgotten.Diary) != 0 || len(forgotten.People) != 0 ||
+		len(forgotten.Files) != 0 || len(forgotten.Mail) != 0 {
+		t.Fatalf("tombstoned evidence survived final boundary: %+v", forgotten)
+	}
+	if forgotten.Sources.Wiki != searchSourceOK || forgotten.Sources.Diary != searchSourceOK ||
+		forgotten.Sources.People != searchSourcePartial || forgotten.Sources.Files != searchSourcePartial ||
+		forgotten.Sources.Mail != searchSourceOK {
+		t.Fatalf("tombstone changed source status: %+v", forgotten.Sources)
+	}
+	if lifecycle.snapshotCalls != 2 {
+		t.Fatalf("RecallFactSnapshot calls after tombstone = %d, want 2 total", lifecycle.snapshotCalls)
+	}
+	if lifecycle.matcherCalls != 2 || len(lifecycle.batchSizes) != 2 || lifecycle.batchSizes[1] != 10 {
+		t.Fatalf("tombstone matcher calls/batches = %d/%v, want one new 10-row batch", lifecycle.matcherCalls, lifecycle.batchSizes)
+	}
+}
+
+func TestSearchAllFactLifecycleKeepsSameValueForDifferentSubject(t *testing.T) {
+	store := newSearchFactStore(t)
+	base := time.Date(2026, 8, 23, 1, 0, 0, 0, time.UTC)
+	upsertSearchFact(t, store, "project:alpha", "release.status", "A", base)
+	upsertSearchFact(t, store, "project:alpha", "release.status", "B", base.Add(time.Hour))
+	upsertSearchFact(t, store, "project:beta", "quality.grade", "A", base.Add(2*time.Hour))
+	lifecycle := &countingSearchFactLifecycle{store: store}
+	deps := SearchDeps{
+		FactLifecycle: func() SearchFactLifecycle { return lifecycle },
+		Files: func(context.Context, string, int) ([]SearchFileHit, error) {
+			return []SearchFileHit{
+				{
+					Path: "files/alpha-release.txt", Name: "project alpha release status",
+					Snippet: "A alpha-stale-marker",
+				},
+				{
+					Path: "files/beta-grade.txt", Name: "project beta quality grade",
+					Snippet: "A beta-current-marker",
+				},
+			}, ErrSearchSourcePartial
+		},
+	}
+
+	resp := searchAll(deps)(authedCtx(), reqWith(t, "miniapp.search.all", map[string]any{"query": "beta"}))
+	var got SearchAllResult
+	decode(t, resp, &got)
+	if len(got.Files) != 1 || got.Files[0].Path != "files/beta-grade.txt" ||
+		!strings.Contains(got.Files[0].Snippet, "beta-current-marker") {
+		t.Fatalf("cross-subject same value was flattened: %+v", got.Files)
+	}
+	if got.Sources.Files != searchSourcePartial {
+		t.Fatalf("files status = %q, want partial", got.Sources.Files)
+	}
+	if lifecycle.snapshotCalls != 1 {
+		t.Fatalf("RecallFactSnapshot calls = %d, want 1", lifecycle.snapshotCalls)
+	}
+	if lifecycle.matcherCalls != 1 || len(lifecycle.batchSizes) != 1 || lifecycle.batchSizes[0] != 2 {
+		t.Fatalf("matcher calls/batches = %d/%v, want one 2-row batch", lifecycle.matcherCalls, lifecycle.batchSizes)
+	}
+}
+
+func TestSearchAllRevalidatesAfterSlowSourceMutation(t *testing.T) {
+	store := newSearchFactStore(t)
+	base := time.Date(2026, 8, 23, 1, 0, 0, 0, time.UTC)
+	oldFact := upsertSearchFact(t, store, "project:alpha", "release.status", "A", base)
+	lifecycle := &countingSearchFactLifecycle{store: store}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseSource := func() { releaseOnce.Do(func() { close(release) }) }
+	defer releaseSource()
+	memory := &fakeMemoryStore{
+		searchFn: func(context.Context, string, int) ([]wiki.SearchResult, error) {
+			return []wiki.SearchResult{
+				{
+					Path: "@facts/" + oldFact.ClaimID + ".md", Content: "project:alpha release status A slow-stale-marker",
+					FactID: oldFact.ClaimID, SubjectID: "project:alpha",
+				},
+				{Path: "projects/alpha-stale.md", Content: "project:alpha release status A slow-stale-marker"},
+			}, nil
+		},
+		readPageFn: func(path string) (*wiki.Page, error) {
+			return &wiki.Page{Meta: wiki.Frontmatter{Title: path}}, nil
+		},
+		searchDiaryFn: func(context.Context, string, int) ([]wiki.DiaryHit, error) { return nil, nil },
+	}
+	deps := searchDepsFor(memory, nil)
+	deps.FactLifecycle = func() SearchFactLifecycle { return lifecycle }
+	deps.Files = func(context.Context, string, int) ([]SearchFileHit, error) {
+		close(started)
+		<-release
+		return []SearchFileHit{{
+			Path: "files/alpha-stale.txt", Name: "project alpha release status", Snippet: "A slow-stale-marker",
+		}}, ErrSearchSourcePartial
+	}
+	handler := searchAll(deps)
+	request := reqWith(t, "miniapp.search.all", map[string]any{"query": "alpha"})
+	response := make(chan *protocol.ResponseFrame, 1)
+	go func() {
+		response <- handler(authedCtx(), request)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("slow file source did not start")
+	}
+	upsertSearchFact(t, store, "project:alpha", "release.status", "B", base.Add(time.Hour))
+	releaseSource()
+	var resp *protocol.ResponseFrame
+	select {
+	case resp = <-response:
+	case <-time.After(5 * time.Second):
+		t.Fatal("unified search did not finish after releasing slow source")
+	}
+	var got SearchAllResult
+	decode(t, resp, &got)
+	if len(got.Wiki) != 0 || len(got.Files) != 0 {
+		t.Fatalf("pre-mutation search evidence escaped final revalidation: wiki=%+v files=%+v", got.Wiki, got.Files)
+	}
+	if got.Sources.Wiki != searchSourceOK || got.Sources.Files != searchSourcePartial {
+		t.Fatalf("final revalidation changed source status: %+v", got.Sources)
+	}
+	if lifecycle.snapshotCalls != 1 {
+		t.Fatalf("RecallFactSnapshot calls = %d, want exactly one final snapshot", lifecycle.snapshotCalls)
+	}
+	if lifecycle.matcherCalls != 1 || len(lifecycle.batchSizes) != 1 || lifecycle.batchSizes[0] != 2 {
+		t.Fatalf("matcher calls/batches = %d/%v, want one 2-row batch", lifecycle.matcherCalls, lifecycle.batchSizes)
 	}
 }
 
