@@ -10,7 +10,8 @@
       "env": {
         "PATH": "${env:PATH}:${userHome}/.local/bin:${userHome}/.npm-global/bin",
         "CURSOR_CODEGRAPH_FALLBACK": "${workspaceFolder}",
-        "CODEGRAPH_MCP_TOOLS": "explore,node,search,impact,callers,callees"
+        "CODEGRAPH_MCP_TOOLS": "explore,node,search,impact,callers,callees",
+        "CODEGRAPH_AGENT": "cursor"
       }
     }
   }

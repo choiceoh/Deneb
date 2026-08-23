@@ -1,0 +1,8 @@
+# Project-scoped CodeGraph MCP (trusted checkouts only).
+[mcp_servers.codegraph]
+command = "bash"
+args = ["scripts/dev/codegraph-serve.sh"]
+
+[mcp_servers.codegraph.env]
+CODEGRAPH_MCP_TOOLS = "explore,node,search,impact,callers,callees"
+CODEGRAPH_AGENT = "codex"

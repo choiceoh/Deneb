@@ -201,6 +201,7 @@ class NudgeMainTests(unittest.TestCase):
         with mock.patch.object(nudge, "resolves_via_rpcmap", return_value=True) as resolver:
             rc, _, stderr = self.invoke(rpc_payload)
         self.assertEqual(rc, 2)
+        self.assertIn("codegraph node miniapp.people.list", stderr)
         self.assertIn("scripts/dev/rpcmap.py miniapp.people.list", stderr)
         resolver.assert_called_once_with("miniapp.people.list", canonical_root)
 
@@ -296,7 +297,8 @@ class AutoindexTests(unittest.TestCase):
         self.assertEqual(command[:2], ["bash", "-lc"])
         canonical_root = shlex.quote(os.path.realpath(self.root))
         self.assertIn(f"cd {canonical_root}", command[2])
-        self.assertTrue(command[2].endswith("&& codegraph init"))
+        self.assertIn("codegraph init", command[2])
+        self.assertIn("rpcmap_codegraph_sync.py", command[2])
         self.assertTrue(popen.call_args.kwargs["start_new_session"])
         self.assertIs(popen.call_args.kwargs["stderr"], subprocess.STDOUT)
         self.assertTrue(popen.call_args.kwargs["stdout"].closed)
@@ -316,9 +318,9 @@ class AutoindexTests(unittest.TestCase):
         command = popen.call_args.args[0][2]
         canonical_fresh = shlex.quote(os.path.realpath(fresh_donor))
         canonical_old = shlex.quote(os.path.realpath(old_donor))
-        self.assertIn(f"cp -r {canonical_fresh}", command)
-        self.assertNotIn(f"cp -r {canonical_old}", command)
-        self.assertIn("codegraph sync", command)
+        self.assertIn("codegraph-seed-index.sh", command)
+        self.assertIn(canonical_fresh, command)
+        self.assertNotIn(canonical_old, command)
         self.assertIn("rm -rf", command)
         self.assertIn("codegraph init", command)
         self.assertTrue(popen.call_args.kwargs["stdout"].closed)
@@ -400,6 +402,10 @@ class CursorCodegraphServeTests(unittest.TestCase):
         self.assertNotIn("--path", cursor_cg["args"])
         self.assertEqual(repo_cg["command"], "bash")
         self.assertIn("codegraph-serve.sh", repo_cg["args"][0])
+        self.assertEqual(
+            repo_cg["env"]["CODEGRAPH_MCP_TOOLS"],
+            "explore,node,search,impact,callers,callees",
+        )
 
     def test_print_root_refuses_production_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

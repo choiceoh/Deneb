@@ -101,8 +101,9 @@ def is_defined_symbol(pat, root):
     return False
 
 
-# A dotted RPC method / tool name like "miniapp.people.list" — CodeGraph can't
-# resolve its string→handler edge, but rpcmap.py can.
+# A dotted RPC method / tool name like "miniapp.people.list". rpcmap.py is the
+# deterministic resolver; rpcmap_codegraph_sync.py also injects rpc-name nodes
+# so `codegraph node miniapp.people.list` works after a sync.
 DOTTED_METHOD = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$")
 
 
@@ -156,6 +157,7 @@ def main():
     elif DOTTED_METHOD.match(pat) and resolves_via_rpcmap(pat, root):
         msg = [
             f"[codegraph] '{pat}'는 RPC 메서드/툴 이름입니다. 어느 핸들러가 처리하는지는 grep보다:",
+            f"  · MCP/CLI: codegraph node {pat}   (rpc-name 합성 노드 → 핸들러)",
             f"  · scripts/dev/rpcmap.py {pat}   → 핸들러 + 파일:라인 (그다음 codegraph node <핸들러>)",
             "텍스트 문자열 검색이 목적이면 같은 검색을 그대로 재실행하세요 (세션당 1회만 안내).",
         ]

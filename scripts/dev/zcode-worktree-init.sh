@@ -34,12 +34,22 @@ ROOT=$(cd "$ROOT" 2>/dev/null && pwd) || exit 0
 # ── Guard: already inside a worktree? ─────────────────────────────────────
 # In the main checkout, --git-dir and --git-common-dir resolve to the same
 # path.  In a linked worktree they differ.  If we're already in a worktree,
-# don't nest — just exit.
+# don't nest — pin CodeGraph and exit.
 GIT_DIR=$(cd "$ROOT" && git rev-parse --git-dir 2>/dev/null) || exit 0
 GIT_COMMON=$(cd "$ROOT" && git rev-parse --git-common-dir 2>/dev/null) || exit 0
 GIT_DIR_ABS=$(cd "$ROOT" && cd "$GIT_DIR" 2>/dev/null && pwd) || exit 0
 GIT_COMMON_ABS=$(cd "$ROOT" && cd "$GIT_COMMON" 2>/dev/null && pwd) || exit 0
-[[ "$GIT_DIR_ABS" != "$GIT_COMMON_ABS" ]] && exit 0
+
+pin_codegraph() {
+    python3 "$ROOT/scripts/dev/codegraph_root.py" write-active --agent zcode --path "$1" --sid "$SESSION_ID" >/dev/null 2>&1 || true
+    python3 "$ROOT/scripts/dev/codegraph_mcp_restore.py" --root "$1" --no-user >/dev/null 2>&1 || true
+}
+
+# Already inside a linked worktree? Don't nest — pin CodeGraph and continue.
+if [[ "$GIT_DIR_ABS" != "$GIT_COMMON_ABS" ]]; then
+    pin_codegraph "$ROOT"
+    exit 0
+fi
 
 # ── Guard: only auto-create from main ─────────────────────────────────────
 # If the user explicitly checked out another branch in the main checkout,
@@ -60,8 +70,9 @@ mkdir -p "$WT_BASE"
 # silently under the `|| exit 0` guard below.
 git worktree prune 2>/dev/null || true
 if git worktree list --porcelain 2>/dev/null | grep -q "^worktree ${WT_PATH}$"; then
-    printf '{"additionalContext":"⚡ ZCode 워크트리 재사용: %s (브랜치 %s).\\n\\n첫 작업 전 반드시 진입: cd %s\\n이 디렉터리에서만 편집하세요 — 메인 체크아웃(/Users/ost/Documents/GitHub/Deneb)에서의 Write/Edit/MultiEdit는 가드가 차단합니다."}\n' \
-        "$WT_PATH" "$WT_BRANCH" "$WT_PATH"
+    pin_codegraph "$WT_PATH"
+    printf '{"additionalContext":"⚡ ZCode 워크트리 재사용: %s (브랜치 %s).\\n\\n첫 작업 전 반드시 진입: cd %s\\n이 디렉터리에서만 편집하세요 — 메인 체크아웃(%s)에서의 Write/Edit/MultiEdit는 가드가 차단합니다."}\n' \
+        "$WT_PATH" "$WT_BRANCH" "$WT_PATH" "$ROOT"
     exit 0
 fi
 
@@ -90,25 +101,16 @@ fi
 # start is never delayed.
 if [[ -d "$ROOT/.codegraph" ]]; then
     {
-        mkdir -p "$WT_PATH/.codegraph" &&
-        # Copy everything except daemon runtime files.
-        for item in "$ROOT/.codegraph"/*; do
-            base=$(basename "$item")
-            case "$base" in
-                daemon.pid|daemon.sock|daemon.log) continue ;;
-            esac
-            cp -r "$item" "$WT_PATH/.codegraph/" 2>/dev/null || true
-        done &&
-        cd "$WT_PATH" &&
-        (codegraph sync 2>/dev/null || true)
+        bash "$ROOT/scripts/dev/codegraph-seed-index.sh" "$ROOT/.codegraph" "$WT_PATH"
     } >/dev/null 2>&1 &
     disown 2>/dev/null || true
 fi
+pin_codegraph "$WT_PATH"
 
 # ── Report to agent ───────────────────────────────────────────────────────
 # Strong directive: the agent must cd into the worktree before any edit,
 # otherwise the guard (zcode-worktree-guard.sh) blocks Write/Edit/MultiEdit
 # in the main checkout.
-printf '{"additionalContext":"⚡ ZCode 워크트리 준비됨: %s (브랜치 %s).\\n\\n첫 작업 전 반드시 진입: cd %s\\n이 디렉터리에서만 편집하세요 — 메인 체크아웃(/Users/ost/Documents/GitHub/Deneb)에서의 Write/Edit/MultiEdit는 가드가 차단합니다."}\n' \
-    "$WT_PATH" "$WT_BRANCH" "$WT_PATH"
+printf '{"additionalContext":"⚡ ZCode 워크트리 준비됨: %s (브랜치 %s).\\n\\n첫 작업 전 반드시 진입: cd %s\\n이 디렉터리에서만 편집하세요 — 메인 체크아웃(%s)에서의 Write/Edit/MultiEdit는 가드가 차단합니다."}\n' \
+    "$WT_PATH" "$WT_BRANCH" "$WT_PATH" "$ROOT"
 exit 0
