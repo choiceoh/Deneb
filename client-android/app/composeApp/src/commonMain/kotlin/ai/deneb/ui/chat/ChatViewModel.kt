@@ -521,6 +521,15 @@ class ChatViewModel(
     private fun cancel() {
         currentJob?.cancel()
         currentJob = null
+        // Cancelling the local job only detaches the UI. The gateway runs the turn
+        // off the request context on purpose (so a backgrounded phone does not kill
+        // it), so without this the model kept generating after the stop and its
+        // answer replaced the "중단됨" reply at the next reconcile. Fire-and-forget
+        // on its own scope: the job above is already cancelled, and a stop must not
+        // wait on the network.
+        viewModelScope.launch(backgroundDispatcher + teardownHandler) {
+            dataRepository.abortTurn()
+        }
         // Tag 중단됨 only on the answer that was actually streaming. Cancelling
         // mid-thinking leaves no new tokens — lastRenderedAssistant() would be the
         // previous complete reply, which must not be marked stopped.

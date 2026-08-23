@@ -709,6 +709,14 @@ class DenebGatewayClient private constructor(
         return true
     }
 
+    override suspend fun abortTurn(): Boolean {
+        val out = callRpc<JsonObject>(
+            "miniapp.chat.abort",
+            buildJsonObject { put("sessionKey", sessionKey) },
+        ) ?: return false
+        return out["aborted"]?.jsonPrimitive?.booleanOrNull == true
+    }
+
     // --- Memory screen → Deneb wiki (read-only browser) ---------------------
     // Wiki pages ([denebMemories]) and Deneb crons ([denebScheduledTasks]) are
     // surfaced to their screens through the concrete StateFlows + refresh

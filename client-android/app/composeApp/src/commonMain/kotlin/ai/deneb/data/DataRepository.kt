@@ -74,6 +74,17 @@ interface DataRepository {
      * gateway accepted it; `false` means the caller should queue instead.
      */
     suspend fun steer(note: String): Boolean
+
+    /**
+     * Stops the turn the gateway is still running for this session.
+     *
+     * Cancelling the local coroutine is not enough: the native chat stream
+     * deliberately detaches its run from the socket so a backgrounded phone does
+     * not kill a turn in progress, which also means closing it is not a stop.
+     * Best-effort — `false` when nothing was running (the turn had just finished)
+     * or the gateway could not be reached.
+     */
+    suspend fun abortTurn(): Boolean = false
     fun startNewChat()
     fun popLastExchange()
     fun truncateFrom(messageId: String)

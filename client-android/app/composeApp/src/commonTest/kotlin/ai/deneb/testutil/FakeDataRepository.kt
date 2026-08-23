@@ -107,6 +107,13 @@ class FakeDataRepository : DataRepository {
         return true
     }
 
+    var abortTurnCalls = 0
+
+    override suspend fun abortTurn(): Boolean {
+        abortTurnCalls++
+        return true
+    }
+
     val renameCalls = mutableListOf<Pair<String, String>>()
 
     /** Flip to false to exercise the refused/unreachable branch. */

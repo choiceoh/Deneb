@@ -173,6 +173,12 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				}
 				return s.chatHandler.SteerNative(sessionKey, note)
 			},
+			AbortNative: func(sessionKey string) bool {
+				if s.chatHandler == nil {
+					return false
+				}
+				return s.chatHandler.AbortNative(sessionKey)
+			},
 		}),
 		handlersession.ExecMethods(handlersession.ExecDeps{
 			Chat:       s.chatHandler,
