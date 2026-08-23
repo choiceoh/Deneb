@@ -120,6 +120,8 @@ class TaskScheduler(
                         body = report.body,
                         kind = report.kind,
                         ref = report.ref,
+                        approveActionId = report.approveActionId,
+                        rejectActionId = report.rejectActionId,
                     )
                 }
             }

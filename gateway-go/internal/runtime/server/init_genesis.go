@@ -477,6 +477,15 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 				// automatically; this card is the notification + 재잠금 veto.
 				OnGraduated: s.postGraduationCard,
 			})
+			// Self-correction Trust Inbox watch: one approve/reject card per
+			// NEW proposed candidate, whatever producer recorded it (chat tool,
+			// evolver mining, runtime-error mining). Prod-gated: writes the
+			// shared watch snapshot and posts operator-facing cards.
+			s.autonomousSvc.RegisterTask(&genesis.SelfCorrectionWatchTask{
+				Tracker: s.genesisTracker,
+				Logger:  s.logger,
+				OnNew:   s.postSelfCorrectionCard,
+			})
 			// Adversarial coverage: deterministically mutate each skill body
 			// (section drops, tool-reference drops) and author the held-out
 			// cases that catch uncaught mutations — "harder tests, found

@@ -22,7 +22,7 @@ const (
 	SelfCorrectionStatusProposed   = string(rsilifecycle.ReviewProposed)
 	SelfCorrectionStatusAccepted   = string(rsilifecycle.ReviewAccepted)
 	SelfCorrectionStatusApplied    = string(rsilifecycle.ReviewApplied)
-	selfCorrectionStatusRejected   = string(rsilifecycle.ReviewRejected)
+	SelfCorrectionStatusRejected   = string(rsilifecycle.ReviewRejected)
 	selfCorrectionStatusSuperseded = string(rsilifecycle.ReviewSuperseded)
 
 	selfCorrectionDispatchStarted     = string(rsilifecycle.DeliveryStarted)

@@ -106,13 +106,18 @@ expect fun sendHeartbeatNotification(title: String, body: String)
  * Like [sendHeartbeatNotification] but for proactive gateway reports pushed over
  * the events stream. Android deep-links a `kind=workfeed` notification with a
  * non-blank [ref] to that exact feed card; older payloads without a ref retain
- * the legacy 업무-topic destination. Other platforms surface it like a heartbeat.
+ * the legacy 업무-topic destination. [approveActionId]/[rejectActionId] carry
+ * the card's approval:* actions (Trust Inbox): Android adds tray 승인/거절
+ * buttons that settle the decision without opening the app. Other platforms
+ * surface it like a heartbeat.
  */
 expect fun sendProactiveReportNotification(
     title: String,
     body: String,
     kind: String = "",
     ref: String = "",
+    approveActionId: String? = null,
+    rejectActionId: String? = null,
 )
 
 /**

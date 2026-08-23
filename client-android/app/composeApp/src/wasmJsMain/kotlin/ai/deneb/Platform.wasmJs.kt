@@ -89,4 +89,11 @@ actual suspend fun shareTextToApps(text: String) = Unit
 // Web notifications API isn't wired up; stub.
 actual fun sendHeartbeatNotification(title: String, body: String) = Unit
 
-actual fun sendProactiveReportNotification(title: String, body: String, kind: String, ref: String) = Unit
+actual fun sendProactiveReportNotification(
+    title: String,
+    body: String,
+    kind: String,
+    ref: String,
+    approveActionId: String?,
+    rejectActionId: String?,
+) = Unit

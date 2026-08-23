@@ -58,7 +58,7 @@ func TestLadderWatchFiresOnceOnReadyTransitionRetriesOnMissingOrFailedCallback(t
 	// Fall back (candidate rejected → staged row leaves READY), then re-earn
 	// with a new candidate: the transition fires again.
 	if _, err := tr.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
-		ID: selfCorrectionID(t, tr), Status: selfCorrectionStatusRejected, Reason: "operator veto",
+		ID: selfCorrectionID(t, tr), Status: SelfCorrectionStatusRejected, Reason: "operator veto",
 	}); err != nil {
 		t.Fatal(err)
 	}

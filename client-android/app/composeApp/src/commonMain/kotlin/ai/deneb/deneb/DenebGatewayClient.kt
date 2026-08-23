@@ -320,6 +320,11 @@ class DenebGatewayClient private constructor(
         val body: String,
         val kind: String = "workfeed",
         val ref: String = "",
+        // Trust Inbox: the card's approval:* action ids, when present. Android
+        // turns these into tray 승인/거절 buttons so a decision settles without
+        // opening the app; null when the card carries no approval actions.
+        val approveActionId: String? = null,
+        val rejectActionId: String? = null,
     )
 
     // Durable proactive-notification stream. Emits once per genuinely-new

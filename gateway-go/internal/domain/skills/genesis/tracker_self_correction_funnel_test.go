@@ -91,7 +91,7 @@ func TestSelfCorrectionFunnelReturnsConversionRateAndReopenCount(t *testing.T) {
 		Type: selfCorrectionTypeReview, ID: "sc-a", Status: SelfCorrectionStatusApplied, CreatedAt: captureA + 2*dayMs,
 	})
 	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-		Type: selfCorrectionTypeReview, ID: "sc-b", Status: selfCorrectionStatusRejected, CreatedAt: captureB + dayMs,
+		Type: selfCorrectionTypeReview, ID: "sc-b", Status: SelfCorrectionStatusRejected, CreatedAt: captureB + dayMs,
 	})
 
 	// A third candidate in-window that re-opens an OLD applied signature —

@@ -112,6 +112,11 @@
         <receiver
             android:name="ai.deneb.DenebReplyReceiver"
             android:exported="false" />
+        <!-- Trust Inbox: approve/reject tray buttons on work-feed approval
+             card notifications. See WorkFeedActionReceiver.kt. -->
+        <receiver
+            android:name="ai.deneb.WorkFeedActionReceiver"
+            android:exported="false" />
         <!-- Android Auto: declares this app posts Auto-compatible messaging
              notifications (read-aloud + voice reply). -->
         <meta-data
