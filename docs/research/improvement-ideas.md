@@ -575,6 +575,7 @@
 | 2026-08-23 | ZCode (GLM-5.3) | 5.7 반증 증거 큐 구현 — 드림/다이제스트 카드 정정 → 비평 프롬프트 반증 블록 주입·소비 |
 | 2026-08-23 | ZCode (GLM-5.3) | 드리머 개선 3건(5.6–5.8) 착수 — 5.6 팩트 원장 구현 완료. 사실: 4.9 다이제스트가 항상 0이던 레거시 카운터를 집계하고 있었음을 발견·수정 |
 | 2026-08-23 | ZCode (GLM-5.3) | 5.5 개인 MCP 브로커 구현 — `DENEB_MCP_TOKEN` 전용 토큰 분리(상수시간 비교, 클라이언트 토큰 공존) + §8 스코프 명시 개정 + `docs/tools/mcp-broker.md` 가이드. tailnet serve 노출은 운영자 절차로 가이드 |
+| 2026-08-23 | Claude (Fable 5) | 위키 전용 개선안을 별도 문서로 분리 — [wiki-improvement-plan-2026-08](wiki-improvement-plan-2026-08.md) (W1~W17: verify 자동이동·드리머 정체성·동일ID 병합·supersede 가드 P0, 메일 재분류·원장 위치·인물·계측·링크 P1, 저장/성능·라우팅·표면·린트 P2) |
 
 ---
 
@@ -583,4 +584,5 @@
 - 코드 인벤토리: Explore 에이전트 (2026-05-25) — `gateway-go/` 핵심 파일 LOC, 테스트 커버리지 갭, 컴팩션 tier 점검
 - 도메인 규칙: `docs/agent-rules/{go-gateway,prompt-cache,concurrency,logging,live-testing,optimization}.md`
 - 최근 4.22.x CHANGELOG: Polaris/Wiki/단일사용자 simplification 흐름
+- 위키 전용 개선안: `docs/research/wiki-improvement-plan-2026-08.md` (2026-08-23, 10영역 조사 + 3렌즈 검증; 본 문서 §4.7~4.9·5.6과 교차)
 - 관련 research: `docs/research/{hermes-agent-analysis,hermes-deneb-mapping,tool-interception-gap}.md`
