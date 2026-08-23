@@ -670,6 +670,10 @@ func (h *Handler) registerAdmittedSyncWhenSessionIdle(
 		return h.abort.RegisterAdmitted(clientRunID, entry), nil
 	}
 	for {
+		// Take the wakeup BEFORE testing the registry: an already-idle session
+		// hands back a closed channel, so the predecessor can finish anywhere in
+		// this loop without the wait missing its transition.
+		idle := h.abort.SessionIdleWait(entry.SessionKey)
 		sessLock := h.mergeWindow.SessionLock(entry.SessionKey)
 		sessLock.Lock()
 		if !h.abort.HasActiveRun(entry.SessionKey) {
@@ -682,14 +686,25 @@ func (h *Handler) registerAdmittedSyncWhenSessionIdle(
 		}
 		sessLock.Unlock()
 
-		select {
-		case <-ctx.Done():
-			if cause := context.Cause(ctx); cause != nil {
-				return false, cause
-			}
-			return false, ctx.Err()
-		case <-time.After(syncSessionIdlePoll):
+		if err := waitSessionIdle(ctx, idle); err != nil {
+			return false, err
 		}
+	}
+}
+
+// waitSessionIdle blocks until the predecessor's run leaves the abort registry
+// or the caller gives up. A run that dies without cleanup is reclaimed by the
+// tracker's GC sweep, which also releases this wait, so a leaked entry cannot
+// wedge a session's ingress queue permanently.
+func waitSessionIdle(ctx context.Context, idle <-chan struct{}) error {
+	select {
+	case <-idle:
+		return nil
+	case <-ctx.Done():
+		if cause := context.Cause(ctx); cause != nil {
+			return cause
+		}
+		return ctx.Err()
 	}
 }
 
@@ -735,8 +750,6 @@ func (h *Handler) finishSyncSessionLifecycle(runCtx context.Context, sessionKey 
 // current behavior (their own run).
 const steerMaxRunes = 400
 
-const syncSessionIdlePoll = 25 * time.Millisecond
-
 // admitSyncWhenSessionIdle blocks until no run is registered for sessionKey.
 // Detached capture turns (miniapp.capture.*) and in-flight sync/stream runs
 // both register in the abort tracker; without this gate a second SendSync would
@@ -746,15 +759,12 @@ func (h *Handler) admitSyncWhenSessionIdle(ctx context.Context, sessionKey strin
 		return nil
 	}
 	for {
-		for h.abort.HasActiveRun(sessionKey) {
-			select {
-			case <-ctx.Done():
-				if cause := context.Cause(ctx); cause != nil {
-					return cause
-				}
-				return ctx.Err()
-			case <-time.After(syncSessionIdlePoll):
+		idle := h.abort.SessionIdleWait(sessionKey)
+		if h.abort.HasActiveRun(sessionKey) {
+			if err := waitSessionIdle(ctx, idle); err != nil {
+				return err
 			}
+			continue
 		}
 		if h.mergeWindow == nil {
 			return nil
