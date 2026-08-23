@@ -32,6 +32,10 @@ const (
 	// critiqueTimeout bounds the critique call so a wedged backend cannot eat the
 	// rest of the cycle budget (same discipline as wikiDreamSynthesisTimeout).
 	critiqueTimeout = 3 * time.Minute
+	// critiqueDemandLimit bounds how many demand terms the critique prompt
+	// carries — the topics the wiki could not answer, which the critic must not
+	// drop proposals addressing.
+	critiqueDemandLimit = 8
 )
 
 const critiqueSystem = "You are a wiki knowledge-base editor reviewing proposed changes. Respond only with a JSON array."
@@ -58,7 +62,8 @@ func (wd *WikiDreamer) critiqueUpdates(ctx context.Context, updates []wikiUpdate
 	defer cancel()
 
 	indexContent := wd.store.SnapshotIndex().Render()
-	prompt := buildCritiquePrompt(updates, indexContent, corrections)
+	demand := wd.store.RecallDemandTerms(time.Now(), critiqueDemandLimit)
+	prompt := buildCritiquePrompt(updates, indexContent, corrections, demand)
 	resp, err := wd.client.Complete(ctx, wd.llmRequest(critiqueSystem, prompt, critiqueMaxTokens))
 	if err != nil {
 		wd.logger.Warn("wiki-dream: critique call failed; keeping all proposals", "error", err)
@@ -88,7 +93,7 @@ func (wd *WikiDreamer) critiqueUpdates(ctx context.Context, updates []wikiUpdate
 // shown (action/path/title/summary + a content snippet) to keep the call cheap.
 // Pending user corrections, when present, add a 반증 block — the critic drops
 // proposals that conflict with a correction the operator just made.
-func buildCritiquePrompt(updates []wikiUpdate, indexContent string, corrections []DreamCorrection) string {
+func buildCritiquePrompt(updates []wikiUpdate, indexContent string, corrections []DreamCorrection, demand []string) string {
 	var sb strings.Builder
 	for i, u := range updates {
 		snippet := strings.TrimSpace(u.Content)
@@ -98,6 +103,13 @@ func buildCritiquePrompt(updates []wikiUpdate, indexContent string, corrections 
 		snippet = strings.ReplaceAll(snippet, "\n", " ")
 		fmt.Fprintf(&sb, "[%d] action=%s path=%s title=%q summary=%q\n    content: %s\n",
 			i, u.Action, u.Path, u.Title, u.Summary, snippet)
+	}
+	demandSection := ""
+	if len(demand) > 0 {
+		demandSection = fmt.Sprintf(`
+## 미충족 수요 (최근 답하지 못한 질문 주제)
+%s
+이 주제를 다루는 제안은 기존 페이지와 일부 겹치더라도 "drop"하지 마세요 — 실제로 사용자가 찾는 지식 구멍을 메우는 제안입니다.`, strings.Join(demand, ", "))
 	}
 	correctionBlock := ""
 	if rendered := RenderDreamCorrections(corrections, 10); rendered != "" {
@@ -116,12 +128,12 @@ func buildCritiquePrompt(updates []wikiUpdate, indexContent string, corrections 
 %s
 ## 현재 위키 인덱스
 %s
-
+%s
 ## 제안 목록
 %s
 
 각 제안에 대해 JSON 배열로만 응답: [{"index":0,"verdict":"keep|drop","reason":"짧은 근거"}]
-다른 텍스트 없이 배열만.`, correctionBlock, indexContent, sb.String())
+다른 텍스트 없이 배열만.`, correctionBlock, indexContent, demandSection, sb.String())
 }
 
 // parseCritiqueDrops decodes the verdict array into a drop set indexed by

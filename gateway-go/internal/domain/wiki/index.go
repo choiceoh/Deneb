@@ -108,17 +108,39 @@ func (idx *Index) Render() string {
 		sb.WriteString(fmt.Sprintf("마지막 일지 처리: %s\n\n", idx.LastProcessed))
 	}
 
-	// Build backlink counts: for each path, count how many entries reference it.
+	sb.WriteString(renderIndexBody(idx.Entries, indexBacklinkCount(idx.Entries)))
+	return sb.String()
+}
+
+// RenderSynthesisSubset renders the same TSV format as Render, but only for the
+// given subset of entries. Backlink counts are computed over the FULL index so
+// a subset render still reports true connectivity, not the subset's own.
+func (idx *Index) RenderSynthesisSubset(subset map[string]IndexEntry) string {
+	var sb strings.Builder
+	sb.WriteString("# 위키 인덱스 (합성용 축약)\n\n")
+	sb.WriteString(renderIndexBody(subset, indexBacklinkCount(idx.Entries)))
+	return sb.String()
+}
+
+// indexBacklinkCount counts, for each path, how many entries reference it in
+// their Related list — the backlinks column the body renderer prints.
+func indexBacklinkCount(entries map[string]IndexEntry) map[string]int {
 	backlinkCount := map[string]int{}
-	for _, entry := range idx.Entries {
+	for _, entry := range entries {
 		for _, rel := range entry.Related {
 			backlinkCount[rel]++
 		}
 	}
+	return backlinkCount
+}
 
+// renderIndexBody renders the category-grouped TSV body for the given entries.
+// backlinkCount must be computed over the FULL index, so a subset render still
+// reports true backlink counts rather than the subset's own.
+func renderIndexBody(entries map[string]IndexEntry, backlinkCount map[string]int) string {
 	// Group entries by category.
 	byCategory := map[string][]indexRenderEntry{}
-	for path, entry := range idx.Entries {
+	for path, entry := range entries {
 		cat := entry.Category
 		if cat == "" {
 			cat = "(기타)"
@@ -133,18 +155,19 @@ func (idx *Index) Render() string {
 	}
 	sort.Strings(cats)
 
+	var sb strings.Builder
 	for _, cat := range cats {
-		entries := byCategory[cat]
-		sort.Slice(entries, func(i, j int) bool {
-			if entries[i].entry.Importance != entries[j].entry.Importance {
-				return entries[i].entry.Importance > entries[j].entry.Importance
+		catEntries := byCategory[cat]
+		sort.Slice(catEntries, func(i, j int) bool {
+			if catEntries[i].entry.Importance != catEntries[j].entry.Importance {
+				return catEntries[i].entry.Importance > catEntries[j].entry.Importance
 			}
-			return entries[i].path < entries[j].path
+			return catEntries[i].path < catEntries[j].path
 		})
 
 		sb.WriteString(fmt.Sprintf("## %s\n\n", cat))
 		sb.WriteString("id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks\tcreated\trelated\n")
-		for _, e := range entries {
+		for _, e := range catEntries {
 			tags := strings.Join(e.entry.Tags, ",")
 			imp := ""
 			if e.entry.Importance > 0 {

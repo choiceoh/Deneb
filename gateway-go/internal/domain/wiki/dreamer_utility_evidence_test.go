@@ -102,3 +102,66 @@ func TestRenderUtilityEvidence_ReportsRatesAndDemand(t *testing.T) {
 		t.Errorf("demand line missing from evidence block: %q", got)
 	}
 }
+
+// The dreamer-scoped distribution must count ONLY pages the dreamer wrote —
+// an operator/system page that earned recall must not enter the denominator,
+// or the rules would be told the dreamer's routing is healthier than it is.
+func TestDreamerWrittenUtilityByKind_ScopesToDreamerPages(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	old := now.Add(-72 * time.Hour).Format(time.RFC3339)
+	capsules := []processedDiaryCapsule{
+		{At: old, Paths: []string{"프로젝트/a/대표.md", "인물/김성훈.md"}},
+	}
+	recalls := map[string]RecallUsage{
+		"프로젝트/a/대표.md": {Reads: 3},   // dreamer-written + observed use
+		"인물/김성훈.md":    {Injects: 5}, // dreamer-written + exposure only
+		"프로젝트/b/대표.md": {Reads: 2},   // operator-written — must NOT count
+	}
+	groups := dreamerWrittenUtilityByKind(capsules, recalls, now)
+	byKind := map[string]utilityGroup{}
+	for _, g := range groups {
+		byKind[g.Kind] = g
+	}
+	if g := byKind["프로젝트/대표"]; g.Written != 1 || g.Recalled != 1 {
+		t.Errorf("프로젝트/대표 = %+v, want written=1 recalled=1", g)
+	}
+	if g := byKind["인물"]; g.Written != 1 || g.Recalled != 0 {
+		t.Errorf("인물 = %+v, want written=1 recalled=0 (inject-only must not count)", g)
+	}
+	if len(groups) != 2 {
+		t.Errorf("expected exactly 2 kinds, got %d: %+v", len(groups), groups)
+	}
+}
+
+// renderDreamerUtilityEvidence reads the capsule history and the recall ledger,
+// and only produces a block when both have signal.
+func TestRenderDreamerUtilityEvidence_EmptyAndWithTraffic(t *testing.T) {
+	t.Parallel()
+	s := missStore(t)
+	wd := &WikiDreamer{store: s}
+	if got := wd.renderDreamerUtilityEvidence(time.Now()); got != "" {
+		t.Fatalf("empty ledger produced a block: %q", got)
+	}
+
+	// A dreamer-written page that earned observed use, past the grace window.
+	now := time.Now()
+	old := now.Add(-72 * time.Hour).Format(time.RFC3339)
+	if err := wd.saveDiaryProcessState(diaryProcessState{
+		Version: 1,
+		Files:   map[string]diaryFileState{},
+		Recent:  []processedDiaryCapsule{{At: old, Paths: []string{"프로젝트/a/대표.md"}}},
+	}); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+	if err := s.RecordRecallEvents([]RecallEvent{{Path: "프로젝트/a/대표.md", Event: RecallEventRead}}); err != nil {
+		t.Fatalf("record hit: %v", err)
+	}
+	got := wd.renderDreamerUtilityEvidence(time.Now())
+	if got == "" {
+		t.Fatal("expected a block once the ledger has traffic and a dreamer-written page")
+	}
+	if !strings.Contains(got, "드리머 작성 1쪽, 실제 회상 1쪽 (100%)") {
+		t.Errorf("dreamer-scoped rate line missing/incorrect: %q", got)
+	}
+}

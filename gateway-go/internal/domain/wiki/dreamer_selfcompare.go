@@ -478,6 +478,25 @@ func (wd *WikiDreamer) reviseDreamRules(ctx context.Context, since []dreamCompar
 이 분포는 취향이 아니라 실제 사용 기록입니다. 회상률이 낮은 종류는 덜/짧게 쓰고, 실제로 회상되는 종류와 답 못한 수요 주제 쪽으로 합성을 기울이세요.
 `, utility)
 	}
+
+	// Dreamer-scoped utility + its trend: the whole-index distribution above
+	// mixes operator/system pages into the denominator; this one isolates the
+	// pages the dreamer itself wrote, and the trend shows whether that utility
+	// is rising or decaying across recent cycles — consequence, not taste.
+	dreamerUtility := wd.renderDreamerUtilityEvidence(dentime.Now())
+	dreamerUtilitySection := ""
+	if dreamerUtility != "" {
+		dreamerUtilitySection = fmt.Sprintf(`
+## 드리머 자체 출력 효용 (드리머가 쓴 페이지만, 최근 30일)
+%s
+이건 드리머 자신이 만든 페이지의 실제 회상률입니다. 회상률이 낮은 종류는 드리머가 그 종류를 과잉 생성한다는 신호 — 해당 종류 생성을 줄이거나, cues·연결을 강화해 회상되게 하세요.
+`, dreamerUtility)
+	}
+	trendSection := ""
+	if trend := wd.renderDreamQualityTrend(); trend != "" {
+		trendSection = fmt.Sprintf("\n%s\n", trend)
+	}
+
 	prompt := fmt.Sprintf(`당신은 위키 드리머의 합성 규칙 유지보수자입니다. 아래는 현재 규칙과, 사이클 간 자기비교에서 집계된 반복 약점입니다.
 
 ## 반복 약점 (카운트 높은 순 — 최우선: %s)
@@ -486,6 +505,7 @@ func (wd *WikiDreamer) reviseDreamRules(ctx context.Context, since []dreamCompar
 ## 최근 비교 근거
 %s
 %s
+%s%s
 ## 현재 규칙
 %s
 
@@ -493,7 +513,7 @@ func (wd *WikiDreamer) reviseDreamRules(ctx context.Context, since []dreamCompar
 반복 약점을 겨냥해 규칙을 **최소 수정**하세요 — 관련 규칙 한두 줄을 고치거나 짧은 줄 하나를 추가하는 수준. 전면 재작성 금지.
 불변식은 절대 제거/약화 금지: 6개 카테고리 체계, 프로젝트 폴더 슬롯(대표.md·로그.md 등), JSON 배열 출력 계약, 추측 금지 계열 규칙, 시스템 자동 관리 페이지 규칙.
 수정된 **전체 규칙 블록**을 '## 규칙'부터 끝까지 그대로 출력하세요. 다른 텍스트 없이.`,
-		target, renderWeaknessCounts(counts), renderRecentComparisons(since, 6), utilitySection, current)
+		target, renderWeaknessCounts(counts), renderRecentComparisons(since, 6), utilitySection, dreamerUtilitySection, trendSection, current)
 
 	resp, err := wd.client.Complete(ctx,
 		wd.llmRequest("You maintain a synthesis-rules document. Output only the full revised rules block.", prompt, dreamRulesReviseMaxTokens))

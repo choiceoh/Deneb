@@ -119,3 +119,84 @@ func (wd *WikiDreamer) renderUtilityEvidence(now time.Time) string {
 	}
 	return b.String()
 }
+
+// dreamerWrittenUtilityByKind is the dreamer-scoped counterpart of
+// utilityByKind: it buckets only the pages the DREAMER wrote (the capsule
+// history) into page kinds and counts written-vs-recalled. utilityByKind spans
+// the whole index — operator- and system-authored pages dominate the
+// denominator and dilute the signal about the dreamer's own routing. This is
+// the honest feedback: of the pages the dreamer chose to create, which kinds
+// later earned recall. The grace/window filters mirror computeDreamQuality so
+// the numbers the revision prompt sees agree with the numbers the quality score
+// reports.
+func dreamerWrittenUtilityByKind(capsules []processedDiaryCapsule, recalls map[string]RecallUsage, now time.Time) []utilityGroup {
+	agg := map[string]*utilityGroup{}
+	seen := map[string]struct{}{}
+	for _, cap := range capsules {
+		at, err := time.Parse(time.RFC3339, cap.At)
+		if err != nil || now.Sub(at) < utilityGrace {
+			continue // too fresh to fairly judge
+		}
+		if now.Sub(at) > utilityWindow {
+			continue // past the ledger's judgment window
+		}
+		for _, p := range cap.Paths {
+			if p == "" {
+				continue
+			}
+			if _, dup := seen[p]; dup {
+				continue
+			}
+			seen[p] = struct{}{}
+			kind := pageKind(p)
+			g, ok := agg[kind]
+			if !ok {
+				g = &utilityGroup{Kind: kind}
+				agg[kind] = g
+			}
+			g.Written++
+			if usage, hit := recalls[p]; hit && usage.Used() {
+				g.Recalled++
+			}
+		}
+	}
+	out := make([]utilityGroup, 0, len(agg))
+	for _, g := range agg {
+		out = append(out, *g)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Written != out[j].Written {
+			return out[i].Written > out[j].Written
+		}
+		return out[i].Kind < out[j].Kind
+	})
+	if len(out) > utilityEvidenceGroups {
+		out = out[:utilityEvidenceGroups]
+	}
+	return out
+}
+
+// renderDreamerUtilityEvidence formats the dreamer-scoped written-vs-recalled
+// distribution for the revision prompt. Returns "" when there is no recall
+// ledger traffic or no judgeable dreamer-written capsules yet — an empty block
+// is better than teaching the rules from zero evidence.
+func (wd *WikiDreamer) renderDreamerUtilityEvidence(now time.Time) string {
+	recalls := wd.store.RecallUsageScoreCounts(now)
+	if len(recalls) == 0 {
+		return ""
+	}
+	capsules := wd.loadDiaryProcessState().Recent
+	groups := dreamerWrittenUtilityByKind(capsules, recalls, now)
+	if len(groups) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, g := range groups {
+		pct := 0.0
+		if g.Written > 0 {
+			pct = float64(g.Recalled) / float64(g.Written) * 100
+		}
+		fmt.Fprintf(&b, "- %s: 드리머 작성 %d쪽, 실제 회상 %d쪽 (%.0f%%)\n", g.Kind, g.Written, g.Recalled, pct)
+	}
+	return b.String()
+}

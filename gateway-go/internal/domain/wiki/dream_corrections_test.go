@@ -53,7 +53,7 @@ func TestCritiquePromptCarriesDisconfirmingBlock(t *testing.T) {
 	}
 	corrections := []DreamCorrection{{ID: "dc-1", Page: "사용자/나.md", Note: "내 출근 시간은 10시다"}}
 
-	withBlock := buildCritiquePrompt(updates, "INDEX", corrections)
+	withBlock := buildCritiquePrompt(updates, "INDEX", corrections, nil)
 	if !strings.Contains(withBlock, "사용자 반증") || !strings.Contains(withBlock, "내 출근 시간은 10시다") ||
 		!strings.Contains(withBlock, "사용자/나.md") {
 		t.Fatalf("prompt must carry the 반증 block:\n%s", withBlock)
@@ -62,7 +62,7 @@ func TestCritiquePromptCarriesDisconfirmingBlock(t *testing.T) {
 		t.Fatalf("drop criteria must mention 반증 conflicts:\n%s", withBlock)
 	}
 
-	without := buildCritiquePrompt(updates, "INDEX", nil)
+	without := buildCritiquePrompt(updates, "INDEX", nil, nil)
 	if strings.Contains(without, "## 사용자 반증") || strings.Contains(without, "출근 시간은 10시다") {
 		t.Fatalf("no corrections must mean no block:\n%s", without)
 	}
