@@ -276,6 +276,16 @@ func (wd *WikiDreamer) detectStaleSuperseded() []verifyFinding {
 		if err != nil || page == nil || page.Meta.Archived || page.Meta.SupersededBy == "" {
 			continue
 		}
+		// Never archive a layout slot or raw evidence on the strength of a
+		// superseded_by flag: MarkSuperseded now refuses to set one there, but
+		// pages already carrying a bad flag (a live project 로그.md, a 거래 ledger,
+		// mail analyses) would otherwise be archived 30 days later and drop out
+		// of recall entirely (validity 0.3 × 0.15). Those flags are repaired, not
+		// acted on.
+		if supersedePrecondition(rp, page.Meta.SupersededBy) != nil {
+			wd.logger.Debug("wiki-verify: skipping stale-superseded archive on a layout page", "path", rp)
+			continue
+		}
 		last := strings.TrimSpace(page.Meta.Updated)
 		if last == "" {
 			last = strings.TrimSpace(page.Meta.Created)
