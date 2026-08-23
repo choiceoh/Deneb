@@ -214,6 +214,11 @@ func (at *AbortTracker) SessionIdleWait(sessionKey string) <-chan struct{} {
 // signalIdleWaitersLocked wakes every waiter whose session just went idle. It
 // runs on each registry removal, which is rare compared to the polls it
 // replaces, and only over sessions somebody is actually waiting on.
+//
+// EVERY path that removes an entry must call this: cancel paths drop the entry
+// outright, so a waiter left behind can no longer be rescued by Cleanup or by
+// the expiry sweep (both look for an entry that is already gone) and the
+// session's ingress queue would wedge until the request context dies.
 func (at *AbortTracker) signalIdleWaitersLocked() {
 	for sessionKey, waiter := range at.idleWaiters {
 		if at.hasActiveRunLocked(sessionKey) {
@@ -307,6 +312,7 @@ func (at *AbortTracker) InterruptSession(sessionKey string) {
 	for _, id := range toDelete {
 		delete(at.entries, id)
 	}
+	at.signalIdleWaitersLocked()
 	at.signalDrainedLocked()
 	at.mu.Unlock()
 }
@@ -321,6 +327,7 @@ func (at *AbortTracker) CancelByRunID(runID string) (sessionKey, abortedRunID st
 		sessionKey = entry.SessionKey
 		abortedRunID = runID
 		delete(at.entries, runID)
+		at.signalIdleWaitersLocked()
 		at.signalDrainedLocked()
 	}
 	return sessionKey, abortedRunID
@@ -347,6 +354,7 @@ func (at *AbortTracker) CancelBySessionKeyWithCause(sessionKey string, cause err
 			delete(at.entries, id)
 		}
 	}
+	at.signalIdleWaitersLocked()
 	at.signalDrainedLocked()
 	return abortedRunID
 }
@@ -368,6 +376,7 @@ func (at *AbortTracker) Close() {
 		at.draining = true
 		at.drained = make(chan struct{})
 	}
+	at.signalIdleWaitersLocked()
 	at.signalDrainedLocked()
 	at.mu.Unlock()
 }

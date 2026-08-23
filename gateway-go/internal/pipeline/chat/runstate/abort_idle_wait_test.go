@@ -100,3 +100,38 @@ func TestSessionIdleWaitReleasedByFatalDrain(t *testing.T) {
 		t.Fatal("fatal drain must release ingress waits")
 	}
 }
+
+// Cancel paths drop the entry outright, so a waiter they leave behind can no
+// longer be rescued by Cleanup or the expiry sweep — both look for an entry that
+// is already gone. Every removal path must release the wait itself.
+func TestSessionIdleWaitReleasedByEveryCancelPath(t *testing.T) {
+	cases := []struct {
+		name   string
+		cancel func(at *AbortTracker)
+	}{
+		{"InterruptSession", func(at *AbortTracker) { at.InterruptSession("client:main") }},
+		{"CancelByRunID", func(at *AbortTracker) { at.CancelByRunID("run-1") }},
+		{"CancelBySessionKey", func(at *AbortTracker) { at.CancelBySessionKey("client:main") }},
+		{"Close", func(at *AbortTracker) { at.Close() }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			at := NewAbortTracker()
+			if !at.TryRegister("run-1", idleTestEntry("client:main")) {
+				t.Fatal("register run-1")
+			}
+			wait := at.SessionIdleWait("client:main")
+			select {
+			case <-wait:
+				t.Fatal("busy session must not be reported idle")
+			default:
+			}
+			tc.cancel(at)
+			select {
+			case <-wait:
+			case <-time.After(time.Second):
+				t.Fatal("cancel path left the ingress wait blocked")
+			}
+		})
+	}
+}
