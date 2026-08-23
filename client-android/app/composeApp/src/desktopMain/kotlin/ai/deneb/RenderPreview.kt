@@ -99,6 +99,26 @@ private fun renderBrowser(name: String, scheme: ColorScheme) {
     scene.close()
 }
 
+private fun renderBrowserError(name: String, scheme: ColorScheme) {
+    val state = DenebWebViewState("https://offline.example").apply {
+        markMainFrameFailed("주소를 찾을 수 없습니다 — 도메인이 맞는지 확인해 주세요")
+    }
+    val scene = ImageComposeScene(width = 824, height = 900, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebBrowserChrome(state = state, onBack = {}, tabCount = 3, onShowTabs = {}) {
+                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    Text("(웹 페이지 — Android WebView)", style = DenebType.meta, color = denebHint())
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
 private fun renderBrowserStart(name: String, scheme: ColorScheme, empty: Boolean) {
     val state = DenebWebViewState("")
     val bookmarks = if (empty) {
@@ -172,6 +192,8 @@ fun main() {
     renderScreen("states_light.png", "states", LightColorScheme, 824, 1500)
     renderBrowser("browser_dark.png", DarkColorScheme)
     renderBrowser("browser_light.png", LightColorScheme)
+    renderBrowserError("browser_error_dark.png", DarkColorScheme)
+    renderBrowserError("browser_error_light.png", LightColorScheme)
     renderBrowserStart("browser_start_dark.png", DarkColorScheme, empty = false)
     renderBrowserStart("browser_start_light.png", LightColorScheme, empty = false)
     renderBrowserStart("browser_start_empty_dark.png", DarkColorScheme, empty = true)

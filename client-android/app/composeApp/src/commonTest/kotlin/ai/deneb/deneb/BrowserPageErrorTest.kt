@@ -45,6 +45,29 @@ class BrowserPageErrorTest {
         assertTrue(browserRendererGoneMessage(crashed = true).contains("비정상 종료"))
         assertTrue(browserRendererGoneMessage(crashed = false).contains("메모리"))
     }
+
+    @Test
+    fun httpGatewayStatusesOverlayAndSiteErrorsDoNot() {
+        assertTrue(browserHttpErrorMessage(502).orEmpty().contains("연결하지 못했"))
+        assertTrue(browserHttpErrorMessage(503).orEmpty().contains("연결하지 못했"))
+        assertTrue(browserHttpErrorMessage(504).orEmpty().contains("연결하지 못했"))
+        assertTrue(browserHttpErrorMessage(408).orEmpty().contains("시간이 초과"))
+        assertTrue(browserHttpErrorMessage(429).orEmpty().contains("너무 많"))
+        assertEquals(null, browserHttpErrorMessage(404))
+        assertEquals(null, browserHttpErrorMessage(401))
+        assertEquals(null, browserHttpErrorMessage(500))
+        assertEquals(null, browserHttpErrorMessage(200))
+    }
+
+    @Test
+    fun sslFailuresMatchTheAskedPageNotThirdPartyFrames() {
+        assertTrue(browserSslErrorAffectsPage("https://pay.example/auth", "https://pay.example/auth"))
+        assertTrue(browserSslErrorAffectsPage("https://pay.example/auth#x", "https://pay.example/auth"))
+        assertTrue(browserSslErrorAffectsPage("https://pay.example/auth/", "https://pay.example/auth"))
+        assertTrue(browserSslErrorAffectsPage("", "https://pay.example/auth"))
+        assertFalse(browserSslErrorAffectsPage("https://shop.example/", "https://tracker.example/pixel"))
+        assertFalse(browserSslErrorAffectsPage("https://shop.example/", ""))
+    }
 }
 
 class BrowserJsDialogTest {

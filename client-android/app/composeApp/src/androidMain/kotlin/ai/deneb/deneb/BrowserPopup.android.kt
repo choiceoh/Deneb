@@ -18,6 +18,7 @@ import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -184,7 +185,7 @@ internal class BrowserPopupLayer(
 
             override fun onPageFinished(view: WebView, url: String) {
                 if (view !== top) return
-                injectSiteQuirk(view, url)
+                if (state.popupError == null) injectSiteQuirk(view, url)
                 publishLocation(view, loading = false)
             }
 
@@ -197,13 +198,33 @@ internal class BrowserPopupLayer(
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                 if (!request.isForMainFrame || view !== top) return
-                state.popupError = browserPageErrorMessage(error.errorCode, error.description?.toString())
+                if (state.popupError == null) {
+                    state.popupError = browserPageErrorMessage(error.errorCode, error.description?.toString())
+                }
+                publishLocation(view, loading = false)
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView,
+                request: WebResourceRequest,
+                errorResponse: WebResourceResponse,
+            ) {
+                if (!request.isForMainFrame || view !== top) return
+                val message = browserHttpErrorMessage(errorResponse.statusCode) ?: return
+                state.popupError = message
                 publishLocation(view, loading = false)
             }
 
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
                 handler.cancel()
                 if (view !== top) return
+                val failing = error.url.orEmpty()
+                if (
+                    !browserSslErrorAffectsPage(view.url.orEmpty(), failing) &&
+                    !browserSslErrorAffectsPage(state.popupUrl, failing)
+                ) {
+                    return
+                }
                 state.popupError = browserSslErrorMessage(error.primaryError)
                 publishLocation(view, loading = false)
             }

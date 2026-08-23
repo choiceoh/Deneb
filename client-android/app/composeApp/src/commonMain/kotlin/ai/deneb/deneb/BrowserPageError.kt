@@ -92,6 +92,33 @@ internal fun browserRendererGoneMessage(crashed: Boolean): String = if (crashed)
     "메모리 확보를 위해 페이지가 종료됐습니다"
 }
 
+/**
+ * HTTP statuses whose response body is almost never a useful page — overlay
+ * instead of showing nginx/CDN English. Site 404/500 HTML stays visible.
+ */
+internal fun browserHttpErrorMessage(status: Int): String? = when (status) {
+    408 -> "응답이 없어 시간이 초과됐습니다"
+    429 -> "요청이 너무 많습니다 — 잠시 후 다시 시도해 주세요"
+    502, 503, 504 -> "서버에 연결하지 못했습니다"
+    else -> null
+}
+
+/**
+ * True when an SSL failure is for the document the user asked for, not a
+ * third-party iframe or image. [pageUrl] may still be the previous page
+ * while a main-frame navigation is in flight, so callers also pass the
+ * URL being loaded.
+ */
+internal fun browserSslErrorAffectsPage(pageUrl: String, errorUrl: String): Boolean {
+    val failing = browserErrorUrlKey(errorUrl)
+    if (failing.isEmpty()) return false
+    val page = browserErrorUrlKey(pageUrl)
+    if (page.isEmpty()) return true
+    return page == failing
+}
+
+private fun browserErrorUrlKey(url: String): String = url.trim().substringBefore('#').trimEnd('/').lowercase()
+
 /** A pending `alert()` / `confirm()` / `prompt()` from the page. */
 internal class BrowserJsDialog(
     val kind: Kind,

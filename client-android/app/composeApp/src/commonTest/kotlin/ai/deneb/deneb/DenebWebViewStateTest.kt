@@ -297,6 +297,31 @@ class DenebWebViewStateTest {
     }
 
     @Test
+    fun finishedNavigationKeepsAMainFrameFailure() {
+        val state = DenebWebViewState("https://down.example")
+        state.loading = true
+        state.progress = 40
+        state.markMainFrameFailed("주소를 찾을 수 없습니다 — 도메인이 맞는지 확인해 주세요")
+        state.markRendererRecoveryStarted("https://down.example")
+
+        assertEquals("주소를 찾을 수 없습니다 — 도메인이 맞는지 확인해 주세요", state.loadError)
+        assertEquals("https://down.example", state.currentUrl)
+        assertFalse(state.loading)
+        assertEquals(100, state.progress)
+        assertFalse(state.rendererRecoveryPending)
+    }
+
+    @Test
+    fun rendererRecoveryStartClearsTheCrashBanner() {
+        val state = DenebWebViewState("https://example.com")
+        state.markRendererGone(crashed = true)
+        state.markRendererRecoveryStarted("https://example.com")
+
+        assertEquals(null, state.loadError)
+        assertFalse(state.rendererRecoveryPending)
+    }
+
+    @Test
     fun retryWhilePopupClearsPopupErrorWithoutTouchingTheOpener() {
         val state = DenebWebViewState("https://example.com")
         state.loadError = "오프너 실패"
