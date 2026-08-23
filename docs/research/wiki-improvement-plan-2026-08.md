@@ -1,6 +1,6 @@
 # 위키 개선 방안 2026-08
 
-**Status:** proposal backlog · 1차 갱신 2026-08-23 저녁 — W-가드 레인 착지 상태 반영 (ideation → adopted → implemented 어휘는 `improvement-ideas.md`와 동일)
+**Status:** implemented (2026-08-23) — W1~W17 전 항목 착지. 구현 결과는 §11, 잔여는 §12. (어휘는 `improvement-ideas.md`와 동일)
 **Audience:** Deneb 운영자 + 차기 AI 세션(구현 레인)
 **Scope:** 위키 서브시스템 전체 — 저장소(`domain/wiki`)·자율 유지보수(dreamer / verify / review / research / scout / digest)·회상(recall)·계측(bench·원장)·클라이언트 표면. 검색 엔진 재작성·Graphify 투자·위키 UI 신설은 범위 밖(§9).
 **Methodology (2026-08-23):** 코드(`gateway-go/internal/domain/wiki` 22K LOC 외) + 라이브 위키(`~/.deneb/wiki`, 읽기 전용) + 14일 게이트웨이 저널 + 위키 git 스냅샷 이력 + 프로덕션 패리티 `make recall-health` 실측(8m17s)을 10개 영역 조사 에이전트가 병렬로 훑고, 73개 발견을 3렌즈(증거 재검증·이력/중복·리스크) 패널이 건별 판정했다. **오늘 하루 동안 다른 레인이 위키 PR 5건을 랜딩하고 `wikicurate --apply`를 2회 적용했으므로(§2), 이 문서는 그 이후(12:16 KST) 상태를 기준선으로 잔여 항목만 제안한다.**
@@ -22,20 +22,20 @@
 | W1 | verify 오분류 자동이동 레이아웃 가드 (서브폴더 민팅·원장·프로젝트 슬롯·존재하지 않는 경로 금지) | **P0** | S | P3 | 착지 [#4600](https://github.com/choiceoh/Deneb/pull/4600) — 잔여: 입력 필터(4)·프롬프트 가이드(5) |
 | W2 | 드리머 정체성 불변식 — id/summary fill-only, 리타겟 시 본문만 append, 대표 전용 필드는 대표에만 | **P0** | M | P3 | 1단계 착지 [#4603](https://github.com/choiceoh/Deneb/pull/4603) — 잔여: DeriveID(3)·id_mismatch(4)·수리(5) |
 | W3 | verify '동일 ID' 자동 병합 조건 강화 + `FoldDuplicate` 슬롯/코드/타입 백스톱 | **P0** | S | P3 | 착지 [#4601](https://github.com/choiceoh/Deneb/pull/4601) — 잔여: type 백스톱(iv) |
-| W4 | 리타겟(`retargetDreamUpdate`) 수용 조건 — 카테고리·페이지 종류 일치 + 제목 토큰 겹침 | P1 | M | P3 | — |
+| W4 | 리타겟(`retargetDreamUpdate`) 수용 조건 — 카테고리·페이지 종류 일치 + 제목 토큰 겹침 | P1 | M | P3 | 착지 [#4617](https://github.com/choiceoh/Deneb/pull/4617) |
 | W5 | `MarkSuperseded` 전제조건 + `detectStaleSuperseded` 슬롯 스킵 + ymn 로그 등 데이터 수리 (08-30 전) | **P0** | M | P3 | 착지 [#4605](https://github.com/choiceoh/Deneb/pull/4605)(수리 포함) — 잔여: 주제 앵커·연대순·강등 UX |
-| W6 | 메일 재분류 신호 정밀도 — 메일↔메일 엣지 비소유·자사명 클라이언트 키 차단·tri-state 모호성·archived 필터·스냅샷/캡 (무장 이후 긴급) | P1 | S | P3 | 가드 착지 [#4606](https://github.com/choiceoh/Deneb/pull/4606) — 잔여: 스냅샷·관찰 원장 구조화·refile dry-run |
-| W7 | 거래 원장 위치 결정(A/B) + 17장 복귀 + `cmd/wikicurate` '조직→인물' 규칙 수정 + 골드 26경로 선repoint | P1 | S–M | n/a | — (운영자 결정 §8-1 대기; 선행 W1 가드는 착지, 골드 repoint는 #4596에서 36경로 착지) |
-| W8 | 인물 코퍼스 정책 — dossier 200행 캡 버그·스텁 전용 강등·본문 동명이인 가드·신원키 중복 검출·스텁 related 스킵·summary 규약·효용 분모 | P1 | M | P5 | 1 착지 [#4615](https://github.com/choiceoh/Deneb/pull/4615) — 2~6 잔여 |
-| W9 | 계측 복구 — nightly recall-health가 한 번도 안 돌았음(go 미발견·tee 마스킹)·벤치 확장암 비패리티·골드 repoint 도구·골드 백업 | P1 | S | P3 | 나이틀리 착지 [#4608](https://github.com/choiceoh/Deneb/pull/4608) — 잔여: 확장암 패리티·골드 도구·골드 백업 |
-| W10 | 본문 [[위키링크]] 복구(33% 깨짐) + `PreserveUpdated` 메타-전용 쓰기 계약(선행) + 빈 본문 생성 가드 | P1 | M | P3 | 계약·빈 본문 가드 착지 [#4608](https://github.com/choiceoh/Deneb/pull/4608) — 잔여: 위키링크 복구 |
-| W11 | 저장/성능 — 벡터 캐시 181MB JSON→바이너리+비동기 로드(부팅 −2.7s), 위키 git ignore/gc, 백업에서 재생성 캐시 제외, by-hash refresh | P2 | M | n/a | 4 착지 [#4611](https://github.com/choiceoh/Deneb/pull/4611) — 1~3 잔여 |
-| W12 | 프로덕션 쿼리확장 관측성·예산 가드(4s 천장 vs 1.5s 프리플라이트) | P2 | M | P5 | — |
-| W13 | 회상 라우팅 계측(`route_followed`) + 수요 원장 트리거 | P2 | M | P5 | — |
-| W14 | cite v2 + 원문 질의(privacy 게이트) → traffic gold 증식 | P2 | M | P5 | — |
-| W15 | 표면 — Trust Inbox 'wiki-maint' 카드(모호 클래스만)·`get_page` 메타/출처·챗 `wiki_move` 툴·죽은 `wiki.*` RPC 정리 | P2 | M | P5/P4 | — |
-| W16 | 린트 패밀리 3레인(CI fixture 린트 · verify advisory · 쓰기 가드) + `wiki-layout.md` 드리프트 패치 | P2 | M | P1/P3 | — |
-| W17 | P3 묶음 — 로그 헤더 문법/회전 경계, 날짜형 로그 페이지 정책, inert 규칙 주석, 공인 인물 태그, 프로젝트 화면 stage/질문 칩, cues 수치 갱신 | P3 | S | — | — |
+| W6 | 메일 재분류 신호 정밀도 — 메일↔메일 엣지 비소유·자사명 클라이언트 키 차단·tri-state 모호성·archived 필터·스냅샷/캡 (무장 이후 긴급) | P1 | S | P3 | 착지 [#4606](https://github.com/choiceoh/Deneb/pull/4606) — 잔여: 스냅샷·구조화 원장·스레드 신호 |
+| W7 | 거래 원장 위치 결정(A/B) + 17장 복귀 + `cmd/wikicurate` '조직→인물' 규칙 수정 + 골드 26경로 선repoint | P1 | S–M | n/a | 착지 [#4620](https://github.com/choiceoh/Deneb/pull/4620) — A안(프로젝트/거래 단일 정본) + 라이브 18장 복귀 |
+| W8 | 인물 코퍼스 정책 — dossier 200행 캡 버그·스텁 전용 강등·본문 동명이인 가드·신원키 중복 검출·스텁 related 스킵·summary 규약·효용 분모 | P1 | M | P5 | 착지 [#4615](https://github.com/choiceoh/Deneb/pull/4615)·[#4625](https://github.com/choiceoh/Deneb/pull/4625)·[#4627](https://github.com/choiceoh/Deneb/pull/4627) — 잔여: 신원키 중복 페이지·summary 규약 |
+| W9 | 계측 복구 — nightly recall-health가 한 번도 안 돌았음(go 미발견·tee 마스킹)·벤치 확장암 비패리티·골드 repoint 도구·골드 백업 | P1 | S | P3 | 착지 [#4608](https://github.com/choiceoh/Deneb/pull/4608) — 잔여: 확장암 패리티·골드 repoint·백업 편입 |
+| W10 | 본문 [[위키링크]] 복구(33% 깨짐) + `PreserveUpdated` 메타-전용 쓰기 계약(선행) + 빈 본문 생성 가드 | P1 | M | P3 | 착지 [#4608](https://github.com/choiceoh/Deneb/pull/4608)·[#4625](https://github.com/choiceoh/Deneb/pull/4625) |
+| W11 | 저장/성능 — 벡터 캐시 181MB JSON→바이너리+비동기 로드(부팅 −2.7s), 위키 git ignore/gc, 백업에서 재생성 캐시 제외, by-hash refresh | P2 | M | n/a | 착지 [#4611](https://github.com/choiceoh/Deneb/pull/4611)·[#4626](https://github.com/choiceoh/Deneb/pull/4626)·[#4633](https://github.com/choiceoh/Deneb/pull/4633) — 잔여: embedindex 포팅 |
+| W12 | 프로덕션 쿼리확장 관측성·예산 가드(4s 천장 vs 1.5s 프리플라이트) | P2 | M | P5 | 착지 [#4625](https://github.com/choiceoh/Deneb/pull/4625) |
+| W13 | 회상 라우팅 계측(`route_followed`) + 수요 원장 트리거 | P2 | M | P5 | 착지 [#4623](https://github.com/choiceoh/Deneb/pull/4623) — 잔여: route_followed |
+| W14 | cite v2 + 원문 질의(privacy 게이트) → traffic gold 증식 | P2 | M | P5 | 착지 [#4629](https://github.com/choiceoh/Deneb/pull/4629) — 잔여: rawQuery |
+| W15 | 표면 — Trust Inbox 'wiki-maint' 카드(모호 클래스만)·`get_page` 메타/출처·챗 `wiki_move` 툴·죽은 `wiki.*` RPC 정리 | P2 | M | P5/P4 | 착지 [#4622](https://github.com/choiceoh/Deneb/pull/4622) — 잔여: wiki-maint 카드·wiki_move 툴 |
+| W16 | 린트 패밀리 3레인(CI fixture 린트 · verify advisory · 쓰기 가드) + `wiki-layout.md` 드리프트 패치 | P2 | M | P1/P3 | 착지 [#4622](https://github.com/choiceoh/Deneb/pull/4622) — 잔여: 린트 2종 |
+| W17 | P3 묶음 — 로그 헤더 문법/회전 경계, 날짜형 로그 페이지 정책, inert 규칙 주석, 공인 인물 태그, 프로젝트 화면 stage/질문 칩, cues 수치 갱신 | P3 | S | — | 착지 [#4623](https://github.com/choiceoh/Deneb/pull/4623) |
 
 ---
 
@@ -343,9 +343,46 @@
 
 ---
 
-## 11. 변경 로그
+## 11. 구현 결과 (2026-08-23, W1~W17 전량 착지)
+
+| 항목 | PR | 무엇이 바뀌었나 |
+|---|---|---|
+| W1 | [#4600](https://github.com/choiceoh/Deneb/pull/4600) | `IsLayoutManagedPath` 신설 · 자동이동에 경로 존재·레이아웃 소유·`type: deal` 게이트 · 서브폴더 민팅 금지 · move 캡 3 · 사유 로깅 |
+| W3 | [#4601](https://github.com/choiceoh/Deneb/pull/4601) | id 동일 **+ 제목 동일**일 때만 자동 병합(그 외 advisory) · `FoldDuplicate` 슬롯/코드/타입 백스톱 |
+| W2 | [#4603](https://github.com/choiceoh/Deneb/pull/4603) | id/summary fill-only · `retargetedFrom` · 대표 전용 필드 격리 · 슬롯 페이지 제목 보호 |
+| W5 | [#4605](https://github.com/choiceoh/Deneb/pull/4605) | `supersedePrecondition` · stale-superseded 슬롯 스킵 · **라이브 5장 수리**(ymn 로그 08-30 아카이브 저지) |
+| W6 | [#4606](https://github.com/choiceoh/Deneb/pull/4606) | 메일↔메일 엣지 비소유 · 자사명 client 키 차단 · tri-state 모호성 · archived 제외 · 도메인 캡 3 |
+| W9·W10 | [#4608](https://github.com/choiceoh/Deneb/pull/4608) | nightly recall-health 실행 복구 · `UpdatePageMetaOnly` · 빈 본문 생성 차단 |
+| W11 | [#4611](https://github.com/choiceoh/Deneb/pull/4611)·[#4626](https://github.com/choiceoh/Deneb/pull/4626)·[#4633](https://github.com/choiceoh/Deneb/pull/4633) | 이동 시 임베딩 재사용 · 원장/캐시 gitignore+`gc.auto=512` · 백업 캐시 제외 · **벡터 캐시 v4**(매니페스트+float32 blob, v3 자동 마이그레이션) |
+| W8 | [#4615](https://github.com/choiceoh/Deneb/pull/4615)·[#4625](https://github.com/choiceoh/Deneb/pull/4625)·[#4627](https://github.com/choiceoh/Deneb/pull/4627) | people 200행 캡 버그(106명 가시화) · 스텁 강등 0.45 + related 노이즈 차단 · 본문 동명이인 병합 중단 + `homonym` advisory |
+| W4 | [#4617](https://github.com/choiceoh/Deneb/pull/4617) | 리타겟 수용 조건(슬롯 종류 + 제목 토큰 겹침), 거부 시 제안 경로 유지 |
+| W7 | [#4620](https://github.com/choiceoh/Deneb/pull/4620) | 거래 원장 단일 정본(A안) · wikicurate 규칙 교정 · **라이브 18장 복귀** · `wiki_deal_ledger_lint` |
+| W15·W16 | [#4622](https://github.com/choiceoh/Deneb/pull/4622) | `get_page` 구조 메타 · 죽은 `wiki.*` RPC 8종 제거 · `wiki-layout.md` verify 5a~5f 표·불변식·신호 표 |
+| W13·W17 | [#4623](https://github.com/choiceoh/Deneb/pull/4623) | 라우팅 shape 로깅 · 엔트리 단위 로그 회전 · `wiki_log_header_lint` |
+| W12 | [#4625](https://github.com/choiceoh/Deneb/pull/4625) | 확장 발화 Info 로그 · ctx 잔여 600ms 미만이면 확장 생략(1차 결과 보호) |
+| W14 | [#4629](https://github.com/choiceoh/Deneb/pull/4629) | cite 매처가 프론트매터 title·프로젝트 코드까지 인식(메시지 ID 파일명 문제 해소) |
+
+**측정.** 고쳐진 `make recall-health`가 도입 이래 처음 완주 — main gold 198케이스 **p@1 83.2 · r@8 95.9 · mrr 0.885**, 로스터 커버리지 **98.6%**, 종합 **92.6**. 거래 원장 린트 0건. 인물 골드 36개 중 스텁은 1개이고 그 케이스의 정답은 동반 골드 경로에 있어 강등이 무해함을 구조적으로 확인.
+
+**운영 사고 1건.** 검증 벤치를 병렬로 돌려 메모리 여유가 6%까지 떨어지자 earlyoom이 `nemotron-embed.service`(:8002)를 종료했고, 그 시간대 프로덕션 회상이 BM25로 강등돼 있었습니다. 재시작으로 복구 — **벤치는 순차 실행**이 규칙.
+
+---
+
+## 12. 잔여 (다음 사이클)
+
+- **W8**: 신원키(이메일·전화) 기반 중복 **페이지** 검출(이영민/이영민-차장 류 — CJK 제목거리로는 영구 미감지), summary 규약, 공인 `kind: public`.
+- **W9**: 벤치 확장암 패리티(qwen vs 프로덕션 dsv4-nothink), 골드 repoint 도구, 골드셋 백업 편입, analysis-xl 재측정.
+- **W11**: `embedindex`(mail 89MB·diary 75MB)에 같은 blob 포맷 포팅, 부팅 병렬 로드.
+- **W13/W14**: `route_followed` 추종률, `rawQuery`(client 세션 한정·절단 — 원장이 gitignore라 이제 안전).
+- **W15**: Trust Inbox 'wiki-maint' 카드, 챗 `wiki_move` 툴.
+- **운영자 결정 대기**(§8): ISW 페이지 복원, 모닝레터 3장, 날짜형 로그 정책, pl2-kia-epc-002 정본 코드, pl1-cny-dev-001 client, 추적 중인 `.bak`·`.wiki.db` `git rm --cached`.
+
+---
+
+## 13. 변경 로그
 
 | 날짜 | 작성자 | 내용 |
 |---|---|---|
 | 2026-08-23 | Claude (Fable 5) | 초안 — 10영역 조사 + 3렌즈 검증 결과를 17항목(W1~W17)으로 정리; 같은 날 랜딩된 #4583/#4587/#4588/#4589/#4593·wikicurate 2회·무장 드롭인 반영; kia-002 자식 페이지 id 충돌 응급조치 기록 |
 | 2026-08-23 | ZCode (GLM-5.3) | 1차 상태 갱신 — 초안 직후 저녁까지 착지된 W1·W2(1단계)·W3·W5(수리 포함)·W6 가드·W8-1·W9(나이틀리)·W10(계약)·W11-4를 #4600·#4603·#4601·#4605·#4606·#4615·#4608·#4611로 표기(§0 상태 칼럼·각 절 상태줄·§2 표·§7~8 갱신). 회상 재측정 #4596·멀티턴 재작성 #4604·드리머 5.7/5.8/후속 #4594·#4598·#4612 반영. 원문 진단·증거는 스냅샷 그대로 유지 |
+| 2026-08-23 | Claude (Fable 5) | 2차 — W4·W7·W12·W13·W14·W15·W16·W17 및 W8/W10/W11 잔여까지 전량 구현·랜딩(PR 14건). §11 구현 결과·§12 잔여 신설, Status를 implemented로 |
