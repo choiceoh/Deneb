@@ -47,6 +47,10 @@
 | 18 | `executeAgentRun` 12개 파라미터 → struct 압축 | P2 | S |
 | 19 | Skill SKILL.md schema lint + CI | P3 | S |
 | 20 | 대용량 파일 전송 처리 (다운로드 링크 폴백) | P3 | M |
+| 21 | Trust Inbox: 자율 변경 통합 승인 대기열 (안드로이드 워크피드) | P1 | M |
+| 22 | 개인 MCP 브로커 — tailnet 경유 읽기 전용 노출 | P2 | M |
+| 23 | 인물·거래 도시에 (Business Dossier) | P2 | M |
+| 24 | 주간 기억 다이제스트 + dreamer 피드백 루프 | P2 | S |
 
 ---
 
@@ -325,6 +329,67 @@
 
 ---
 
+### 4.7 Trust Inbox: 자율 변경 통합 승인 대기열 (안드로이드) — **P1 / M · ideation**
+
+**무엇.** 시스템이 자율적으로 적용·제안하는 변경 — genesis 스킬 진화·auto-apply, `skill_lifecycle` 자기교정 후보, graduation 단계 상승, dreamer 위키 합성 — 을 안드로이드 워크피드의 승인 카드로 모으고, 카드에서 승인/거절/상세(diff)를 처리.
+
+**현황.** 부품은 존재, 연결이 없음:
+
+- 게이트웨이: `domain/workfeed/store.go`의 콜백 훅(`OnAnswer`·`OnMetaProposal`·`OnEvolveVerdict`·`OnLadder`)이 사실상 승인 큐 골격. `miniapp.workfeed.{list,ack,action.run,answer}` RPC도 이미 있음.
+- 자기교정: `pipeline/chat/tools/lifecycletool/skill_lifecycle.go` ↔ `domain/skills/genesis/tracker_self_correction.go` → `~/.deneb/data/self_correction_candidates.jsonl` (`accepted|rejected|superseded|applied` 상태 이미 정의).
+- 안드로이드: `WorkFeedPanel.kt`가 `approval:approve`/`approval:reject` 액션을 인식하는 승인 다이얼로그를 이미 보유. `DenebApprovalsScreen`(groupware 결재)이 인박스 UI 선례.
+
+**제안.**
+
+- genesis auto-apply(`runtime/heartbeat/heartbeat_auto_apply.go`), graduation(`genesis/graduation_state.go`), 자기교정 dispatch, dreamer `DreamReport`를 workfeed 카드로 발행 — 기존 `runtime/server/workfeed_dream.go` 패턴 확장.
+- 거절 액션을 각 도메인의 되돌리기와 연결: graduation 재잠금(`RelockGraduation`), 자기교정 `rejected` 처리, dreamer git 스냅숏 롤백 힌트.
+- 안드로이드: 알림 tray에 승인/거절 직접 액션 추가(기존 `DenebReplyReceiver` 인터랙티브 알림 패턴 재사용). 파괴적 액션(롤백)은 앱 내 상세 화면으로 한정.
+
+**왜.** auto-apply 표면이 skill-body → gateway-source로 졸업(#4536)하며 자율 범위가 넓어지는데, 검토·번복 표면은 jsonl grep뿐. 승인/거절 이력이 쌓이면 신뢰 경계(#4565) 운용의 실험 근거가 됨 — RSI P5(재귀 표면)의 사용자 측 완결.
+
+---
+
+### 4.8 인물·거래 도시에 (Business Dossier) — **P2 / M · ideation**
+
+**무엇.** 사람·프로젝트·거래별 종합 카드 — 최근 메일 요약, 통화·알림 이력, 관련 위키 페이지(인물/거래/프로젝트 로그), 답장 대기 약속 — 를 한 화면 타임라인으로.
+
+**현황.** 조각은 있고 조이너가 없음:
+
+- `miniapp.people.list`(`runtime/rpc/handler/handlerminiapp/knowledge/people.go`) — Gmail 발신인 × `인물` 위키 페이지 조인 (mail+wiki 2개 소스만).
+- 위키 빌딩 블록: `domain/wiki`의 `person_emails.go`·`person_resolve.go`·`counterparties.go`·`deal_records.go`·`project_log.go`.
+- `domain/phoneledger` — 통화·알림 일별 JSONL (30일 보존).
+- 클라 선례: 안드로이드 `DenebPersonScreen`(`miniapp.mail.sender_context` 기반), 안드로메다 `PeoplePane` 상세 카드.
+
+**제안.**
+
+- 게이트웨이: `people.list`를 확장하거나 `miniapp.person.dossier` 신설 — sender_context(메일) + phoneledger(통화) + deal_records/project_log(위키) 집계.
+- 클라: 레인 분리해 각자 선례 확장 — 안드로이드 `DenebPersonScreen`, 안드로메다 `PeoplePane` 상세 → 독립 pane (`panes/index.ts` PANES 등록).
+
+**왜.** README의 제품 정체성 "deep business analysis (mail, projects, people, deals)"의 열람 표면 완결. 데이터는 이미 흐르는데 검색 나열로만 접근됨.
+
+**주의.** 통화 이력 30일 초과분은 phoneledger 보존 한계 — noti-digest 위키 다이제스트와 조인해 장기 타임라인 구성.
+
+---
+
+### 4.9 주간 기억 다이제스트 + dreamer 피드백 — **P2 / S · ideation**
+
+**무엇.** dreamer가 주간에 검증·병합·만료한 기억 요약 카드(새 사실 N개 / 병합 M개 / 만료 K개 + 항목 펼침 보기)를 발행하고, 사실별 맞아요/틀려요 피드백을 dreamer 검증 루프로 회귀.
+
+**현황.**
+
+- dreamer는 `DreamReport`(`factsVerified/Merged/Expired/Pruned`, `domain/autonomous/dreamer.go`)와 위키 git 스냅숏 롤백 힌트를 이미 생성하나 **별도 감사 로그가 없고**, 소비처는 `workfeed_dream.go` 카드 1장뿐.
+- 케이던스 표면: 4.4 cadence editor(모닝/이브닝)에 주간 다이제스트가 세 번째 항목으로 자연 편입.
+
+**제안.**
+
+- `DreamReport`를 주간 롤업으로 누적(예: `~/.deneb/data/dream-reports.jsonl`) — 다이제스트 원천 + 3.3 dreamer 단위 테스트의 실데이터.
+- 발행: weekly-report 케이던스로 안드로이드 푸시. 피드백 액션은 4.7 Trust Inbox의 approval:* 메커니즘 공유.
+- "틀려요" → `dreamer_critique` 검증에 반증 증거로 주입, 만료 사실 재검토.
+
+**왜.** dreamer는 백그라운드에서 장기기억(위키)을 mutate하는 가장 영향력 큰 자율 컴포넌트인데 사용자에게 불투명. 잘못 학습된 기억의 유일한 조기 검출 경로이자, slow loop(P2)에 사용자 신호를 넣는 첫 회로.
+
+---
+
 ## 5. AI 능력 (Capabilities)
 
 ### 5.1 Anchor extraction (3.3 과 연관) — **P3 / M**
@@ -369,6 +434,27 @@
 
 ---
 
+### 5.5 개인 MCP 브로커 (외부 에이전트에 내 도구 제공) — **P2 / M · ideation**
+
+**무엇.** 게이트웨이 MCP 엔드포인트(`POST /mcp`, 2026-07-28 전용 — #4562)를 tailnet(Tailscale) 등 사설망 경유로 외부 MCP 클라이언트에 개방. 어디서든 내 위키·일정·일기 검색 도구 호출.
+
+**현황.**
+
+- `runtime/mcpapi/handler.go`는 읽기 전용 allowlist(`wiki_search`·`wiki_read`·`wiki_list`·`project_digests`·`diary_recent`·`calendar_upcoming`·`search_all` — 각각 `miniapp.*` 선언적 매핑)로 이미 좁게 서빙. 쓰기 도구 추가는 명시적으로 "보안 결정"(파일 헤더 주석).
+- 인증: 미니앱과 동일한 단일 클라이언트 토큰(`X-Deneb-Client-Token`). 바인딩: loopback 기본.
+
+**제안.**
+
+- 1단계 (노출 변화 없음): MCP 전용 별도 토큰 분리 + allowlist 유지. tailnet 내 디바이스(Cursor 등)에서 접속.
+- 2단계: `tailscale serve`가 loopback `/mcp`를 tailnet 한정 프록시 — 게이트웨이 바인드는 loopback 유지.
+- `integration` 빈 스킬 카테고리의 첫 주민(외부 MCP 연동 스킬) 후보.
+
+**⚠️ §8과의 긴장 (명시적 요건).** §8 "External-facing API 금지 — loopback이 정답"과 충돌한다. 본 제안은 (a) 게이트웨이 바인드 변경 없음 (b) tailnet 단말 한정 (c) 읽기 전용 — §8의 취지(attack surface 최소)를 준수하는 좁은 예외다. 채택 시 §8 해당 항목에 스코프를 명시해 개정하는 것을 전제로 하며, 운영자 판단 필요.
+
+**왜.** MCP 2.0 서버·양클라 채택(#4561) 직후라 한계 비용이 가장 낮은 시점. 개인 지식 자산을 도구 번들로 제공하는 RSI P4 표면.
+
+---
+
 ## 6. 인프라/운영 (Ops)
 
 ### 6.1 Live-test 시간 단축 — **P2 / M**
@@ -407,6 +493,7 @@
 - 3.1 Polaris reopen 라운드트립 테스트
 - 3.2 CJK rune boundary 테스트
 - 2.4 한국어 quality CI gate
+- 4.7 Trust Inbox 통합 승인 대기열 (ideation)
 
 ### Next — 다음 1개월 (P2)
 
@@ -418,6 +505,9 @@
 - 4.3 Tool reasoning 1-line trace
 - 4.4 Cadence editor
 - 6.1 Live-test 시간 단축
+- 4.8 인물·거래 도시에 Business Dossier (ideation)
+- 4.9 주간 기억 다이제스트 + dreamer 피드백 (ideation)
+- 5.5 개인 MCP 브로커 (ideation — §8 개정 전제)
 
 ### Later — 분기 단위 (P3)
 
@@ -452,6 +542,7 @@
 |---|---|---|
 | 2026-05-25 | Claude (claude-opus-4-7) | 초안 작성 |
 | 2026-06-02 | Claude | PR 1922 (Telegram 봇 제거) 반영 — 표면 참조를 네이티브 클라로 정정 |
+| 2026-08-23 | ZCode (GLM-5.3) | 운영자 요청 4개 제안 추가 (모두 ideation) — 4.7 Trust Inbox(안드로이드), 4.8 Business Dossier, 4.9 주간 기억 다이제스트, 5.5 개인 MCP 브로커(§8 긴장 명시) |
 
 ---
 
