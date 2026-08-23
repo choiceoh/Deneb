@@ -1,5 +1,25 @@
 # Changelog
 
+## [5.4.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.3.0...deneb-v5.4.0) (2026-08-23)
+
+
+### ✨ Features
+
+* **chat:** make the stop button actually stop the turn ([#4652](https://github.com/choiceoh/Deneb/issues/4652)) ([bcb7b22](https://github.com/choiceoh/Deneb/commit/bcb7b222b6ce4cfc61e11265bff9abc342c74740))
+* **chat:** 대화 검색·고정·세션 복원과 모델 기본 되돌리기 ([#4644](https://github.com/choiceoh/Deneb/issues/4644)) ([eac149f](https://github.com/choiceoh/Deneb/commit/eac149fbfcd22807c8330a1596344ebfe5669af0))
+
+
+### 🐛 Bug Fixes
+
+* **android:** contain the three crash paths the client-crash log actually recorded ([#4645](https://github.com/choiceoh/Deneb/issues/4645)) ([671310e](https://github.com/choiceoh/Deneb/commit/671310ea96c8b0b0675d546bcee6878278afe1e1))
+* **android:** make failed actions and stale screens say so ([#4654](https://github.com/choiceoh/Deneb/issues/4654)) ([5685ab0](https://github.com/choiceoh/Deneb/commit/5685ab0a0412530a527929e1eb534732b148324f))
+* **browser:** repair the address bar, repeat loads, and background page state ([#4655](https://github.com/choiceoh/Deneb/issues/4655)) ([ad02155](https://github.com/choiceoh/Deneb/commit/ad021550eb57351dc794f81885470c6859a52b92))
+* **chat:** stop the chat surface from reporting things that did not happen ([#4650](https://github.com/choiceoh/Deneb/issues/4650)) ([b46cd8a](https://github.com/choiceoh/Deneb/commit/b46cd8ace90cbd1cbfb558b16acc0a6b23db591c))
+* **chat:** tell a dead turn apart from a detached one before recovering it ([#4651](https://github.com/choiceoh/Deneb/issues/4651)) ([7039a1c](https://github.com/choiceoh/Deneb/commit/7039a1c0bfd798158d779da7db859a64aec07379))
+* **deploy:** rebuild and swap the wormhole router alongside the gateway ([#4648](https://github.com/choiceoh/Deneb/issues/4648)) ([13bc576](https://github.com/choiceoh/Deneb/commit/13bc576d325e1f2797a2fdfadd53c5a464e826a2))
+* **sync:** flag retention truncation and resync wholesale instead of dropping events ([#4649](https://github.com/choiceoh/Deneb/issues/4649)) ([6b7e043](https://github.com/choiceoh/Deneb/commit/6b7e0432c0bb4a3c85a57faae3bb26404d3b93aa))
+* **wormhole:** implement the declared deepseek reasoning dialect ([#4647](https://github.com/choiceoh/Deneb/issues/4647)) ([6365ecb](https://github.com/choiceoh/Deneb/commit/6365ecbb07636d130037871769ca74c564541737))
+
 ## [5.3.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.2.0...deneb-v5.3.0) (2026-08-23)
 
 
