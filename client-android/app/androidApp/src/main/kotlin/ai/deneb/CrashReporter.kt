@@ -60,7 +60,13 @@ object CrashReporter {
         }
         val file = File(context.filesDir, CRASH_FILE)
         val existing = runCatching { if (file.exists()) file.readText() else "" }.getOrDefault("")
-        val reports = (splitReports(existing) + report).takeLast(MAX_REPORTS)
+        // A crash loop writes the same stack over and over, and MAX_REPORTS of one
+        // signature pushes out every OTHER crash on the device — exactly the ones
+        // worth seeing. Keep the newest copy of a repeated signature (its timestamp
+        // is the useful part) rather than N identical ones.
+        val signature = crashSignature(report)
+        val kept = splitReports(existing).filterNot { crashSignature(it) == signature }
+        val reports = (kept + report).takeLast(MAX_REPORTS)
         // Synchronous write + fsync so the report is durable on disk before the
         // process dies (a plain buffered write can be lost when the OS kills us).
         file.outputStream().use { out ->
@@ -96,4 +102,16 @@ object CrashReporter {
     }
 
     private fun splitReports(raw: String): List<String> = raw.split(DELIM).map { it.trim() }.filter { it.isNotEmpty() }
+
+    /**
+     * Identity of a crash, ignoring the parts that differ between repeats.
+     *
+     * Drops the header (time/build/device vary per occurrence) and keeps the stack,
+     * which is what makes two crashes "the same one again".
+     */
+    internal fun crashSignature(report: String): String = report
+        .lineSequence()
+        .dropWhile { it.startsWith("time=") || it.startsWith("build=") || it.startsWith("android=") || it.startsWith("device=") || it.startsWith("thread=") }
+        .joinToString("\n")
+        .trim()
 }

@@ -213,6 +213,18 @@ internal fun AppContent(
 
     val notificationPermissionController = koinInject<NotificationPermissionController>()
     SetupNotificationPermissionHandler(notificationPermissionController)
+    // Ask once. The launcher above has been wired for a long time but nothing ever
+    // pulled it: requestPermission() had no callers, so on Android 13+ (targetSdk 36
+    // shows no automatic prompt) a fresh install silently posted nothing — no FCM
+    // reports, no heartbeat, no work-feed alerts, no daemon notification — and every
+    // post path just returned early. Gated on a flag because Android ignores a second
+    // prompt after a denial anyway.
+    LaunchedEffect(Unit) {
+        if (!appSettings.notificationPermissionAsked() && !notificationPermissionController.hasPermission()) {
+            appSettings.setNotificationPermissionAsked(true)
+            notificationPermissionController.requestPermission()
+        }
+    }
 
     val contactsPermissionController = koinInject<ContactsPermissionController>()
     SetupContactsPermissionHandler(contactsPermissionController)

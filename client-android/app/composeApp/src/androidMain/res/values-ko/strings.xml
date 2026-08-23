@@ -1,0 +1,5 @@
+<resources>
+    <string name="daemon_channel_name">백그라운드 연결</string>
+    <string name="daemon_channel_description">알림과 예약 작업을 받기 위해 연결을 유지합니다</string>
+    <string name="daemon_notification_text">실시간 알림 연결 유지 중</string>
+</resources>

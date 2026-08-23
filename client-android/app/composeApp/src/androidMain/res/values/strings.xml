@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">Deneb</string>
-    <string name="daemon_channel_name">Deneb Background Service</string>
-    <string name="daemon_channel_description">Keeps Deneb running for scheduled task execution</string>
-    <string name="daemon_notification_text">Daemon is running</string>
+    <string name="daemon_channel_name">Background connection</string>
+    <string name="daemon_channel_description">Keeps the connection open for notifications and scheduled tasks</string>
+    <string name="daemon_notification_text">Keeping notifications connected</string>
 </resources>
