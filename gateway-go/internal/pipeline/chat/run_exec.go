@@ -534,7 +534,15 @@ func recordRunCompletion(rec runCompletionRecord, logger *slog.Logger) {
 	// Effort-router fields ride on the existing run-complete line (one
 	// greppable record per run for the acceptance comparison and a future
 	// learned router) instead of a near-duplicate second Info line.
+	// runKind labels the population this run belongs to (chat, heartbeat, cron,
+	// skill-review, …). Without it every postmortem reader has to treat a 4-hour
+	// research cron and a chat turn as one population: runtime-health's latency
+	// pillar scored 0.0 on EVERY window for months because automation lanes pin
+	// p95 to their own budget caps (2026-08-23 measurement — interactive p95 was
+	// 558s while the heartbeat lane sat exactly on its 300s fence). Classified by
+	// the session package, the single source of truth for key→kind.
 	logger.Info("pipeline: agent loop complete",
+		"runKind", session.WorkTypeForKey(params.SessionKey),
 		"effortDecision", effortDecision,
 		"effortEscalated", effortRt != nil && effortRt.escalated,
 		"agentMs", agentMs,

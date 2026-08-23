@@ -30,9 +30,22 @@ type RejectedSkillEditRecord struct {
 	CreatedAt        int64             `json:"createdAt"`
 }
 
+// rejectedEditBodyLimit bounds the stored candidate body. It must stay ABOVE
+// real SKILL.md sizes (the largest bundled skill is ~14K runes): the body has a
+// second consumer that SCORES it — mineFalseRejects (judge_accuracy.go) replays
+// the rejected body through stored validation cases and flags a strict
+// improvement as a suspected judge false reject, the only organic label source
+// P3 verifier co-evolution has. A body chopped mid-document silently loses the
+// assertions living in its tail, so the rejected candidate always under-scores
+// and the lane can never fire. (2026-08-23: 45 of 47 buffered rows sat exactly
+// at the old 1997-rune ceiling while judge false-reject labels stayed at 0 for
+// 30 days.) The prompt consumer does its own 800-rune clamp at render time
+// (formatRejectedSkillEdits), so nothing downstream depends on this being tight.
+const rejectedEditBodyLimit = 20000
+
 // RecordRejectedSkillEdit appends a failed skill-evolution candidate to the
 // rejected-edit buffer. The candidate body is bounded so one bad rewrite cannot
-// bloat the state sidecar or future prompts.
+// bloat the state sidecar.
 func (t *Tracker) RecordRejectedSkillEdit(record RejectedSkillEditRecord) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -40,7 +53,7 @@ func (t *Tracker) RecordRejectedSkillEdit(record RejectedSkillEditRecord) error 
 	record.SkillName = strings.TrimSpace(record.SkillName)
 	record.Reason = strings.TrimSpace(record.Reason)
 	record.Source = strings.TrimSpace(record.Source)
-	record.CandidateBody = strings.TrimSpace(genesiscommon.TruncateRunes(record.CandidateBody, 1997))
+	record.CandidateBody = strings.TrimSpace(genesiscommon.TruncateRunes(record.CandidateBody, rejectedEditBodyLimit))
 	if record.SelfHarnessAudit != nil {
 		audit := withHarnessDimensions(*record.SelfHarnessAudit)
 		record.SelfHarnessAudit = audit.Ptr()

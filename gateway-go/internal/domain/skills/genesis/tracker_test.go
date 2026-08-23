@@ -825,8 +825,11 @@ func TestTrackerRejectedSkillEdits_NewestFirstAndFiltered(t *testing.T) {
 	if entries[0].Reason != "invented command" || entries[1].Reason != "missing verification gate" {
 		t.Fatalf("expected newest first, got %+v", entries)
 	}
-	if len([]rune(entries[1].CandidateBody)) != 2000 {
-		t.Fatalf("expected candidate body truncated to 2000 runes, got %d", len([]rune(entries[1].CandidateBody)))
+	// A skill-sized body is stored whole — the false-reject miner scores it.
+	// Clamping only kicks in at rejectedEditBodyLimit (see
+	// TestRecordRejectedSkillEditKeepsFullSkillSizedBody).
+	if len([]rune(entries[1].CandidateBody)) != 2500 {
+		t.Fatalf("expected the 2500-rune candidate body kept whole, got %d", len([]rune(entries[1].CandidateBody)))
 	}
 }
 

@@ -103,9 +103,18 @@ def score_signals(signals: rh.Signals) -> list[Metric]:
     llm_hard_per_run = signals.llm_hard / runs
     timeout_frac = signals.timeout_runs / runs
     toolerr_frac = signals.tool_errors / max(signals.tool_calls, 1)
-    p95 = rh.percentile(signals.agent_ms, 0.95) / 1000.0
+    # Same cohort rule as runtime_health: latency is a user-facing question, and
+    # automation lanes pin p95 to their own budget caps. Windows written before
+    # the runKind label fall back to every run.
+    latency_ms = signals.interactive_ms or signals.agent_ms
+    latency_scoped = bool(signals.interactive_ms)
+    interactive_runs = sum(
+        count for kind, count in signals.kind_runs.items() if kind in rh.INTERACTIVE_KINDS
+    )
+    latency_denominator = interactive_runs if latency_scoped else runs
+    p95 = rh.percentile(latency_ms, 0.95) / 1000.0
     tool_coverage = min(1.0, signals.tool_call_reports / runs)
-    latency_coverage = min(1.0, len(signals.agent_ms) / runs)
+    latency_coverage = min(1.0, len(latency_ms) / max(latency_denominator, 1))
 
     stability = clamp(_grade(crashes_per_day, 0.0, CRASH_PER_DAY_HARD) * STABILITY_CEILING)
     error_rate = clamp(_grade(err_per_run, ERR_PER_RUN_SOFT, ERR_PER_RUN_HARD))
@@ -187,7 +196,11 @@ def score_signals(signals: rh.Signals) -> list[Metric]:
             20,
             latency,
             "Run agentMs p95 under world-class bars",
-            {"p95_s": round(p95, 1), "coverage": round(latency_coverage, 4)},
+            {
+                "p95_s": round(p95, 1),
+                "coverage": round(latency_coverage, 4),
+                "scoped_to_interactive": latency_scoped,
+            },
             finding("latency", latency, f"p95={p95:.0f}s"),
         ),
     ]
@@ -198,6 +211,9 @@ def signals_to_dict(signals: rh.Signals) -> dict[str, Any]:
         "runs": signals.runs,
         "timeout_runs": signals.timeout_runs,
         "agent_ms": list(signals.agent_ms),
+        "interactive_ms": list(signals.interactive_ms),
+        "kind_runs": dict(signals.kind_runs),
+        "kind_timeouts": dict(signals.kind_timeouts),
         "turns": list(signals.turns),
         "tool_calls": signals.tool_calls,
         "tool_call_reports": signals.tool_call_reports,
@@ -215,6 +231,9 @@ def signals_from_dict(data: dict[str, Any]) -> rh.Signals:
         runs=int(data.get("runs", 0)),
         timeout_runs=int(data.get("timeout_runs", 0)),
         agent_ms=[int(x) for x in data.get("agent_ms", [])],
+        interactive_ms=[int(x) for x in data.get("interactive_ms", [])],
+        kind_runs={str(k): int(v) for k, v in (data.get("kind_runs") or {}).items()},
+        kind_timeouts={str(k): int(v) for k, v in (data.get("kind_timeouts") or {}).items()},
         turns=[int(x) for x in data.get("turns", [])],
         tool_calls=int(data.get("tool_calls", 0)),
         tool_call_reports=int(data.get("tool_call_reports", 0)),

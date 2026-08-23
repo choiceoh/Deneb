@@ -101,7 +101,7 @@ func (r *skillReviewFork) RunSkillReview(ctx context.Context, sessionKey string,
 	// health showed self-review forks dominating turn timeouts by spending the
 	// full 90s review budget in LLM time before recording a decision.
 	maxTokens := skillReviewMaxTokens
-	_, err := r.chat.RunSync(ctx, chatport.SyncRequest{
+	res, err := r.chat.RunSync(ctx, chatport.SyncRequest{
 		SessionKey:         skillReviewSessionKey(sessionKey),
 		Message:            prompt,
 		Model:              r.model,
@@ -113,7 +113,19 @@ func (r *skillReviewFork) RunSkillReview(ctx context.Context, sessionKey string,
 		EphemeralUser:      true,
 		EphemeralAssistant: true,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// A review that runs out of budget is NOT a completed review. The lifecycle
+	// decision (skill_lifecycle action=propose) is the last step, so a run cut
+	// off at the fence usually recorded nothing — yet the nudger only sees the
+	// error return, so reporting nil here logged every timeout as a healthy
+	// review. 2026-08-23: 30 reviews spawned in 8 days, zero failures on
+	// /health, while 62% of the runs were ending at the budget with no decision.
+	if res != nil && res.StopReason == "timeout" {
+		return fmt.Errorf("skill review fork: budget elapsed before a lifecycle decision was recorded (turns=%d)", res.Turns)
+	}
+	return nil
 }
 
 func mergeSkillReviewContext(snapshot, loaded generation.SessionContext) generation.SessionContext {

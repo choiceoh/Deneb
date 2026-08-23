@@ -40,6 +40,13 @@ LLMMS_RE = re.compile(r"\bllmMs=(\d+)")
 TOOLMS_RE = re.compile(r"\btoolMs=(\d+)")
 TURNS_RE = re.compile(r"\bturns=(\d+)")
 TOOLCALLS_RE = re.compile(r"\btotalToolCalls=(\d+)")
+RUNKIND_RE = re.compile(r"\brunKind=([\w.-]+)")
+# Which run kinds are user-facing. Everything else is automation with its own
+# per-lane budget cap, and mixing the two is what made the latency pillar score
+# 0.0 on every window: a 4-hour research cron and a chat turn were one
+# population, so p95 measured the largest cap in the window instead of how long
+# the user waited. Kind slugs come from session.WorkTypeForKey (Go).
+INTERACTIVE_KINDS = frozenset({"chat", "phone-event", "glasses", "subagent"})
 TOOLERR_RE = re.compile(r"tool complete .*isError=true")
 CRASH_RE = re.compile(r"panic:|fatal error|SIGSEGV|runtime\.error")
 LLM_HARD_RE = re.compile(
@@ -97,9 +104,16 @@ class Signals:
     runs: int = 0
     timeout_runs: int = 0
     agent_ms: list[int] = field(default_factory=list)
+    # agentMs restricted to user-facing kinds, and per-kind run/timeout tallies.
+    # Empty when the window predates the runKind label (2026-08-23) — the
+    # latency pillar then falls back to the whole population and says so.
+    interactive_ms: list[int] = field(default_factory=list)
+    kind_runs: dict = field(default_factory=dict)
+    kind_timeouts: dict = field(default_factory=dict)
     # Stage decomposition of slow runs (llmMs/toolMs ride the same run-complete
     # record; older journals lack them, so coverage is tracked separately).
     stage_samples: list[tuple[int, int, int]] = field(default_factory=list)
+    interactive_stage_samples: list[tuple[int, int, int]] = field(default_factory=list)
     turns: list[int] = field(default_factory=list)
     tool_calls: int = 0
     tool_call_reports: int = 0
@@ -159,6 +173,23 @@ def latency_stage_detail(samples: list[tuple[int, int, int]]) -> list[str]:
     ]
 
 
+def timeout_by_kind_detail(kind_timeouts: dict, kind_runs: dict) -> list[str]:
+    """Attribute timeouts to the lane that produced them. The score stays global
+    — a timed-out run is lost work in any lane — but the operator needs to see
+    WHICH lane, because one broken background lane can own the whole number
+    (2026-08-23: system:skill-review alone was 31 of 45 timeouts, hitting its own
+    90s review budget)."""
+    if not kind_timeouts:
+        return []
+    ranked = sorted(kind_timeouts.items(), key=lambda kv: -kv[1])
+    return [
+        "by lane: "
+        + " · ".join(
+            f"{kind} {count}/{kind_runs.get(kind, count)}" for kind, count in ranked[:5]
+        )
+    ]
+
+
 def latency_stage_extra(samples: list[tuple[int, int, int]]) -> dict:
     """Machine fields for the latency dimension extra dict (same cohort as
     latency_stage_detail; empty when the window has no stage samples)."""
@@ -186,14 +217,23 @@ def parse(lines: Iterable[str]) -> Signals:
         line = raw.rstrip("\n")
         if RUN_RE.search(line):
             s.runs += 1
+            kind_match = RUNKIND_RE.search(line)
+            kind = kind_match.group(1) if kind_match else ""
+            if kind:
+                s.kind_runs[kind] = s.kind_runs.get(kind, 0) + 1
             match = AGENTMS_RE.search(line)
             if match:
                 agent_ms = int(match.group(1))
                 s.agent_ms.append(agent_ms)
+                if kind in INTERACTIVE_KINDS:
+                    s.interactive_ms.append(agent_ms)
                 llm = LLMMS_RE.search(line)
                 tool = TOOLMS_RE.search(line)
                 if llm and tool:
-                    s.stage_samples.append((agent_ms, int(llm.group(1)), int(tool.group(1))))
+                    sample = (agent_ms, int(llm.group(1)), int(tool.group(1)))
+                    s.stage_samples.append(sample)
+                    if kind in INTERACTIVE_KINDS:
+                        s.interactive_stage_samples.append(sample)
             match = TURNS_RE.search(line)
             if match:
                 s.turns.append(int(match.group(1)))
@@ -203,6 +243,8 @@ def parse(lines: Iterable[str]) -> Signals:
                 s.tool_call_reports += 1
             if "stopReason=timeout" in line:
                 s.timeout_runs += 1
+                if kind:
+                    s.kind_timeouts[kind] = s.kind_timeouts.get(kind, 0) + 1
             continue
         if MCP_STDERR_RE.search(line):
             s.mcp_stderr_lines += 1
@@ -266,9 +308,16 @@ def compute(s: Signals) -> tuple[float, list[DimResult]]:
     llm_hard_per_run = s.llm_hard / runs
     timeout_frac = s.timeout_runs / runs
     toolerr_frac = s.tool_errors / max(s.tool_calls, 1)
-    p95 = percentile(s.agent_ms, 0.95) / 1000.0
+    # Score latency on the user-facing cohort when the journal carries runKind;
+    # fall back to every run for windows written before the label existed.
+    latency_ms = s.interactive_ms or s.agent_ms
+    latency_scoped = bool(s.interactive_ms)
+    stage_samples = s.interactive_stage_samples if latency_scoped else s.stage_samples
+    p95 = percentile(latency_ms, 0.95) / 1000.0
     tool_coverage = min(1.0, s.tool_call_reports / runs)
-    latency_coverage = min(1.0, len(s.agent_ms) / runs)
+    interactive_runs = sum(count for kind, count in s.kind_runs.items() if kind in INTERACTIVE_KINDS)
+    latency_denominator = interactive_runs if latency_scoped else runs
+    latency_coverage = min(1.0, len(latency_ms) / max(latency_denominator, 1))
 
     def top(examples):
         return [f"{n:>3}x  {key}" for key, n in sorted(examples.items(), key=lambda item: -item[1])[:TOP_N]]
@@ -316,8 +365,13 @@ def compute(s: Signals) -> tuple[float, list[DimResult]]:
             "turn-reliability",
             16,
             100.0 * graded(timeout_frac, TIMEOUT_FRAC_SOFT, TIMEOUT_FRAC_HARD),
-            [f"{s.timeout_runs}/{runs} runs timed out = {timeout_frac * 100:.1f}%"],
-            {"timeout_runs": s.timeout_runs, "frac": round(timeout_frac, 4)},
+            [f"{s.timeout_runs}/{runs} runs timed out = {timeout_frac * 100:.1f}%"]
+            + timeout_by_kind_detail(s.kind_timeouts, s.kind_runs),
+            {
+                "timeout_runs": s.timeout_runs,
+                "frac": round(timeout_frac, 4),
+                "by_kind": dict(sorted(s.kind_timeouts.items(), key=lambda kv: -kv[1])),
+            },
         ),
         DimResult(
             "tool-reliability",
@@ -339,16 +393,30 @@ def compute(s: Signals) -> tuple[float, list[DimResult]]:
             20,
             100.0 * graded(p95, LAT_P95_SOFT, LAT_P95_HARD) * latency_coverage,
             [
-                f"run agentMs p95 = {p95:.0f}s (p50 {percentile(s.agent_ms, 0.5) / 1000:.0f}s, "
-                f"max {percentile(s.agent_ms, 1.0) / 1000:.0f}s) over {len(s.agent_ms)}/{runs} runs "
+                f"{'user-facing runs' if latency_scoped else 'all runs (no runKind label in window)'}: "
+                f"agentMs p95 = {p95:.0f}s (p50 {percentile(latency_ms, 0.5) / 1000:.0f}s, "
+                f"max {percentile(latency_ms, 1.0) / 1000:.0f}s) over {len(latency_ms)}/{latency_denominator} runs "
                 f"({latency_coverage * 100:.1f}% coverage)"
             ]
-            + latency_stage_detail(s.stage_samples),
+            + (
+                [
+                    "automation lanes excluded (own budget caps): "
+                    + " · ".join(
+                        f"{kind} {count}"
+                        for kind, count in sorted(s.kind_runs.items(), key=lambda kv: -kv[1])
+                        if kind not in INTERACTIVE_KINDS
+                    )
+                ]
+                if latency_scoped and any(k not in INTERACTIVE_KINDS for k in s.kind_runs)
+                else []
+            )
+            + latency_stage_detail(stage_samples),
             {
                 "p95_s": round(p95, 1),
-                "sampled_runs": len(s.agent_ms),
+                "sampled_runs": len(latency_ms),
+                "scoped_to_interactive": latency_scoped,
                 "coverage": round(latency_coverage, 4),
-                **latency_stage_extra(s.stage_samples),
+                **latency_stage_extra(stage_samples),
             },
         ),
     ]
