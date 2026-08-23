@@ -165,22 +165,46 @@ type personPage struct{ path, title string }
 // name into one record, uniting all numbers/emails for a person saved under
 // several entries. 1-char/empty names are dropped as too ambiguous to match.
 func mergeContactsByName(book []contactdomain.Contact) map[string]*contactdomain.Contact {
-	merged := make(map[string]*contactdomain.Contact, len(book))
+	byName := make(map[string][]contactdomain.Contact, len(book))
+	order := make([]string, 0, len(book))
 	for i := range book {
 		c := book[i]
 		key := contactdomain.NormalizePersonName(c.Name)
 		if len([]rune(key)) < 2 {
 			continue
 		}
-		if m, ok := merged[key]; ok {
-			m.Phones = append(m.Phones, c.Phones...)
-			m.Emails = append(m.Emails, c.Emails...)
-			if strings.TrimSpace(m.Org) == "" {
-				m.Org = c.Org
-			}
+		if _, seen := byName[key]; !seen {
+			order = append(order, key)
+		}
+		byName[key] = append(byName[key], c)
+	}
+	merged := make(map[string]*contactdomain.Contact, len(byName))
+	for _, key := range order {
+		group := byName[key]
+		// Same guard the frontmatter identity backfill uses (identityEmails):
+		// entries under one name spanning two employers with no shared phone are
+		// 동명이인, not one person. Merging them wrote both companies' phones and
+		// addresses into a single 인물 page — 인물/김성환.md ended up carrying
+		// topsolar.kr and bmenergy.co.kr side by side, which is how a call gets
+		// routed to the wrong person. Keep only the first entry's own details and
+		// let the operator split (never auto-split: 2026-07-28 over-merge).
+		if _, ambiguous := identityEmails(group); ambiguous {
+			cp := group[0]
+			cp.Phones = append([]string(nil), group[0].Phones...)
+			cp.Emails = append([]string(nil), group[0].Emails...)
+			merged[key] = &cp
 			continue
 		}
-		cp := c
+		cp := group[0]
+		cp.Phones = append([]string(nil), group[0].Phones...)
+		cp.Emails = append([]string(nil), group[0].Emails...)
+		for _, c := range group[1:] {
+			cp.Phones = append(cp.Phones, c.Phones...)
+			cp.Emails = append(cp.Emails, c.Emails...)
+			if strings.TrimSpace(cp.Org) == "" {
+				cp.Org = c.Org
+			}
+		}
 		merged[key] = &cp
 	}
 	return merged
