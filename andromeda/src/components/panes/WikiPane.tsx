@@ -58,7 +58,7 @@ export function WikiPane() {
   // prose. Never copy their body into the generic AI workspace context.
   useRegisterPane(
     WIKI_RESOURCE,
-    !currentReadOnly && !isSyntheticFactPath(path ?? "") && content.trim()
+    !currentReadOnly && !isFactDerivedPath(path ?? "") && content.trim()
       ? `[위키${path ? ` ${path}` : ""}]\n${content}`
       : "",
   );
@@ -179,7 +179,7 @@ export function WikiPane() {
 
   function requestOpenPath(key: string) {
     if (!key) return;
-    if (isSyntheticFactPath(key)) {
+    if (isFactDerivedPath(key)) {
       requestOpenFactRef(key);
       return;
     }
@@ -192,7 +192,7 @@ export function WikiPane() {
 
   function requestOpenSearchHit(hit: WikiPage) {
     const ref = keyOf(hit);
-    if (hit.resultKind !== "fact" && !hit.readOnly && !isSyntheticFactPath(ref)) {
+    if (hit.resultKind !== "fact" && !hit.readOnly && !isFactDerivedPath(ref)) {
       requestOpenPath(ref);
       return;
     }
@@ -242,7 +242,7 @@ export function WikiPane() {
 
   async function openPath(key: string) {
     if (!key) return;
-    if (isSyntheticFactPath(key)) {
+    if (isFactDerivedPath(key)) {
       await openFactRef(key);
       return;
     }
@@ -655,14 +655,16 @@ export function WikiPane() {
 }
 
 const WIKI_RESOURCE = "wiki";
+const FACT_PROFILE_PATH = "사용자/현행-사실.md";
 
-function isSyntheticFactPath(path: string): boolean {
-  return normalizeWikiRef(path).startsWith("@facts/");
+function isFactDerivedPath(path: string): boolean {
+  return canonicalFactRef(path) !== "";
 }
 
 function canonicalFactRef(path: string): string {
   const trimmed = normalizeWikiRef(path);
-  if (!isSyntheticFactPath(trimmed)) return "";
+  if (trimmed === FACT_PROFILE_PATH || trimmed === FACT_PROFILE_PATH.slice(0, -3)) return FACT_PROFILE_PATH;
+  if (!trimmed.startsWith("@facts/")) return "";
   return trimmed.endsWith(".md") ? trimmed : `${trimmed}.md`;
 }
 

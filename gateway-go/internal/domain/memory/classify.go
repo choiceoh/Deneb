@@ -30,9 +30,13 @@ var (
 	// Third-party subject cues (family / named roles) — not exhaustive, heuristic.
 	otherSubjectRe = regexp.MustCompile(`(?i)(아내|남편|배우자|아들|딸|어머니|아버지|부모님|동료|배우자분)`)
 	profileCueRe   = regexp.MustCompile(`(?i)(기억해|기억해줘|기억\s*해\s*둬|내\s*선호|나는\s*.{0,12}(좋아|싫어|원해|선호)|앞으로\s*.{0,20}(불러|해줘|해\s*줘)|알레르기|못\s*먹|비건|채식|채식주의|금기|제약\s*사항|장기\s*목표)`)
-	forgetCueRe    = regexp.MustCompile(`(?i)(기억.{0,20}(지워|삭제|잊|하지\s*마)|(?:내|나의).{0,24}(선호|취향|사실|정보).{0,16}(지워|삭제|잊)|(?:선호|취향).{0,20}(지워|삭제|잊))`)
-	procedureCueRe = regexp.MustCompile(`(?i)(앞으로는\s*이렇게|절차는|워크플로|워크플로우|SOP|표준\s*절차|항상\s*이렇게\s*해|매번\s*.{0,16}해줘|스킬로\s*만들어)`)
-	episodicCueRe  = regexp.MustCompile(`(?i)(오늘|방금|어제|아까|이번\s*주|내일|모레|방금\s*전)`)
+	forgetCueRe    = regexp.MustCompile(`(?i)(기억.{0,20}(지워|삭제|잊|하지\s*마)|(?:내|나의).{0,24}(선호|취향|사실|정보).{0,16}(지워|삭제|잊)|(?:선호|취향).{0,20}(지워|삭제|잊)|(?:forget|delete|remove|erase)\b.{0,40}\b(?:memory|memories|preference|preferences|fact|facts|profile|information)\b|(?:memory|memories|preference|preferences|fact|facts|profile|information)\b.{0,40}\b(?:forget|delete|remove|erase)\b)`)
+	// A retention request can contain the same destructive verb as an explicit
+	// forget. Keep this guard local to that verb so "기억하지 마" remains a
+	// deletion request while "잊지 마" and "do not delete" do not tombstone.
+	negatedForgetCueRe = regexp.MustCompile(`(?i)(?:(?:(?:지우|삭제하|잊)(?:거나|고)\s*)*(?:지우|삭제하|잊)지(?:는|만)?\s*(?:마|말)|(?:지우|삭제하|잊)면\s*안|(?:지워|삭제해|잊어)서는?\s*안|(?:do\s+not|don['’]t|never|not\s+to)(?:\s+[\p{L}'’.\-]+){0,3}\s+(?:forget|delete|remove|erase)(?:\s+(?:or|and)\s+(?:forget|delete|remove|erase))*\b)`)
+	procedureCueRe     = regexp.MustCompile(`(?i)(앞으로는\s*이렇게|절차는|워크플로|워크플로우|SOP|표준\s*절차|항상\s*이렇게\s*해|매번\s*.{0,16}해줘|스킬로\s*만들어)`)
+	episodicCueRe      = regexp.MustCompile(`(?i)(오늘|방금|어제|아까|이번\s*주|내일|모레|방금\s*전)`)
 )
 
 // ClassifyHeuristics assigns a WriteTarget (and subject/fact key) from a raw
@@ -59,8 +63,15 @@ func ClassifyHeuristics(message string) Candidate {
 		// Third-party mention without explicit self-frame → not self profile.
 		c.SubjectID = "other:" + firstMatch(otherSubjectRe, msg)
 	}
+	withoutNegatedForget := negatedForgetCueRe.ReplaceAllString(msg, " ")
+	hasForget := forgetCueRe.MatchString(withoutNegatedForget)
+	hasRetentionRequest := !hasForget && forgetCueRe.MatchString(msg)
 	switch {
-	case forgetCueRe.MatchString(msg):
+	case hasRetentionRequest:
+		// This is a request to retain an existing fact, not a new assertion.
+		// Leave the fact plane untouched rather than replacing or tombstoning it.
+		c.Target = TargetEpisodic
+	case hasForget:
 		c.Target = TargetProfile
 		c.FactKind = profileFactKind(msg)
 		c.Forget = true

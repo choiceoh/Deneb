@@ -320,7 +320,9 @@ internal data class CurrentFactDetail(
  *  route cannot bypass the native client's cache/write boundary. */
 internal fun isSyntheticFactPath(path: String): Boolean {
     val normalized = path.trim().replace('\\', '/').trimStart('/')
-    return normalized.startsWith("@facts/")
+    return normalized.startsWith("@facts/") ||
+        normalized == "사용자/현행-사실" ||
+        normalized == "사용자/현행-사실.md"
 }
 
 /** Older gateways may identify a fact through only one of these fields. */

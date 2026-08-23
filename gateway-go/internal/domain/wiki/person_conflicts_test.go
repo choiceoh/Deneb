@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func writePersonPageT(t *testing.T, s *Store, rel, title string, emails []string, body string) {
@@ -42,6 +43,48 @@ func TestPersonMailConflicts(t *testing.T) {
 	}
 	// The same-domain From (gil@topsolar.kr) must NOT conflict — the page owns
 	// the topsolar.kr domain.
+}
+
+func TestPersonMailConflictsKeepsFactResultsOutOfItsPageWindow(t *testing.T) {
+	s, _ := newVerifyStore(t)
+	ctx := context.Background()
+
+	writePersonPageT(t, s, "인물/홍길동.md", "홍길동",
+		[]string{"hong@topsolar.kr"}, strings.Repeat("홍길동 ", 20)+"담당: 태안 프로젝트")
+	writePageT(t, s, "프로젝트/pl9-tst-001/메일분석/주소-변경.md", "주소 변경", "프로젝트",
+		"**발신** 홍길동 <hong@newco.com>\n\n홍길동 님이 새 주소로 회신했습니다.")
+	base := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
+	for i, key := range []string{"profile.name", "profile.alias", "profile.role"} {
+		if _, err := s.UpsertFact(FactInput{
+			Subject: "person:홍길동", Key: key, Value: "홍길동",
+			Kind: FactKindIdentity, Authority: FactAuthorityAgent,
+			At: base.Add(time.Duration(i) * time.Minute),
+		}); err != nil {
+			t.Fatalf("UpsertFact(%q): %v", key, err)
+		}
+	}
+
+	crowded, err := s.Search(ctx, "홍길동", personConflictHitsMax)
+	if err != nil {
+		t.Fatal(err)
+	}
+	factHits, mailHits := 0, 0
+	for _, hit := range crowded {
+		if hit.FactID != "" {
+			factHits++
+		}
+		if IsMailAnalysisPath(hit.Path) {
+			mailHits++
+		}
+	}
+	if factHits == 0 || mailHits != 0 {
+		t.Fatalf("test setup did not crowd the page window: %+v", crowded)
+	}
+
+	got := s.PersonMailConflicts(ctx, 10)
+	if len(got) != 1 || got[0].MailFrom != "hong@newco.com" {
+		t.Fatalf("conflicts = %+v, want the mail mismatch despite fact hits", got)
+	}
 }
 
 func TestPersonMailConflictNegativeCases(t *testing.T) {

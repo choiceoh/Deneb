@@ -196,8 +196,9 @@ func TestSubjectAwareCurrentFactsMatchesKoreanGenitiveSubject(t *testing.T) {
 
 func TestVagueCueWithOnlyAmbientSelfFactsStillReportsNoEvidence(t *testing.T) {
 	store := newSubjectFactRecallStore(t)
+	const value = "짧고 간결하게 답한다"
 	putSubjectFact(t, store, wiki.FactInput{
-		Subject: "self", Key: "communication.response_length", Value: "짧고 간결하게 답한다",
+		Subject: "self", Key: "communication.response_length", Value: value,
 		Kind: wiki.FactKindPreference, Authority: wiki.FactAuthorityDirectUser,
 		At: time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC),
 	})
@@ -205,6 +206,57 @@ func TestVagueCueWithOnlyAmbientSelfFactsStillReportsNoEvidence(t *testing.T) {
 	out := buildSubjectFactRecall(t, store, "그거 기억나?")
 	if !strings.Contains(out, "source=none") || !strings.Contains(out, "근거를 찾지 못했다") {
 		t.Fatalf("ambient self facts incorrectly satisfied a vague recall cue:\n%s", out)
+	}
+
+	specific := buildSubjectFactRecall(t, store, "내 답변 길이 선호 기억나?")
+	if !strings.Contains(specific, value) {
+		t.Fatalf("explicit self-fact cue omitted current preference:\n%s", specific)
+	}
+	if strings.Contains(specific, "source=none") || strings.Contains(specific, "근거를 찾지 못했다") {
+		t.Fatalf("explicit self-fact cue emitted contradictory no-evidence notice:\n%s", specific)
+	}
+	leaffulSpecific := buildSubjectFactRecall(t, store, "내 response length preference 기억나?")
+	if !strings.Contains(leaffulSpecific, value) || strings.Contains(leaffulSpecific, "source=none") {
+		t.Fatalf("explicit self-fact cue was not resolved by the leaf key token:\n%s", leaffulSpecific)
+	}
+	wrongAxis := buildSubjectFactRecall(t, store, "내 response language preference 기억나?")
+	if !strings.Contains(wrongAxis, "source=none") || !strings.Contains(wrongAxis, "근거를 찾지 못했다") {
+		t.Fatalf("shared parent key token incorrectly satisfied a different self-fact axis:\n%s", wrongAxis)
+	}
+
+	unrelatedStore := newSubjectFactRecallStore(t)
+	putSubjectFact(t, unrelatedStore, wiki.FactInput{
+		Subject: "self", Key: "coffee", Value: "커피를 좋아한다",
+		Kind: wiki.FactKindPreference, Authority: wiki.FactAuthorityDirectUser,
+		At: time.Date(2026, 8, 23, 0, 1, 0, 0, time.UTC),
+	})
+	unrelated := buildSubjectFactRecall(t, unrelatedStore, "내 답변 길이 선호 기억나?")
+	if !strings.Contains(unrelated, "source=none") || !strings.Contains(unrelated, "근거를 찾지 못했다") {
+		t.Fatalf("unrelated self preference incorrectly satisfied the explicit cue:\n%s", unrelated)
+	}
+
+	aliasStore := newSubjectFactRecallStore(t)
+	putSubjectFact(t, aliasStore, wiki.FactInput{
+		Subject: "self", Key: "communication.language", Value: "한국어로 답한다",
+		Kind: wiki.FactKindPreference, Authority: wiki.FactAuthorityDirectUser,
+		At: time.Date(2026, 8, 23, 0, 2, 0, 0, time.UTC),
+	})
+	putSubjectFact(t, aliasStore, wiki.FactInput{
+		Subject: "self", Key: "identity.address", Value: "선택님이라고 부른다",
+		Kind: wiki.FactKindIdentity, Authority: wiki.FactAuthorityDirectUser,
+		At: time.Date(2026, 8, 23, 0, 3, 0, 0, time.UTC),
+	})
+	for _, tc := range []struct {
+		query string
+		value string
+	}{
+		{query: "내 언어 선호 기억나?", value: "한국어로 답한다"},
+		{query: "내 호칭 기억나?", value: "선택님이라고 부른다"},
+	} {
+		got := buildSubjectFactRecall(t, aliasStore, tc.query)
+		if !strings.Contains(got, tc.value) || strings.Contains(got, "source=none") {
+			t.Fatalf("canonical self-fact alias did not resolve %q:\n%s", tc.query, got)
+		}
 	}
 }
 

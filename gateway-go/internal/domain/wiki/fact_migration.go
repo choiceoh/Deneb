@@ -182,16 +182,45 @@ func parseLegacyInductionMeta(line string) (legacyInductionMeta, bool) {
 
 func makeLegacyFactCandidate(value, section, label string, lineNo int, subject, key string) legacyFactCandidate {
 	if strings.TrimSpace(key) == "" {
-		key = memory.FactKeyFromText(value)
+		key = legacyFactKey(value)
 	}
 	return legacyFactCandidate{
 		input: FactInput{
 			Subject: memory.NormalizeSubject(subject), Key: key, Value: value,
-			Kind: legacyFactKind(section, value), Authority: FactAuthorityLegacyImport,
+			Kind: legacyFactKind(key, section, value), Authority: FactAuthorityLegacyImport,
 			Sources: []string{fmt.Sprintf("workspace:%s#L%d", legacyProjectionName(label), lineNo)}, Actor: "legacy-migration",
 			Reason: "기존 " + label + " 호환 이관",
 		},
 		label: label, lineNo: lineNo,
+	}
+}
+
+func legacyFactKey(value string) string {
+	if key := legacyCanonicalLabelKey(value); key != "" {
+		return key
+	}
+	return memory.FactKeyFromText(value)
+}
+
+// legacyCanonicalLabelKey recognizes only the structured profile labels that
+// have a live induction identity. This deliberately does not alias arbitrary
+// prose containing "이름" or "언어".
+func legacyCanonicalLabelKey(text string) string {
+	label := strings.TrimSpace(text)
+	for _, separator := range []string{":", "：", "="} {
+		if before, _, ok := strings.Cut(label, separator); ok {
+			label = before
+			break
+		}
+	}
+	label = strings.Trim(strings.TrimSpace(label), "*_` ")
+	switch label {
+	case "이름", "호칭":
+		return "identity.address"
+	case "언어":
+		return "communication.language"
+	default:
+		return ""
 	}
 }
 
@@ -200,7 +229,13 @@ func legacyProjectionName(name string) string {
 	return strings.TrimSuffix(name, ext) + ".legacy" + ext
 }
 
-func legacyFactKind(section, value string) FactKind {
+func legacyFactKind(key, section, value string) FactKind {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "identity.address":
+		return FactKindIdentity
+	case "communication.language":
+		return FactKindPreference
+	}
 	lower := strings.ToLower(section + " " + value)
 	switch {
 	case strings.Contains(section, "선호") || strings.Contains(lower, "선호") || strings.Contains(lower, "답변"):

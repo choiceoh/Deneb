@@ -316,4 +316,26 @@ describe("WikiPane", () => {
     expect(getPageCalls).toBe(1);
     expect(lastGetPagePath).toBe("@facts/fact-poisoned.md");
   });
+
+  it("opens the generated current-facts profile uncached and read-only", async () => {
+    const profilePath = "사용자/현행-사실.md";
+
+    renderWithProviders(
+      <>
+        <CrossPaneFactProbe path={profilePath} />
+        <WikiPane />
+      </>,
+      { connected: true },
+    );
+    await userEvent.click(screen.getByRole("button", { name: "open cross-pane fact" }));
+
+    expect(await screen.findByRole("heading", { name: profilePath })).toBeInTheDocument();
+    expect(screen.getByText("읽기 전용", { selector: ".wiki-save-state" })).toBeInTheDocument();
+    expect(screen.getByTestId("ai-context")).toHaveTextContent("");
+    expect(getPageCalls).toBe(1);
+    expect(lastGetPagePath).toBe(profilePath);
+    for (const action of ["편집", "저장", "되돌리기", "이동", "병합", "삭제"]) {
+      expect(screen.getByRole("button", { name: action })).toBeDisabled();
+    }
+  });
 });

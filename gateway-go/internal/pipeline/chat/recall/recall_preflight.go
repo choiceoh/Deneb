@@ -851,13 +851,19 @@ func factValueAllowsAttachedSuffix(last rune, suffix string) bool {
 }
 
 func currentFactsResolveMessage(message string, claims []wiki.FactClaim, matched map[string]struct{}) bool {
+	messageTokens := normalizedFactSubjectTokens(message)
 	if len(matched) == 0 {
+		for _, claim := range claims {
+			if strings.EqualFold(strings.TrimSpace(claim.Subject), mem.SubjectSelf) &&
+				liveSelfTurnFact(claim) && selfFactClaimMatchesMessage(message, messageTokens, claim) {
+				return true
+			}
+		}
 		return false
 	}
 	if factQueryOnlyNamesMatchedSubjects(message, matched) {
 		return true
 	}
-	messageTokens := normalizedFactSubjectTokens(message)
 	for _, claim := range claims {
 		if _, ok := matched[strings.ToLower(strings.TrimSpace(claim.Subject))]; !ok {
 			continue
@@ -867,6 +873,68 @@ func currentFactsResolveMessage(message string, claims []wiki.FactClaim, matched
 		}
 	}
 	return false
+}
+
+// selfFactClaimMatchesMessage deliberately excludes broad kind aliases such as
+// "preference" or "선호". Those aliases are useful after an explicit subject
+// match, but on a self-only turn they would let any preference satisfy a
+// question about a different preference axis.
+func selfFactClaimMatchesMessage(message string, messageTokens map[string]struct{}, claim wiki.FactClaim) bool {
+	if evidenceContainsNormalizedFactValue(message, claim.Value) {
+		return true
+	}
+	claimKey := strings.ToLower(strings.TrimSpace(claim.Key))
+	queryKey := strings.ToLower(strings.TrimSpace(mem.FactKeyFromText(message)))
+	if claimKey != "" && queryKey != "" && queryKey != "untitled" && claimKey == queryKey {
+		return true
+	}
+	for _, token := range selfFactKeyQueryTokens(claim.Key) {
+		if _, ok := messageTokens[token]; ok {
+			return true
+		}
+	}
+	for _, alias := range selfFactCanonicalQueryAliases(claimKey) {
+		if _, ok := messageTokens[alias]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func selfFactKeyQueryTokens(key string) []string {
+	var specific []string
+	for _, token := range factKeyQueryTokens(key) {
+		switch token {
+		case "communication", "response", "identity", "profile", "preference", "fact", "setting":
+			continue
+		default:
+			specific = append(specific, token)
+		}
+	}
+	return specific
+}
+
+func selfFactCanonicalQueryAliases(key string) []string {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "communication.response_length":
+		return []string{"length", "길이", "분량", "간결", "장황"}
+	case "communication.language":
+		return []string{"language", "언어", "한국어", "영어", "한글"}
+	case "communication.answer_first":
+		return []string{"first", "결론", "즉답", "답부터"}
+	case "communication.progress_updates":
+		return []string{"progress", "진행", "진행상황", "중간보고"}
+	case "communication.format":
+		return []string{"format", "형식", "서식", "불릿", "마크다운"}
+	case "identity.address":
+		return []string{"address", "호칭", "이름"}
+	case "wiki.amount_vat_policy":
+		return []string{"vat", "부가세", "공급가액"}
+	case "diet.vegan":
+		return []string{"vegan", "비건", "채식"}
+	default:
+		return nil
+	}
 }
 
 func factClaimMatchesMessage(message string, messageTokens map[string]struct{}, claim wiki.FactClaim) bool {

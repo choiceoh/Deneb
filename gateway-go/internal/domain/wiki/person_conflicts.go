@@ -84,11 +84,11 @@ func (s *Store) PersonMailConflicts(ctx context.Context, limit int) []PersonMail
 		if title == "" || len([]rune(title)) < personConflictTitleMin || len(emails) == 0 {
 			continue
 		}
-		hits, err := s.Search(ctx, title, personConflictHitsMax)
+		report, err := s.SearchWithOptions(ctx, title, personConflictHitsMax, QueryOptions{ExcludeFactResults: true})
 		if err != nil {
 			continue
 		}
-		for _, hit := range hits {
+		for _, hit := range report.Results {
 			if !IsMailAnalysisPath(hit.Path) {
 				continue
 			}

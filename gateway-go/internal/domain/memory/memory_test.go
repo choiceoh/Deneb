@@ -87,6 +87,46 @@ func TestClassifyHeuristics_ExplicitForgetUsesFactTombstoneIntent(t *testing.T) 
 	if !forget.Forget || assertion.FactKey != "커피" || forget.FactKey != assertion.FactKey {
 		t.Fatalf("generic assertion=%+v forget=%+v", assertion, forget)
 	}
+
+	if remember := ClassifyHeuristics("이 내용은 기억하지 마"); !remember.Forget {
+		t.Fatalf("candidate=%+v, explicit do-not-remember must still tombstone", remember)
+	}
+}
+
+func TestClassifyHeuristics_NegatedForgetDoesNotTombstone(t *testing.T) {
+	tests := []struct {
+		name string
+		msg  string
+	}{
+		{name: "korean do not delete", msg: "내 간결한 답변 선호를 삭제하지 마"},
+		{name: "korean do not delete from memory", msg: "내 답변 길이 선호는 기억에서 삭제하지 마"},
+		{name: "korean do not forget", msg: "내 커피 취향은 잊지 마"},
+		{name: "korean topic particle", msg: "내 간결한 답변 선호는 삭제하지는 마"},
+		{name: "korean limiting particle", msg: "내 커피 취향은 잊지만 마"},
+		{name: "korean coordinated verbs", msg: "내 커피 취향은 잊거나 삭제하지 마"},
+		{name: "english do not delete", msg: "Do not delete my response length preference from memory"},
+		{name: "english do not forget", msg: "Please don't forget my coffee preference"},
+		{name: "english adverb", msg: "Please do not permanently delete my preference from memory"},
+		{name: "english coordinated verbs", msg: "Please don't remove or delete my preference from memory"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ClassifyHeuristics(tt.msg); got.Forget || got.Target != TargetEpisodic {
+				t.Fatalf("candidate=%+v, negated retention request must leave the fact plane untouched", got)
+			}
+		})
+	}
+}
+
+func TestClassifyHeuristics_EnglishForgetUsesFactTombstoneIntent(t *testing.T) {
+	for _, msg := range []string{
+		"Delete my response length preference from memory",
+		"Please forget my coffee preference",
+	} {
+		if got := ClassifyHeuristics(msg); got.Target != TargetProfile || !got.Forget {
+			t.Errorf("%q: candidate=%+v, want profile forget", msg, got)
+		}
+	}
 }
 
 func TestRouteFor_SplitsProfileProcedureAndSubjects(t *testing.T) {

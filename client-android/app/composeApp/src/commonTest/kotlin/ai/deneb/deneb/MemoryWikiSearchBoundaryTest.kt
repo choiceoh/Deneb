@@ -424,15 +424,30 @@ class MemoryWikiSearchBoundaryTest {
     @Test
     fun syntheticFactRefsCannotEnterEditableWikiRpcSurface() = runTest {
         val f = gatewayClientFixture()
-        val ref = "@facts/fact-123.md"
-
-        assertNull(f.client.fetchWikiPage(ref))
-        assertFalse(f.client.saveWikiPage(ref, "overwrite"))
-        assertFalse(f.client.deleteCategoryPages(listOf(ref)))
-        assertFalse(f.client.moveWikiPage(ref, "wiki/ordinary.md"))
-        assertFalse(f.client.moveWikiPage("wiki/ordinary.md", ref))
+        for (ref in listOf("@facts/fact-123.md", "사용자\\현행-사실.md")) {
+            assertNull(f.client.fetchWikiPage(ref))
+            assertFalse(f.client.saveWikiPage(ref, "overwrite"))
+            assertFalse(f.client.deleteCategoryPages(listOf(ref)))
+            assertFalse(f.client.moveWikiPage(ref, "wiki/ordinary.md"))
+            assertFalse(f.client.moveWikiPage("wiki/ordinary.md", ref))
+        }
         assertNull(f.client.createWikiPage("Fact", "@facts", "body"))
         assertTrue(f.transport.requests.isEmpty())
+    }
+
+    @Test
+    fun generatedCurrentFactsProfileIsExcludedFromEditableListings() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc(
+            pagesPayload(
+                page("사용자/현행-사실.md", title = "현행 사실"),
+                page("사용자/프로필.md", title = "프로필"),
+            ),
+        )
+
+        val result = f.client.fetchCategoryPages("사용자").orEmpty()
+
+        assertEquals(listOf("사용자/프로필.md"), result.map { it.path })
     }
 
     @Test
