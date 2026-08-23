@@ -28,62 +28,47 @@ type Candidate struct {
 var (
 	excludeRe = regexp.MustCompile(`(?i)(주민등록|주민번호|여권번호|비밀번호|password|secret|api[_-]?key|토큰\s*[:：]|bearer\s+[a-z0-9]|보험증|카드번호|\b\d{6}-?\d{7}\b)`)
 	// Third-party subject cues (family / named roles) — not exhaustive, heuristic.
-	otherSubjectRe                 = regexp.MustCompile(`(?i)(아내|남편|배우자|아들|딸|어머니|아버지|부모님|동료|배우자분)`)
-	profileCueRe                   = regexp.MustCompile(`(?i)(기억해|기억해줘|기억\s*해\s*둬|내\s*선호|나는\s*.{0,12}(좋아|싫어|원해|선호)|앞으로\s*.{0,20}(불러|해줘|해\s*줘)|알레르기|못\s*먹|비건|채식|채식주의|금기|제약\s*사항|장기\s*목표)`)
-	profileCorrectionLeadRe        = regexp.MustCompile(`(?i)^\s*(?:아니(?:야|요)?|아님|정정(?:할게(?:요)?)?|수정(?:할게(?:요)?)?|바꿔서?)(?:[,，:：.!?。！？\s-]+|$)`)
-	genericProfileCorrectionRe     = regexp.MustCompile(`(?i)(좋아|싫어|원해|선호|간결|짧게|짧은\s*답변|장황|길게|상세하게|자세하게|한국어|영어|한글|즉답|답부터|결론부터|불릿|목록|표\s*형식|산문|마크다운|비건|채식|호칭|불러)`)
-	directRememberLeadRe           = regexp.MustCompile(`(?i)^\s*기억\s*(?:해|해줘|해줘요|해\s*둬)(?:[,，:：.!?。！？\s-]+|$)`)
-	directForwardLeadRe            = regexp.MustCompile(`(?i)^\s*(?:앞으로(?:는)?|다음부터)(?:[,，:：.!?。！？\s-]+|$)`)
-	directCorrectionValueRe        = regexp.MustCompile(`(?i)^\s*(?:(?:답변(?:은|는|을|를)?|응답(?:은|는|을|를)?|말투(?:는|를)?|언어(?:는|를)?)\s*)?(?:간결하게?|짧게|짧고\s*간결하게|짧은\s*답변|장황하게?|길게|상세하게|자세하게|한국어(?:로)?|영어(?:로)?|한글(?:로)?|즉답(?:으로)?|답부터|결론부터|불릿(?:으로)?|목록(?:으로)?|표\s*형식(?:으로)?|산문(?:으로)?|마크다운(?:으로)?)(?:\s*(?:답해줘|답변해줘|말해줘|해줘|바꿔줘))?\s*[.!?。！？]*\s*$`)
-	directTrailingRememberRe       = regexp.MustCompile(`(?i)^\s*(?:내|나의|나는|저는|제가|나를|저를)[^:：\n]{0,60}기억\s*(?:해|해줘|해줘요|해\s*둬)\s*[.!?。！？]*\s*$`)
-	directTrailingRememberEnd      = regexp.MustCompile(`(?i)\s*기억\s*(?:해|해줘|해줘요|해\s*둬)\s*[.!?。！？]*\s*$`)
-	directKoreanForgetRe           = regexp.MustCompile(`(?i)^\s*(?:내|나의)\s+(?:(?:답변[^:：\n]{0,18}(?:선호|길이|분량|간결|짧|길게|상세|언어|형식))|(?:[^\s:：\n]{1,16}(?:\s+[^\s:：\n]{1,16}){0,2}\s+(?:선호|취향))|(?:(?:호칭|이름|언어|비건|채식|장기\s*목표|(?:[^\s:：\n]{1,16}\s+)?알레르기)(?:\s*정보)?))(?:은|는|이|가|을|를)?\s*(?:기억에서\s*)?(?:지워줘|삭제해줘|잊어줘)\s*[.!?。！？]*\s*$`)
-	directPreferenceForgetRe       = regexp.MustCompile(`(?i)^\s*(?:내|나의)\s+([^\s:：\n]{1,16}(?:\s+[^\s:：\n]{1,16}){0,2})\s+(?:선호|취향)(?:은|는|이|가|을|를)?\s*(?:기억에서\s*)?(?:지워줘|삭제해줘|잊어줘)\s*[.!?。！？]*\s*$`)
-	directKnownAxisForgetRe        = regexp.MustCompile(`(?i)^\s*(?:내|나의)\s+(?:(?:(?:답변\s*)?형식|불릿|목록|표\s*형식|산문|마크다운)\s*(?:선호|취향)|(?:부가세|vat|공급가액)(?:\s*(?:별도|제외|포함))?\s*(?:선호|정책)|(?:즉답|답부터|결론부터)\s*(?:선호|취향)|(?:진행\s*상황|중간\s*보고|능동\s*공지)\s*(?:선호|취향))(?:은|는|이|가|을|를)?\s*(?:기억에서\s*)?(?:지워줘|삭제해줘|잊어줘)\s*[.!?。！？]*\s*$`)
-	embeddedPreferenceForgetRe     = regexp.MustCompile(`(?i)^\s*(?:내가|제가|나는|저는)\s+(.{1,32}?)(?:을|를)\s+(?:좋아(?:해|한다)|싫어(?:해|한다)|선호(?:해|한다))(?:는|다는)\s+사실(?:은|는|을|를)?\s*(?:기억에서\s*)?(?:지워줘|삭제해줘|잊어줘)\s*[.!?。！？]*\s*$`)
-	embeddedIdentityForgetRe       = regexp.MustCompile(`(?i)^\s*(?:내가|제가|나는|저는)\s+(비건|채식(?:주의자)?)(?:이란|이?라는|이라는)\s+사실(?:은|는|을|를)?\s*(?:기억에서\s*)?(?:지워줘|삭제해줘|잊어줘)\s*[.!?。！？]*\s*$`)
-	directEnglishRememberRe        = regexp.MustCompile(`(?i)^\s*(?:please\s+)?remember\b`)
-	directEnglishForwardRe         = regexp.MustCompile(`(?i)^\s*from\s+now\s+on\b`)
-	directEnglishResponseLengthRe  = regexp.MustCompile(`(?i)^\s*i\s+(?:prefer|want|like)\s+(?:(?:short|brief|concise|long|detailed)\s+(?:answers?|responses?|replies)|(?:answers?|responses?|replies)\s+(?:short|brief|concise|long|detailed))\s*[.!?]*\s*$`)
-	directEnglishLanguageRe        = regexp.MustCompile(`(?i)^\s*i\s+(?:prefer|want|like)\s+(?:(?:answers?|responses?|replies)\s+in\s+)?(?:english|korean)(?:\s+(?:answers?|responses?|replies))?\s*[.!?]*\s*$`)
-	directEnglishIdentityRe        = regexp.MustCompile(`(?i)^\s*i(?:['’]m|\s+am)\s+(?:vegan|vegetarian)\s*[.!?]*\s*$`)
-	directEnglishAllergyRe         = regexp.MustCompile(`(?i)^\s*i(?:['’]m|\s+am)\s+allergic\s+to\s+.{1,32}\s*[.!?]*\s*$`)
-	directEnglishAddressRe         = regexp.MustCompile(`(?i)^\s*my\s+(?:name|preferred\s+name)\s+is\s+[\p{L}\p{N}_-]{1,24}\s*[.!?]*\s*$`)
-	directEnglishGoalRe            = regexp.MustCompile(`(?i)^\s*my\s+long[-\s]?term\s+goal\s+is\s+.{1,40}\s*[.!?]*\s*$`)
-	directEnglishFormatRe          = regexp.MustCompile(`(?i)^\s*i\s+(?:prefer|want|like)\s+(?:(?:bullet(?:ed)?\s+lists?|numbered\s+lists?|lists?|tables?|markdown|prose)(?:\s+(?:format|answers?|responses?|replies))?|(?:answers?|responses?|replies)\s+in\s+(?:bullet(?:ed)?\s+lists?|numbered\s+lists?|lists?|tables?|markdown|prose))\s*[.!?]*\s*$`)
-	directEnglishAnswerFirstRe     = regexp.MustCompile(`(?i)^\s*i\s+(?:prefer|want|like)\s+(?:the\s+)?(?:answer|conclusion)\s+first\s*[.!?]*\s*$`)
-	directEnglishProgressRe        = regexp.MustCompile(`(?i)^\s*i\s+(?:prefer|want|like)\s+(?:proactive\s+)?progress\s+updates?\s*[.!?]*\s*$`)
-	directEnglishVATRe             = regexp.MustCompile(`(?i)^\s*i\s+(?:prefer|want)\s+(?:vat|tax)\s+(?:listed\s+)?(?:separate|excluded|included)\s*[.!?]*\s*$`)
-	directEnglishPreferenceRe      = regexp.MustCompile(`(?i)^\s*i\s+(?:like|dislike|prefer)\s+(.{1,40}?)\s*[.!?]*\s*$`)
-	directEnglishForwardLangRe     = regexp.MustCompile(`(?i)^\s*(?:answer|respond|reply|speak|write)(?:\s+to\s+me)?\s+(?:in\s+)?(?:english|korean)\s*[.!?]*\s*$`)
-	directEnglishForwardLengthRe   = regexp.MustCompile(`(?i)^\s*(?:(?:answer|respond|reply)(?:\s+to\s+me)?\s+(?:briefly|concisely|in\s+detail)|keep\s+(?:your\s+)?(?:answers?|responses?|replies)\s+(?:short|brief|concise|long|detailed))\s*[.!?]*\s*$`)
-	directEnglishForwardFormatRe   = regexp.MustCompile(`(?i)^\s*use\s+(?:bullet(?:ed)?\s+lists?|numbered\s+lists?|lists?|tables?|markdown|prose)(?:\s+format)?\s*[.!?]*\s*$`)
-	directEnglishForwardAnswerRe   = regexp.MustCompile(`(?i)^\s*(?:put|give)\s+(?:the\s+)?(?:answer|conclusion)\s+first\s*[.!?]*\s*$`)
-	directEnglishForwardProgressRe = regexp.MustCompile(`(?i)^\s*(?:give|send)\s+(?:me\s+)?(?:proactive\s+)?progress\s+updates?\s*[.!?]*\s*$`)
-	directEnglishForwardVATRe      = regexp.MustCompile(`(?i)^\s*(?:list|show|write)\s+(?:vat|tax)\s+(?:separately|as\s+(?:separate|excluded|included))\s*[.!?]*\s*$`)
-	directEnglishForwardAddressRe  = regexp.MustCompile(`(?i)^\s*call\s+me\s+[\p{L}\p{N}_-]{1,24}\s*[.!?]*\s*$`)
-	englishTemporaryScopeRe        = regexp.MustCompile(`(?i)\b(?:today|tomorrow|temporarily|for\s+now|for\s+(?:a\s+while|the\s+time\s+being)|until\s+[^,.!?\n]{1,24}|(?:just\s+)?this\s+once|(?:this|next)\s+(?:day|week|month|year|quarter)(?:\s+only)?|for\s+(?:the\s+)?next\s+(?:day|week|month|year|quarter)(?:\s+only)?|this\s+(?:time|answer|response|reply|turn|message|request|conversation|session)|(?:for\s+)?(?:one|the\s+next|this)\s+(?:answer|response|reply|turn|message|request|conversation|session)\s+only|for\s+(?:today|tomorrow|this\s+(?:time|week|month|year|answer|response|reply|turn|message|request|conversation|session)|one\s+(?:day|week|month))\s+only)\b`)
-	englishReportedContentRe       = regexp.MustCompile(`(?i)(?:,\s*)?(?:according\s+to\b|(?:as\s+)?(?:[\p{L}\p{N}_'’-]+\s+){1,5}(?:says?|told\s+me)\b|i\s+was\s+told\b|it\s+(?:says|said)\b|was\s+(?:written|reported)\b)`)
-	englishUncertainAssertionRe    = regexp.MustCompile(`(?i)(?:,\s*)?(?:i\s+(?:guess|think|suppose|believe)|apparently|supposedly|maybe|probably|perhaps)\b`)
-	directDiscourseLeadRe          = regexp.MustCompile(`(?i)^\s*(?:잠깐(?:만)?|wait)(?:[,，:：.!?。！？\s-]+)`)
-	directSelfProfileFrameRe       = regexp.MustCompile(`(?i)(?:(?:나는|저는|제가)\s*.{0,24}(?:좋아|싫어|원해|선호|비건|채식|알레르기)|(?:내|나의)\s*.{0,24}(?:선호|취향|답변|정보|사실|기억|호칭|이름|알레르기|장기\s*목표)|(?:나를|저를).{0,20}(?:불러|호칭)|\bi\s+(?:prefer|like|dislike|want)\b|\bi(?:['’]m|\s+am)\s+(?:vegan|vegetarian|allergic)\b|\bmy\s+(?:preference|preferences|profile|response|answer|language|name|address)\b)`)
-	directSelfProfileStartRe       = regexp.MustCompile(`(?i)^\s*(?:(?:나는|저는|제가)(?:\s|$)|(?:내|나의|나를|저를)(?:\s|$)|i(?:\s|['’]m\s|\s+am\s)|my\s)`)
-	thirdPartyReportFrameRe        = regexp.MustCompile(`(?i)(?:나는|저는|제가)\s+.{0,48}(?:가|이|는|은)\s+.{0,48}(?:라고|다고)\s*(?:들었|말했|전했|생각|알고|기억)`)
-	reportedContentFrameRe         = regexp.MustCompile(`(?i)(?:라고|다고)\s*(?:들었|말했|전했|생각|알고|기억|적혀|쓰여|써\s*있|기재|작성)`)
-	profilePayloadFrameRe          = regexp.MustCompile(`(?i)(?:번역(?:해|할)|요약(?:해|할)|검토(?:해|할)|설명(?:해|할)|문장|문구|메일|이메일|문서|페이지|파일|원문|\btranslate\b|\bsummarize\b|\bemail\b|\bdocument\b|\bsentence\b|\bpage\b|\bfile\b)`)
-	temporaryProfileScopeRe        = regexp.MustCompile(`(?i)(?:오늘만|이번만|이번에만|이번에는|이번엔|다음에만|지금만|지금은|(?:(?:오늘|내일|모레)(?:\s*(?:하루|동안))?(?:에)?\s*만)|(?:이번\s*(?:주|달|개월|분기|해|연도)(?:\s*(?:에|동안))?\s*만)|(?:(?:한|두|세|\d+)\s*(?:시간|일|주|달|개월)|일주일|한달|한\s*달)(?:\s*동안)?\s*만|(?:이|이번|다음)\s*(?:답변|메시지|질문|요청|턴|대화|회의|세션)(?:에|에서|에는)?\s*만|(?:[\p{L}\p{N}_-]+(?:\s+[\p{L}\p{N}_-]+){0,3})(?:에서만|에게만|한테만|때만|경우에만))`)
-	selfIdentityCueRe              = regexp.MustCompile(`(?i)(?:비건|채식|채식주의|알레르기|못\s*먹)`)
-	directSelfIdentityRe           = regexp.MustCompile(`(?i)^\s*(?:(?:나는|저는|제가)\s+(?:(?:비건|채식(?:주의자)?)(?:이야|입니다|이에요|예요|야)?|(?:[\p{L}\p{N}_-]{1,16}\s+)?알레르기(?:가|는)?\s*(?:있어|있어요|있습니다)?)|(?:내|나의)\s+(?:(?:식단|식습관)(?:은|는|이|가)?\s*(?:비건|채식(?:주의)?)|알레르기(?:는|가)?\s+.{1,24}))\s*[.!?。！？]*\s*$`)
-	directSelfIntoleranceRe        = regexp.MustCompile(`(?i)^\s*(?:나는|저는|제가)\s+[\p{L}\p{N}_-]{1,16}(?:을|를)\s+못\s*먹(?:어|어요|습니다)?\s*[.!?。！？]*\s*$`)
-	directSelfCommunicationRe      = regexp.MustCompile(`(?i)^\s*(?:(?:나는|저는|제가)\s+(?:(?:(?:답변|응답|말투|언어)(?:은|는|을|를)?\s+(?:간결하게?|짧게|짧고\s*간결하게|장황하게?|길게|길고\s*상세하게|상세하게|자세하게|한국어(?:로)?|영어(?:로)?|한글(?:로)?)(?:\s*(?:원해|선호해|좋아해))?)|(?:(?:간결한|짧은|긴|상세한|자세한)\s+(?:답변|응답)(?:을|를)?\s*(?:원해|선호해|좋아해)))|(?:내|나의)\s+(?:답변|응답|말투|언어)(?:은|는|을|를)?\s+(?:간결하게?|짧게|짧고\s*간결하게|장황하게?|길게|길고\s*상세하게|상세하게|자세하게|한국어(?:로)?|영어(?:로)?|한글(?:로)?)(?:\s*(?:원해|선호해|좋아해))?|i\s+(?:prefer|want|like)\s+(?:my\s+)?(?:answers?|responses?|reply|replies|language)\s+.{1,24}|my\s+(?:answers?|responses?|reply|replies|language)\s+.{1,24})\s*[.!?。！？]*\s*$`)
-	directSelfGenericPreferenceRe  = regexp.MustCompile(`(?i)^\s*(?:나는|저는|제가)\s+(.{1,40}?)(?:을|를|은|는)?\s*(?:(?:정말|아주|별로|전혀|꽤|많이)\s*)?(?:좋아\s*하지\s*않(?:아|아요)?|안\s*좋아(?:해|해요)?|좋아(?:해|해요|한다)|싫어(?:해|해요|한다)|선호(?:해|해요|한다))\s*[.!?。！？]*\s*$`)
-	directSelfLongTermGoalRe       = regexp.MustCompile(`(?i)^\s*(?:내|나의)\s*장기\s*목표(?:는|은|이|가)?\s+.{1,40}\s*[.!?。！？]*\s*$`)
-	genericThirdPartyObjectRe      = regexp.MustCompile(`(?i)(?:^|\s)[\p{L}\p{N}_-]{1,24}(?:가|이|는|은|도|에게|한테|의)(?:\s|$)`)
-	directSelfAddressRe            = regexp.MustCompile(`(?i)^\s*(?:(?:내|나의)\s*(?:호칭|이름)(?:은|는|을|를)?\s+(?:["“][^"”\n]{1,20}["”]|[\p{L}\p{N}_-]{1,20})(?:으로|로)?|(?:나를|저를)\s+(?:["“][^"”\n]{1,20}["”]|[\p{L}\p{N}_-]{1,20})(?:이라고|라고|로)\s*불러(?:줘)?)\s*[.!?。！？]*\s*$`)
-	directForwardAddressRe         = regexp.MustCompile(`(?i)^\s*(?:나를|저를)\s+(?:["“][^"”\n]{1,20}["”]|[\p{L}\p{N}_-]{1,20})(?:이라고|라고|로)\s*불러(?:줘|주세요)?\s*[.!?。！？]*\s*$`)
-	directForwardVATRe             = regexp.MustCompile(`(?i)^\s*(?:금액(?:은|는|을|를)?\s*)?(?:부가세|vat)(?:는|은|를|을)?\s*(?:별도|제외|포함)(?:로)?\s*(?:기재해줘|적어줘|해줘)?\s*[.!?。！？]*\s*$`)
-	nestedSubjectWithinSelfRe      = regexp.MustCompile(`(?i)^\s*(?:나는|저는|제가)\s+.{0,32}[\p{L}\p{N}_-]{1,24}(?:가|이|는|은)\s+`)
-	forgetCueRe                    = regexp.MustCompile(`(?i)(기억.{0,20}(지워|삭제|잊|하지\s*마)|(?:내|나의).{0,24}(선호|취향|사실|정보).{0,16}(지워|삭제|잊)|(?:선호|취향).{0,20}(지워|삭제|잊)|(?:forget|delete|remove|erase)\b.{0,40}\b(?:memory|memories|preference|preferences|fact|facts|profile|information)\b|(?:memory|memories|preference|preferences|fact|facts|profile|information)\b.{0,40}\b(?:forget|delete|remove|erase)\b)`)
+	otherSubjectRe             = regexp.MustCompile(`(?i)(아내|남편|배우자|아들|딸|어머니|아버지|부모님|동료|배우자분)`)
+	profileCueRe               = regexp.MustCompile(`(?i)(기억해|기억해줘|기억\s*해\s*둬|내\s*선호|나는\s*.{0,12}(좋아|싫어|원해|선호)|앞으로\s*.{0,20}(불러|해줘|해\s*줘)|알레르기|못\s*먹|비건|채식|채식주의|금기|제약\s*사항|장기\s*목표)`)
+	profileCorrectionLeadRe    = regexp.MustCompile(`(?i)^\s*(?:아니(?:야|요)?|아님|정정(?:할게(?:요)?)?|수정(?:할게(?:요)?)?|바꿔서?)(?:[,，:：.!?。！？\s-]+|$)`)
+	genericProfileCorrectionRe = regexp.MustCompile(`(?i)(좋아|싫어|원해|선호|간결|짧게|짧은\s*답변|장황|길게|상세하게|자세하게|한국어|영어|한글|즉답|답부터|결론부터|불릿|목록|표\s*형식|산문|마크다운|비건|채식|호칭|불러)`)
+	directRememberLeadRe       = regexp.MustCompile(`(?i)^\s*기억\s*(?:해|해줘|해줘요|해\s*둬)(?:[,，:：.!?。！？\s-]+|$)`)
+	directForwardLeadRe        = regexp.MustCompile(`(?i)^\s*(?:앞으로(?:는)?|다음부터)(?:[,，:：.!?。！？\s-]+|$)`)
+	directCorrectionValueRe    = regexp.MustCompile(`(?i)^\s*(?:(?:답변(?:은|는|을|를)?|응답(?:은|는|을|를)?|말투(?:는|를)?|언어(?:는|를)?)\s*)?(?:간결하게?|짧게|짧고\s*간결하게|짧은\s*답변|장황하게?|길게|상세하게|자세하게|한국어(?:로)?|영어(?:로)?|한글(?:로)?|즉답(?:으로)?|답부터|결론부터|불릿(?:으로)?|목록(?:으로)?|표\s*형식(?:으로)?|산문(?:으로)?|마크다운(?:으로)?)(?:\s*(?:답해줘|답변해줘|말해줘|해줘|바꿔줘))?\s*[.!?。！？]*\s*$`)
+	directTrailingRememberRe   = regexp.MustCompile(`(?i)^\s*(?:내|나의|나는|저는|제가|나를|저를)[^:：\n]{0,60}기억\s*(?:해|해줘|해줘요|해\s*둬)\s*[.!?。！？]*\s*$`)
+	directTrailingRememberEnd  = regexp.MustCompile(`(?i)\s*기억\s*(?:해|해줘|해줘요|해\s*둬)\s*[.!?。！？]*\s*$`)
+	directKoreanForgetRe       = regexp.MustCompile(`(?i)^\s*(?:내|나의)\s+(?:(?:답변[^:：\n]{0,18}(?:선호|길이|분량|간결|짧|길게|상세|언어|형식))|(?:[^\s:：\n]{1,16}(?:\s+[^\s:：\n]{1,16}){0,2}\s+(?:선호|취향))|(?:(?:호칭|이름|언어|비건|채식|장기\s*목표|(?:[^\s:：\n]{1,16}\s+)?알레르기)(?:\s*정보)?))(?:은|는|이|가|을|를)?\s*(?:기억에서\s*)?(?:지워줘|삭제해줘|잊어줘)\s*[.!?。！？]*\s*$`)
+	directPreferenceForgetRe   = regexp.MustCompile(`(?i)^\s*(?:내|나의)\s+([^\s:：\n]{1,16}(?:\s+[^\s:：\n]{1,16}){0,2})\s+(?:선호|취향)(?:은|는|이|가|을|를)?\s*(?:기억에서\s*)?(?:지워줘|삭제해줘|잊어줘)\s*[.!?。！？]*\s*$`)
+	directKnownAxisForgetRe    = regexp.MustCompile(`(?i)^\s*(?:내|나의)\s+(?:(?:(?:답변\s*)?형식|불릿|목록|표\s*형식|산문|마크다운)\s*(?:선호|취향)|(?:부가세|vat|공급가액)(?:\s*(?:별도|제외|포함))?\s*(?:선호|정책)|(?:즉답|답부터|결론부터)\s*(?:선호|취향)|(?:진행\s*상황|중간\s*보고|능동\s*공지)\s*(?:선호|취향))(?:은|는|이|가|을|를)?\s*(?:기억에서\s*)?(?:지워줘|삭제해줘|잊어줘)\s*[.!?。！？]*\s*$`)
+	embeddedPreferenceForgetRe = regexp.MustCompile(`(?i)^\s*(?:내가|제가|나는|저는)\s+(.{1,32}?)(?:을|를)\s+(?:좋아(?:해|한다)|싫어(?:해|한다)|선호(?:해|한다))(?:는|다는)\s+사실(?:은|는|을|를)?\s*(?:기억에서\s*)?(?:지워줘|삭제해줘|잊어줘)\s*[.!?。！？]*\s*$`)
+	embeddedIdentityForgetRe   = regexp.MustCompile(`(?i)^\s*(?:내가|제가|나는|저는)\s+(비건|채식(?:주의자)?)(?:이란|이?라는|이라는)\s+사실(?:은|는|을|를)?\s*(?:기억에서\s*)?(?:지워줘|삭제해줘|잊어줘)\s*[.!?。！？]*\s*$`)
+	// The per-axis English/Korean phrasings live in direct_grammar.json; only the
+	// structural leads and guards remain here.
+	directEnglishRememberRe       = regexp.MustCompile(`(?i)^\s*(?:please\s+)?remember\b`)
+	directEnglishForwardRe        = regexp.MustCompile(`(?i)^\s*from\s+now\s+on\b`)
+	directEnglishPreferenceRe     = regexp.MustCompile(`(?i)^\s*i\s+(?:like|dislike|prefer)\s+(.{1,40}?)\s*[.!?]*\s*$`)
+	englishTemporaryScopeRe       = regexp.MustCompile(`(?i)\b(?:today|tomorrow|temporarily|for\s+now|for\s+(?:a\s+while|the\s+time\s+being)|until\s+[^,.!?\n]{1,24}|(?:just\s+)?this\s+once|(?:this|next)\s+(?:day|week|month|year|quarter)(?:\s+only)?|for\s+(?:the\s+)?next\s+(?:day|week|month|year|quarter)(?:\s+only)?|this\s+(?:time|answer|response|reply|turn|message|request|conversation|session)|(?:for\s+)?(?:one|the\s+next|this)\s+(?:answer|response|reply|turn|message|request|conversation|session)\s+only|for\s+(?:today|tomorrow|this\s+(?:time|week|month|year|answer|response|reply|turn|message|request|conversation|session)|one\s+(?:day|week|month))\s+only)\b`)
+	englishReportedContentRe      = regexp.MustCompile(`(?i)(?:,\s*)?(?:according\s+to\b|(?:as\s+)?(?:[\p{L}\p{N}_'’-]+\s+){1,5}(?:says?|told\s+me)\b|i\s+was\s+told\b|it\s+(?:says|said)\b|was\s+(?:written|reported)\b)`)
+	englishUncertainAssertionRe   = regexp.MustCompile(`(?i)(?:,\s*)?(?:i\s+(?:guess|think|suppose|believe)|apparently|supposedly|maybe|probably|perhaps)\b`)
+	directDiscourseLeadRe         = regexp.MustCompile(`(?i)^\s*(?:잠깐(?:만)?|wait)(?:[,，:：.!?。！？\s-]+)`)
+	directSelfProfileFrameRe      = regexp.MustCompile(`(?i)(?:(?:나는|저는|제가)\s*.{0,24}(?:좋아|싫어|원해|선호|비건|채식|알레르기)|(?:내|나의)\s*.{0,24}(?:선호|취향|답변|정보|사실|기억|호칭|이름|알레르기|장기\s*목표)|(?:나를|저를).{0,20}(?:불러|호칭)|\bi\s+(?:prefer|like|dislike|want)\b|\bi(?:['’]m|\s+am)\s+(?:vegan|vegetarian|allergic)\b|\bmy\s+(?:preference|preferences|profile|response|answer|language|name|address)\b)`)
+	directSelfProfileStartRe      = regexp.MustCompile(`(?i)^\s*(?:(?:나는|저는|제가)(?:\s|$)|(?:내|나의|나를|저를)(?:\s|$)|i(?:\s|['’]m\s|\s+am\s)|my\s)`)
+	thirdPartyReportFrameRe       = regexp.MustCompile(`(?i)(?:나는|저는|제가)\s+.{0,48}(?:가|이|는|은)\s+.{0,48}(?:라고|다고)\s*(?:들었|말했|전했|생각|알고|기억)`)
+	reportedContentFrameRe        = regexp.MustCompile(`(?i)(?:라고|다고)\s*(?:들었|말했|전했|생각|알고|기억|적혀|쓰여|써\s*있|기재|작성)`)
+	profilePayloadFrameRe         = regexp.MustCompile(`(?i)(?:번역(?:해|할)|요약(?:해|할)|검토(?:해|할)|설명(?:해|할)|문장|문구|메일|이메일|문서|페이지|파일|원문|\btranslate\b|\bsummarize\b|\bemail\b|\bdocument\b|\bsentence\b|\bpage\b|\bfile\b)`)
+	temporaryProfileScopeRe       = regexp.MustCompile(`(?i)(?:오늘만|이번만|이번에만|이번에는|이번엔|다음에만|지금만|지금은|(?:(?:오늘|내일|모레)(?:\s*(?:하루|동안))?(?:에)?\s*만)|(?:이번\s*(?:주|달|개월|분기|해|연도)(?:\s*(?:에|동안))?\s*만)|(?:(?:한|두|세|\d+)\s*(?:시간|일|주|달|개월)|일주일|한달|한\s*달)(?:\s*동안)?\s*만|(?:이|이번|다음)\s*(?:답변|메시지|질문|요청|턴|대화|회의|세션)(?:에|에서|에는)?\s*만|(?:[\p{L}\p{N}_-]+(?:\s+[\p{L}\p{N}_-]+){0,3})(?:에서만|에게만|한테만|때만|경우에만))`)
+	selfIdentityCueRe             = regexp.MustCompile(`(?i)(?:비건|채식|채식주의|알레르기|못\s*먹)`)
+	directSelfIdentityRe          = regexp.MustCompile(`(?i)^\s*(?:(?:나는|저는|제가)\s+(?:(?:비건|채식(?:주의자)?)(?:이야|입니다|이에요|예요|야)?|(?:[\p{L}\p{N}_-]{1,16}\s+)?알레르기(?:가|는)?\s*(?:있어|있어요|있습니다)?)|(?:내|나의)\s+(?:(?:식단|식습관)(?:은|는|이|가)?\s*(?:비건|채식(?:주의)?)|알레르기(?:는|가)?\s+.{1,24}))\s*[.!?。！？]*\s*$`)
+	directSelfIntoleranceRe       = regexp.MustCompile(`(?i)^\s*(?:나는|저는|제가)\s+[\p{L}\p{N}_-]{1,16}(?:을|를)\s+못\s*먹(?:어|어요|습니다)?\s*[.!?。！？]*\s*$`)
+	directSelfCommunicationRe     = regexp.MustCompile(`(?i)^\s*(?:(?:나는|저는|제가)\s+(?:(?:(?:답변|응답|말투|언어)(?:은|는|을|를)?\s+(?:간결하게?|짧게|짧고\s*간결하게|장황하게?|길게|길고\s*상세하게|상세하게|자세하게|한국어(?:로)?|영어(?:로)?|한글(?:로)?)(?:\s*(?:원해|선호해|좋아해))?)|(?:(?:간결한|짧은|긴|상세한|자세한)\s+(?:답변|응답)(?:을|를)?\s*(?:원해|선호해|좋아해)))|(?:내|나의)\s+(?:답변|응답|말투|언어)(?:은|는|을|를)?\s+(?:간결하게?|짧게|짧고\s*간결하게|장황하게?|길게|길고\s*상세하게|상세하게|자세하게|한국어(?:로)?|영어(?:로)?|한글(?:로)?)(?:\s*(?:원해|선호해|좋아해))?|i\s+(?:prefer|want|like)\s+(?:my\s+)?(?:answers?|responses?|reply|replies|language)\s+.{1,24}|my\s+(?:answers?|responses?|reply|replies|language)\s+.{1,24})\s*[.!?。！？]*\s*$`)
+	directSelfGenericPreferenceRe = regexp.MustCompile(`(?i)^\s*(?:나는|저는|제가)\s+(.{1,40}?)(?:을|를|은|는)?\s*(?:(?:정말|아주|별로|전혀|꽤|많이)\s*)?(?:좋아\s*하지\s*않(?:아|아요)?|안\s*좋아(?:해|해요)?|좋아(?:해|해요|한다)|싫어(?:해|해요|한다)|선호(?:해|해요|한다))\s*[.!?。！？]*\s*$`)
+	directSelfLongTermGoalRe      = regexp.MustCompile(`(?i)^\s*(?:내|나의)\s*장기\s*목표(?:는|은|이|가)?\s+.{1,40}\s*[.!?。！？]*\s*$`)
+	genericThirdPartyObjectRe     = regexp.MustCompile(`(?i)(?:^|\s)[\p{L}\p{N}_-]{1,24}(?:가|이|는|은|도|에게|한테|의)(?:\s|$)`)
+	directSelfAddressRe           = regexp.MustCompile(`(?i)^\s*(?:(?:내|나의)\s*(?:호칭|이름)(?:은|는|을|를)?\s+(?:["“][^"”\n]{1,20}["”]|[\p{L}\p{N}_-]{1,20})(?:으로|로)?|(?:나를|저를)\s+(?:["“][^"”\n]{1,20}["”]|[\p{L}\p{N}_-]{1,20})(?:이라고|라고|로)\s*불러(?:줘)?)\s*[.!?。！？]*\s*$`)
+	directForwardAddressRe        = regexp.MustCompile(`(?i)^\s*(?:나를|저를)\s+(?:["“][^"”\n]{1,20}["”]|[\p{L}\p{N}_-]{1,20})(?:이라고|라고|로)\s*불러(?:줘|주세요)?\s*[.!?。！？]*\s*$`)
+	directForwardVATRe            = regexp.MustCompile(`(?i)^\s*(?:금액(?:은|는|을|를)?\s*)?(?:부가세|vat)(?:는|은|를|을)?\s*(?:별도|제외|포함)(?:로)?\s*(?:기재해줘|적어줘|해줘)?\s*[.!?。！？]*\s*$`)
+	nestedSubjectWithinSelfRe     = regexp.MustCompile(`(?i)^\s*(?:나는|저는|제가)\s+.{0,32}[\p{L}\p{N}_-]{1,24}(?:가|이|는|은)\s+`)
+	forgetCueRe                   = regexp.MustCompile(`(?i)(기억.{0,20}(지워|삭제|잊|하지\s*마)|(?:내|나의).{0,24}(선호|취향|사실|정보).{0,16}(지워|삭제|잊)|(?:선호|취향).{0,20}(지워|삭제|잊)|(?:forget|delete|remove|erase)\b.{0,40}\b(?:memory|memories|preference|preferences|fact|facts|profile|information)\b|(?:memory|memories|preference|preferences|fact|facts|profile|information)\b.{0,40}\b(?:forget|delete|remove|erase)\b)`)
 	// A retention request can contain the same destructive verb as an explicit
 	// forget. Keep this guard local to that verb so "기억하지 마" remains a
 	// deletion request while "잊지 마" and "do not delete" do not tombstone.
@@ -235,27 +220,8 @@ func englishSelfProfileAssertion(body string) (key, kind string, ok bool) {
 		englishUncertainAssertionRe.MatchString(body) {
 		return "", "", false
 	}
-	switch {
-	case directEnglishResponseLengthRe.MatchString(body):
-		return "communication.response_length", "preference", true
-	case directEnglishLanguageRe.MatchString(body):
-		return "communication.language", "preference", true
-	case directEnglishFormatRe.MatchString(body):
-		return "communication.format", "preference", true
-	case directEnglishAnswerFirstRe.MatchString(body):
-		return "communication.answer_first", "preference", true
-	case directEnglishProgressRe.MatchString(body):
-		return "communication.progress_updates", "preference", true
-	case directEnglishVATRe.MatchString(body):
-		return "wiki.amount_vat_policy", "preference", true
-	case directEnglishIdentityRe.MatchString(body):
-		return "diet.vegan", "identity", true
-	case directEnglishAllergyRe.MatchString(body):
-		return "health.allergy", "identity", true
-	case directEnglishAddressRe.MatchString(body):
-		return "identity.address", "identity", true
-	case directEnglishGoalRe.MatchString(body):
-		return "goals.long_term", "preference", true
+	if axis, found := axisForEnglishAssertion(body); found {
+		return axis.Key, axis.Kind, true
 	}
 	match := directEnglishPreferenceRe.FindStringSubmatch(body)
 	if len(match) != 2 {
@@ -281,39 +247,17 @@ func englishForwardProfileCommand(message string) (key, kind string, ok bool) {
 		profilePayloadFrameRe.MatchString(body) || englishTemporaryScopeRe.MatchString(body) {
 		return "", "", false
 	}
-	switch {
-	case directEnglishForwardLangRe.MatchString(body):
-		return "communication.language", "preference", true
-	case directEnglishForwardLengthRe.MatchString(body):
-		return "communication.response_length", "preference", true
-	case directEnglishForwardFormatRe.MatchString(body):
-		return "communication.format", "preference", true
-	case directEnglishForwardAnswerRe.MatchString(body):
-		return "communication.answer_first", "preference", true
-	case directEnglishForwardProgressRe.MatchString(body):
-		return "communication.progress_updates", "preference", true
-	case directEnglishForwardVATRe.MatchString(body):
-		return "wiki.amount_vat_policy", "preference", true
-	case directEnglishForwardAddressRe.MatchString(body):
-		return "identity.address", "identity", true
-	default:
-		return "", "", false
+	if axis, found := axisForEnglishForward(body); found {
+		return axis.Key, axis.Kind, true
 	}
+	return "", "", false
 }
 
 func embeddedSelfFactForget(message string) (key, kind string, ok bool) {
 	if directKnownAxisForgetRe.MatchString(message) {
 		lower := strings.ToLower(strings.TrimSpace(message))
-		switch {
-		case strings.Contains(lower, "부가세") || strings.Contains(lower, "vat") || strings.Contains(lower, "공급가액"):
-			return "wiki.amount_vat_policy", "preference", true
-		case strings.Contains(lower, "형식") || strings.Contains(lower, "불릿") || strings.Contains(lower, "목록") ||
-			strings.Contains(lower, "산문") || strings.Contains(lower, "마크다운"):
-			return "communication.format", "preference", true
-		case strings.Contains(lower, "즉답") || strings.Contains(lower, "답부터") || strings.Contains(lower, "결론부터"):
-			return "communication.answer_first", "preference", true
-		case strings.Contains(lower, "진행") || strings.Contains(lower, "중간 보고") || strings.Contains(lower, "능동 공지"):
-			return "communication.progress_updates", "preference", true
+		if axis, found := axisForKnownAxisForget(lower); found {
+			return axis.Key, axis.Kind, true
 		}
 	}
 	if directKoreanForgetRe.MatchString(message) {
@@ -323,37 +267,14 @@ func embeddedSelfFactForget(message string) (key, kind string, ok bool) {
 				return "", "", false
 			}
 			normalizedObject := strings.Join(strings.Fields(strings.ToLower(object)), " ")
-			switch normalizedObject {
-			case "언어", "답변 언어":
-				return "communication.language", "preference", true
-			case "호칭", "이름":
-				return "identity.address", "identity", true
-			case "비건", "채식", "채식주의":
-				return "diet.vegan", "identity", true
-			case "답변 길이", "답변 분량", "짧은 답변", "긴 답변", "간결한 답변", "상세한 답변":
-				return "communication.response_length", "preference", true
-			default:
-				return genericFactKeyFromText(object), "preference", true
+			if axis, found := axisForForgetObject(normalizedObject); found {
+				return axis.Key, axis.Kind, true
 			}
+			return genericFactKeyFromText(object), "preference", true
 		}
 		lower := strings.ToLower(strings.TrimSpace(message))
-		switch {
-		case strings.Contains(lower, "언어") || strings.Contains(lower, "한국어") ||
-			strings.Contains(lower, "영어") || strings.Contains(lower, "한글"):
-			return "communication.language", "preference", true
-		case strings.Contains(lower, "호칭") || strings.Contains(lower, "이름"):
-			return "identity.address", "identity", true
-		case strings.Contains(lower, "비건") || strings.Contains(lower, "채식"):
-			return "diet.vegan", "identity", true
-		case strings.Contains(lower, "알레르기"):
-			return "health.allergy", "identity", true
-		case strings.Contains(lower, "장기 목표"):
-			return "goals.long_term", "preference", true
-		case strings.Contains(lower, "답변") && (strings.Contains(lower, "길이") ||
-			strings.Contains(lower, "분량") || strings.Contains(lower, "간결") ||
-			strings.Contains(lower, "짧") || strings.Contains(lower, "길게") ||
-			strings.Contains(lower, "상세")):
-			return "communication.response_length", "preference", true
+		if axis, found := axisForForgetCue(lower); found {
+			return axis.Key, axis.Kind, true
 		}
 		return "", "", false
 	}
@@ -487,10 +408,8 @@ func isProfileCorrection(message string) bool {
 	if !profileCorrectionLeadRe.MatchString(message) {
 		return false
 	}
-	for _, axis := range profileFactAxes {
-		if axis.re.MatchString(message) {
-			return true
-		}
+	if _, found := axisForClassifiedText(message); found {
+		return true
 	}
 	return genericProfileCorrectionRe.MatchString(message)
 }
@@ -560,10 +479,8 @@ func FactKindForKey(key string) (string, bool) {
 
 func FactKeyFromText(text string) string {
 	lower := strings.ToLower(strings.TrimSpace(text))
-	for _, axis := range profileFactAxes {
-		if axis.re.MatchString(lower) {
-			return axis.key
-		}
+	if axis, found := axisForClassifiedText(lower); found {
+		return axis.Key
 	}
 	return genericFactKeyFromText(lower)
 }
@@ -593,25 +510,6 @@ func genericFactKeyFromText(text string) string {
 	return b.String()
 }
 
-type profileFactAxis struct {
-	key  string
-	kind string
-	re   *regexp.Regexp
-}
-
-var profileFactAxes = []profileFactAxis{
-	{key: "communication.response_length", kind: "preference", re: regexp.MustCompile(`(간결|짧게|짧은 답변|3줄|장황|길게|상세하게|자세하게|긴 답변|답변.{0,8}(길이|분량))`)},
-	{key: "communication.language", kind: "preference", re: regexp.MustCompile(`(한국어|영어|한글).{0,12}(전용|답변|답해|답변해|사용|말해|써|작성)`)},
-	{key: "communication.answer_first", kind: "preference", re: regexp.MustCompile(`(즉답|답부터|결론부터|질문에는.{0,8}답|분석보다.{0,8}답)`)},
-	{key: "communication.progress_updates", kind: "preference", re: regexp.MustCompile(`(진행 상황|진행상황|중간 보고|능동 공지|왜 멈췄)`)},
-	{key: "communication.format", kind: "preference", re: regexp.MustCompile(`(불릿|목록|표 형식|산문|헤더|마크다운).{0,12}(선호|좋아|싫어|해줘|하지)`)},
-	{key: "wiki.amount_vat_policy", kind: "preference", re: regexp.MustCompile(`(부가세|vat|공급가액).{0,24}(제외|별도|포함|기재|적지)`)},
-	{key: "health.allergy", kind: "identity", re: regexp.MustCompile(`(알레르기|못\s*먹)`)},
-	{key: "goals.long_term", kind: "preference", re: regexp.MustCompile(`(장기\s*목표)`)},
-	{key: "diet.vegan", kind: "identity", re: regexp.MustCompile(`(비건|채식주의|채식주의자)`)},
-	{key: "identity.address", kind: "identity", re: regexp.MustCompile(`(?:(나를|저를|호칭|이름).{0,16}(불러|불러줘|라고 해|호칭)|(?:내|나의)\s*(?:호칭|이름).{0,24}기억)`)},
-}
-
 var (
 	factKeyScaffoldingRE = regexp.MustCompile(`(?i)(기억\s*(?:해(?:줘)?|하지\s*마|에서\s*(?:지워|삭제)|지워|삭제)|잊어(?:줘)?|앞으로(?:는)?|항상|다음부터|나는|내가|제가|저는|내\s+|나의\s+|취향(?:은|는|이|가|을|를)?|선호(?:해|한다|함|은|는|이|가|을|를)?|좋아\s*하지\s*않(?:아|아요)?|안\s*좋아(?:해|한다)?|선호\s*하지\s*않(?:아|아요)?|원하지\s*않(?:아|아요)?|좋아(?:해|한다|함)?|싫어(?:해|한다|함)?|원해|정말|아주|별로|전혀|꽤|많이|아니야|아님|하지\s*마|해\s*줘|해주세요|부탁해|바꿔|변경해)`)
 	factKeyParticleRE    = regexp.MustCompile(`([[:alnum:]가-힣]+)(은|는|이|가|을|를)(\s|$)`)
@@ -619,10 +517,8 @@ var (
 
 func profileFactKind(text string) string {
 	lower := strings.ToLower(strings.TrimSpace(text))
-	for _, axis := range profileFactAxes {
-		if axis.re.MatchString(lower) {
-			return axis.kind
-		}
+	if axis, found := axisForClassifiedText(lower); found {
+		return axis.Kind
 	}
 	return "preference"
 }
