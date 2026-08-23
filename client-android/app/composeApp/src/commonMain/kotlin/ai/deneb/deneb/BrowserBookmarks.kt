@@ -61,6 +61,31 @@ internal fun removeBrowserBookmark(bookmarks: List<BrowserBookmark>, url: String
     return bookmarks.filterNot { canonicalBrowserBookmarkUrl(it.url) == key }.sanitizedBrowserBookmarks()
 }
 
+internal fun updateBrowserBookmark(
+    bookmarks: List<BrowserBookmark>,
+    currentUrl: String,
+    title: String,
+    url: String = currentUrl,
+): List<BrowserBookmark> {
+    val currentKey = canonicalBrowserBookmarkUrl(currentUrl)
+    val nextUrl = canonicalBrowserBookmarkUrl(url)
+    if (!canBookmarkUrl(nextUrl)) return bookmarks.sanitizedBrowserBookmarks()
+    val current = bookmarks.firstOrNull { canonicalBrowserBookmarkUrl(it.url) == currentKey }
+        ?: return bookmarks.sanitizedBrowserBookmarks()
+    val updated = current.copy(
+        url = nextUrl,
+        title = cleanBrowserBookmarkTitle(title, nextUrl),
+    )
+    return bookmarks.mapNotNull { row ->
+        val key = canonicalBrowserBookmarkUrl(row.url)
+        when {
+            key == currentKey -> updated
+            key == nextUrl -> null
+            else -> row
+        }
+    }.sanitizedBrowserBookmarks()
+}
+
 internal fun isBrowserBookmarked(bookmarks: List<BrowserBookmark>, url: String): Boolean {
     val key = canonicalBrowserBookmarkUrl(url)
     return canBookmarkUrl(key) && bookmarks.any { canonicalBrowserBookmarkUrl(it.url) == key }

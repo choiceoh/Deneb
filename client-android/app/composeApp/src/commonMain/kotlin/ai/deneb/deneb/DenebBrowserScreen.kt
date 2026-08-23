@@ -8,6 +8,9 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
+import ai.deneb.ui.denebPopEnter
+import ai.deneb.ui.denebPopExit
+import ai.deneb.ui.denebPressable
 import ai.deneb.ui.icons.automirrored.outlined.OpenInNew
 import ai.deneb.ui.icons.filled.Bookmark
 import ai.deneb.ui.icons.outlined.Block
@@ -15,6 +18,7 @@ import ai.deneb.ui.icons.outlined.BookmarkBorder
 import ai.deneb.ui.icons.outlined.ContentCopy
 import ai.deneb.ui.icons.outlined.History
 import ai.deneb.ui.icons.outlined.Translate
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -382,6 +386,9 @@ fun DenebBrowserScreen(
                 showBookmarks = false
             },
             onDelete = { bookmark -> persistBookmarks(removeBrowserBookmark(bookmarks, bookmark.url)) },
+            onUpdate = { bookmark, title, url ->
+                persistBookmarks(updateBrowserBookmark(bookmarks, bookmark.url, title, url))
+            },
             onDismiss = { showBookmarks = false },
         )
     }
@@ -1003,9 +1010,9 @@ private fun BrowserBookmarksSheet(
     bookmarks: List<BrowserBookmark>,
     onOpen: (BrowserBookmark) -> Unit,
     onDelete: (BrowserBookmark) -> Unit,
+    onUpdate: (BrowserBookmark, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val haptics = rememberHaptics()
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier
@@ -1021,62 +1028,162 @@ private fun BrowserBookmarksSheet(
                 color = denebHint(),
             )
             Spacer(Modifier.height(12.dp))
-            if (bookmarks.isEmpty()) {
-                Text(
-                    "아직 비어 있습니다.",
-                    style = DenebType.body,
-                    color = denebHint(),
+            BrowserBookmarksList(
+                bookmarks = bookmarks,
+                onOpen = onOpen,
+                onDelete = onDelete,
+                onUpdate = onUpdate,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun BrowserBookmarksList(
+    bookmarks: List<BrowserBookmark>,
+    onOpen: (BrowserBookmark) -> Unit,
+    onDelete: (BrowserBookmark) -> Unit,
+    onUpdate: (BrowserBookmark, String, String) -> Unit,
+    initiallyRevealedUrl: String? = null,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberHaptics()
+    var revealedUrl by remember { mutableStateOf(initiallyRevealedUrl) }
+    var editTarget by remember { mutableStateOf<BrowserBookmark?>(null) }
+    editTarget?.let { target ->
+        EditBrowserBookmarkDialog(
+            bookmark = target,
+            onSave = { title, url ->
+                onUpdate(target, title, url)
+                editTarget = null
+                revealedUrl = null
+            },
+            onDismiss = { editTarget = null },
+        )
+    }
+    if (bookmarks.isEmpty()) {
+        Text(
+            "아직 비어 있습니다.",
+            style = DenebType.body,
+            color = denebHint(),
+            modifier = modifier,
+        )
+        return
+    }
+    LazyColumn(modifier.fillMaxWidth()) {
+        items(bookmarks, key = { it.url }) { bookmark ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .denebPressable(
+                        onClick = {
+                            haptics.tap()
+                            onOpen(bookmark)
+                        },
+                        onLongClick = {
+                            revealedUrl = if (revealedUrl == bookmark.url) null else bookmark.url
+                        },
+                    )
+                    .padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.Bookmark,
+                    contentDescription = null,
+                    tint = denebInsight(),
+                    modifier = Modifier.size(22.dp),
                 )
-            } else {
-                LazyColumn(Modifier.fillMaxWidth()) {
-                    items(bookmarks, key = { it.url }) { bookmark ->
-                        Row(
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text(
+                        browserBookmarkDisplayTitle(bookmark),
+                        style = DenebType.rowTitle,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        bookmark.url,
+                        style = DenebType.meta,
+                        color = denebHint(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                AnimatedVisibility(
+                    visible = revealedUrl == bookmark.url,
+                    enter = denebPopEnter,
+                    exit = denebPopExit,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
+                                .padding(end = 8.dp)
+                                .height(44.dp)
+                                .clickable(onClickLabel = "북마크 수정") {
                                     haptics.tap()
-                                    onOpen(bookmark)
-                                }
-                                .padding(vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                Icons.Filled.Bookmark,
-                                contentDescription = null,
-                                tint = denebInsight(),
-                                modifier = Modifier.size(22.dp),
-                            )
-                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                                Text(
-                                    browserBookmarkDisplayTitle(bookmark),
-                                    style = DenebType.rowTitle,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    bookmark.url,
-                                    style = DenebType.meta,
-                                    color = denebHint(),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            IconButton(
-                                onClick = {
-                                    haptics.tap()
-                                    onDelete(bookmark)
+                                    editTarget = bookmark
                                 },
-                                modifier = Modifier.size(40.dp),
-                            ) {
-                                Icon(Icons.Outlined.Delete, contentDescription = "북마크 삭제", tint = denebHint())
-                            }
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("수정", style = DenebType.meta, color = denebHint())
+                        }
+                        IconButton(
+                            onClick = {
+                                haptics.tap()
+                                onDelete(bookmark)
+                            },
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Icon(Icons.Outlined.Delete, contentDescription = "북마크 삭제", tint = denebHint())
                         }
                     }
                 }
             }
         }
     }
+}
+
+private const val BOOKMARK_TITLE_EDIT_MAX = 96
+
+@Composable
+private fun EditBrowserBookmarkDialog(
+    bookmark: BrowserBookmark,
+    onSave: (String, String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var title by remember(bookmark.url) { mutableStateOf(bookmark.title) }
+    var url by remember(bookmark.url) { mutableStateOf(bookmark.url) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("북마크 수정", style = DenebType.rowTitle) },
+        confirmButton = {
+            TextButton(
+                enabled = canBookmarkUrl(url),
+                onClick = { onSave(title, url) },
+            ) { Text("저장") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { next ->
+                        title = if (next.length <= BOOKMARK_TITLE_EDIT_MAX) next else next.take(BOOKMARK_TITLE_EDIT_MAX)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("이름") },
+                )
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    singleLine = true,
+                    label = { Text("주소") },
+                )
+            }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -42,6 +42,35 @@ class BrowserBookmarksTest {
     }
 
     @Test
+    fun `update renames title and can retarget the url`() {
+        val existing = listOf(
+            BrowserBookmark(url = "https://example.com/old", title = "Old"),
+            BrowserBookmark(url = "https://example.com/keep", title = "Keep"),
+        )
+
+        val renamed = updateBrowserBookmark(existing, "https://example.com/old", "  New   Name  ")
+        assertEquals("New Name", renamed.first { it.url == "https://example.com/old" }.title)
+        assertEquals(listOf("https://example.com/old", "https://example.com/keep"), renamed.map { it.url })
+
+        val moved = updateBrowserBookmark(renamed, "https://example.com/old", "Moved", " https://example.com/new ")
+        assertEquals(listOf("https://example.com/new", "https://example.com/keep"), moved.map { it.url })
+        assertEquals("Moved", moved.first().title)
+    }
+
+    @Test
+    fun `update rejects a bad url and drops a colliding row`() {
+        val existing = listOf(
+            BrowserBookmark(url = "https://example.com/a", title = "A"),
+            BrowserBookmark(url = "https://example.com/b", title = "B"),
+        )
+
+        assertEquals(existing, updateBrowserBookmark(existing, "https://example.com/a", "Nope", "javascript:alert(1)"))
+
+        val collided = updateBrowserBookmark(existing, "https://example.com/a", "Now B", "https://example.com/b")
+        assertEquals(listOf(BrowserBookmark(url = "https://example.com/b", title = "Now B", addedAtMs = 0)), collided)
+    }
+
+    @Test
     fun `only http urls can be bookmarked`() {
         assertTrue(canBookmarkUrl("https://example.com"))
         assertTrue(canBookmarkUrl("http://example.com"))
