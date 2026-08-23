@@ -15,11 +15,39 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase/runcontract"
 	evalbriefcase "github.com/choiceoh/deneb/gateway-go/internal/eval/briefcase"
 	closedloop "github.com/choiceoh/deneb/gateway-go/internal/eval/briefcase/closedloop"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	runtimebriefcase "github.com/choiceoh/deneb/gateway-go/internal/runtime/briefcase"
 )
+
+func setRunProvenanceForTest(t *testing.T, result *runtimebriefcase.RunResult) {
+	t.Helper()
+	result.Sampling = runtimebriefcase.SamplingProfile{Temperature: 0, TopP: 1}
+	promptDigests := make([]string, 0, len(result.Episodes))
+	for _, episode := range result.Episodes {
+		if episode.SystemPromptSHA256 != "" {
+			promptDigests = append(promptDigests, episode.SystemPromptSHA256)
+		}
+	}
+	var err error
+	result.SystemPromptSequenceSHA256, err = runcontract.SystemPromptSequenceDigest(promptDigests)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result.ExecutionProfileSHA256, err = runcontract.ExecutionProfileDigest(
+		result.Model,
+		result.APIMode,
+		result.ToolSchemaSHA256,
+		result.EndpointSHA256,
+		result.BuildSHA256,
+		result.Sampling,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestAuthorizeModelEndpointRejectsUnsafeEndpoints(t *testing.T) {
 	tests := []struct {
@@ -86,9 +114,7 @@ func TestScoreCommandReturnsPassOrFailWhenAnswerChanges(t *testing.T) {
 		Episodes: []runtimebriefcase.EpisodeResult{scoreTimelineEpisode(t, pack, "개정 메일이 이전 승인 예산 100을 대체했으며, Project Aurora의 최신 승인 예산은 120입니다.")},
 		State:    json.RawMessage(`{"ok":true}`),
 	}
-	if err := runtimebriefcase.SetRunProvenance(&result); err != nil {
-		t.Fatal(err)
-	}
+	setRunProvenanceForTest(t, &result)
 	runPath := filepath.Join(dir, "run.json")
 	writeTestJSON(t, runPath, result)
 	planPath := filepath.Join(caseDir, "sealed", "grader-plan.json")
@@ -297,9 +323,7 @@ func TestScoreRejectsUnboundRunAndPlan(t *testing.T) {
 		ExecutionProfileSHA256: strings.Repeat("4", 64), SystemPromptSequenceSHA256: strings.Repeat("5", 64),
 		Episodes: []runtimebriefcase.EpisodeResult{scoreTimelineEpisode(t, pack, "120")}, State: json.RawMessage(`{}`),
 	}
-	if err := runtimebriefcase.SetRunProvenance(&result); err != nil {
-		t.Fatal(err)
-	}
+	setRunProvenanceForTest(t, &result)
 	runPath := filepath.Join(dir, "run.json")
 	writeTestJSON(t, runPath, result)
 	planPath := filepath.Join(caseDir, "sealed", "grader-plan.json")

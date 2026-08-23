@@ -12,6 +12,32 @@ import (
 
 const supervisorTestDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
+func setRunProvenanceForTest(result *runcontract.RunResult) {
+	result.Sampling = runcontract.SamplingProfile{Temperature: 0, TopP: 1}
+	promptDigests := make([]string, 0, len(result.Episodes))
+	for _, episode := range result.Episodes {
+		if episode.SystemPromptSHA256 != "" {
+			promptDigests = append(promptDigests, episode.SystemPromptSHA256)
+		}
+	}
+	var err error
+	result.SystemPromptSequenceSHA256, err = runcontract.SystemPromptSequenceDigest(promptDigests)
+	if err != nil {
+		panic(err)
+	}
+	result.ExecutionProfileSHA256, err = runcontract.ExecutionProfileDigest(
+		result.Model,
+		result.APIMode,
+		result.ToolSchemaSHA256,
+		result.EndpointSHA256,
+		result.BuildSHA256,
+		result.Sampling,
+	)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func TestSupervisorEvaluateReturnsContinueThenPassWithHiddenDiagnostics(t *testing.T) {
 	plan := signedSupervisorPlan(t, 2, 1, []SupervisorCheckpoint{
 		{Cycle: 1, Checks: []Check{{ID: "final-answer", Type: CheckExactText, Weight: 1, ExpectedText: "final"}}},
@@ -289,7 +315,7 @@ func supervisorRun(runID, text string) runcontract.RunResult {
 		}},
 		State: json.RawMessage(`{"ok":true}`),
 	}
-	_ = runcontract.SetRunProvenance(&result)
+	setRunProvenanceForTest(&result)
 	return result
 }
 

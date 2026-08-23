@@ -6,6 +6,26 @@ import (
 	"testing"
 )
 
+func setRunProvenanceForTest(t *testing.T, run *RunResult) {
+	t.Helper()
+	run.Sampling = SamplingProfile{Temperature: 0, TopP: 1}
+	digests := make([]string, 0, len(run.Episodes))
+	for _, episode := range run.Episodes {
+		if episode.SystemPromptSHA256 != "" {
+			digests = append(digests, episode.SystemPromptSHA256)
+		}
+	}
+	var err error
+	run.SystemPromptSequenceSHA256, err = SystemPromptSequenceDigest(digests)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.ExecutionProfileSHA256, err = ExecutionProfileDigest(run.Model, run.APIMode, run.ToolSchemaSHA256, run.EndpointSHA256, run.BuildSHA256, run.Sampling)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunContractProvenanceAndWireRoundTrip(t *testing.T) {
 	digest := strings.Repeat("a", 64)
 	run := &RunResult{
@@ -27,9 +47,7 @@ func TestRunContractProvenanceAndWireRoundTrip(t *testing.T) {
 		}},
 		State: json.RawMessage(`{"ok":true}`),
 	}
-	if err := SetRunProvenance(run); err != nil {
-		t.Fatal(err)
-	}
+	setRunProvenanceForTest(t, run)
 	if err := ValidateRunProvenance(run); err != nil {
 		t.Fatal(err)
 	}
