@@ -739,7 +739,12 @@ func (s *Store) filterFactLifecycleSearchResults(query string, results []SearchR
 	for _, claim := range snapshot.Active {
 		activeIDs[claim.ID] = struct{}{}
 	}
-	matcher := newFactLifecycleMatcher(snapshot)
+	pageSnapshot := snapshot
+	// Superseded pages are already removed from the page index by path. Their
+	// untyped body lines cannot safely retire a successor that shares boilerplate;
+	// page results therefore use only identity-scoped lifecycle rules.
+	pageSnapshot.StaleValues = nil
+	matcher := newFactLifecycleMatcher(pageSnapshot)
 	filtered := results[:0]
 	for _, result := range results {
 		if result.FactID != "" {

@@ -208,6 +208,77 @@ func TestTypedFactLifecycleKeepsSharedShortValuesScopedAcrossSearchPlanAndRestar
 	assertScoped("reopen", reopened)
 }
 
+func TestPageSearchIgnoresUntypedSupersededLinesButKeepsTypedLifecycle(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	const (
+		sharedLine   = "선택님 6월 19일 확인 완료"
+		currentPath  = "업무/파이프라인-현행.md"
+		oldPath      = "업무/파이프라인-구버전.md"
+		typedOldPath = "프로젝트/beta-quote-old.md"
+		typedNewPath = "프로젝트/beta-quote-current.md"
+	)
+
+	write := func(path, title, subject, body string) {
+		t.Helper()
+		page := NewPage(title, "업무", nil)
+		page.Meta.SubjectID = subject
+		page.Body = body
+		if err := store.WritePage(path, page); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(oldPath, "착공 파이프라인 구버전", "", "옛 파이프라인 기준점 411MW\n"+sharedLine)
+	write(currentPath, "착공 파이프라인 현행", "", "현행 파이프라인 기준점 534MW\n"+sharedLine)
+	write(typedOldPath, "beta quote old", "project:beta", "project beta quote amount 8120만원")
+	write(typedNewPath, "beta quote current", "project:beta", "project beta quote amount 9350만원")
+	if err := store.MarkSuperseded(oldPath, currentPath); err != nil {
+		t.Fatal(err)
+	}
+
+	base := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
+	for index, value := range []string{"8120만원", "9350만원"} {
+		at := base.Add(time.Duration(index) * time.Hour)
+		result, err := store.UpsertFact(FactInput{
+			Subject: "project:beta", Key: "quote.amount", Value: value,
+			Kind: FactKindAmount, Authority: FactAuthorityPrimaryDoc,
+			Sources: []string{"doc:beta"}, BasisAt: at, At: at,
+		})
+		if err != nil || !result.Committed {
+			t.Fatalf("UpsertFact(%q) = %+v, err=%v", value, result, err)
+		}
+	}
+
+	snapshot := store.RecallFactSnapshot()
+	if !containsString(snapshot.StaleValues, sharedLine) {
+		t.Fatalf("shared superseded line missing from audit snapshot: %+v", snapshot.StaleValues)
+	}
+	if len(snapshot.LifecycleRules) != 1 {
+		t.Fatalf("typed lifecycle rules = %+v, want beta correction", snapshot.LifecycleRules)
+	}
+
+	searchPages := func(query string) []SearchResult {
+		t.Helper()
+		report, err := store.SearchWithOptions(context.Background(), query, 10, QueryOptions{
+			Mode: SearchModeBM25, SkipRerank: true, ExcludeFactResults: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return report.Results
+	}
+	current := searchPages("현행 파이프라인 기준점")
+	if !searchResultsContainPath(current, currentPath) {
+		t.Fatalf("shared untyped stale line removed the current page: %+v", current)
+	}
+	if old := searchPages("옛 파이프라인 기준점"); searchResultsContainPath(old, oldPath) {
+		t.Fatalf("superseded page resurfaced after page-line exemption: %+v", old)
+	}
+	typed := searchPages("project beta quote amount")
+	if searchResultsContainPath(typed, typedOldPath) || !searchResultsContainPath(typed, typedNewPath) {
+		t.Fatalf("typed lifecycle filtering changed: %+v", typed)
+	}
+}
+
 func TestFactLifecycleMatcherRequiresIdentityForShortTypedAndUntypedValues(t *testing.T) {
 	store, _, _ := newFactTestStore(t)
 	snapshot := FactRecallSnapshot{
