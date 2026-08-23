@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 )
@@ -16,11 +17,18 @@ type nativeWorkFeedStore struct {
 	onLadderAction   func(workfeed.Item, string) error
 	onApprovalAct    func(workfeed.Item, string, string) error
 	onSelfCorrection func(workfeed.Item, string, string) error
+	// wikiDir routes dream-card corrections into the dreamer's 반증 queue
+	// (improvement-ideas 5.7); empty disables the funnel.
+	wikiDir string
 }
 
 func (s *Server) nativeWorkFeedStore() *nativeWorkFeedStore {
 	if s == nil || s.workFeedStore == nil {
 		return nil
+	}
+	var wikiDir string
+	if s.wikiStore != nil {
+		wikiDir = s.wikiStore.Dir()
 	}
 	return &nativeWorkFeedStore{
 		store:            s.workFeedStore,
@@ -30,6 +38,7 @@ func (s *Server) nativeWorkFeedStore() *nativeWorkFeedStore {
 		onLadderAction:   s.handleLadderCardAction,
 		onApprovalAct:    s.handleGroupwareApprovalAction,
 		onSelfCorrection: s.handleSelfCorrectionCardAction,
+		wikiDir:          wikiDir,
 	}
 }
 
@@ -129,7 +138,26 @@ func (s *nativeWorkFeedStore) Correct(id, note string) (workfeed.Item, error) {
 		return workfeed.Item{}, err
 	}
 	s.record(nativesync.WorkFeedUpdated(item))
+	s.funnelDreamCorrection(item, note)
 	return item, nil
+}
+
+// funnelDreamCorrection routes a correction made on a dream/digest card into
+// the dreamer's disconfirming-evidence queue (improvement-ideas 5.7) so the
+// next critique-eligible cycle re-examines the corrected fact instead of the
+// correction dying in the card body. Best-effort by design.
+func (s *nativeWorkFeedStore) funnelDreamCorrection(item workfeed.Item, note string) {
+	if s.wikiDir == "" || strings.TrimSpace(note) == "" {
+		return
+	}
+	if item.Source != workfeed.SourceDream && item.Source != dreamDigestSource {
+		return
+	}
+	if err := wiki.RecordDreamCorrection(s.wikiDir, "workfeed-correct", item.RefID, note); err != nil {
+		if s.log != nil {
+			s.log.Error("native sync: dream correction queue append failed", "error", err)
+		}
+	}
 }
 
 // Rewrite replaces an item's body and mirrors the resulting item.

@@ -616,8 +616,18 @@ func (wd *WikiDreamer) synthesizeDreamCycle(ctx context.Context, cycle *dreamCyc
 
 	// Offline self-critique (P3): a second, cheap model pass drops proposals that
 	// duplicate the index or add no knowledge, before they reach the store.
-	updates, dropped := wd.critiqueUpdates(ctx, updates)
+	// Pending user corrections (5.7) ride along as 반증 evidence; the cycle that
+	// actually ran the critique consumes them, a skipped critique leaves them
+	// pending for the next eligible cycle.
+	dreamCorrections := wd.pendingDreamCorrections()
+	updates, dropped := wd.critiqueUpdates(ctx, updates, dreamCorrections)
 	cycle.report.CritiqueDropped = dropped
+	if len(dreamCorrections) > 0 && wd.client != nil && cycle.report.WikiUpdatesProposed >= critiqueMinUpdates {
+		wd.consumeDreamCorrections(dreamCorrections)
+		cycle.report.CorrectionsConsidered = len(dreamCorrections)
+		wd.logger.Info("wiki-dream: user corrections injected into critique",
+			"corrections", len(dreamCorrections))
+	}
 
 	gated, demandDropped := applyDemandGate(cycle.synthInput, updates)
 	if demandDropped > 0 {
