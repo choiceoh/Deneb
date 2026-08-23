@@ -19,6 +19,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -319,7 +320,23 @@ internal fun applyDenebBrowserWebSettings(web: WebView) {
     web.settings.setSupportMultipleWindows(true)
     web.settings.javaScriptCanOpenWindowsAutomatically = false
     web.settings.userAgentString = browserUserAgent(web.settings.userAgentString)
+    // Older Korean sites still serve http images/scripts on https pages; the
+    // WebView default (NEVER_ALLOW) silently drops them and the page renders
+    // broken. Chrome itself uses the compatibility behaviour.
+    web.settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
     CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
+}
+
+/**
+ * Persists cookies now instead of whenever Chromium next decides to.
+ *
+ * Chromium flushes its cookie store lazily. The app can be killed from the
+ * background at any time — and the battery policy tears the connection down on
+ * purpose — so a session cookie written just before that (a login the user just
+ * completed) could be lost, silently signing them back out.
+ */
+internal fun flushBrowserCookies() {
+    runCatching { CookieManager.getInstance().flush() }
 }
 
 internal fun newBrowserPopupLayerView(context: Context): FrameLayout = FrameLayout(context).apply {

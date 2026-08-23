@@ -96,6 +96,10 @@ class BrowserAdBlockTest {
     @Test
     fun `blocks substack publisher pixels and trackers`() {
         assertTrue(shouldBlockBrowserAdRequest("https://connect.facebook.net/en_US/fbevents.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://connect.facebook.net/signals/config/123"))
+        // ...but the same host also serves the Facebook Login SDK, and blocking it
+        // wholesale broke every "Facebook으로 로그인" button.
+        assertFalse(shouldBlockBrowserAdRequest("https://connect.facebook.net/ko_KR/sdk.js"))
         assertTrue(shouldBlockBrowserAdRequest("https://www.facebook.com/tr?id=123&ev=PageView"))
         assertTrue(shouldBlockBrowserAdRequest("https://analytics.twitter.com/i/adsct?x=1"))
         assertTrue(shouldBlockBrowserAdRequest("https://cdn.parsely.com/keys/x/p.js"))

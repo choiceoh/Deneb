@@ -31,6 +31,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,10 +40,14 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayInputStream
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 private val webViewJson = Json { ignoreUnknownKeys = true }
 
@@ -72,6 +77,32 @@ actual fun DenebWebView(
     // Web forms with <input type="file"> need an activity result; without one the
     // "파일 선택" button does nothing at all. The callback must be answered even on
     // cancel, or the page's file input stays wedged for the rest of the session.
+    // Pages keep running timers, media and JS after the app goes to the background;
+    // without this a video kept playing and a busy page kept the CPU awake behind a
+    // black screen. Also the moment to persist cookies: Chromium writes them lazily
+    // and a background kill can drop a login the user just completed.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, holder) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    holder.web?.onPause()
+                    holder.web?.pauseTimers()
+                    flushBrowserCookies()
+                }
+
+                Lifecycle.Event.ON_START -> {
+                    holder.web?.onResume()
+                    holder.web?.resumeTimers()
+                }
+
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val fileChooser = remember(state) { FileChooserHolder() }
     val filePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -187,7 +218,7 @@ actual fun DenebWebView(
                             state.pagePreview = null
                             state.clearTranslationProgress()
                         }
-                    } else if (!state.rendererRecoveryPending && !(urlScheme(url) == "about" && previousStable.isNotBlank())) {
+                    } else if (!state.rendererRecoveryPending && canShowAsAddress(url)) {
                         state.currentUrl = url
                     }
                     favicon?.let(::browserFaviconImage)?.let { state.pageFavicon = it }
@@ -202,7 +233,7 @@ actual fun DenebWebView(
                 override fun onPageFinished(view: WebView, url: String) {
                     if (canBookmarkUrl(url)) {
                         state.markRendererRecoveryStarted(url)
-                    } else if (!state.rendererRecoveryPending && urlScheme(url) != "about") {
+                    } else if (!state.rendererRecoveryPending && canShowAsAddress(url)) {
                         state.currentUrl = url
                     }
                     state.canGoBack = view.canGoBack()
@@ -431,14 +462,19 @@ actual fun DenebWebView(
         }
     }
 
-    LaunchedEffect(state.url) {
+    LaunchedEffect(state.url, state.loadTick) {
         val target = browserWebViewCommandUrl(
             requestedUrl = state.url,
             currentUrl = state.currentUrl,
             rendererRecoveryUrl = state.rendererRecoveryUrl,
             rendererRecoveryPending = state.rendererRecoveryPending,
         )
-        if (target.isNotBlank() && holder.lastCommandUrl != target) {
+        // A repeat load of the same address must still reach loadUrl, so the
+        // lastCommandUrl guard is skipped when load() asked for it explicitly. The
+        // guard still stops the initial composition from re-loading the page the
+        // WebView already restored.
+        val explicit = holder.commands.consumeLoad(state)
+        if (target.isNotBlank() && (explicit || holder.lastCommandUrl != target)) {
             holder.popups?.destroyAll()
             holder.finishDetachedRestore()
             holder.lastCommandUrl = target
@@ -601,10 +637,16 @@ internal fun injectSiteQuirk(view: WebView, url: String) {
     view.evaluateJavascript(js, null)
 }
 
+// The translator asset is ~53KB and identical for the life of the process, but it
+// was re-read from assets — blocking IO on the main thread — on every single page
+// load. Read it once.
+private val translateScriptSource = AtomicReference<String?>(null)
+
 private fun injectTranslateScript(view: WebView) {
-    val js = runCatching {
+    val cached = translateScriptSource.get()
+    val js = cached ?: runCatching {
         view.context.assets.open("deneb-translate.js").bufferedReader().use { it.readText() }
-    }.getOrNull() ?: return
+    }.getOrNull()?.also { translateScriptSource.set(it) } ?: return
     view.evaluateJavascript(js, null)
 }
 

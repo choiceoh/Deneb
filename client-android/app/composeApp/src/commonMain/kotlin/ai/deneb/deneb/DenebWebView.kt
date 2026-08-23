@@ -34,6 +34,7 @@ internal class BrowserCommandCursor(state: DenebWebViewState) {
     private var stop = state.stopTick
     private var retry = state.retryTick
     private var closePopup = state.closePopupTick
+    private var load = state.loadTick
 
     fun consumeDiagnostics(state: DenebWebViewState): Boolean = consume(state.diagnosticsTick, diagnostics) { diagnostics = it }
 
@@ -44,6 +45,8 @@ internal class BrowserCommandCursor(state: DenebWebViewState) {
     fun consumeGoForward(state: DenebWebViewState): Boolean = consume(state.goForwardTick, goForward) { goForward = it }
 
     fun consumeReload(state: DenebWebViewState): Boolean = consume(state.reloadTick, reload) { reload = it }
+
+    fun consumeLoad(state: DenebWebViewState): Boolean = consume(state.loadTick, load) { load = it }
 
     fun consumeStop(state: DenebWebViewState): Boolean = consume(state.stopTick, stop) { stop = it }
 
@@ -163,6 +166,9 @@ class DenebWebViewState(
     internal var goForwardTick by mutableStateOf(0)
         private set
     internal var reloadTick by mutableStateOf(0)
+
+    /** Increments on every [load] call, so an identical URL still commands a load. */
+    internal var loadTick by mutableStateOf(0)
         private set
     internal var stopTick by mutableStateOf(0)
         private set
@@ -224,6 +230,13 @@ class DenebWebViewState(
         pagePreview = null
         translationProgress = BrowserTranslationProgress()
         url = newUrl
+        // Bumped even when the URL is unchanged. `url` is the requested address and
+        // is NOT rewritten as the page navigates (only currentUrl is), so after
+        // following a link, asking for the original address again — omnibox, a
+        // bookmark, 홈으로, the start pane — assigned the same value, changed no
+        // state, and did nothing at all. Same for re-entering a URL that just
+        // failed. The platform effect keys on this alongside the URL.
+        loadTick++
     }
 
     fun goBack() {
