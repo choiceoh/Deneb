@@ -4,6 +4,7 @@ package ai.deneb
 
 import ai.deneb.deneb.AppTilesContent
 import ai.deneb.deneb.BrowserBookmark
+import ai.deneb.deneb.BrowserBookmarksList
 import ai.deneb.deneb.BrowserStartPane
 import ai.deneb.deneb.BrowserVisit
 import ai.deneb.deneb.CalendarEventDetail
@@ -88,6 +89,38 @@ private fun renderBrowser(name: String, scheme: ColorScheme) {
             DenebBrowserChrome(state = state, onBack = {}, tabCount = 3, onShowTabs = {}) {
                 Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                     Text("(웹 페이지 — Android WebView)", style = DenebType.meta, color = denebHint())
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+private val previewBrowserBookmarks = listOf(
+    BrowserBookmark(url = "https://en.wikipedia.org/wiki/Deneb", title = "Deneb"),
+    BrowserBookmark(url = "https://github.com/choiceoh/Deneb", title = "Deneb · GitHub"),
+)
+
+private fun renderBrowserBookmarks(name: String, scheme: ColorScheme, revealed: Boolean) {
+    val scene = ImageComposeScene(width = 824, height = 720, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = scheme.background) {
+                Column(Modifier.fillMaxWidth().padding(24.dp)) {
+                    Text("북마크", style = DenebType.subject, color = scheme.onSurface)
+                    Spacer(Modifier.height(2.dp))
+                    Text("저장한 페이지 ${previewBrowserBookmarks.size}개", style = DenebType.meta, color = denebHint())
+                    Spacer(Modifier.height(12.dp))
+                    BrowserBookmarksList(
+                        bookmarks = previewBrowserBookmarks,
+                        onOpen = {},
+                        onDelete = {},
+                        onUpdate = { _, _, _ -> },
+                        initiallyRevealedUrl = if (revealed) previewBrowserBookmarks.first().url else null,
+                    )
                 }
             }
         }
@@ -200,6 +233,8 @@ fun main() {
     renderBrowserStart("browser_start_dark.png", DarkColorScheme, empty = false)
     renderBrowserStart("browser_start_light.png", LightColorScheme, empty = false)
     renderBrowserStart("browser_start_empty_dark.png", DarkColorScheme, empty = true)
+    renderBrowserBookmarks("browser_bookmarks_dark.png", DarkColorScheme, revealed = false)
+    renderBrowserBookmarks("browser_bookmarks_actions_dark.png", DarkColorScheme, revealed = true)
     renderMore("more_dark.png", DarkColorScheme)
     renderMore("more_light.png", LightColorScheme)
     // 더보기 숨김: the grid with two tiles hidden (검색·브라우저) — verify they drop out.
