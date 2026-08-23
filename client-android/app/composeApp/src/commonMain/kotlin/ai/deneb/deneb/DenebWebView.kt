@@ -33,10 +33,13 @@ internal class BrowserCommandCursor(state: DenebWebViewState) {
     private var reload = state.reloadTick
     private var stop = state.stopTick
     private var retry = state.retryTick
+    private var closePopup = state.closePopupTick
 
     fun consumeDiagnostics(state: DenebWebViewState): Boolean = consume(state.diagnosticsTick, diagnostics) { diagnostics = it }
 
     fun consumeGoBack(state: DenebWebViewState): Boolean = consume(state.goBackTick, goBack) { goBack = it }
+
+    fun consumeClosePopup(state: DenebWebViewState): Boolean = consume(state.closePopupTick, closePopup) { closePopup = it }
 
     fun consumeGoForward(state: DenebWebViewState): Boolean = consume(state.goForwardTick, goForward) { goForward = it }
 
@@ -165,6 +168,27 @@ class DenebWebViewState(
         private set
     internal var retryTick by mutableStateOf(0)
         private set
+    internal var closePopupTick by mutableStateOf(0)
+        private set
+
+    /**
+     * A live `window.open` / `target=_blank` child is covering this tab. The
+     * Android actual keeps that WebView attached so POST bodies, `window.opener`,
+     * and `about:blank` document.write survive — stealing the URL into a new tab
+     * drops all three.
+     */
+    internal var popupActive by mutableStateOf(false)
+        private set
+    internal var popupUrl by mutableStateOf("")
+        private set
+    internal var popupTitle by mutableStateOf("")
+        private set
+    internal var popupCanGoForward by mutableStateOf(false)
+        internal set
+    internal var popupLoading by mutableStateOf(false)
+        internal set
+    internal var popupError by mutableStateOf<String?>(null)
+        internal set
 
     private var navigationSerial = 0
     private var lastCommittedNavigationUrl = ""
@@ -219,9 +243,44 @@ class DenebWebViewState(
     }
 
     fun retry() {
-        rendererRecoveryPending = false
-        loadError = null
+        if (popupActive) {
+            popupError = null
+        } else {
+            rendererRecoveryPending = false
+            loadError = null
+        }
         retryTick++
+    }
+
+    fun closePopup() {
+        if (!popupActive) return
+        closePopupTick++
+    }
+
+    internal fun attachPopup(url: String, title: String = "") {
+        popupActive = true
+        popupUrl = url
+        popupTitle = title
+        popupCanGoForward = false
+        popupLoading = url.isNotBlank()
+        popupError = null
+    }
+
+    internal fun updatePopup(url: String, title: String, canGoForward: Boolean, loading: Boolean) {
+        if (!popupActive) return
+        popupUrl = url
+        if (title.isNotBlank()) popupTitle = title
+        popupCanGoForward = canGoForward
+        popupLoading = loading
+    }
+
+    internal fun detachPopup() {
+        popupActive = false
+        popupUrl = ""
+        popupTitle = ""
+        popupCanGoForward = false
+        popupLoading = false
+        popupError = null
     }
 
     internal fun commitNavigation(url: String, force: Boolean = false) {
