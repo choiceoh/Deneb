@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -30,8 +31,9 @@ type imapConn struct {
 // archive UID so callers can build stable locators for later detail/attachment
 // reads.
 type FetchedMessage struct {
-	UID string
-	Raw []byte
+	UID       string
+	Raw       []byte
+	Truncated bool
 }
 
 // dialIMAP connects and consumes the server greeting. addr is host:port.
@@ -64,6 +66,25 @@ func (c *imapConn) touchDeadline() {
 
 func (c *imapConn) close() { _ = c.conn.Close() }
 
+// closeOnContext interrupts an in-flight IMAP read/write when the owning
+// request is canceled. Per-command socket deadlines remain a backstop, but a
+// unified-search timeout should not leave mailbox scans alive for several more
+// deadline windows.
+func (c *imapConn) closeOnContext(ctx context.Context) func() {
+	done := make(chan struct{})
+	var once sync.Once
+	go func() {
+		select {
+		case <-ctx.Done():
+			c.close()
+		case <-done:
+		}
+	}()
+	return func() {
+		once.Do(func() { close(done) })
+	}
+}
+
 // nextTag returns a fresh command tag like "a3".
 func (c *imapConn) nextTag() string {
 	c.tag++
@@ -79,6 +100,10 @@ var literalRe = regexp.MustCompile(`\{(\d+)\}\r?\n$`)
 // of FETCH responses. Returns the untagged lines and the completion status word
 // ("OK"/"NO"/"BAD").
 func (c *imapConn) exec(cmd string) (untagged [][]byte, status string, err error) {
+	return c.execWithLiteralLimit(cmd, 0)
+}
+
+func (c *imapConn) execWithLiteralLimit(cmd string, maxLiteralBytes int) (untagged [][]byte, status string, err error) {
 	tag := c.nextTag()
 	c.touchDeadline()
 	if _, err = fmt.Fprintf(c.conn, "%s %s\r\n", tag, cmd); err != nil {
@@ -106,6 +131,10 @@ func (c *imapConn) exec(cmd string) (untagged [][]byte, status string, err error
 				break
 			}
 			n, _ := strconv.Atoi(string(m[1]))
+			if maxLiteralBytes > 0 && n > maxLiteralBytes {
+				c.close()
+				return nil, "", fmt.Errorf("imap literal exceeds preview limit: %d > %d", n, maxLiteralBytes)
+			}
 			lit := make([]byte, n)
 			c.touchDeadline()
 			if _, rerr := readFull(c.r, lit); rerr != nil {
@@ -162,12 +191,32 @@ func (c *imapConn) examine(mailbox string) error {
 
 // uidSearch runs UID SEARCH with the given criteria and returns matching UIDs.
 func (c *imapConn) uidSearch(criteria string) ([]string, error) {
-	untagged, status, err := c.exec("UID SEARCH " + criteria)
+	if hasNonASCII(criteria) {
+		uids, status, err := c.uidSearchOnce("CHARSET UTF-8 " + criteria)
+		if err != nil {
+			return nil, err
+		}
+		if status == "OK" {
+			return uids, nil
+		}
+		// RFC 3501 servers may reject UTF-8 with BADCHARSET, while Maddy and
+		// other modern servers sometimes accept raw UTF-8 criteria. Retry once
+		// without CHARSET so Korean archive search degrades across both behaviors.
+	}
+	uids, status, err := c.uidSearchOnce(criteria)
 	if err != nil {
 		return nil, err
 	}
 	if status != "OK" {
 		return nil, fmt.Errorf("imap search rejected: %s", status)
+	}
+	return uids, nil
+}
+
+func (c *imapConn) uidSearchOnce(criteria string) ([]string, string, error) {
+	untagged, status, err := c.exec("UID SEARCH " + criteria)
+	if err != nil {
+		return nil, status, err
 	}
 	var uids []string
 	for _, ln := range untagged {
@@ -177,7 +226,16 @@ func (c *imapConn) uidSearch(criteria string) ([]string, error) {
 			uids = append(uids, strings.Fields(rest)...)
 		}
 	}
-	return uids, nil
+	return uids, status, nil
+}
+
+func hasNonASCII(s string) bool {
+	for i := range len(s) {
+		if s[i] >= 0x80 {
+			return true
+		}
+	}
+	return false
 }
 
 // sentDateKeyRe matches IMAP SENTSINCE/SENTBEFORE date keys. Maddy (and some
@@ -226,10 +284,24 @@ func (c *imapConn) uidSearchSentAware(criteria string) ([]string, error) {
 // higher-level repository code can re-open an already-listed message without a
 // fuzzy Message-ID search.
 func (c *imapConn) uidFetchMessages(uidSet string) ([]FetchedMessage, error) {
+	return c.uidFetchMessagesCommand(uidSet, "BODY.PEEK[]", 0)
+}
+
+// uidFetchMessagePreviews bounds each RFC822 literal for evidence search so a
+// handful of attachment-heavy messages cannot exhaust gateway memory. A
+// max-sized response is marked truncated and propagated as partial coverage.
+func (c *imapConn) uidFetchMessagePreviews(uidSet string, maxBytes int) ([]FetchedMessage, error) {
+	if maxBytes <= 0 {
+		return c.uidFetchMessages(uidSet)
+	}
+	return c.uidFetchMessagesCommand(uidSet, fmt.Sprintf("BODY.PEEK[]<0.%d>", maxBytes), maxBytes)
+}
+
+func (c *imapConn) uidFetchMessagesCommand(uidSet, bodyItem string, previewBytes int) ([]FetchedMessage, error) {
 	if strings.TrimSpace(uidSet) == "" {
 		return nil, nil
 	}
-	untagged, status, err := c.exec(fmt.Sprintf("UID FETCH %s (UID BODY.PEEK[])", uidSet))
+	untagged, status, err := c.execWithLiteralLimit(fmt.Sprintf("UID FETCH %s (UID %s)", uidSet, bodyItem), previewBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -243,8 +315,9 @@ func (c *imapConn) uidFetchMessages(uidSet string) ([]FetchedMessage, error) {
 		body, ok := extractLiteralPayload(entry)
 		if ok {
 			out = append(out, FetchedMessage{
-				UID: extractFetchUID(entry),
-				Raw: body,
+				UID:       extractFetchUID(entry),
+				Raw:       body,
+				Truncated: previewBytes > 0 && len(body) >= previewBytes,
 			})
 		}
 	}
@@ -305,6 +378,15 @@ func (c *imapConn) logout() {
 
 // quote wraps a string as an IMAP quoted-string.
 func quote(s string) string {
+	// IMAP quoted-strings cannot contain control bytes. In particular, leaving
+	// CR/LF intact would let an authenticated search query terminate UID SEARCH
+	// and inject a second command on the same connection.
+	s = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, s)
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `"`, `\"`)
 	return `"` + s + `"`

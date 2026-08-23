@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+const approvalAttachmentTextOutputMaxBytes = 4 * 1024 * 1024
+
 // ReadApprovalByDocID fetches one 전자결재 document body by Amaranth doc id
 // (searches pending→done→cc→total via folder=all, matching id === query).
 func ReadApprovalByDocID(ctx context.Context, cfg Config, docID string) (string, error) {
@@ -89,12 +91,12 @@ func ReadApprovalAttachment(ctx context.Context, cfg Config, docID, selector str
 	if selector == "" {
 		return "", fmt.Errorf("attachment selector required")
 	}
-	out, err := Run(ctx, cfg, Request{
+	out, err := runWithOutputLimit(ctx, cfg, Request{
 		Area:       AreaApproval,
 		Action:     ActionAttachment,
 		DocID:      docID,
 		Attachment: selector,
-	})
+	}, approvalAttachmentTextOutputMaxBytes)
 	if err != nil {
 		return "", wrapGroupwareRunError(out, err)
 	}

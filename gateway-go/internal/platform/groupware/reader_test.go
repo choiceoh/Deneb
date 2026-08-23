@@ -79,6 +79,22 @@ func TestStatusLine_OffAndOn(t *testing.T) {
 	}
 }
 
+func TestRunWithOutputLimitRejectsOversizedReaderStdout(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "reader.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf '1234567890'\n"), 0o700); err != nil {
+		t.Fatalf("write fake reader: %v", err)
+	}
+	out, err := runWithOutputLimit(context.Background(), Config{
+		User: "alice", Password: "secret", ReaderJS: script, NodeBin: "/bin/sh", Timeout: time.Second,
+	}, Request{Area: AreaApproval, Action: ActionAttachment}, 5)
+	if err == nil {
+		t.Fatalf("oversized reader output unexpectedly succeeded: %q", out)
+	}
+	if !strings.Contains(out, "안전 한도(5 bytes)") {
+		t.Fatalf("oversized reader output = %q", out)
+	}
+}
+
 func TestReadApproval_EmptyWithoutCreds(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()

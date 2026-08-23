@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -26,6 +27,11 @@ import (
 // csvToMarkdown parses CSV bytes and renders them as a markdown table so the
 // model reads columns as a grid instead of comma soup. Ragged rows are
 // tolerated; output is capped to keep large exports out of the context budget.
+const (
+	maxCSVRows    = 500
+	maxCSVColumns = 1024
+)
+
 func csvToMarkdown(data []byte) (string, error) {
 	// Spreadsheet exports commonly prefix UTF-8 CSV with a BOM. encoding/csv
 	// treats it as part of the first field, which made the rendered header read
@@ -35,7 +41,6 @@ func csvToMarkdown(data []byte) (string, error) {
 	r.FieldsPerRecord = -1 // tolerate ragged rows
 	r.LazyQuotes = true
 
-	const maxRows = 500
 	var grid [][]string
 	total := 0
 	for {
@@ -47,19 +52,30 @@ func csvToMarkdown(data []byte) (string, error) {
 			break // stop at the first malformed line, keep what parsed
 		}
 		total++
-		if len(grid) < maxRows {
+		if len(rec) > maxCSVColumns {
+			return "", fmt.Errorf("%w: CSV row exceeds %d columns", errDocumentExtractionLimit, maxCSVColumns)
+		}
+		if len(grid) < maxCSVRows {
 			grid = append(grid, rec)
 		}
 	}
 
-	table := mdTable(grid)
+	table, err := mdTableWithLimit(grid, maxDocumentOutputBytes)
+	if err != nil {
+		return "", fmt.Errorf("%w: CSV output exceeds %d bytes", errDocumentExtractionLimit, maxDocumentOutputBytes)
+	}
 	if table == "" {
 		return "", fmt.Errorf("빈 CSV")
 	}
-	if total > maxRows {
-		table += fmt.Sprintf("\n... (%d행 이하 생략)", total-maxRows)
+	out := newLimitedBuffer(maxDocumentOutputBytes, false)
+	_, _ = out.WriteString(table)
+	if total > maxCSVRows {
+		fmt.Fprintf(out, "\n... (%d행 이하 생략)", total-maxCSVRows)
 	}
-	return table, nil
+	if out.exceeded {
+		return "", fmt.Errorf("%w: CSV output exceeds %d bytes", errDocumentExtractionLimit, maxDocumentOutputBytes)
+	}
+	return out.String(), nil
 }
 
 // docKind identifies which format family the dispatcher recognized for a payload.
@@ -96,18 +112,28 @@ type docResult struct {
 // them. File-store extraction passes an empty MIME type, which naturally
 // degrades to filename-only classification.
 func extractDocument(ctx context.Context, data []byte, filename, mimeType string) docResult {
+	return extractDocumentWithOCR(ctx, data, filename, mimeType, true)
+}
+
+func extractDocumentWithOCR(ctx context.Context, data []byte, filename, mimeType string, allowOCR bool) docResult {
 	lower := strings.ToLower(filename)
 	mime := strings.ToLower(mimeType)
 
 	switch {
 	case strings.Contains(mime, "pdf") || strings.HasSuffix(lower, ".pdf"):
-		text, err := pdfToTextStructured(ctx, data)
+		text, err := pdfPrimaryText(ctx, data, allowOCR, pdfToText, pdfToTextStructured)
 		if err == nil && strings.TrimSpace(text) != "" {
 			return docResult{kind: docPDF, text: text}
 		}
-		// pdftotext found nothing — likely a scanned PDF. Try per-page OCR.
-		if ocrText, ocrErr := pdfOCR(ctx, data); ocrErr == nil && strings.TrimSpace(ocrText) != "" {
-			return docResult{kind: docPDF, text: ocrText, ocr: true}
+		if errors.Is(err, errDocumentExtractionLimit) {
+			return docResult{kind: docPDF, err: err}
+		}
+		// pdftotext found nothing — likely a scanned PDF. Request paths may
+		// deliberately defer this expensive fallback to the background index.
+		if allowOCR {
+			if ocrText, ocrErr := pdfOCR(ctx, data); ocrErr == nil && strings.TrimSpace(ocrText) != "" {
+				return docResult{kind: docPDF, text: ocrText, ocr: true}
+			}
 		}
 		return docResult{kind: docPDF, err: err}
 	case strings.Contains(mime, "spreadsheetml") || strings.HasSuffix(lower, ".xlsx") || strings.HasSuffix(lower, ".xlsm"):
@@ -120,6 +146,9 @@ func extractDocument(ctx context.Context, data []byte, filename, mimeType string
 		text, err := pptxToText(data)
 		return docResult{kind: docPPTX, text: text, err: err}
 	case strings.HasPrefix(mime, "image/") || hasImageExt(lower):
+		if !allowOCR {
+			return docResult{kind: docImage}
+		}
 		text, err := imageOCR(ctx, data)
 		return docResult{kind: docImage, text: text, err: err}
 	case strings.Contains(mime, "csv") || strings.HasSuffix(lower, ".csv"):
@@ -132,8 +161,31 @@ func extractDocument(ctx context.Context, data []byte, filename, mimeType string
 		// back to an installed converter (hwp5txt, LibreOffice) — see
 		// document_convert.go. Absent a converter this returns docUnsupported,
 		// preserving the prior behavior.
+		if !allowOCR {
+			// Latency-bounded exact search also defers external converters to the
+			// background index; some converter processes allow up to 90 seconds.
+			return docResult{kind: docUnsupported}
+		}
 		return convertUnsupported(ctx, data, filename)
 	}
+}
+
+type pdfTextExtractor func(context.Context, []byte) (string, error)
+
+// pdfPrimaryText keeps latency-bounded request extraction on the PDF text
+// layer only. Structured extraction may rasterize candidate pages and call GPU
+// OCR even when pdftotext succeeds, so it is reserved for allowOCR callers.
+func pdfPrimaryText(
+	ctx context.Context,
+	pdf []byte,
+	allowOCR bool,
+	textOnly pdfTextExtractor,
+	structured pdfTextExtractor,
+) (string, error) {
+	if allowOCR {
+		return structured(ctx, pdf)
+	}
+	return textOnly(ctx, pdf)
 }
 
 // ExtractDocumentText extracts text from a document's raw bytes for callers
@@ -242,6 +294,8 @@ func pdfToTextStructured(ctx context.Context, pdf []byte) (string, error) {
 			ocrByPage   = make(map[int]string, len(candidates))
 			chartByPage = make(map[int]string)
 			chartCalls  int
+			ocrBytes    int
+			ocrLimited  bool
 		)
 		sem := make(chan struct{}, ocrPageConcurrency)
 		for _, i := range candidates {
@@ -268,6 +322,12 @@ func pdfToTextStructured(ctx context.Context, pdf []byte) (string, error) {
 					return
 				}
 				mu.Lock()
+				if len(text) > maxDocumentOutputBytes-ocrBytes {
+					ocrLimited = true
+					mu.Unlock()
+					return
+				}
+				ocrBytes += len(text)
 				ocrByPage[i] = text
 				runChart := !isTable[i] && chartCalls < chartPageCap && looksChartLike(text)
 				if runChart {
@@ -279,12 +339,20 @@ func pdfToTextStructured(ctx context.Context, pdf []byte) (string, error) {
 				}
 				if data, cerr := chartOCR(ctx, img); cerr == nil && data != "" {
 					mu.Lock()
-					chartByPage[i] = data
+					if len(data) > maxDocumentOutputBytes-ocrBytes {
+						ocrLimited = true
+					} else {
+						ocrBytes += len(data)
+						chartByPage[i] = data
+					}
 					mu.Unlock()
 				}
 			}(i, img)
 		}
 		wg.Wait()
+		if ocrLimited {
+			return "", fmt.Errorf("%w: structured PDF OCR output exceeds %d bytes", errDocumentExtractionLimit, maxDocumentOutputBytes)
+		}
 		for _, i := range candidates {
 			text, ok := ocrByPage[i]
 			if !ok {
@@ -298,7 +366,11 @@ func pdfToTextStructured(ctx context.Context, pdf []byte) (string, error) {
 			}
 		}
 	}
-	return strings.TrimSpace(strings.Join(pages, "\n\n")), nil
+	out, err := joinTextWithLimit(pages, "\n\n", maxDocumentOutputBytes)
+	if err != nil {
+		return "", fmt.Errorf("%w: structured PDF output exceeds %d bytes", errDocumentExtractionLimit, maxDocumentOutputBytes)
+	}
+	return strings.TrimSpace(out), nil
 }
 
 // splitPDFPages splits raw pdftotext output into per-page text. pdftotext

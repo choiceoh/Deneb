@@ -3,12 +3,15 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FILES_RPC } from "@/resources";
 import { cachedRpcStorageKey, rpcCacheKey } from "@/rpcCache";
+import { maxTextPreviewBytes } from "@/components/fileView";
 import type { FileEntry } from "@/types";
 import { renderWithProviders } from "@/test/util";
+import { useWorkspace } from "@/workspaceContext";
 import { FilesPane } from "./FilesPane";
 
 const rootEntries: FileEntry[] = [{ tag: "folder", name: "projects", pathDisplay: "projects" }];
 let rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
+let downloadCalls = 0;
 
 const projectEntries: FileEntry[] = [
   {
@@ -27,9 +30,24 @@ const projectEntries: FileEntry[] = [
   },
 ];
 
+function FileTargetOpener() {
+  const { openPane } = useWorkspace();
+  return <button onClick={() => openPane("files", { path: "projects/notes.md" })}>검색 파일 열기</button>;
+}
+
+function OversizedFileTargetOpener() {
+  const { openPane } = useWorkspace();
+  return (
+    <button onClick={() => openPane("files", { path: "projects/oversized.md", size: maxTextPreviewBytes + 1 })}>
+      큰 검색 파일 열기
+    </button>
+  );
+}
+
 beforeEach(() => {
   localStorage.clear();
   rpcCalls = [];
+  downloadCalls = 0;
   if (!globalThis.crypto?.randomUUID) {
     vi.stubGlobal("crypto", { randomUUID: () => "test-uuid" });
   }
@@ -40,6 +58,7 @@ beforeEach(() => {
       // body) — serve markdown as a Blob. jsdom's Blob lacks .text(), so back
       // it with an explicit body the viewer can read.
       if (typeof url === "string" && url.includes("/api/v1/files/download")) {
+        downloadCalls += 1;
         const body = "# 메모\n원본 내용";
         const blob = { size: body.length, type: "text/markdown", text: async () => body } as unknown as Blob;
         return { ok: true, blob: async () => blob } as unknown as Response;
@@ -71,6 +90,34 @@ afterEach(() => {
 });
 
 describe("FilesPane", () => {
+  it("opens the exact file carried by a unified-search deep link", async () => {
+    renderWithProviders(
+      <>
+        <FileTargetOpener />
+        <FilesPane />
+      </>,
+      { connected: true },
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "검색 파일 열기" }));
+    expect(await screen.findByRole("dialog", { name: "notes.md" })).toBeInTheDocument();
+    expect(screen.getByText("원본 내용")).toBeInTheDocument();
+  });
+
+  it("refuses a known oversized unified-search target before starting its download", async () => {
+    renderWithProviders(
+      <>
+        <OversizedFileTargetOpener />
+        <FilesPane />
+      </>,
+      { connected: true },
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "큰 검색 파일 열기" }));
+    expect(await screen.findByRole("dialog", { name: "oversized.md" })).toBeInTheDocument();
+    expect(downloadCalls).toBe(0);
+  });
+
   it("when hydrates the root folder from cache before the gateway refresh finishes", () => {
     vi.stubGlobal(
       "fetch",

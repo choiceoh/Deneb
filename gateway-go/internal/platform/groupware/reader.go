@@ -116,6 +116,10 @@ func StatusLine(cfg Config, ok bool) string {
 // Run executes a read-only groupware scrape. On failure returns a calm Korean
 // error string suitable for tool output (err is still set for callers that care).
 func Run(ctx context.Context, cfg Config, req Request) (string, error) {
+	return runWithOutputLimit(ctx, cfg, req, 0)
+}
+
+func runWithOutputLimit(ctx context.Context, cfg Config, req Request, maxOutputBytes int) (string, error) {
 	if strings.TrimSpace(cfg.User) == "" || cfg.Password == "" {
 		return StatusLine(cfg, false), fmt.Errorf("groupware credentials unset")
 	}
@@ -181,7 +185,8 @@ func Run(ctx context.Context, cfg Config, req Request) (string, error) {
 		"DENEB_GROUPWARE_PASSWORD="+cfg.Password,
 		"DENEB_GROUPWARE_COMPANY="+cfg.Company,
 	)
-	var stdout, stderr bytes.Buffer
+	stdout := boundedOutputBuffer{max: maxOutputBytes}
+	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -193,12 +198,45 @@ func Run(ctx context.Context, cfg Config, req Request) (string, error) {
 		msg = strings.ReplaceAll(msg, cfg.Password, "****")
 		return fmt.Sprintf("그룹웨어 읽기 실패 (%s/%s): %s", area, action, msg), err
 	}
+	if stdout.exceeded {
+		err := fmt.Errorf("groupware output exceeds %d byte safety limit", maxOutputBytes)
+		return fmt.Sprintf("그룹웨어 읽기 실패 (%s/%s): 출력이 안전 한도(%d bytes)를 초과했습니다", area, action, maxOutputBytes), err
+	}
 	out := strings.TrimSpace(stdout.String())
 	if out == "" {
 		return fmt.Sprintf("그룹웨어 읽기 결과가 비었습니다 (%s/%s).", area, action),
 			fmt.Errorf("empty groupware output")
 	}
 	return out, nil
+}
+
+type boundedOutputBuffer struct {
+	buf      bytes.Buffer
+	max      int
+	exceeded bool
+}
+
+func (b *boundedOutputBuffer) Write(p []byte) (int, error) {
+	written := len(p)
+	if b.max <= 0 {
+		_, err := b.buf.Write(p)
+		return written, err
+	}
+	remaining := b.max - b.buf.Len()
+	if remaining > 0 {
+		keep := min(remaining, len(p))
+		if _, err := b.buf.Write(p[:keep]); err != nil {
+			return 0, err
+		}
+	}
+	if len(p) > remaining {
+		b.exceeded = true
+	}
+	return written, nil
+}
+
+func (b *boundedOutputBuffer) String() string {
+	return b.buf.String()
 }
 
 // ApprovalSummary is the stable machine-readable projection of one approval-list row.

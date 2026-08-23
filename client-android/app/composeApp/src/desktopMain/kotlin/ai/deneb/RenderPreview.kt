@@ -13,8 +13,11 @@ import ai.deneb.deneb.DenebWebViewState
 import ai.deneb.deneb.FilesSearchMode
 import ai.deneb.deneb.MailMessage
 import ai.deneb.deneb.PersonHit
+import ai.deneb.deneb.SearchFileResult
 import ai.deneb.deneb.SearchHit
+import ai.deneb.deneb.SearchMailResult
 import ai.deneb.deneb.SearchResults
+import ai.deneb.deneb.SearchSourceAvailability
 import ai.deneb.deneb.Todo
 import ai.deneb.ui.DarkColorScheme
 import ai.deneb.ui.DenebRow
@@ -423,5 +426,34 @@ internal val sampleSearch = SearchResults(
     ),
     diary = listOf(
         SearchHit("diary/2026-06-08", "2026-06-08", "남도에코 미팅 메모 — 케이블 물량 재확인, 준공 일정 당김 …", "일기"),
+    ),
+    files = listOf(
+        SearchFileResult(
+            path = "/계약/RE100-PPA-검토.md",
+            name = "RE100-PPA-검토.md",
+            snippet = "자동 갱신 조항은 만료 30일 전 서면 통지가 필요합니다.",
+            score = 0.93,
+            startLine = 42,
+            endLine = 47,
+            kind = "markdown",
+            heading = "해지 및 갱신",
+        ),
+    ),
+    mail = listOf(
+        SearchMailResult(
+            id = "preview-mail-1",
+            from = "법무팀 <legal@example.com>",
+            subject = "RE100 계약 갱신 검토",
+            date = "2026-06-08",
+            snippet = "갱신 조건과 단가표를 이번 주까지 확인해 주세요.",
+            mailbox = "INBOX",
+        ),
+    ),
+    sourceStatus = SearchSourceAvailability(
+        wiki = "ok",
+        diary = "ok",
+        people = "ok",
+        files = "ok",
+        mail = "ok",
     ),
 )

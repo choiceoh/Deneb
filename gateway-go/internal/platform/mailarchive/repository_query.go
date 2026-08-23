@@ -9,7 +9,10 @@ import (
 )
 
 type archiveQuery struct {
-	Criteria      string
+	Criteria string
+	// Text is the normalized free-text part of the query. It is retained beside
+	// the IMAP criteria so returned evidence can center the snippet on the match.
+	Text          string
 	DefaultView   bool
 	HasAttachment bool
 	InboxOnly     bool
@@ -115,6 +118,7 @@ func parseArchiveQuery(query string, now time.Time) archiveQuery {
 	}
 	return archiveQuery{
 		Criteria:      strings.Join(parts, " "),
+		Text:          text,
 		DefaultView:   defaultView,
 		HasAttachment: hasAttachment,
 		InboxOnly:     inboxOnly,

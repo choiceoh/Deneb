@@ -2,6 +2,7 @@ package filesemindex
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,12 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 )
+
+func TestEvidenceSearchReportsColdIndexUnavailable(t *testing.T) {
+	if _, err := (&Service{}).EvidenceSearch(context.Background(), "계약", 5); !errors.Is(err, ErrEvidenceIndexUnavailable) {
+		t.Fatalf("error = %v, want unavailable", err)
+	}
+}
 
 func TestFileServerModifiedMillisBoundaryMatrix(t *testing.T) {
 	t.Parallel()
@@ -363,13 +370,13 @@ func TestSemindexTaskMetadataAndRunSucceedsWhenCanceled(t *testing.T) {
 
 func TestFileSemindexExtractFormatsSupportedFileTypes(t *testing.T) {
 	tests := []struct{ name, filename, body, want string }{
-		{name: "txt", filename: "note.txt", body: "plain text", want: ""},
+		{name: "txt", filename: "note.txt", body: "plain text", want: "plain text"},
 		{name: "markdown", filename: "note.md", body: "# Heading\nbody", want: "Heading"},
 		{name: "csv", filename: "data.csv", body: "a,b\n1,2", want: "| a | b |"},
-		{name: "json", filename: "data.json", body: `{"a":1}`, want: ""},
-		{name: "log", filename: "app.log", body: "line one\nline two", want: ""},
+		{name: "json", filename: "data.json", body: `{"a":1}`, want: `{"a":1}`},
+		{name: "log", filename: "app.log", body: "line one\nline two", want: "line two"},
 		{name: "unknown", filename: "blob.unknown", body: "readable payload", want: ""},
-		{name: "unicode", filename: "한글.txt", body: "업무 내용", want: ""},
+		{name: "unicode", filename: "한글.txt", body: "업무 내용", want: "업무 내용"},
 		{name: "empty", filename: "empty.txt", body: "", want: ""},
 	}
 	for _, tc := range tests {

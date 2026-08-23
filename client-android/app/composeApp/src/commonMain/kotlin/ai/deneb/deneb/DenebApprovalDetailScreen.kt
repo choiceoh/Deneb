@@ -32,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,12 +40,14 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -58,6 +61,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+internal const val APPROVAL_QA_GROUNDING_LABEL = "본문 및 가용한 첨부 근거"
 
 private val approvalTeardownHandler = httpTeardownTolerantHandler("ApprovalDetail")
 
@@ -200,6 +205,14 @@ fun DenebApprovalDetailScreen(
                         haptics.tap()
                         runAnalysis(force = true)
                     },
+                )
+
+                ApprovalSectionGap()
+                ApprovalAskBox(
+                    client = client,
+                    docId = docId,
+                    title = title.ifBlank { doc.title },
+                    folder = folder,
                 )
 
                 ApprovalSectionGap()
@@ -366,6 +379,89 @@ fun DenebApprovalDetailScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun ApprovalAskBox(
+    client: DenebGatewayClient,
+    docId: String,
+    title: String,
+    folder: String,
+) {
+    val scope = rememberCoroutineScope { approvalTeardownHandler }
+    val haptics = rememberHaptics()
+    val history = remember(docId) { mutableStateListOf<Pair<String, String>>() }
+    var question by remember(docId) { mutableStateOf("") }
+    var asking by remember(docId) { mutableStateOf(false) }
+    var error by remember(docId) { mutableStateOf("") }
+
+    fun ask() {
+        val q = boundApprovalQAText(question)
+        if (q.isEmpty() || asking) return
+        haptics.tap()
+        asking = true
+        error = ""
+        question = ""
+        scope.launch {
+            val answer = client.askApproval(
+                docId = docId,
+                question = q,
+                title = title,
+                folder = folder,
+                history = history.toList(),
+            )
+            if (answer == null) {
+                error = "답변을 가져오지 못했습니다. 다시 시도해 주세요."
+                question = q
+            } else {
+                history.add(q to answer)
+            }
+            asking = false
+        }
+    }
+
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Outlined.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.size(8.dp))
+            Text("근거 질문", style = DenebType.rowTitleStrong)
+            Spacer(Modifier.weight(1f))
+            Text(APPROVAL_QA_GROUNDING_LABEL, style = DenebType.meta, color = denebHint())
+        }
+        if (history.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            history.forEach { (q, a) ->
+                Text("Q. $q", style = DenebType.rowTitleStrong)
+                Spacer(Modifier.height(2.dp))
+                MarkdownContent(a)
+                Spacer(Modifier.height(10.dp))
+            }
+        }
+        if (error.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(error, style = DenebType.meta, color = MaterialTheme.colorScheme.error)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = question,
+                onValueChange = { question = it },
+                placeholder = { Text(if (asking) "근거를 확인하는 중…" else "예: 첨부 견적과 본문 금액이 같아?") },
+                enabled = !asking,
+                maxLines = 3,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.size(8.dp))
+            TextButton(onClick = { ask() }, enabled = !asking && question.isNotBlank()) {
+                Text(if (asking) "…" else "질문")
+            }
+        }
     }
 }
 

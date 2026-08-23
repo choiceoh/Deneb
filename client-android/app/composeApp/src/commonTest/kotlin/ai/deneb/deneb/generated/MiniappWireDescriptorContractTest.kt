@@ -454,13 +454,31 @@ class MiniappWireDescriptorContractTest {
             name = "SearchAllResult",
             serializer = SearchAllResult.serializer(),
             empty = SearchAllResult(),
-            fields = listOf("wiki", "diary", "people"),
+            fields = listOf("wiki", "diary", "people", "files", "mail", "sources"),
         ),
         contract(
             name = "SearchDiaryHit",
             serializer = SearchDiaryHit.serializer(),
             empty = SearchDiaryHit(),
             fields = listOf("file", "header", "content", "at", "score"),
+        ),
+        contract(
+            name = "SearchFileHit",
+            serializer = SearchFileHit.serializer(),
+            empty = SearchFileHit(),
+            fields = listOf("path", "name", "size", "snippet", "score", "startLine", "endLine", "kind", "heading"),
+        ),
+        contract(
+            name = "SearchMailHit",
+            serializer = SearchMailHit.serializer(),
+            empty = SearchMailHit(),
+            fields = listOf("id", "threadId", "from", "subject", "date", "snippet", "mailbox"),
+        ),
+        contract(
+            name = "SearchSourceStatus",
+            serializer = SearchSourceStatus.serializer(),
+            empty = SearchSourceStatus(),
+            fields = listOf("wiki", "diary", "people", "files", "mail"),
         ),
         contract(
             name = "SearchWikiHit",

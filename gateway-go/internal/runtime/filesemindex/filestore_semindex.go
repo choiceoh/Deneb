@@ -15,6 +15,7 @@ package filesemindex
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"path/filepath"
 	"time"
@@ -27,6 +28,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
+
+// ErrEvidenceIndexUnavailable is surfaced only by EvidenceSearch, whose caller
+// must report incomplete source coverage instead of silently treating a cold or
+// unhealthy semantic index as an authoritative empty result.
+var ErrEvidenceIndexUnavailable = errors.New("file evidence index unavailable")
 
 const (
 	// semindexInterval is how often the index is refreshed against the store.
@@ -87,29 +93,49 @@ func New(store filestore.Store, embeddingClient *embedding.Client, logger *slog.
 // strictly better than the cosine-only Search for the user-facing "의미" mode, so
 // that one mode now covers lexical+semantic in a single call (no extra flag).
 //
-// Results are validated against the live store with Stat, dropping any hit whose
-// path no longer exists. The index is reindexed only every 15 minutes, and the
-// move/delete hooks (Rename/Remove) cover the in-process mutations — but this
-// Stat backstop also catches paths that vanished by any other route (a direct
-// filesystem delete, an external mount change), so a search never hands back a
-// path that would 404 at download time.
+// Results are validated against the live store's mtime, size, and bounded
+// content hash. The index is reindexed only every 15 minutes, so this backstop
+// drops externally changed paths rather than presenting stale snippets as
+// current evidence.
 func (s *Service) Search(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error) {
+	hits, _, err := s.searchValidated(ctx, query, max)
+	return hits, err
+}
+
+func (s *Service) searchValidated(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, bool, error) {
 	if s.index == nil || s.embedding == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 	qctx, cancel := context.WithTimeout(ctx, semindexQueryTimeout)
 	defer cancel()
 	hits, err := s.index.HybridSearch(qctx, query, max, s.embedding, fileSemindexExtract)
 	if err != nil || len(hits) == 0 || s.store == nil {
-		return hits, err
+		return hits, false, err
 	}
 	live := hits[:0] // reuse backing array; we only ever shrink
 	for _, h := range hits {
-		if _, serr := s.store.Stat(qctx, h.Entry.PathDisplay); serr == nil {
+		if s.index.IsEntryCurrent(qctx, s.store, h.Entry.PathDisplay) {
 			live = append(live, h)
 		}
 	}
-	return live, nil
+	return live, len(live) != len(hits), nil
+}
+
+// EvidenceSearch is the strict variant used by grounded unified search. Other
+// legacy callers keep Search's quiet fallback contract; this path exposes
+// unavailable semantic coverage so exact-search results can be labeled partial.
+func (s *Service) EvidenceSearch(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error) {
+	if s == nil || s.index == nil || s.embedding == nil || !s.embedding.IsHealthy() || s.index.IndexedCount() == 0 {
+		return nil, ErrEvidenceIndexUnavailable
+	}
+	hits, staleDropped, err := s.searchValidated(ctx, query, max)
+	if err != nil {
+		return hits, err
+	}
+	if staleDropped {
+		return hits, ErrEvidenceIndexUnavailable
+	}
+	return hits, nil
 }
 
 // fileIndexRemove drops a path's vectors from the semantic index immediately
@@ -134,12 +160,11 @@ func (s *Service) Rename(oldPath, newPath string) {
 }
 
 // fileSemindexExtract is the text extractor the reindex passes to the index —
-// the chat tools' shared document extractor (PDF/Office/text/image OCR). Wired
+// the file-store extractor (PDF/Office/raw text/image OCR). Wired
 // here (the server layer may import tools); the domain takes it as a callback to
 // avoid a layer inversion.
 func fileSemindexExtract(ctx context.Context, data []byte, name string) string {
-	t, _ := document.ExtractDocumentText(ctx, data, name, "")
-	return t
+	return document.ExtractFileText(ctx, name, data)
 }
 
 // registerFileSemindexTask registers the background reindex PeriodicTask. No-op

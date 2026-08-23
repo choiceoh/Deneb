@@ -209,11 +209,11 @@ suspend fun DenebGatewayClient.createWikiPage(title: String, category: String, b
         ?.takeIf { it.isNotBlank() }
 }
 
-/** Unified search across wiki, diary and people (`miniapp.search.all`).
+/** Unified search across wiki, diary, people, files and mail (`miniapp.search.all`).
  *  Offline, wiki and diary hits come from the on-device mirrors, and people
- *  hits are the 인물 wiki pages already inside the wiki mirror (the Gmail
- *  half of the people directory is inherently online-only); null only when
- *  there's no mirror content at all, so the screen retries. */
+ *  hits are the 인물 wiki pages already inside the wiki mirror (the mail/files
+ *  sources are gateway-owned); null only when there's no mirror content at all,
+ *  so the screen retries. */
 suspend fun DenebGatewayClient.searchAll(query: String): SearchResults? {
     val p = callRpc<SearchAllResult>(
         "miniapp.search.all",
@@ -225,9 +225,42 @@ suspend fun DenebGatewayClient.searchAll(query: String): SearchResults? {
     return SearchResults(
         wiki = p.wiki.filter { it.path.isNotBlank() }
             .map { SearchHit(it.path, it.title.ifBlank { it.path }, it.snippet.ifBlank { it.summary }, it.category) },
-        diary = p.diary.map { SearchHit("", it.header.ifBlank { "일기" }, it.content, "diary") },
+        diary = p.diary.map { SearchHit(it.file, it.header.ifBlank { "일기" }, it.content, "diary") },
         people = p.people.filter { it.email.isNotBlank() || it.name.isNotBlank() }
             .map { PersonHit(it.name.ifBlank { it.email }, it.email, it.messageCount, it.lastSubject) },
+        files = p.files.filter { it.path.isNotBlank() }
+            .map {
+                SearchFileResult(
+                    path = it.path,
+                    name = it.name.ifBlank { it.path.substringAfterLast('/') },
+                    size = it.size,
+                    snippet = it.snippet,
+                    score = it.score,
+                    startLine = it.startLine,
+                    endLine = it.endLine,
+                    kind = it.kind,
+                    heading = it.heading,
+                )
+            },
+        mail = p.mail.filter { it.id.isNotBlank() }
+            .map {
+                SearchMailResult(
+                    id = it.id,
+                    threadId = it.threadId,
+                    from = it.from,
+                    subject = it.subject,
+                    date = it.date,
+                    snippet = it.snippet,
+                    mailbox = it.mailbox,
+                )
+            },
+        sourceStatus = SearchSourceAvailability(
+            wiki = p.sources.wiki,
+            diary = p.sources.diary,
+            people = p.sources.people,
+            files = p.sources.files,
+            mail = p.sources.mail,
+        ),
     )
 }
 
@@ -241,7 +274,18 @@ internal suspend fun DenebGatewayClient.offlineSearchAll(query: String): SearchR
     val people = wiki
         .filter { it.category == "인물" }
         .map { PersonHit(name = it.title, email = "", messageCount = 0, lastSubject = it.snippet, wikiPath = it.path) }
-    return SearchResults(wiki = wiki, diary = diary, people = people)
+    return SearchResults(
+        wiki = wiki,
+        diary = diary,
+        people = people,
+        sourceStatus = SearchSourceAvailability(
+            wiki = "offline",
+            diary = "offline",
+            people = "offline",
+            files = "unavailable",
+            mail = "unavailable",
+        ),
+    )
 }
 
 /** Merged people directory (`miniapp.people.list`): recent Gmail counterparties

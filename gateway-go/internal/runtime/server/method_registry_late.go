@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
@@ -22,6 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
 	handlerchatminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat/miniapp"
+	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 	miniknowledge "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/knowledge"
 	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
@@ -205,6 +207,15 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			// 24h per-model usage for the picker rows (nil-safe on the writer).
 			UsageStats: s.agentLogWriter.AggregateByModel,
 		}).Methods(),
+
+		// Grounded approval Q&A is late-bound because the read-only projection
+		// needs chatHandler. The approval list/detail/action methods remain in the
+		// early phase and do not depend on an LLM.
+		handlerminiapp.GroupwareApprovalsAskMethods(handlerminiapp.GroupwareApprovalsDeps{
+			Get:   makeGroupwareApprovalGet(s.denebDir),
+			Cache: groupware.NewApprovalAnalysisStore(filepath.Join(s.denebDir, "cache", "approval_analysis")),
+			Ask:   s.makeGroupwareApprovalQAAsk(),
+		}),
 
 		// --- Skill genesis (depends on chatHandler for LLM client) ---
 		handlerskill.GenesisMethods(handlerskill.GenesisDeps{

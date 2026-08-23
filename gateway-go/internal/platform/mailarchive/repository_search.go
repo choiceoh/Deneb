@@ -17,12 +17,18 @@ import (
 
 const defaultArchivePageSize = 25
 
+const (
+	evidenceMailPreviewBytes    = 128 << 10
+	evidenceMailFetchMultiplier = 3
+)
+
 type archiveSearchPlan struct {
-	spec        archiveQuery
-	mailboxes   []string
-	offset      int
-	pageSize    int
-	fetchPerBox int
+	spec         archiveQuery
+	mailboxes    []string
+	offset       int
+	pageSize     int
+	fetchPerBox  int
+	previewBytes int
 }
 
 type archiveRow struct {
@@ -68,24 +74,39 @@ func archiveFetchLimit(offset, pageSize int) int {
 	return wanted
 }
 
-func (r *Repository) searchArchive(ctx context.Context, spec archiveQuery, pageToken string, maxResults int) ([]gmail.MessageSummary, string, error) {
+func (r *Repository) searchArchive(ctx context.Context, spec archiveQuery, pageToken string, maxResults int, boundedEvidence bool) ([]gmail.MessageSummary, string, error) {
 	plan, err := planArchiveSearch(r.cfg.Mailboxes, spec, pageToken, maxResults)
 	if err != nil {
 		return nil, "", err
+	}
+	if boundedEvidence {
+		boundedFetch := maxArchiveFetchPerBox
+		if plan.pageSize < maxArchiveFetchPerBox/evidenceMailFetchMultiplier {
+			boundedFetch = max(plan.pageSize*evidenceMailFetchMultiplier+1, plan.pageSize+1)
+		}
+		plan.fetchPerBox = min(plan.fetchPerBox, boundedFetch)
+		plan.previewBytes = evidenceMailPreviewBytes
 	}
 	c, err := r.openArchiveSearch(ctx)
 	if err != nil {
 		return nil, "", err
 	}
+	stopCancelClose := c.closeOnContext(ctx)
+	defer stopCancelClose()
 	defer c.close()
 	defer c.logout()
 
-	rows, err := r.scanArchiveMailboxes(c, plan)
-	if err != nil {
-		return nil, "", err
+	stateSnapshot := r.state.Snapshot()
+	locators := make(map[string]overlay.MessageState)
+	rows, scanErr := r.scanArchiveMailboxes(ctx, c, plan, stateSnapshot, locators)
+	if rememberErr := r.state.RememberLocators(locators); rememberErr != nil && scanErr == nil {
+		scanErr = fmt.Errorf("%w: persist locators: %w", ErrArchivePartial, rememberErr)
+	}
+	if scanErr != nil && !errors.Is(scanErr, ErrArchivePartial) {
+		return nil, "", scanErr
 	}
 	page, next := pageArchiveRows(rows, plan)
-	return page, next, nil
+	return page, next, scanErr
 }
 
 func (r *Repository) openArchiveSearch(ctx context.Context) (*imapConn, error) {
@@ -100,27 +121,50 @@ func (r *Repository) openArchiveSearch(ctx context.Context) (*imapConn, error) {
 	return c, nil
 }
 
-func (r *Repository) scanArchiveMailboxes(c *imapConn, plan archiveSearchPlan) ([]archiveRow, error) {
+func (r *Repository) scanArchiveMailboxes(
+	ctx context.Context,
+	c *imapConn,
+	plan archiveSearchPlan,
+	stateSnapshot map[string]overlay.MessageState,
+	locators map[string]overlay.MessageState,
+) ([]archiveRow, error) {
 	var rows []archiveRow
 	var scanErrs []error
 	completed := 0
 	seen := make(map[string]bool)
 	for _, mailbox := range plan.mailboxes {
-		mailboxRows, err := r.scanArchiveMailbox(c, mailbox, plan, seen)
+		if err := ctx.Err(); err != nil {
+			scanErrs = append(scanErrs, err)
+			break
+		}
+		mailboxRows, err := r.scanArchiveMailbox(ctx, c, mailbox, plan, seen, stateSnapshot, locators)
 		if err != nil {
 			scanErrs = append(scanErrs, err)
-			continue
+			if !errors.Is(err, ErrArchivePartial) {
+				continue
+			}
 		}
 		completed++
 		rows = append(rows, mailboxRows...)
 	}
 	if completed > 0 {
+		if len(scanErrs) > 0 {
+			return rows, fmt.Errorf("%w: %w", ErrArchivePartial, errors.Join(scanErrs...))
+		}
 		return rows, nil
 	}
 	return nil, fmt.Errorf("%w: no mailbox scan completed: %w", ErrArchiveUnavailable, errors.Join(scanErrs...))
 }
 
-func (r *Repository) scanArchiveMailbox(c *imapConn, mailbox string, plan archiveSearchPlan, seen map[string]bool) ([]archiveRow, error) {
+func (r *Repository) scanArchiveMailbox(
+	ctx context.Context,
+	c *imapConn,
+	mailbox string,
+	plan archiveSearchPlan,
+	seen map[string]bool,
+	stateSnapshot map[string]overlay.MessageState,
+	locators map[string]overlay.MessageState,
+) ([]archiveRow, error) {
 	if err := c.examine(mailbox); err != nil {
 		return nil, fmt.Errorf("mailarchive: examine %q: %w", mailbox, err)
 	}
@@ -130,24 +174,56 @@ func (r *Repository) scanArchiveMailbox(c *imapConn, mailbox string, plan archiv
 	}
 	uids = tailStrings(uids, plan.fetchPerBox)
 	reverseStrings(uids)
-	messages, err := c.uidFetchMessages(strings.Join(uids, ","))
+	var messages []FetchedMessage
+	if plan.previewBytes > 0 {
+		messages, err = c.uidFetchMessagePreviews(strings.Join(uids, ","), plan.previewBytes)
+	} else {
+		messages, err = c.uidFetchMessages(strings.Join(uids, ","))
+	}
 	if err != nil {
 		return nil, fmt.Errorf("mailarchive: fetch %q: %w", mailbox, err)
 	}
-	return r.filterArchiveMessages(mailbox, messages, plan.spec, seen), nil
+	rows, filterErr := r.filterArchiveMessages(ctx, mailbox, messages, plan.spec, seen, stateSnapshot, locators)
+	if filterErr != nil {
+		return rows, filterErr
+	}
+	for _, message := range messages {
+		if message.Truncated {
+			return rows, fmt.Errorf("%w: message preview truncated", ErrArchivePartial)
+		}
+	}
+	return rows, nil
 }
 
-func (r *Repository) filterArchiveMessages(mailbox string, messages []FetchedMessage, spec archiveQuery, seen map[string]bool) []archiveRow {
+func (r *Repository) filterArchiveMessages(
+	ctx context.Context,
+	mailbox string,
+	messages []FetchedMessage,
+	spec archiveQuery,
+	seen map[string]bool,
+	stateSnapshot map[string]overlay.MessageState,
+	locators map[string]overlay.MessageState,
+) ([]archiveRow, error) {
 	rows := make([]archiveRow, 0, len(messages))
 	for _, message := range messages {
-		if row, ok := r.archiveRowForMessage(mailbox, message, spec, seen); ok {
+		if err := ctx.Err(); err != nil {
+			return rows, err
+		}
+		if row, ok := r.archiveRowForMessage(mailbox, message, spec, seen, stateSnapshot, locators); ok {
 			rows = append(rows, row)
 		}
 	}
-	return rows
+	return rows, nil
 }
 
-func (r *Repository) archiveRowForMessage(mailbox string, message FetchedMessage, spec archiveQuery, seen map[string]bool) (archiveRow, bool) {
+func (r *Repository) archiveRowForMessage(
+	mailbox string,
+	message FetchedMessage,
+	spec archiveQuery,
+	seen map[string]bool,
+	stateSnapshot map[string]overlay.MessageState,
+	locators map[string]overlay.MessageState,
+) (archiveRow, bool) {
 	uid := strings.TrimSpace(message.UID)
 	if uid == "" {
 		return archiveRow{}, false
@@ -165,13 +241,13 @@ func (r *Repository) archiveRowForMessage(mailbox string, message FetchedMessage
 		return archiveRow{}, false
 	}
 	seen[id] = true
-	_ = r.state.RememberLocator(id, mailbox, uid)
-	state := r.state.Get(id)
+	locators[id] = overlay.MessageState{Mailbox: mailbox, UID: uid}
+	state := stateSnapshot[id]
 	if !archiveMessageVisible(spec, detail, state) {
 		return archiveRow{}, false
 	}
 	return archiveRow{
-		summary: detailToSummary(detail, mailbox, state),
+		summary: detailToSummary(detail, mailbox, state, spec.Text),
 		when:    mailbody.ParseMailDate(detail.Date),
 		uid:     parseUID(uid),
 	}, true

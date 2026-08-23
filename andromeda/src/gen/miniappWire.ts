@@ -639,6 +639,9 @@ export interface SearchAllResult {
   wiki?: SearchWikiHit[]
   diary?: SearchDiaryHit[]
   people?: PersonRow[]
+  files?: SearchFileHit[]
+  mail?: SearchMailHit[]
+  sources?: SearchSourceStatus
 }
 
 export interface SearchDiaryHit {
@@ -647,6 +650,36 @@ export interface SearchDiaryHit {
   content?: string
   at?: number
   score?: number
+}
+
+export interface SearchFileHit {
+  path?: string
+  name?: string
+  size?: number
+  snippet?: string
+  score?: number
+  startLine?: number
+  endLine?: number
+  kind?: string
+  heading?: string
+}
+
+export interface SearchMailHit {
+  id?: string
+  threadId?: string
+  from?: string
+  subject?: string
+  date?: string
+  snippet?: string
+  mailbox?: string
+}
+
+export interface SearchSourceStatus {
+  wiki?: string
+  diary?: string
+  people?: string
+  files?: string
+  mail?: string
 }
 
 export interface SearchWikiHit {

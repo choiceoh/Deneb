@@ -1,9 +1,10 @@
 package document
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,11 +32,23 @@ const convertTimeout = 90 * time.Second
 // absent (the caller then reports the format as unsupported, unchanged). Wired
 // into extractDocument's default case, so every capture path gains the formats.
 func convertUnsupported(ctx context.Context, data []byte, filename string) docResult {
-	switch strings.ToLower(filepath.Ext(filename)) {
+	ext := strings.ToLower(filepath.Ext(filename))
+	if isConverterExtension(ext) {
+		// LibreOffice content-sniffs its input, so an attacker can rename an ODF/
+		// OOXML ZIP bomb to a legacy extension. Detect and preflight ZIP structure
+		// before choosing any converter; only genuinely non-ZIP legacy payloads
+		// may bypass the archive budget.
+		if err := preflightConverterInput(data, ext); err != nil {
+			return docResult{kind: docUnsupported, err: err}
+		}
+	}
+	switch ext {
 	case ".hwp":
 		// hwp5txt is a focused, lightweight HWP→text parser — smaller surface than
 		// LibreOffice, so prefer it; fall back to soffice (which also reads .hwp).
-		if text, ok := hwp5txtToText(ctx, data); ok {
+		if text, ok, err := hwp5txtToText(ctx, data); err != nil {
+			return docResult{kind: docUnsupported, err: err}
+		} else if ok {
 			return docResult{kind: docText, text: text}
 		}
 		return sofficeConvertAndExtract(ctx, data, ".hwp")
@@ -49,32 +62,36 @@ func convertUnsupported(ctx context.Context, data []byte, filename string) docRe
 }
 
 // hwp5txtToText runs hwp5txt on HWP bytes and returns its plain-text output.
-func hwp5txtToText(ctx context.Context, data []byte) (string, bool) {
+func hwp5txtToText(ctx context.Context, data []byte) (string, bool, error) {
 	if _, err := exec.LookPath("hwp5txt"); err != nil {
-		return "", false
+		return "", false, nil
 	}
 	dir, err := os.MkdirTemp("", "deneb-hwp-")
 	if err != nil {
-		return "", false
+		return "", false, nil
 	}
 	defer os.RemoveAll(dir)
 	if err := os.WriteFile(filepath.Join(dir, "in.hwp"), data, 0o600); err != nil {
-		return "", false
+		return "", false, nil
 	}
-	runCtx, cancel := context.WithTimeout(ctx, convertTimeout)
-	defer cancel()
-	// Literal args, run inside the temp dir — no tainted input reaches the process.
-	cmd := exec.CommandContext(runCtx, "hwp5txt", "in.hwp") //nolint:gosec // G204 — literal args, temp dir
-	cmd.Dir = dir
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		return "", false
+	text, err := runBoundedTextCommand(ctx, convertTimeout, nil, func(runCtx context.Context, _ io.Reader, stdout, stderr io.Writer) error {
+		// Literal args, run inside the temp dir — no tainted input reaches the process.
+		cmd := exec.CommandContext(runCtx, "hwp5txt", "in.hwp") //nolint:gosec // G204 — literal args, temp dir
+		cmd.Dir = dir
+		cmd.Stdout = stdout
+		cmd.Stderr = stderr
+		return cmd.Run()
+	})
+	if err != nil {
+		if errors.Is(err, errDocumentExtractionLimit) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return "", false, err
+		}
+		return "", false, nil
 	}
-	if text := strings.TrimSpace(out.String()); text != "" {
-		return text, true
+	if text != "" {
+		return text, true, nil
 	}
-	return "", false
+	return "", false, nil
 }
 
 // sofficeConvertAndExtract converts a LibreOffice-readable format to its OOXML
@@ -106,11 +123,32 @@ func sofficeConvertAndExtract(ctx context.Context, data []byte, ext string) docR
 	if err := cmd.Run(); err != nil {
 		return docResult{kind: docUnsupported, err: fmt.Errorf("soffice 변환 실패: %w", err)}
 	}
-	outBytes, err := os.ReadFile(filepath.Join(dir, "in."+target))
+	outPath := filepath.Join(dir, "in."+target)
+	outBytes, err := readBoundedRegularFile(outPath, maxDocumentOutputBytes)
+	_ = os.Remove(outPath) // release converter output disk space before native parsing
 	if err != nil {
 		return docResult{kind: docUnsupported, err: fmt.Errorf("soffice 변환 출력 없음: %w", err)}
 	}
 	return extractDocument(ctx, outBytes, "converted."+target, "")
+}
+
+func isConverterExtension(ext string) bool {
+	switch ext {
+	case ".hwp", ".doc", ".rtf", ".odt", ".hwpx", ".wps",
+		".xls", ".ods", ".ppt", ".odp":
+		return true
+	default:
+		return false
+	}
+}
+
+func isZipConverterInput(ext string) bool {
+	switch ext {
+	case ".hwpx", ".odt", ".ods", ".odp":
+		return true
+	default:
+		return false
+	}
 }
 
 // sofficeTarget maps an input extension to the OOXML target that best preserves

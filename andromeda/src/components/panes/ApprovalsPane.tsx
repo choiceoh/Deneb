@@ -9,6 +9,7 @@ import {
   analyzeApproval,
   approvalAttachmentUrl,
   cachedApprovalAnalysis,
+  callRpc,
   fetchApprovalAttachment,
   fetchApprovalBody,
   fetchGatewayBlob,
@@ -684,6 +685,8 @@ function ApprovalDetail({
         </div>
       )}
 
+      <ApprovalAskBox key={docId} docId={docId} title={doc.title} folder={doc.folder} />
+
       {doc.canAct ? (
         <div className="approval-act-bar" role="group" aria-label="결재 처리">
           <button className="btn" disabled={busy} onClick={onApprove}>
@@ -695,5 +698,96 @@ function ApprovalDetail({
         </div>
       ) : null}
     </section>
+  );
+}
+
+interface ApprovalQATurn {
+  q: string;
+  a: string;
+}
+
+const APPROVAL_QA_MAX_HISTORY_TURNS = 8;
+const APPROVAL_QA_MAX_TEXT_CODE_POINTS = 2000;
+
+function boundApprovalQAText(value: string): string {
+  return Array.from(value.trim()).slice(0, APPROVAL_QA_MAX_TEXT_CODE_POINTS).join("");
+}
+
+function ApprovalAskBox({ docId, title, folder }: { docId: string; title?: string; folder?: string }) {
+  const { cfg, connected } = useWorkspace();
+  const [turns, setTurns] = useState<ApprovalQATurn[]>([]);
+  const [question, setQuestion] = useState("");
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState("");
+
+  async function ask() {
+    const boundedQuestion = boundApprovalQAText(question);
+    if (!boundedQuestion || asking || !connected || !docId) return;
+    setAsking(true);
+    setAskError("");
+    try {
+      const result = await callRpc<{ answer?: string }>(cfg, APPROVALS_RPC.ask, {
+        docId,
+        title: title?.trim() || undefined,
+        folder: folder?.trim() || undefined,
+        question: boundedQuestion,
+        history: turns
+          .slice(-APPROVAL_QA_MAX_HISTORY_TURNS)
+          .map(({ q, a }) => ({ q: boundApprovalQAText(q), a: boundApprovalQAText(a) }))
+          .filter(({ q, a }) => q || a),
+      });
+      const answer = result.answer?.trim();
+      if (!answer) throw new Error("빈 답변을 받았습니다.");
+      setTurns((current) => [...current, { q: boundedQuestion, a: answer }]);
+      setQuestion("");
+    } catch (error) {
+      setAskError(errText(error));
+    } finally {
+      setAsking(false);
+    }
+  }
+
+  return (
+    <div className="mail-card approval-ask no-print" aria-label="결재 문서 질문">
+      <div className="mail-card-title">이 결재에 질문</div>
+      {turns.map((turn, index) => (
+        <div className="mail-qa" key={`${index}:${turn.q}`}>
+          <div className="mail-qa-q">{turn.q}</div>
+          <div className="mail-qa-a">
+            <Markdown text={turn.a} />
+          </div>
+        </div>
+      ))}
+      {askError ? (
+        <div className="mail-card-line error" role="alert">
+          {askError}{" "}
+          <button className="row-btn" type="button" disabled={asking || !question.trim()} onClick={() => void ask()}>
+            다시 시도
+          </button>
+        </div>
+      ) : null}
+      <form
+        className="mail-ask"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void ask();
+        }}
+      >
+        <input
+          className="field"
+          value={question}
+          placeholder={asking ? "답변 중…" : "예: 전례 대비 단가가 왜 높아?"}
+          disabled={!connected || asking || !docId}
+          onChange={(event) => setQuestion(event.target.value)}
+        />
+        <button
+          className="btn btn-accent"
+          type="submit"
+          disabled={!connected || asking || !docId || question.trim().length === 0}
+        >
+          {asking ? "답변 중…" : "질문"}
+        </button>
+      </form>
+    </div>
   );
 }
