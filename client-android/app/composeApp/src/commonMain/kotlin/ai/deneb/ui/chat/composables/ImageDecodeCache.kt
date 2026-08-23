@@ -21,7 +21,17 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 // core (Dispatchers.Default), off the scroll frame.
 private const val IMAGE_DECODE_CACHE_MAX = 24
 
+// A count alone does not bound this cache: entries are decoded to at most 2048px
+// on the long side, so 24 of them is up to ~400MB of ARGB against a ~256MB heap.
+// The budget is what actually bounds it; the count cap just keeps the map short
+// when the images are small.
+private const val IMAGE_DECODE_CACHE_MAX_BYTES = 48L * 1024 * 1024
+
 private val imageDecodeCache = LinkedHashMap<String, ImageBitmap>()
+private var imageDecodeCacheBytes = 0L
+
+// ARGB_8888 is 4 bytes per pixel on every target; close enough to charge the budget.
+private fun ImageBitmap.approximateBytes(): Long = width.toLong() * height.toLong() * 4L
 
 @OptIn(ExperimentalEncodingApi::class)
 fun decodeBase64ImageCached(data: String): ImageBitmap? {
@@ -30,10 +40,7 @@ fun decodeBase64ImageCached(data: String): ImageBitmap? {
         return cached
     }
     val bitmap = runCatching { decodeToImageBitmap(Base64.decode(data)) }.getOrNull() ?: return null
-    imageDecodeCache[data] = bitmap
-    while (imageDecodeCache.size > IMAGE_DECODE_CACHE_MAX) {
-        imageDecodeCache.remove(imageDecodeCache.keys.first())
-    }
+    putImageDecoded(data, bitmap)
     return bitmap
 }
 
@@ -42,9 +49,26 @@ fun decodeBase64ImageCached(data: String): ImageBitmap? {
 private fun putImageDecoded(data: String, bitmap: ImageBitmap) {
     if (imageDecodeCache.containsKey(data)) return
     imageDecodeCache[data] = bitmap
-    while (imageDecodeCache.size > IMAGE_DECODE_CACHE_MAX) {
-        imageDecodeCache.remove(imageDecodeCache.keys.first())
+    imageDecodeCacheBytes += bitmap.approximateBytes()
+    // Always keep the newest entry even when it alone blows the budget — a single
+    // huge attachment should still display rather than evict itself on insert.
+    while (imageDecodeCache.size > 1 &&
+        (imageDecodeCache.size > IMAGE_DECODE_CACHE_MAX || imageDecodeCacheBytes > IMAGE_DECODE_CACHE_MAX_BYTES)
+    ) {
+        val oldest = imageDecodeCache.keys.first()
+        imageDecodeCache.remove(oldest)?.let { imageDecodeCacheBytes -= it.approximateBytes() }
     }
+}
+
+/**
+ * Drops every cached bitmap. Wired to the platform's low-memory callback: when the
+ * system says it is about to start killing processes, several hundred megabytes of
+ * decoded attachments is the cheapest thing this app can give back — they re-decode
+ * from the transcript on demand.
+ */
+fun clearImageDecodeCache() {
+    imageDecodeCache.clear()
+    imageDecodeCacheBytes = 0L
 }
 
 // rememberDecodedImage returns the bitmap for a base64 [data] using the device's spare

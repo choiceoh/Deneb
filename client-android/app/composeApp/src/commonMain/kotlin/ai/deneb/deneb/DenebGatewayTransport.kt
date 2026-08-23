@@ -1,5 +1,7 @@
 package ai.deneb.deneb
 
+import ai.deneb.getBackgroundDispatcher
+import ai.deneb.network.httpTeardownTolerantHandler
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
@@ -14,10 +16,12 @@ import io.ktor.http.isSuccess
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readByte
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlin.coroutines.CoroutineContext
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -170,6 +174,25 @@ internal suspend fun streamGatewayChat(
 }
 
 /**
+ * The context every miniapp RPC body runs in.
+ *
+ * Two jobs, both of which have to happen at this choke point rather than at call
+ * sites. First, dispatch: without it the ktor pipeline and all request/response
+ * JSON run on the caller's thread, and ~45 screens call these helpers from
+ * `rememberCoroutineScope()` / `LaunchedEffect`, i.e. the main thread. Second,
+ * teardown containment: cancelling one of those screen scopes (every navigation
+ * away does) while a request is in flight raises the crash described in
+ * [httpTeardownTolerantHandler], which can ONLY be intercepted by a
+ * CoroutineExceptionHandler in the context of the coroutine being cancelled.
+ * Individual `rememberCoroutineScope()` call sites cannot install one at all when
+ * the caller is a `LaunchedEffect` (the Recomposer's effect context is not ours),
+ * so containment has to live inside the call itself — here.
+ */
+internal val gatewayRpcContext: CoroutineContext by lazy {
+    getBackgroundDispatcher() + httpTeardownTolerantHandler("transport")
+}
+
+/**
  * Calls a non-critical miniapp read RPC and drops stale responses when the
  * gateway credentials change while the request is in flight.
  */
@@ -179,27 +202,29 @@ internal suspend inline fun <reified T> DenebGatewayClient.callRpc(method: Strin
     val token = clientToken
     val epoch = credEpoch
     if (token.isEmpty()) return null
-    val response = try {
-        http.post("$url/api/v1/miniapp/rpc") {
-            header(DenebGatewayClient.CLIENT_TOKEN_HEADER, token)
-            contentType(ContentType.Application.Json)
-            setBody(RpcReq(id = Uuid.random().toString(), method = method, params = params))
+    return withContext(gatewayRpcContext) {
+        val response = try {
+            http.post("$url/api/v1/miniapp/rpc") {
+                header(DenebGatewayClient.CLIENT_TOKEN_HEADER, token)
+                contentType(ContentType.Application.Json)
+                setBody(RpcReq(id = Uuid.random().toString(), method = method, params = params))
+            }
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            return@withContext null
         }
-    } catch (cancel: CancellationException) {
-        throw cancel
-    } catch (_: Exception) {
-        return null
+        if (!response.status.isSuccess()) return@withContext null
+        val envelope = try {
+            response.body<RpcEnv<T>>()
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            return@withContext null
+        }
+        val payload = envelope.takeIf { it.ok }?.payload
+        if (epoch == credEpoch && url == gatewayUrl && token == clientToken) payload else null
     }
-    if (!response.status.isSuccess()) return null
-    val envelope = try {
-        response.body<RpcEnv<T>>()
-    } catch (cancel: CancellationException) {
-        throw cancel
-    } catch (_: Exception) {
-        return null
-    }
-    val payload = envelope.takeIf { it.ok }?.payload
-    return if (epoch == credEpoch && url == gatewayUrl && token == clientToken) payload else null
 }
 
 /**
@@ -222,52 +247,56 @@ internal suspend inline fun <reified T> DenebGatewayClient.callRpcOutcome(method
     val token = clientToken
     val epoch = credEpoch
     if (token.isEmpty()) return RpcOutcome.Unreachable
-    val response = try {
-        http.post("$url/api/v1/miniapp/rpc") {
-            header(DenebGatewayClient.CLIENT_TOKEN_HEADER, token)
-            contentType(ContentType.Application.Json)
-            setBody(RpcReq(id = Uuid.random().toString(), method = method, params = params))
+    return withContext(gatewayRpcContext) {
+        val response = try {
+            http.post("$url/api/v1/miniapp/rpc") {
+                header(DenebGatewayClient.CLIENT_TOKEN_HEADER, token)
+                contentType(ContentType.Application.Json)
+                setBody(RpcReq(id = Uuid.random().toString(), method = method, params = params))
+            }
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            return@withContext RpcOutcome.Unreachable
         }
-    } catch (cancel: CancellationException) {
-        throw cancel
-    } catch (_: Exception) {
-        return RpcOutcome.Unreachable
+        if (!response.status.isSuccess()) return@withContext RpcOutcome.Unreachable
+        val envelope = try {
+            response.body<RpcEnvFull<T>>()
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            return@withContext RpcOutcome.Unreachable
+        }
+        // Stale-credential fence, same as callRpc: never act on account A's answer
+        // under account B.
+        if (epoch != credEpoch || url != gatewayUrl || token != clientToken) return@withContext RpcOutcome.Unreachable
+        if (envelope.ok) {
+            return@withContext envelope.payload?.let { RpcOutcome.Ok(it) } ?: RpcOutcome.Unreachable
+        }
+        val code = envelope.error?.code.orEmpty()
+        if (code.isBlank()) RpcOutcome.Unreachable else RpcOutcome.Rejected(code)
     }
-    if (!response.status.isSuccess()) return RpcOutcome.Unreachable
-    val envelope = try {
-        response.body<RpcEnvFull<T>>()
-    } catch (cancel: CancellationException) {
-        throw cancel
-    } catch (_: Exception) {
-        return RpcOutcome.Unreachable
-    }
-    // Stale-credential fence, same as callRpc: never act on account A's answer
-    // under account B.
-    if (epoch != credEpoch || url != gatewayUrl || token != clientToken) return RpcOutcome.Unreachable
-    if (envelope.ok) {
-        return envelope.payload?.let { RpcOutcome.Ok(it) } ?: RpcOutcome.Unreachable
-    }
-    val code = envelope.error?.code.orEmpty()
-    return if (code.isBlank()) RpcOutcome.Unreachable else RpcOutcome.Rejected(code)
 }
 
 /** Calls a miniapp write RPC and preserves the gateway's user-facing error. */
 @OptIn(ExperimentalUuidApi::class)
 internal suspend fun DenebGatewayClient.rpcWrite(method: String, params: JsonObject): String? {
     if (clientToken.isEmpty()) return "게이트웨이에 연결되어 있지 않습니다."
-    return try {
-        val response = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
-            header(DenebGatewayClient.CLIENT_TOKEN_HEADER, clientToken)
-            contentType(ContentType.Application.Json)
-            setBody(RpcReq(id = Uuid.random().toString(), method = method, params = params))
+    return withContext(gatewayRpcContext) {
+        try {
+            val response = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
+                header(DenebGatewayClient.CLIENT_TOKEN_HEADER, clientToken)
+                contentType(ContentType.Application.Json)
+                setBody(RpcReq(id = Uuid.random().toString(), method = method, params = params))
+            }
+            if (!response.status.isSuccess()) return@withContext "요청을 처리하지 못했습니다."
+            val result = response.body<RpcResult>()
+            if (result.ok) null else result.error?.message?.ifBlank { null } ?: "요청을 처리하지 못했습니다."
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            "요청을 처리하지 못했습니다."
         }
-        if (!response.status.isSuccess()) return "요청을 처리하지 못했습니다."
-        val result = response.body<RpcResult>()
-        if (result.ok) null else result.error?.message?.ifBlank { null } ?: "요청을 처리하지 못했습니다."
-    } catch (cancel: CancellationException) {
-        throw cancel
-    } catch (_: Exception) {
-        "요청을 처리하지 못했습니다."
     }
 }
 

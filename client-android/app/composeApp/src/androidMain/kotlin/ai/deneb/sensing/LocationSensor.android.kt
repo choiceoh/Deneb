@@ -10,10 +10,18 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.java.KoinJavaComponent
 import java.util.Locale
 import kotlin.coroutines.resume
+
+// A one-shot fix and a best-effort address are both "nice to have, now": bound
+// them so a caller never waits on a fix that will not arrive.
+private const val FIX_TIMEOUT_MS = 15_000L
+private const val GEOCODE_TIMEOUT_MS = 5_000L
 
 /**
  * FusedLocationProvider one-shot read. Context comes from Koin (registered via
@@ -34,6 +42,10 @@ actual suspend fun readCurrentLocation(): String? {
     val request = CurrentLocationRequest.Builder()
         .setPriority(Priority.PRIORITY_BALANCED_POWER_ACCURACY)
         .setMaxUpdateAgeMillis(60_000L)
+        // Without this the request's duration defaults to Long.MAX_VALUE: indoors,
+        // with no fix to be had, the settings screen would sit on "요청 중…"
+        // forever instead of reporting that it could not get one.
+        .setDurationMillis(FIX_TIMEOUT_MS)
         .build()
 
     val location: Location = suspendCancellableCoroutine { cont ->
@@ -51,12 +63,25 @@ actual suspend fun readCurrentLocation(): String? {
         // On-device reverse geocoding: the gateway matches this Korean admin
         // string ("전라북도 군산시 옥구읍 수산리") against project 현장 to log a
         // site visit. Best-effort — omitted on failure (no network, no result).
-        reverseGeocode(context, location.latitude, location.longitude)?.let {
+        reverseGeocodeOffMain(context, location.latitude, location.longitude)?.let {
             append(",\"place\":\"").append(jsonEscape(it)).append("\"")
         }
         readBatteryJson(context)?.let { append(",\"battery\":").append(it) }
         append("}")
     }
+}
+
+/**
+ * [reverseGeocode] off the caller's thread and under a deadline.
+ *
+ * The blocking `getFromLocation` overload does network I/O when the area is not
+ * cached, and one caller (the gateway settings card's 위치 핀) invokes this from a
+ * `rememberCoroutineScope()` — i.e. the main thread — so without the hop it is a
+ * StrictMode violation and a visible stall. Best-effort field: a timeout just
+ * omits `place`.
+ */
+private suspend fun reverseGeocodeOffMain(context: Context, lat: Double, lng: Double): String? = withTimeoutOrNull(GEOCODE_TIMEOUT_MS) {
+    withContext(Dispatchers.IO) { reverseGeocode(context, lat, lng) }
 }
 
 /**

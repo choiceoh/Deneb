@@ -1,5 +1,7 @@
 package ai.deneb
 
+import ai.deneb.data.InMemorySettings
+import ai.deneb.data.isUnreadableSecureStore
 import ai.deneb.sms.declaresReadSms
 import android.content.Context
 import android.content.Intent
@@ -22,7 +24,9 @@ import io.github.vinceglb.filekit.write
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.android.Android
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.koin.java.KoinJavaComponent.inject
 import kotlin.coroutines.CoroutineContext
 
@@ -56,25 +60,48 @@ actual val isSmsSupported: Boolean by lazy {
     }
 }
 
+// Downsample on decode, never full-res. A modern phone camera shot is 50-200MP;
+// decoding one at full resolution allocates width*height*4 bytes (a 50MP shot =
+// ~200MB ARGB_8888) against a ~256MB heap, which is how build 838 died. The
+// bounds pass costs no pixels, so we size an inSampleSize first and let
+// BitmapFactory allocate only what we are about to upload — the same two-pass
+// shape decodeToImageBitmap already uses. Runs off the main thread: the callers
+// are activity coroutines on Dispatchers.Main.immediate.
+//
+// The catch is Throwable, not Exception, on purpose: the failure worth
+// containing here IS OutOfMemoryError, which is an Error. Returning the original
+// bytes degrades to "upload it as-is" instead of taking the process down; the
+// batch size cap is what keeps that fallback bounded.
 actual suspend fun compressImageBytes(bytes: ByteArray, mimeType: String, maxDim: Int): ByteArray {
     if (!mimeType.startsWith("image/")) return bytes
-    return try {
-        val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
-        val scaled = if (bitmap.width > maxDim || bitmap.height > maxDim) {
-            val scale = maxDim.toFloat() / maxOf(bitmap.width, bitmap.height)
-            val newWidth = (bitmap.width * scale).toInt()
-            val newHeight = (bitmap.height * scale).toInt()
-            bitmap.scale(newWidth, newHeight)
-        } else {
-            bitmap
+    return withContext(Dispatchers.Default) {
+        try {
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            val opts = android.graphics.BitmapFactory.Options().apply {
+                inSampleSize = displayInSampleSize(bounds.outWidth, bounds.outHeight, maxDim)
+            }
+            val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+                ?: return@withContext bytes
+            // inSampleSize only lands on powers of two, so the decoded bitmap can still
+            // exceed maxDim by up to 2x — scale the remainder down exactly.
+            val scaled = if (bitmap.width > maxDim || bitmap.height > maxDim) {
+                val scale = maxDim.toFloat() / maxOf(bitmap.width, bitmap.height)
+                bitmap.scale((bitmap.width * scale).toInt(), (bitmap.height * scale).toInt())
+            } else {
+                bitmap
+            }
+            val outputStream = java.io.ByteArrayOutputStream()
+            scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, outputStream)
+            if (scaled !== bitmap) scaled.recycle()
+            bitmap.recycle()
+            outputStream.toByteArray()
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            DenebLog.warn("Platform", "image downsample failed, sending as-is: $t")
+            bytes
         }
-        val outputStream = java.io.ByteArrayOutputStream()
-        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, outputStream)
-        if (scaled !== bitmap) scaled.recycle()
-        bitmap.recycle()
-        outputStream.toByteArray()
-    } catch (_: Exception) {
-        bytes
     }
 }
 
@@ -86,30 +113,49 @@ actual fun getAppFilesDirectory(): String {
 // Uses dev.spght:encryptedprefs-ktx — a maintained community fork of the deprecated
 // androidx.security:security-crypto. We keep application-level encryption because
 // secure settings store API keys, email passwords, and conversation encryption keys.
+//
+// Opening the store has three outcomes and only one of them may delete data. This
+// runs inside a Koin `single` resolved from Application.onCreate, so an escaping
+// exception is not "a failed read" — it is an app that never starts again until
+// the user clears app data. Hence: wipe only on proven corruption
+// (isUnreadableSecureStore), retry everything else, and boot degraded rather than
+// not at all.
 actual fun createSecureSettings(): Settings {
     val context: Context by inject(Context::class.java)
-    return try {
-        SharedPreferencesSettings(createEncryptedPrefs(context))
-    } catch (_: Exception) {
+    val opened = runCatching { SharedPreferencesSettings(createEncryptedPrefs(context)) }
+    opened.getOrNull()?.let { return it }
+
+    val cause = opened.exceptionOrNull()
+    if (isUnreadableSecureStore(cause)) {
         // AEADBadTagException occurs when Android Auto Backup restores the encrypted
         // prefs file but the Keystore key is hardware-bound and doesn't transfer.
-        // Delete the corrupted file and recreate fresh encrypted prefs.
-        context.deleteSharedPreferences("kai_secure_prefs")
-        SharedPreferencesSettings(createEncryptedPrefs(context))
+        // Delete the unreadable file and recreate fresh encrypted prefs.
+        DenebLog.warn("Platform", "secure prefs unreadable (${cause?.let { it::class.simpleName }}) — recreating empty")
+        context.deleteSharedPreferences(SECURE_PREFS_NAME)
+    } else {
+        DenebLog.warn("Platform", "secure prefs open failed (${cause?.let { it::class.simpleName }}) — retrying, keeping data")
     }
+
+    return runCatching { SharedPreferencesSettings(createEncryptedPrefs(context)) }
+        .getOrElse { second ->
+            DenebLog.error("Platform", "secure prefs unavailable — this session runs on in-memory settings", second)
+            InMemorySettings()
+        }
 }
 
 // NOTE: the "kai_secure_prefs" file name is pinned, not de-Kai'd. It holds the
 // gateway token, API keys, and conversation encryption keys that already-installed
 // clients wrote. Renaming it would reset secure storage on update (forcing a
 // re-pair), so the identity-keyed name stays stable like the pinned applicationId.
+private const val SECURE_PREFS_NAME = "kai_secure_prefs"
+
 private fun createEncryptedPrefs(context: Context): android.content.SharedPreferences {
     val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
         .build()
     return EncryptedSharedPreferences.create(
         context,
-        "kai_secure_prefs",
+        SECURE_PREFS_NAME,
         masterKey,
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,

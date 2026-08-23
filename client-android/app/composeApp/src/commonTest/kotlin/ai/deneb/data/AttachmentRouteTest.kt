@@ -98,9 +98,13 @@ class AttachmentRouteTest {
 
     @Test
     fun attachmentSizeGuardCapsNonImagesButNotImages() {
-        // Images are downsampled before upload, so they are always within size.
+        // Images are downsampled before upload, so the payload cap does not apply —
+        // a 40MB photo is fine even though a 40MB PDF is not.
         assertTrue(isWithinAttachmentSize("png", 40_000_000L), "image")
-        assertTrue(isWithinAttachmentSize("JPG", 999_000_000L), "image ci")
+        assertTrue(isWithinAttachmentSize("JPG", MAX_RAW_IMAGE_BYTES.toLong()), "image at ceiling, ci")
+        // ...but the encoded file is still read into memory to decode it, so a
+        // pathological one is refused instead of being pulled in whole.
+        assertEquals(false, isWithinAttachmentSize("jpg", 999_000_000L), "pathological image")
         // Non-images are capped.
         assertTrue(isWithinAttachmentSize("pdf", 10_000_000L), "small pdf")
         assertEquals(false, isWithinAttachmentSize("pdf", MAX_ATTACHMENT_BYTES + 1), "oversize pdf")

@@ -13,8 +13,13 @@ import android.widget.RemoteViews
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+
+// Broadcast receivers get roughly 10s before the system treats them as hung; stay
+// well inside it so a stalled gateway shows "새로고침 실패" instead of an ANR.
+private const val WIDGET_FETCH_TIMEOUT_MS = 8_000L
 
 // Home-screen widget: the next meeting and unread-mail count at a glance, with a
 // tap that opens the Deneb chat. Refreshes on a slow 2h system cycle
@@ -34,8 +39,12 @@ class DenebWidgetProvider :
         for (id in ids) render(context, mgr, id, WidgetSummary(meeting = "…", unread = -1))
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
-            val summary = (repo as? DenebGatewayClient)?.widgetSummary()
-                ?: WidgetSummary(configured = false)
+            // goAsync() buys a broadcast a short grace period, not the client's
+            // 180s request budget — overrunning it is an ANR kill, not a slow
+            // widget. Give up well inside the window and paint the failure.
+            val summary = withTimeoutOrNull(WIDGET_FETCH_TIMEOUT_MS) {
+                (repo as? DenebGatewayClient)?.widgetSummary() ?: WidgetSummary(configured = false)
+            } ?: WidgetSummary(ok = false)
             try {
                 for (id in ids) render(context, mgr, id, summary)
             } finally {
