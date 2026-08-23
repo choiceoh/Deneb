@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
@@ -302,4 +303,32 @@ func toPromptToolDefs(defs []ToolDef) []prompt.ToolDef {
 		out = append(out, prompt.ToolDef{Name: d.Name})
 	}
 	return out
+}
+
+// formatToolHist renders the per-turn tool-call histogram as a compact
+// "name:count,name:count" string ordered by descending count (ties broken by
+// name) for the delivery/audit card. Empty counts yield "".
+func formatToolHist(counts map[string]int) string {
+	if len(counts) == 0 {
+		return ""
+	}
+	type kv struct {
+		name  string
+		count int
+	}
+	pairs := make([]kv, 0, len(counts))
+	for k, v := range counts {
+		pairs = append(pairs, kv{k, v})
+	}
+	sort.Slice(pairs, func(i, j int) bool {
+		if pairs[i].count != pairs[j].count {
+			return pairs[i].count > pairs[j].count
+		}
+		return pairs[i].name < pairs[j].name
+	})
+	parts := make([]string, 0, len(pairs))
+	for _, p := range pairs {
+		parts = append(parts, fmt.Sprintf("%s:%d", p.name, p.count))
+	}
+	return strings.Join(parts, ",")
 }
