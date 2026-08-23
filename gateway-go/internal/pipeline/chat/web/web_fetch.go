@@ -63,6 +63,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.Spillover
 			Type     string   `json:"type"`
 			Academic bool     `json:"academic"`
 			Extract  string   `json:"extract"`
+			Focus    string   `json:"focus"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			//nolint:nilerr // tool returns user-facing error in result string
@@ -79,7 +80,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.Spillover
 
 		case p.URL != "":
 			// Fetch mode: extract content from URL.
-			return webFetchURL(ctx, cache, localAI, spill, p.URL, p.MaxChars)
+			return webFetchURL(ctx, cache, localAI, spill, p.URL, p.MaxChars, p.Focus)
 
 		case len(p.Queries) > 0:
 			// Parallel search mode: multiple queries at once.
@@ -101,7 +102,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.Spillover
 			if fetch > 3 {
 				fetch = 3
 			}
-			return webParallelSearch(ctx, cache, localAI, spill, p.Queries, p.Count, fetch, p.MaxChars)
+			return webParallelSearch(ctx, cache, localAI, spill, p.Queries, p.Count, fetch, p.MaxChars, p.Focus)
 
 		case p.Query != "":
 			if p.Count <= 0 {
@@ -126,7 +127,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.Spillover
 				if p.Fetch > 3 {
 					p.Fetch = 3
 				}
-				out, err = webSearchAndFetch(ctx, cache, localAI, spill, p.Query, p.Count, p.Fetch, p.MaxChars)
+				out, err = webSearchAndFetch(ctx, cache, localAI, spill, p.Query, p.Count, p.Fetch, p.MaxChars, p.Focus)
 			} else {
 				// Search-only mode: return search results.
 				out, err = webSearch(ctx, p.Query, p.Count)
@@ -148,8 +149,8 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.Spillover
 }
 
 // webFetchURL fetches a URL and returns extracted content with metadata envelope.
-func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int) (string, error) {
-	out, err := webFetchURLDetailed(ctx, cache, localAI, spill, targetURL, maxChars)
+func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int, focus string) (string, error) {
+	out, err := webFetchURLDetailed(ctx, cache, localAI, spill, targetURL, maxChars, focus)
 	if err != nil {
 		return "", err
 	}
@@ -158,7 +159,7 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 
 // webFetchURLDetailed is the search+fetch path: same fetch as webFetchURL but
 // returns a structured usability verdict alongside the envelope.
-func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int) (fetchOutcome, error) {
+func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int, focus string) (fetchOutcome, error) {
 	if maxChars <= 0 {
 		maxChars = 20000
 	}
@@ -196,7 +197,7 @@ func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalA
 	// Cache hit — envelope only; fall back to parsing for assess.
 	if cached, ok := cache.Get(targetURL); ok {
 		slog.Info("web fetch", "url", targetURL, "cache_hit", true)
-		truncated := applyTruncation(cached, maxChars)
+		truncated := applyFocusAndTruncation(cached, focus, maxChars)
 		return fetchOutcome{Content: truncated, Assess: assessFetchResult(truncated, nil)}, nil
 	}
 
@@ -222,7 +223,7 @@ func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalA
 	if !ok {
 		return fetchOutcome{}, fmt.Errorf("web fetch %q: unexpected result type %T", targetURL, v)
 	}
-	out.Content = applyTruncation(out.Content, maxChars)
+	out.Content = applyFocusAndTruncation(out.Content, focus, maxChars)
 	return out, nil
 }
 
@@ -425,7 +426,7 @@ func webFetchViaSerper(ctx context.Context, apiKey, targetURL string) (fetchOutc
 // webParallelSearch runs multiple search queries concurrently and returns
 // combined results. Each query runs independently with optional fetch.
 // This avoids sequential LLM round-trips for multi-constraint questions.
-func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, queries []string, count, fetch, maxChars int) (string, error) {
+func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, queries []string, count, fetch, maxChars int, focus string) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 20000
 	}
@@ -445,7 +446,7 @@ func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 			var content string
 			var err error
 			if fetch > 0 {
-				content, err = webSearchAndFetch(ctx, cache, localAI, spill, query, count, fetch, perQueryChars)
+				content, err = webSearchAndFetch(ctx, cache, localAI, spill, query, count, fetch, perQueryChars, focus)
 			} else {
 				content, err = webSearch(ctx, query, count)
 			}
@@ -472,7 +473,7 @@ func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 // webSearchAndFetch searches the web and auto-fetches the top N usable pages.
 // Candidates are ranked (answer-box, knowledge graph, query overlap, denylist),
 // then filled with a parallel wave + sequential early-stop.
-func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, query string, count, fetchTop, maxChars int) (string, error) {
+func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, query string, count, fetchTop, maxChars int, focus string) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 15000
 	}
@@ -519,7 +520,7 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 		perCandidateChars = maxChars
 	}
 
-	selected := fillUsableFetches(ctx, cache, localAI, spill, candidates, fetchTop, perCandidateChars, nil)
+	selected := fillUsableFetches(ctx, cache, localAI, spill, candidates, fetchTop, perCandidateChars, focus, nil)
 	if len(selected) == 0 {
 		sb.WriteString(fmt.Sprintf(
 			"\n[Note: filled 0 of %d; skipped thin/failed. Try web(url=...) on a specific result.]\n",
@@ -537,7 +538,7 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 	}
 	for i, item := range selected {
 		fmt.Fprintf(&sb, "<fetched index=\"%d\" url=\"%s\">\n", i+1, item.url)
-		sb.WriteString(applyTruncation(item.content, finalChars))
+		sb.WriteString(applyFocusAndTruncation(item.content, focus, finalChars))
 		sb.WriteString("\n</fetched>\n\n")
 	}
 

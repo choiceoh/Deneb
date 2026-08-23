@@ -344,6 +344,10 @@ func WebToolSchema() map[string]any {
 				"type":        "number",
 				"description": "Auto-fetch top N results per query (1-3, default: 0)",
 			},
+			"focus": map[string]any{
+				"type":        "string",
+				"description": "What you are looking for on the page. Keeps only the matching sections (with their parent headings) instead of the top of the page — a long reference page comes back as the part that answers the question. Falls back to the full page when nothing matches.",
+			},
 			"maxChars": map[string]any{
 				"type":        "number",
 				"description": "Maximum content characters total (default: 20000). search+fetch may use a lower internal budget",
