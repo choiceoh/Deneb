@@ -29,6 +29,7 @@ class WorkFeedSourcePresentationTest {
             "dream" to (WorkFeedSourceIcon.DREAM to "드림"),
             "dream-digest" to (WorkFeedSourceIcon.DIGEST to "기억 다이제스트"),
             "self-correction" to (WorkFeedSourceIcon.TRUST to "자기교정"),
+            "wiki-maint" to (WorkFeedSourceIcon.WIKI_MAINT to "위키 정비"),
             "deal_question" to (WorkFeedSourceIcon.QUESTION to "질문"),
             "proactive" to (WorkFeedSourceIcon.REPORT to "리포트"),
             "meeting_report" to (WorkFeedSourceIcon.MEETING to "회의"),

@@ -23,6 +23,7 @@ import ai.deneb.ui.icons.outlined.AutoAwesome
 import ai.deneb.ui.icons.outlined.Autorenew
 import ai.deneb.ui.icons.outlined.Bolt
 import ai.deneb.ui.icons.outlined.Book
+import ai.deneb.ui.icons.outlined.Contacts
 import ai.deneb.ui.icons.outlined.KeyboardVoice
 import ai.deneb.ui.icons.outlined.QuestionAnswer
 import androidx.compose.foundation.layout.Arrangement
@@ -692,6 +693,7 @@ internal enum class WorkFeedSourceIcon {
     DREAM,
     DIGEST,
     TRUST,
+    WIKI_MAINT,
     GENESIS,
     INTERVIEW,
     HEARTBEAT,
@@ -726,6 +728,7 @@ internal fun workFeedSourcePresentation(source: String): WorkFeedSourcePresentat
     "dream" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.DREAM, "드림")
     "dream-digest" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.DIGEST, "기억 다이제스트")
     "self-correction" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.TRUST, "자기교정")
+    "wiki-maint" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.WIKI_MAINT, "위키 정비")
     "deal_question" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.QUESTION, "질문")
     "kb-interview" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.INTERVIEW, "인터뷰")
     "genesis-meta", "genesis-evolve-verdict", "genesis-ladder" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.GENESIS, "자가개선")
@@ -752,6 +755,7 @@ private fun sourcePainter(source: WorkFeedSourceIcon): Painter = when (source) {
     WorkFeedSourceIcon.DREAM -> rememberVectorPainter(Icons.Outlined.AutoAwesome)
     WorkFeedSourceIcon.DIGEST -> rememberVectorPainter(Icons.Outlined.Book)
     WorkFeedSourceIcon.TRUST -> rememberVectorPainter(Icons.Filled.Verified)
+    WorkFeedSourceIcon.WIKI_MAINT -> rememberVectorPainter(Icons.Outlined.Contacts)
     WorkFeedSourceIcon.GENESIS -> rememberVectorPainter(Icons.Outlined.Autorenew)
     WorkFeedSourceIcon.INTERVIEW -> rememberVectorPainter(Icons.Filled.School)
     WorkFeedSourceIcon.HEARTBEAT -> rememberVectorPainter(Icons.Outlined.Bolt)

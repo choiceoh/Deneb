@@ -110,6 +110,10 @@ type dreamDigestStats struct {
 	UserModelUpdated int     `json:"userModelUpdated"`
 	RecallHitPages   int     `json:"recallHitPages"`
 	QualityAvg       float64 `json:"qualityAvg"`
+	// QualityTrend carries the window's per-cycle quality scores (scored
+	// cycles only, entry order) for the body's sparkline — the average hides
+	// a slide that a trend makes obvious.
+	QualityTrend []float64 `json:"qualityTrend,omitempty"`
 	// RecallDemandTerms: the topics recent turns asked about that the wiki
 	// could not answer (deduplicated, most-seen first) — what memory should
 	// learn next.
@@ -138,6 +142,10 @@ func aggregateDreamReports(entries []dreamReportEntry, sinceMs, untilMs int64) d
 		if r.QualityScore > 0 {
 			qualitySum += r.QualityScore
 			qualityCount++
+			if len(stats.QualityTrend) >= 12 {
+				stats.QualityTrend = stats.QualityTrend[1:]
+			}
+			stats.QualityTrend = append(stats.QualityTrend, r.QualityScore)
 		}
 		for _, term := range r.RecallDemandTerms {
 			term = strings.TrimSpace(term)
@@ -191,6 +199,11 @@ func (s *Server) postDreamDigestCard(stats dreamDigestStats) error {
 	if stats.QualityAvg > 0 {
 		fmt.Fprintf(&b, "- 평균 품질: %.0f/100\n", stats.QualityAvg)
 	}
+	if len(stats.QualityTrend) >= 2 {
+		first := stats.QualityTrend[0]
+		last := stats.QualityTrend[len(stats.QualityTrend)-1]
+		fmt.Fprintf(&b, "- 품질 추이: %s (%.0f→%.0f)\n", sparklineBars(stats.QualityTrend), first, last)
+	}
 	if len(stats.RecallDemandTerms) > 0 {
 		fmt.Fprintf(&b, "- 기억 공백(자주 물은 주제): %s\n", strings.Join(stats.RecallDemandTerms, ", "))
 	}
@@ -215,4 +228,40 @@ func (s *Server) postDreamDigestCard(stats dreamDigestStats) error {
 		return fmt.Errorf("post dream digest card: %w", err)
 	}
 	return nil
+}
+
+// sparklineBars renders 0–100 scores as unicode block bars (▁▂▃▄▅▆▇█), scaled
+// to the series' own min/max so a flat series reads flat rather than pinned to
+// the floor. Text-only by design: the digest body is markdown, and a text
+// sparkline survives every renderer (native, desktop, notification preview).
+func sparklineBars(series []float64) string {
+	if len(series) == 0 {
+		return ""
+	}
+	const levels = "▁▂▃▄▅▆▇█"
+	minV, maxV := series[0], series[0]
+	for _, v := range series[1:] {
+		if v < minV {
+			minV = v
+		}
+		if v > maxV {
+			maxV = v
+		}
+	}
+	levelRunes := []rune(levels)
+	bars := make([]rune, 0, len(series)*2)
+	for _, v := range series {
+		idx := len(levelRunes) / 2 // flat series → mid bar
+		if maxV > minV {
+			idx = int((v - minV) / (maxV - minV) * float64(len(levelRunes)-1))
+			if idx < 0 {
+				idx = 0
+			}
+			if idx > len(levelRunes)-1 {
+				idx = len(levelRunes) - 1
+			}
+		}
+		bars = append(bars, levelRunes[idx], ' ')
+	}
+	return strings.TrimSpace(string(bars))
 }
