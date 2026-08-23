@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
@@ -1062,7 +1064,104 @@ func (wd *WikiDreamer) findExistingPage(u wikiUpdate) string {
 	if len(hits) == 0 {
 		return ""
 	}
-	return hits[0].Path
+	hit := hits[0]
+	if !wd.acceptRetarget(u, hit) {
+		return ""
+	}
+	return hit.Path
+}
+
+// acceptRetarget decides whether a similarity hit is a good enough reason to
+// write this update into that page instead of the proposed path.
+//
+// Two conditions, both from retargets that landed on the wrong page:
+//
+//   - SLOT KIND must agree. A 대표페이지 proposal is not satisfied by the folder's
+//     로그.md or a detail page: 2026-08-19 a rep update for a new project landed
+//     in another project's 로그.md, and 2026-08-21 a rep re-creation landed on a
+//     child page, so the folder still had no 대표.
+//   - A "title" hit needs real title overlap. That stage is not a title
+//     comparison — it is an FTS query over the whole page (body included) with
+//     an OR fallback, and the 0.6 floor is raw≥1.5, which a single shared token
+//     clears. That is how a "데이팅 앱 기반 범죄" proposal landed on a smart-glasses
+//     page. id/code/slug hits are exact keys and stay as they are.
+//
+// A rejected retarget is not a dropped update: the caller keeps the proposed
+// path, so the fact is written where synthesis asked.
+func (wd *WikiDreamer) acceptRetarget(u wikiUpdate, hit SimilarHit) bool {
+	if sameSlotKind := projectSlotKind(u.Path) == projectSlotKind(hit.Path); !sameSlotKind {
+		wd.logger.Info("wiki-dream: similar match ignored (different slot kind)",
+			"proposed", u.Path, "candidate", hit.Path, "reason", hit.Reason)
+		return false
+	}
+	if hit.Reason != "title" {
+		return true
+	}
+	if titleTokenOverlap(u.Title, hit.Title) {
+		return true
+	}
+	wd.logger.Info("wiki-dream: weak similar match ignored",
+		"proposed", u.Path, "candidate", hit.Path, "proposedTitle", u.Title, "candidateTitle", hit.Title)
+	return false
+}
+
+// projectSlotKind labels a path by its role in the project layout so a retarget
+// cannot cross roles. Non-project pages share one label — category equality is
+// already enforced by the similarity search.
+func projectSlotKind(relPath string) string {
+	switch {
+	case IsProjectRepPage(relPath):
+		return "rep"
+	case IsProjectLogPage(relPath):
+		return "log"
+	case IsMailAnalysisPath(relPath):
+		return "mail"
+	case IsMaterialPath(relPath):
+		return "material"
+	}
+	if _, ok := ProjectNameOf(relPath); ok {
+		return "detail"
+	}
+	return "page"
+}
+
+// titleTokenOverlap reports whether two titles share their subject: identical
+// normalized keys, or at least one common token of 2+ runes after dropping the
+// generic words that every business page carries.
+func titleTokenOverlap(a, b string) bool {
+	if ka, kb := normalizeTitleKey(a), normalizeTitleKey(b); ka != "" && ka == kb {
+		return true
+	}
+	tokens := func(s string) map[string]bool {
+		out := map[string]bool{}
+		for _, t := range strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+		}) {
+			if utf8.RuneCountInString(t) < 2 || genericTitleTokens[t] {
+				continue
+			}
+			out[t] = true
+		}
+		return out
+	}
+	ta, tb := tokens(a), tokens(b)
+	if len(ta) == 0 || len(tb) == 0 {
+		return false
+	}
+	for t := range ta {
+		if tb[t] {
+			return true
+		}
+	}
+	return false
+}
+
+// genericTitleTokens carry no subject: two pages sharing only these are not
+// about the same thing.
+var genericTitleTokens = map[string]bool{
+	"대표": true, "로그": true, "진행": true, "현황": true, "검토": true,
+	"관련": true, "문의": true, "회신": true, "송부": true, "요청": true,
+	"건": true, "의": true, "및": true, "re": true, "fw": true, "fwd": true,
 }
 
 // normalizeSlug reduces a wiki path to a comparable slug form.
