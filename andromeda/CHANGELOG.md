@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.117](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.116...andromeda-v0.0.117) (2026-08-23)
+
+
+### ✨ Features
+
+* **knowledge:** add grounded personal search and approval Q&A ([#4607](https://github.com/choiceoh/Deneb/issues/4607)) ([bd26ea7](https://github.com/choiceoh/Deneb/commit/bd26ea710df10048e6108af733d6a6b059094f79))
+
 ## [0.0.116](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.115...andromeda-v0.0.116) (2026-08-23)
 
 

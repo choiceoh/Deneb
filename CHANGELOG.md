@@ -1,5 +1,51 @@
 # Changelog
 
+## [5.1.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.0.0...deneb-v5.1.0) (2026-08-23)
+
+
+### ✨ Features
+
+* **knowledge:** add grounded personal search and approval Q&A ([#4607](https://github.com/choiceoh/Deneb/issues/4607)) ([bd26ea7](https://github.com/choiceoh/Deneb/commit/bd26ea710df10048e6108af733d6a6b059094f79))
+* **recall:** elliptical follow-ups search with prior-turn context (multiturn rewrite) ([#4604](https://github.com/choiceoh/Deneb/issues/4604)) ([d0b4b02](https://github.com/choiceoh/Deneb/commit/d0b4b027331b8441712f93f912d1e8dbf0e0b3a9))
+* **wiki:** cap related/tags, demote orphan mail, expire stale questions ([#4583](https://github.com/choiceoh/Deneb/issues/4583)) ([7003fd0](https://github.com/choiceoh/Deneb/commit/7003fd04148700ca20c7f84bb4dde59d9348bde5))
+* **wiki:** dream cycle change records and selective revert (improvement-ideas 5.8) ([#4598](https://github.com/choiceoh/Deneb/issues/4598)) ([1d0d639](https://github.com/choiceoh/Deneb/commit/1d0d63948daedac04899621c1448795837891ec0))
+* **wiki:** dream fact ledger and measured fact counters (improvement-ideas 5.6) ([#4587](https://github.com/choiceoh/Deneb/issues/4587)) ([a575997](https://github.com/choiceoh/Deneb/commit/a5759971e64923fa8fc2da79bf9fa5a921874902))
+* **wiki:** surface wiki↔mail person conflicts without picking a winner ([#4593](https://github.com/choiceoh/Deneb/issues/4593)) ([342dfa4](https://github.com/choiceoh/Deneb/commit/342dfa4ebbc55002d4ba7ca7f073f92d96857847))
+* **wiki:** 드리머 반증 증거 큐 — 사용자 정정의 비평 주입 (5.7) ([#4594](https://github.com/choiceoh/Deneb/issues/4594)) ([40cb1f0](https://github.com/choiceoh/Deneb/commit/40cb1f0f9923f5b5d546656e64851e0f20122df8))
+* **wiki:** 드리머 쓰기 계약 — 수요 게이트·due 닫기·stage persist ([#4588](https://github.com/choiceoh/Deneb/issues/4588)) ([a254cc4](https://github.com/choiceoh/Deneb/commit/a254cc4cc61df29067b7e989487fb657df81f91b))
+* **wiki:** 드리머 효용 접지·품질 원장·인덱스 상한·수요 케이던스·모순 검증 ([#4612](https://github.com/choiceoh/Deneb/issues/4612)) ([071bbfe](https://github.com/choiceoh/Deneb/commit/071bbfe34acabdc7905a21e23a6f602830e0cbf3))
+
+
+### 🐛 Bug Fixes
+
+* **browser:** keep live popup WebViews so login and payment windows work ([#4609](https://github.com/choiceoh/Deneb/issues/4609)) ([303da65](https://github.com/choiceoh/Deneb/commit/303da6522b6be4ea374a077082e1be79ac5807ba))
+* **chat:** wait for active session run before sync send ([#4586](https://github.com/choiceoh/Deneb/issues/4586)) ([6435f9b](https://github.com/choiceoh/Deneb/commit/6435f9b594291c93b2b3b22d2a2d53115eff6e06))
+* **core:** safego reports panics without a logger; checkpoint index reports corrupt lines; cron comment matches behavior ([#4584](https://github.com/choiceoh/Deneb/issues/4584)) ([f406461](https://github.com/choiceoh/Deneb/commit/f4064615a85fff8ecfb4ef1a6beb6d8ceab4a668))
+* **dev:** keep Cursor CodeGraph off the production checkout ([#4614](https://github.com/choiceoh/Deneb/issues/4614)) ([d7fdc64](https://github.com/choiceoh/Deneb/commit/d7fdc64e743af6cead3cb63425afa643cd409bf1))
+* **filestore:** confine symlink checks to store root ([#4610](https://github.com/choiceoh/Deneb/issues/4610)) ([d64c027](https://github.com/choiceoh/Deneb/commit/d64c027494c5bed21ad9da46af81bd385d314103))
+* **genesis:** shadow-bench verdicts cite flip evidence; pending meta proposals expire without verdict ([#4582](https://github.com/choiceoh/Deneb/issues/4582)) ([0aa9802](https://github.com/choiceoh/Deneb/commit/0aa9802349ec427ccb365b7da7f0f98b97312dc7))
+* **recall:** make the nightly recall-health job actually run (W9) + metadata-repair contract (W10) ([#4608](https://github.com/choiceoh/Deneb/issues/4608)) ([228de60](https://github.com/choiceoh/Deneb/commit/228de60e8b909a883cf622096e52d264385a8651))
+* **rsi:** 남은 워치 3종 수리 — 레이턴시 코호트 채점·리뷰 예산·오기각 라벨 파이프 ([#4590](https://github.com/choiceoh/Deneb/issues/4590)) ([329785c](https://github.com/choiceoh/Deneb/commit/329785c9c55df1aba8510a53a4326ad8fe610568))
+* **wiki:** give supersession preconditions so layout pages stay recallable (W5) ([#4605](https://github.com/choiceoh/Deneb/issues/4605)) ([e1fa6d3](https://github.com/choiceoh/Deneb/commit/e1fa6d31fd82d7577c3f0b42e4ca58f8a881877a))
+* **wiki:** keep page identity when a dream update is retargeted (W2) ([#4603](https://github.com/choiceoh/Deneb/issues/4603)) ([a296cfe](https://github.com/choiceoh/Deneb/commit/a296cfe0ce79bf779d8a681ac21874f59e76716b))
+* **wiki:** refuse LLM category moves on layout-managed paths (W1) ([#4600](https://github.com/choiceoh/Deneb/issues/4600)) ([8cb4bba](https://github.com/choiceoh/Deneb/commit/8cb4bba7e357345645fb22c74436858562d6a8ef))
+* **wiki:** stop id collisions from auto-folding unrelated pages (W3) ([#4601](https://github.com/choiceoh/Deneb/issues/4601)) ([1e64c88](https://github.com/choiceoh/Deneb/commit/1e64c882e66de9d46e4c378318487e8b882daaf7))
+* **wiki:** tighten mail refile signals now that the domain signal is armed (W6) ([#4606](https://github.com/choiceoh/Deneb/issues/4606)) ([00d3033](https://github.com/choiceoh/Deneb/commit/00d3033748c860bb548b605ac515bbdba8e49cdb))
+* **wiki:** verify_selfheal_test.go 누락된 record 인자 보정 ([#4595](https://github.com/choiceoh/Deneb/issues/4595)) ([72aa555](https://github.com/choiceoh/Deneb/commit/72aa55537bd5b74438384c79874e389688e291b7))
+* **wiki:** 회상 수요 집계 조사 탈락 — 조사 붙은 주제가 페이지 매칭에서 누락 ([#4592](https://github.com/choiceoh/Deneb/issues/4592)) ([ccbe875](https://github.com/choiceoh/Deneb/commit/ccbe87525b2f54f0963099780b0975274bd2b3be))
+
+
+### ⚡ Performance
+
+* **wiki:** reuse embeddings when a page moves instead of re-embedding it (W11) ([#4611](https://github.com/choiceoh/Deneb/issues/4611)) ([676ab04](https://github.com/choiceoh/Deneb/commit/676ab04db5cc1222b03a9da478b4cb81763d930a))
+
+
+### 🔧 Internal
+
+* **briefcase:** remove dead run provenance setter ([#4602](https://github.com/choiceoh/Deneb/issues/4602)) ([d664750](https://github.com/choiceoh/Deneb/commit/d664750846887e666fb3ad794ea345d84573ec33))
+* **embedindex:** remove dead batch-size option ([#4591](https://github.com/choiceoh/Deneb/issues/4591)) ([8c21488](https://github.com/choiceoh/Deneb/commit/8c21488cebe061e344416e069c58f0ee0fed0d56))
+* **rpc:** drop dead miniapp methods and the gmail.* alias shim (mail.* registered directly) ([#4589](https://github.com/choiceoh/Deneb/issues/4589)) ([2defe95](https://github.com/choiceoh/Deneb/commit/2defe95bfb5455d5816e7fda7ec5f3ace86b60d8))
+
 ## [5.0.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.143.0...deneb-v5.0.0) (2026-08-23)
 
 
