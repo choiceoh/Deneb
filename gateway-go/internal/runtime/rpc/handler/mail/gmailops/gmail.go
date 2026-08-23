@@ -1,12 +1,12 @@
-// gmail.go — miniapp.gmail.* RPC handlers.
+// gmail.go — miniapp.mail.* RPC handlers.
 //
 // The Mini App webview talks to these to power its Gmail triage UI:
 //
-//	miniapp.gmail.list_recent  — recent messages matching a Gmail query
-//	miniapp.gmail.get          — full message body + headers + attachments
-//	miniapp.gmail.mark_read    — remove the UNREAD label
-//	miniapp.gmail.archive      — remove the INBOX label
-//	miniapp.gmail.trash        — move the message to Gmail's Trash folder
+//	miniapp.mail.list_recent  — recent messages matching a Gmail query
+//	miniapp.mail.get          — full message body + headers + attachments
+//	miniapp.mail.mark_read    — remove the UNREAD label
+//	miniapp.mail.archive      — remove the INBOX label
+//	miniapp.mail.trash        — move the message to Gmail's Trash folder
 //
 // Every method assumes the request already passed client-token verification
 // (the HTTP bridge in server_http_miniapp.go enforces that before the
@@ -140,7 +140,7 @@ const (
 	maxWorkFilterPageHops = 5
 )
 
-// GmailMethods returns the miniapp.gmail.* handler map. Returns nil if deps
+// GmailMethods returns the miniapp.mail.* handler map. Returns nil if deps
 // has no Client factory — handler registration in method_registry.go can
 // then skip wiring without crashing the server.
 func GmailMethods(deps GmailDeps) map[string]rpcutil.HandlerFunc {
@@ -154,12 +154,12 @@ func GmailMethods(deps GmailDeps) map[string]rpcutil.HandlerFunc {
 	// gmail_list_cache.go).
 	cache := newListCache(listCacheTTL)
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.gmail.list_recent":   gmailListRecent(deps, cache),
-		"miniapp.gmail.get":           gmailGet(deps),
-		"miniapp.gmail.mark_read":     gmailMarkRead(deps),
-		"miniapp.gmail.archive":       gmailArchive(deps, cache),
-		"miniapp.gmail.trash":         gmailTrash(deps, cache),
-		"miniapp.gmail.native_status": gmailNativeStatus(deps),
+		"miniapp.mail.list_recent":   gmailListRecent(deps, cache),
+		"miniapp.mail.get":           gmailGet(deps),
+		"miniapp.mail.mark_read":     gmailMarkRead(deps),
+		"miniapp.mail.archive":       gmailArchive(deps, cache),
+		"miniapp.mail.trash":         gmailTrash(deps, cache),
+		"miniapp.mail.native_status": gmailNativeStatus(deps),
 	}
 }
 

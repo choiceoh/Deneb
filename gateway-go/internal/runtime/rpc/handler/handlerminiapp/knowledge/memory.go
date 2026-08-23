@@ -56,14 +56,6 @@ type memoryProjectAliaser interface {
 	ProjectDisplayLabel(path string) string
 }
 
-type memorySemanticStatus interface {
-	SemanticStatus() wiki.SemanticIndexStatus
-}
-
-type memorySearchDoctorStore interface {
-	SearchDoctor(context.Context) wiki.SearchDoctorReport
-}
-
 // MemoryDeps holds the wiki store and is consumed at registration time.
 // Store is a lazy factory so the gateway boots cleanly when the wiki
 // knowledge base is disabled (per-config `wiki.enabled=false`); the
@@ -109,8 +101,6 @@ func MemoryMethods(deps MemoryDeps) map[string]rpcutil.HandlerFunc {
 	}
 	return map[string]rpcutil.HandlerFunc{
 		"miniapp.memory.search":           memorySearch(deps),
-		"miniapp.memory.search_status":    memorySearchStatus(deps),
-		"miniapp.memory.search_doctor":    memorySearchDoctor(deps),
 		"miniapp.memory.get_page":         memoryGetPage(deps),
 		"miniapp.memory.write_page":       memoryWritePage(deps),
 		"miniapp.memory.create_page":      memoryCreatePage(deps),
@@ -123,40 +113,6 @@ func MemoryMethods(deps MemoryDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.memory.diary_recent":     memoryDiaryRecent(deps),
 		"miniapp.memory.diary_mirror":     memoryDiaryMirror(deps),
 	}
-}
-
-func memorySearchStatus(deps MemoryDeps) rpcutil.HandlerFunc {
-	type out struct {
-		Semantic wiki.SemanticIndexStatus `json:"semantic"`
-	}
-	return minibind.Authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		store, err := deps.Store()
-		if err != nil {
-			return rpcerr.WrapUnavailable("memory search status unavailable", err).Response(req.ID)
-		}
-		statusStore, ok := store.(memorySemanticStatus)
-		if !ok {
-			return rpcerr.Unavailable("memory search status unsupported").Response(req.ID)
-		}
-		return rpcutil.RespondOK(req.ID, out{Semantic: statusStore.SemanticStatus()})
-	})
-}
-
-// memorySearchDoctor is deliberately separate from the cheap cache-status
-// endpoint: it performs live embedding and reranker probes and must only run
-// when an operator explicitly asks for it, never on a polling UI path.
-func memorySearchDoctor(deps MemoryDeps) rpcutil.HandlerFunc {
-	return minibind.Authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		store, err := deps.Store()
-		if err != nil {
-			return rpcerr.WrapUnavailable("memory search doctor unavailable", err).Response(req.ID)
-		}
-		doctorStore, ok := store.(memorySearchDoctorStore)
-		if !ok {
-			return rpcerr.Unavailable("memory search doctor unsupported").Response(req.ID)
-		}
-		return rpcutil.RespondOK(req.ID, doctorStore.SearchDoctor(ctx))
-	})
 }
 
 // memoryGetPage returns the full body + frontmatter of a single wiki page.

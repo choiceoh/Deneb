@@ -81,7 +81,7 @@ type NativeOverlayStatus struct {
 }
 
 // Repository exposes the on-box IMAP archive through the Gmail-like interface
-// already used by miniapp.gmail.*. Reads prefer the local archive; Gmail remains
+// already used by miniapp.mail.*. Reads prefer the local archive; Gmail remains
 // a compatibility fallback for disabled archive setups and unsupported legacy
 // Gmail search tokens.
 type Repository struct {

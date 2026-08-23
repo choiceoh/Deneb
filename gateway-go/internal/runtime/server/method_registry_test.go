@@ -117,16 +117,8 @@ var requiredMethods = []string{
 
 	// Mini App (Telegram).
 	"miniapp.ping",
-	"miniapp.whoami",
-	"miniapp.gmail.list_recent",
-	"miniapp.gmail.get",
-	"miniapp.gmail.mark_read",
-	"miniapp.gmail.archive",
-	"miniapp.gmail.trash",
-	"miniapp.gmail.native_status",
-	"miniapp.gmail.sender_context",
-	// miniapp.mail.* — the accurate archive-first namespace, registered as
-	// aliases of the miniapp.gmail.* handlers above (withMailAliases).
+	// miniapp.mail.* — the archive-first mail namespace (the legacy
+	// miniapp.gmail.* aliases were removed once both native clients migrated).
 	"miniapp.mail.list_recent",
 	"miniapp.mail.get",
 	"miniapp.mail.mark_read",
@@ -134,7 +126,6 @@ var requiredMethods = []string{
 	"miniapp.mail.trash",
 	"miniapp.mail.native_status",
 	"miniapp.mail.sender_context",
-	"miniapp.observatory.snapshot",
 	"miniapp.models.add_custom",
 	"miniapp.models.delete_custom",
 	"miniapp.models.list",
@@ -147,7 +138,7 @@ var requiredMethods = []string{
 	"miniapp.files.delete",
 	"miniapp.files.mkdir",
 	"miniapp.files.move",
-	// miniapp.gmail.analyze and miniapp.gmail.analysis_cached are
+	// miniapp.mail.analyze and miniapp.mail.analysis_cached are
 	// conditional on an LLM client being configured
 	// (modelRegistry.Client(RoleMain) returning non-nil) — not in the
 	// required list because tests run without providers.

@@ -35,12 +35,12 @@ func TestGmailAskReturnsAnswerWithGroundedMailContext(t *testing.T) {
 			return "결제 기한은 다음 주입니다.", nil
 		},
 	}
-	h := GmailAnalyzeMethods(deps)["miniapp.gmail.ask"]
+	h := GmailAnalyzeMethods(deps)["miniapp.mail.ask"]
 	if h == nil {
 		t.Fatal("ask handler not registered when Ask is wired")
 	}
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.ask", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.ask", map[string]any{
 		"id":       "m1",
 		"question": "기한 언제야?",
 		"history":  []map[string]any{{"q": "금액?", "a": "백만원"}},
@@ -73,8 +73,8 @@ func TestGmailAsk_MissingQuestion(t *testing.T) {
 		Pipeline: func() (AnalyzePipeline, error) { return &fakeAnalyzePipeline{}, nil },
 		Ask:      func(context.Context, string, []QATurn, string) (string, error) { return "x", nil },
 	}
-	h := GmailAnalyzeMethods(deps)["miniapp.gmail.ask"]
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.ask", map[string]any{"id": "m1"}))
+	h := GmailAnalyzeMethods(deps)["miniapp.mail.ask"]
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.ask", map[string]any{"id": "m1"}))
 	if resp.OK {
 		t.Fatalf("expected error for missing question")
 	}
@@ -89,7 +89,7 @@ func TestGmailAsk_NotRegisteredWithoutAskCallback(t *testing.T) {
 		Pipeline: func() (AnalyzePipeline, error) { return &fakeAnalyzePipeline{}, nil },
 		// Ask is nil → ask must not be registered.
 	}
-	if _, ok := GmailAnalyzeMethods(deps)["miniapp.gmail.ask"]; ok {
+	if _, ok := GmailAnalyzeMethods(deps)["miniapp.mail.ask"]; ok {
 		t.Error("ask must not be registered when Ask callback is nil")
 	}
 }

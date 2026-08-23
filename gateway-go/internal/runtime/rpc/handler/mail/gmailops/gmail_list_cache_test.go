@@ -97,7 +97,7 @@ func TestGmailListRecent_CacheHitWithinTTL(t *testing.T) {
 		Messages []map[string]any `json:"messages"`
 	}
 	for i := 0; i < 3; i++ {
-		resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+		resp := h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 		decode(t, resp, &got)
 		if len(got.Messages) != 1 {
 			t.Fatalf("call %d: len(messages)=%d, want 1", i, len(got.Messages))
@@ -114,10 +114,10 @@ func TestGmailListRecentCachesEachQuerySeparatelyAndSkipsReloadOnRepeat(t *testi
 	cache := newListCache(30 * time.Second)
 	h := gmailListRecent(depsFor(client), cache)
 
-	h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", map[string]any{"query": "is:starred"}))
-	h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", map[string]any{"query": "is:important"}))
+	h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", map[string]any{"query": "is:starred"}))
+	h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", map[string]any{"query": "is:important"}))
 	// Repeat the first — should hit cache, not re-fetch.
-	h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", map[string]any{"query": "is:starred"}))
+	h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", map[string]any{"query": "is:starred"}))
 
 	if calls != 2 {
 		t.Errorf("list fetched %d times, want 2 (two distinct queries, third cached)", calls)
@@ -131,12 +131,12 @@ func TestGmailListRecent_ArchiveInvalidatesCache(t *testing.T) {
 	listH := gmailListRecent(depsFor(client), cache)
 	archiveH := gmailArchive(depsFor(client), cache)
 
-	listH(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil)) // fetch + cache
-	resp := archiveH(authedCtx(), reqWith(t, "miniapp.gmail.archive", map[string]any{"id": "m1"}))
+	listH(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil)) // fetch + cache
+	resp := archiveH(authedCtx(), reqWith(t, "miniapp.mail.archive", map[string]any{"id": "m1"}))
 	if !resp.OK {
 		t.Fatalf("archive failed: %+v", resp.Error)
 	}
-	listH(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil)) // must re-fetch
+	listH(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil)) // must re-fetch
 
 	if calls != 2 {
 		t.Errorf("list fetched %d times, want 2 (archive must invalidate)", calls)
@@ -150,12 +150,12 @@ func TestGmailListRecent_TrashInvalidatesCache(t *testing.T) {
 	listH := gmailListRecent(depsFor(client), cache)
 	trashH := gmailTrash(depsFor(client), cache)
 
-	listH(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
-	resp := trashH(authedCtx(), reqWith(t, "miniapp.gmail.trash", map[string]any{"id": "m1"}))
+	listH(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
+	resp := trashH(authedCtx(), reqWith(t, "miniapp.mail.trash", map[string]any{"id": "m1"}))
 	if !resp.OK {
 		t.Fatalf("trash failed: %+v", resp.Error)
 	}
-	listH(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	listH(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 
 	if calls != 2 {
 		t.Errorf("list fetched %d times, want 2 (trash must invalidate)", calls)
@@ -174,12 +174,12 @@ func TestGmailListRecent_MarkReadKeepsCache(t *testing.T) {
 	listH := gmailListRecent(depsFor(client), cache)
 	markH := gmailMarkRead(depsFor(client)) // shares no cache by design
 
-	listH(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
-	resp := markH(authedCtx(), reqWith(t, "miniapp.gmail.mark_read", map[string]any{"id": "m1"}))
+	listH(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
+	resp := markH(authedCtx(), reqWith(t, "miniapp.mail.mark_read", map[string]any{"id": "m1"}))
 	if !resp.OK {
 		t.Fatalf("mark_read failed: %+v", resp.Error)
 	}
-	listH(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	listH(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 
 	if calls != 1 {
 		t.Errorf("list fetched %d times, want 1 (mark_read must NOT invalidate)", calls)
@@ -215,7 +215,7 @@ func TestGmailListRecent_StaleRefreshDoesNotRestoreAfterArchive(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		resp := listH(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+		resp := listH(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 		if !resp.OK {
 			t.Errorf("stale list failed: %+v", resp.Error)
 		}
@@ -230,7 +230,7 @@ func TestGmailListRecent_StaleRefreshDoesNotRestoreAfterArchive(t *testing.T) {
 		t.Fatal("background stale refresh never started")
 	}
 
-	resp := archiveH(authedCtx(), reqWith(t, "miniapp.gmail.archive", map[string]any{"id": "m1"}))
+	resp := archiveH(authedCtx(), reqWith(t, "miniapp.mail.archive", map[string]any{"id": "m1"}))
 	if !resp.OK {
 		t.Fatalf("archive failed: %+v", resp.Error)
 	}
@@ -238,7 +238,7 @@ func TestGmailListRecent_StaleRefreshDoesNotRestoreAfterArchive(t *testing.T) {
 	close(releaseFetch)
 	<-done
 
-	listH(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	listH(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 
 	if calls != 2 {
 		t.Fatalf("list fetched %d times, want 2 (stale refresh must not resurrect cache after archive)", calls)
@@ -305,7 +305,7 @@ func TestGmailListRecent_SyncFetchDoesNotRestoreAfterArchive(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		resp := listH(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+		resp := listH(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 		if !resp.OK {
 			t.Errorf("sync list failed: %+v", resp.Error)
 		}
@@ -319,7 +319,7 @@ func TestGmailListRecent_SyncFetchDoesNotRestoreAfterArchive(t *testing.T) {
 		t.Fatal("sync fetch never started")
 	}
 
-	resp := archiveH(authedCtx(), reqWith(t, "miniapp.gmail.archive", map[string]any{"id": "m1"}))
+	resp := archiveH(authedCtx(), reqWith(t, "miniapp.mail.archive", map[string]any{"id": "m1"}))
 	if !resp.OK {
 		t.Fatalf("archive failed: %+v", resp.Error)
 	}
@@ -327,7 +327,7 @@ func TestGmailListRecent_SyncFetchDoesNotRestoreAfterArchive(t *testing.T) {
 	close(releaseFetch)
 	<-done
 
-	listH(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	listH(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 
 	if calls != 2 {
 		t.Fatalf("list fetched %d times, want 2 (sync fetch must not resurrect cache after archive)", calls)

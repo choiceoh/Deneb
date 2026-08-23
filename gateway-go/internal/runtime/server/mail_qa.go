@@ -1,4 +1,4 @@
-// mail_qa.go — wiring for miniapp.gmail.ask (mail follow-up Q&A).
+// mail_qa.go — wiring for miniapp.mail.ask (mail follow-up Q&A).
 //
 // The handler (handler/mail/gmail_qa.go) assembles the grounding context
 // from the email + cached analysis; this layer runs the actual LLM via the
@@ -34,7 +34,7 @@ const mailQAMaxTokens = 1536
 
 // makeMailQAAsk returns the Ask callback wired into GmailAnalyzeDeps. Returns
 // nil when chatHandler isn't ready, in which case the handler skips
-// registering miniapp.gmail.ask entirely.
+// registering miniapp.mail.ask entirely.
 func (s *Server) makeMailQAAsk() func(context.Context, string, []handlermail.QATurn, string) (string, error) {
 	if s.chatHandler == nil {
 		return nil

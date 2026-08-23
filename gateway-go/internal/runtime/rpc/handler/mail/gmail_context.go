@@ -1,4 +1,4 @@
-// gmail_context.go — miniapp.gmail.sender_context RPC.
+// gmail_context.go — miniapp.mail.sender_context RPC.
 //
 // Given a Gmail sender ("Name <email>", raw email, or just a name), assemble
 // what Deneb already knows about that person so the Mini App detail view
@@ -77,7 +77,7 @@ const (
 	defaultSenderContextCacheMax = 64
 )
 
-// GmailContextMethods returns the miniapp.gmail.sender_context handler.
+// GmailContextMethods returns the miniapp.mail.sender_context handler.
 // Returns nil if no source is wired — the gateway then skips registration
 // cleanly.
 func GmailContextMethods(deps GmailContextDeps) map[string]rpcutil.HandlerFunc {
@@ -85,11 +85,11 @@ func GmailContextMethods(deps GmailContextDeps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.gmail.sender_context": senderContext(deps),
+		"miniapp.mail.sender_context": senderContext(deps),
 	}
 }
 
-// senderContextOut is the miniapp.gmail.sender_context response shape.
+// senderContextOut is the miniapp.mail.sender_context response shape.
 type senderContextOut struct {
 	Sender      string             `json:"sender"`
 	Email       string             `json:"email,omitempty"`

@@ -202,24 +202,6 @@ func TestMemorySearchReturnsExplicitDiagnosticsAndIntentExplanation(t *testing.T
 	}
 }
 
-func TestMemorySearchStatusReturnsSemanticCacheIntegrity(t *testing.T) {
-	store := &fakeMemoryStore{semanticStatusFn: func() wiki.SemanticIndexStatus {
-		return wiki.SemanticIndexStatus{
-			Enabled: true, Healthy: false, EmbedderHealthy: true, Fingerprint: "model:1024",
-			Preprocessing: "wiki-semantic-text-v1", Expected: 12, Indexed: 10, Pending: 2,
-			DegradedReason: "incomplete_cache",
-		}
-	}}
-	resp := memorySearchStatus(memoryDepsFor(store))(authedCtx(), reqWith(t, "miniapp.memory.search_status", nil))
-	var got struct {
-		Semantic wiki.SemanticIndexStatus `json:"semantic"`
-	}
-	decode(t, resp, &got)
-	if got.Semantic.Healthy || got.Semantic.Pending != 2 || got.Semantic.DegradedReason != "incomplete_cache" {
-		t.Fatalf("semantic status = %+v", got.Semantic)
-	}
-}
-
 func TestMemorySearchPlanReturnsAddressedResults(t *testing.T) {
 	store := &fakeMemoryStore{
 		planSearchFn: func(_ context.Context, plan wiki.QueryPlan, limit int) (wiki.SearchReport, error) {
@@ -245,18 +227,6 @@ func TestMemorySearchPlanReturnsAddressedResults(t *testing.T) {
 	decode(t, resp, &got)
 	if len(got.Results) != 1 || got.Results[0].Line != 12 || got.Results[0].EndLine != 14 || len(got.Results[0].Context) != 2 {
 		t.Fatalf("results = %+v", got.Results)
-	}
-}
-
-func TestMemorySearchDoctorUsesExplicitEndpoint(t *testing.T) {
-	store := &fakeMemoryStore{searchDoctorFn: func(context.Context) wiki.SearchDoctorReport {
-		return wiki.SearchDoctorReport{Healthy: true, LexicalDocuments: 7}
-	}}
-	resp := memorySearchDoctor(memoryDepsFor(store))(authedCtx(), reqWith(t, "miniapp.memory.search_doctor", nil))
-	var got wiki.SearchDoctorReport
-	decode(t, resp, &got)
-	if !got.Healthy || got.LexicalDocuments != 7 {
-		t.Fatalf("doctor = %+v", got)
 	}
 }
 
@@ -494,8 +464,6 @@ func TestMemoryMethodsReturnsAllRegisteredMethods(t *testing.T) {
 	got := MemoryMethods(memoryDepsFor(&fakeMemoryStore{}))
 	for _, name := range []string{
 		"miniapp.memory.search",
-		"miniapp.memory.search_status",
-		"miniapp.memory.search_doctor",
 		"miniapp.memory.get_page",
 		"miniapp.memory.write_page",
 		"miniapp.memory.create_page",

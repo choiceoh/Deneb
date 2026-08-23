@@ -135,7 +135,7 @@ type ProjectRef struct {
 }
 
 // MailAnalysisOut is the wire shape for a Gmail AI-analysis result
-// (miniapp.gmail.analyze). Marked for Kotlin codegen so the native client's
+// (miniapp.mail.analyze). Marked for Kotlin codegen so the native client's
 // analysis card shares it; the cached endpoint returns a subset of this shape.
 //
 //deneb:wire
@@ -159,7 +159,7 @@ type MailAnalysisOut struct {
 }
 
 // SenderWikiHitOut and SenderRecentOut are wire shapes for the sender-context
-// card (miniapp.gmail.sender_context), marked for Kotlin codegen so the native
+// card (miniapp.mail.sender_context), marked for Kotlin codegen so the native
 // client shares them. The envelope itself stays handler-local (it is cached as
 // `any`), but its row/sub types are generated.
 

@@ -40,7 +40,6 @@ type Deps struct {
 func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
 		"miniapp.ping":         ping(deps),
-		"miniapp.whoami":       whoami(),
 		"miniapp.client.hello": clientHello(deps),
 	}
 }
@@ -99,29 +98,5 @@ func clientHello(deps Deps) rpcutil.HandlerFunc {
 			}
 		}
 		return rpcutil.RespondOK(req.ID, payload)
-	}
-}
-
-// whoami echoes back the native operator identity the middleware authenticated.
-// The client uses this to confirm that client-token verification is intact.
-func whoami() rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		data := minibind.Identity(ctx)
-		if data == nil {
-			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.whoami requires client identity context").Response(req.ID)
-		}
-		if data.User == nil {
-			return rpcerr.New(protocol.ErrUnauthorized, "client identity missing user").Response(req.ID)
-		}
-		u := data.User
-		return rpcutil.RespondOK(req.ID, map[string]any{
-			"id":           u.ID,
-			"firstName":    u.FirstName,
-			"lastName":     u.LastName,
-			"username":     u.Username,
-			"languageCode": u.LanguageCode,
-			"isPremium":    u.IsPremium,
-			"authDateMs":   data.AuthDate.UnixMilli(),
-		})
 	}
 }

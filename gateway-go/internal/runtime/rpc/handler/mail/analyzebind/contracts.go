@@ -1,4 +1,4 @@
-// Package analyzebind holds the miniapp.gmail.analyze / analysis_cached /
+// Package analyzebind holds the miniapp.mail.analyze / analysis_cached /
 // ask RPC handlers — the LLM-backed mail-analysis and follow-up Q&A
 // surface. Split out of the parent handlermail package as a leaf (like
 // the handlerminiapp dashboard/contacts children) to keep the parent's

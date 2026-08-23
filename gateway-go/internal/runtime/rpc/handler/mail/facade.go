@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail/gmailops"
 )
 
-// --- gmailops re-exports (miniapp.gmail.list/get/mark_read/archive/trash) ---
+// --- gmailops re-exports (miniapp.mail.list/get/mark_read/archive/trash) ---
 
 type (
 	GmailDeps       = gmailops.GmailDeps
@@ -26,7 +26,7 @@ var (
 	NewAnalysisStore = gmailops.NewAnalysisStore
 )
 
-// --- analyzebind re-exports (miniapp.gmail.analyze/analysis_cached/ask) ---
+// --- analyzebind re-exports (miniapp.mail.analyze/analysis_cached/ask) ---
 
 type (
 	GmailAnalyzeDeps  = analyzebind.GmailAnalyzeDeps

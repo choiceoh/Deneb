@@ -2,7 +2,7 @@
 // inbox priority scorer (mailpriority). Bridges the wiki-derived domain set
 // (wiki.ActiveCounterpartyDomains — recent project-linked mail analyses) to
 // the per-row Score call, which must stay cheap enough to run inline on every
-// miniapp.gmail.list_recent row: the wiki index scan happens at most once per
+// miniapp.mail.list_recent row: the wiki index scan happens at most once per
 // TTL, every row in between is one lock + map hit.
 package mailflow
 

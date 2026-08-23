@@ -1,4 +1,4 @@
-// gmail_analyze.go — miniapp.gmail.analyze RPC.
+// gmail_analyze.go — miniapp.mail.analyze RPC.
 //
 // Operator taps "🔍 분석" on a Mini App email detail; the gateway runs the
 // same analysis pipeline the agent's `mail_archive` / mailanalysis path uses (intent + key
@@ -68,11 +68,11 @@ type GmailAnalyzeDeps struct {
 	// title/summary for display. nil → chips fall back to the bare path.
 	WikiStore func() (MemorySearcher, error)
 	// Ask runs an ephemeral, isolated LLM Q&A grounded in the mail context
-	// (body + analysis + projects). nil → miniapp.gmail.ask is not registered.
+	// (body + analysis + projects). nil → miniapp.mail.ask is not registered.
 	Ask func(ctx context.Context, mailContext string, history []QATurn, question string) (string, error)
 }
 
-// GmailAnalyzeMethods returns the miniapp.gmail.analyze handler. Returns
+// GmailAnalyzeMethods returns the miniapp.mail.analyze handler. Returns
 // nil if either factory is missing so registration can skip cleanly when
 // the LLM client hasn't been wired (e.g. early in startup).
 func GmailAnalyzeMethods(deps GmailAnalyzeDeps) map[string]rpcutil.HandlerFunc {
@@ -80,13 +80,13 @@ func GmailAnalyzeMethods(deps GmailAnalyzeDeps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	m := map[string]rpcutil.HandlerFunc{
-		"miniapp.gmail.analyze":         gmailAnalyze(deps),
-		"miniapp.gmail.analysis_cached": gmailAnalysisCached(deps),
+		"miniapp.mail.analyze":         gmailAnalyze(deps),
+		"miniapp.mail.analysis_cached": gmailAnalysisCached(deps),
 	}
 	// Follow-up Q&A is registered only when the chat-backed Ask callback is
 	// wired (late phase, after chatHandler exists).
 	if deps.Ask != nil {
-		m["miniapp.gmail.ask"] = gmailAsk(deps)
+		m["miniapp.mail.ask"] = gmailAsk(deps)
 	}
 	return m
 }

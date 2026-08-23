@@ -72,7 +72,6 @@ func NotebookMethods(deps NotebookDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.notebook.edit_source":   notebookEditSourceRPC(deps),
 		"miniapp.notebook.delete":        notebookDeleteRPC(deps),
 		"miniapp.notebook.remove_source": notebookRemoveSourceRPC(deps),
-		"miniapp.notebook.set_mode":      notebookSetModeRPC(deps),
 	}
 	// File ingestion registers when any extractor is wired (document / image OCR /
 	// audio ASR); skip the method cleanly when none are (client hides the 파일 picker).
@@ -514,40 +513,6 @@ func notebookRemoveSourceRPC(deps NotebookDeps) rpcutil.HandlerFunc {
 			if errors.Is(err, notebook.ErrNotFound) {
 				return rpcerr.NotFound("notebook").Response(req.ID)
 			}
-			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
-		}
-		nb, ok := store.Get(id)
-		if !ok {
-			return rpcerr.NotFound("notebook").Response(req.ID)
-		}
-		return rpcutil.RespondOK(req.ID, notebookOutFrom(nb))
-	})
-}
-
-// notebookSetModeRPC toggles a notebook's grounding strictness (soft/strict) and
-// returns the updated notebook so the client repaints its mode control without a
-// second get. This is the native-UI analogue of the chat `notebook` tool's
-// "mode" action: before this, the only way to switch a notebook into strict
-// ("이 자료 위주로만, 없으면 '자료에 없음'") grounding was to ask the agent in chat.
-func notebookSetModeRPC(deps NotebookDeps) rpcutil.HandlerFunc {
-	type params struct {
-		ID   string `json:"id"`
-		Mode string `json:"mode"`
-	}
-	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
-		id := strings.TrimSpace(p.ID)
-		if id == "" {
-			return rpcerr.MissingParam("id").Response(req.ID)
-		}
-		store, err := deps.Store()
-		if err != nil {
-			return rpcerr.WrapUnavailable("notebook store unavailable", err).Response(req.ID)
-		}
-		if err := store.SetMode(id, p.Mode); err != nil {
-			if errors.Is(err, notebook.ErrNotFound) {
-				return rpcerr.NotFound("notebook").Response(req.ID)
-			}
-			// An unrecognized mode value ("use soft or strict") is the caller's fault.
 			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
 		}
 		nb, ok := store.Get(id)
