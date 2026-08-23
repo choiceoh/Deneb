@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.DenebLog
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.network.httpTeardownTolerantHandler
 import io.ktor.client.HttpClient
@@ -266,15 +267,23 @@ internal suspend inline fun <reified T> DenebGatewayClient.callRpc(method: Strin
             }
         } catch (cancel: CancellationException) {
             throw cancel
-        } catch (_: Exception) {
+        } catch (transport: Exception) {
+            DenebLog.warn("rpc", "$method -> unreachable: $transport")
             return@withContext null
         }
-        if (!response.status.isSuccess()) return@withContext null
+        if (!response.status.isSuccess()) {
+            // The whole deneb/ package logged nothing, so "불러오지 못했습니다" on a
+            // screen gave no way to tell 401 from a timeout from a decode failure.
+            // Method and status only — never the token, never the payload.
+            DenebLog.warn("rpc", "$method -> HTTP ${response.status.value}")
+            return@withContext null
+        }
         val envelope = try {
             response.body<RpcEnv<T>>()
         } catch (cancel: CancellationException) {
             throw cancel
-        } catch (_: Exception) {
+        } catch (decode: Exception) {
+            DenebLog.warn("rpc", "$method -> decode failed: $decode")
             return@withContext null
         }
         val payload = envelope.takeIf { it.ok }?.payload

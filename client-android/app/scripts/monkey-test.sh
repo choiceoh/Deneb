@@ -18,7 +18,9 @@ fi
 
 # Launch the app
 echo "[1/4] Launching app..."
-adb shell am start -n "$ACTIVITY/.MainActivity" -W
+# Component is <package>/<class>, so the package goes on the left — "$ACTIVITY/…"
+# built ai.deneb.MainActivity/.MainActivity, which no device could resolve.
+adb shell am start -n "$PACKAGE/$ACTIVITY" -W
 
 # Wait for activity to be fully up
 sleep 2
@@ -69,8 +71,12 @@ adb shell am task lock stop 2>/dev/null || true
 # Summary
 echo ""
 echo "=== Results ==="
-CRASHES=$(grep -c "CRASH" /tmp/deneb-monkey-results.txt 2>/dev/null || echo "0")
-ANRS=$(grep -c "ANR" /tmp/deneb-monkey-results.txt 2>/dev/null || echo "0")
+# grep -c prints 0 AND exits 1 when nothing matches, so `|| echo "0"` appended a
+# SECOND zero and the integer test below died on "0\n0".
+CRASHES=$(grep -c "CRASH" /tmp/deneb-monkey-results.txt 2>/dev/null || true)
+ANRS=$(grep -c "ANR" /tmp/deneb-monkey-results.txt 2>/dev/null || true)
+CRASHES=${CRASHES:-0}
+ANRS=${ANRS:-0}
 echo "Crashes: $CRASHES"
 echo "ANRs:    $ANRS"
 echo ""
