@@ -10,9 +10,10 @@ import (
 )
 
 type fakeNativeSyncStore struct {
-	cursor int64
-	limit  int
-	err    error
+	cursor    int64
+	limit     int
+	err       error
+	truncated bool
 }
 
 func (f *fakeNativeSyncStore) Pull(afterSeq int64, limit int) (nativesync.PullResult, error) {
@@ -27,6 +28,7 @@ func (f *fakeNativeSyncStore) Pull(afterSeq int64, limit int) (nativesync.PullRe
 		},
 		Cursor:    afterSeq + 1,
 		LatestSeq: afterSeq + 1,
+		Truncated: f.truncated,
 	}, nil
 }
 
@@ -78,5 +80,22 @@ func TestSyncPullReturnsUnavailableOnStoreError(t *testing.T) {
 	}
 	if resp.Error.Code != protocol.ErrUnavailable {
 		t.Fatalf("code = %s, want %s", resp.Error.Code, protocol.ErrUnavailable)
+	}
+}
+
+func TestSyncPullSurfacesTruncationFlag(t *testing.T) {
+	// Retention rotated past the client's cursor: the response must say so, or
+	// the phone would apply the retained-tail delta and silently skip the
+	// pruned range (battery doc §3.1 loss window).
+	store := &fakeNativeSyncStore{truncated: true}
+	h := syncPull(SyncDeps{Store: store})
+	resp := h(authedCtx(), reqWith(t, "miniapp.sync.pull", map[string]any{"cursor": 3}))
+
+	var got struct {
+		Truncated bool `json:"truncated"`
+	}
+	decode(t, resp, &got)
+	if !got.Truncated {
+		t.Fatalf("payload truncated = false, want true")
 	}
 }

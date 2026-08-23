@@ -110,6 +110,10 @@ suspend fun DenebGatewayClient.syncNativeState(): Boolean {
     // same warm — it refreshes both home caches, which is the point.
     var calendarChanged = false
     var mailChanged = false
+    // Server retention rotated past our pre-drain cursor: the retained-tail
+    // events below still apply, but the pruned range in between is gone for
+    // good — collected here, healed wholesale after the gate.
+    var truncatedByRetention = false
     // wiki.changed carries the touched path: collected here (not applied inside
     // the gate — each repair is an RPC) and fed to the offline mirror below.
     val wikiChangedPaths = linkedSetOf<String>()
@@ -137,6 +141,7 @@ suspend fun DenebGatewayClient.syncNativeState(): Boolean {
             if (epoch != credEpoch) return false
             pulled = true
             eventCount += payload.events.size
+            if (payload.truncated) truncatedByRetention = true
             payload.events.forEach { ev ->
                 applyNativeSyncEvent(ev, reloadSessions)
                 if (ev.type == "calendar.changed") calendarChanged = true
@@ -182,6 +187,19 @@ suspend fun DenebGatewayClient.syncNativeState(): Boolean {
     // (2026-07-05 field report).
     if (_denebWorkFeed.value.isEmpty()) {
         refreshWorkFeed()
+    }
+    // Retention truncation (battery doc §3.1): events between the pre-drain
+    // cursor and the server's retained window were pruned before we saw them —
+    // the drain above recovered only the retained tail. Anything state-shaped
+    // may have drifted through the lost window (feed cards, calendar/mail,
+    // wiki/org/approvals caches, the open transcript), so resync wholesale
+    // from current server state instead of trusting the delta. Rare by
+    // construction: only a multi-day absence outruns the ~3,000-event window.
+    if (truncatedByRetention) {
+        refreshWorkFeed()
+        sectionCaches.clearAll()
+        if (sessionKey.isNotBlank()) loadTranscriptGuarded(sessionKey)
+        lastHomeWarm = null
     }
     // A calendar.changed/mail.changed event arrived: clear the throttle so the warm
     // below refreshes now rather than waiting out DenebGatewayClient.HOME_WARM_INTERVAL —

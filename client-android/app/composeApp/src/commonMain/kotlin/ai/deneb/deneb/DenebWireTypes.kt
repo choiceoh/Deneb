@@ -70,6 +70,9 @@ internal data class NativeSyncPayload(
     val cursor: Long = 0,
     val latestSeq: Long = 0,
     val hasMore: Boolean = false,
+    // Server retention rotated past our cursor: events in between were pruned
+    // before we saw them, so this page's delta has a hole (see syncNativeState).
+    val truncated: Boolean = false,
 )
 
 @Serializable

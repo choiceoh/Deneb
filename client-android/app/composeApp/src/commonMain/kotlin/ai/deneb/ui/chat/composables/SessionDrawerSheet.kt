@@ -56,12 +56,13 @@ import deneb.composeapp.generated.resources.chat_history_title
 import deneb.composeapp.generated.resources.snackbar_conversation_deleted
 import deneb.composeapp.generated.resources.snackbar_undo
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.datetime.format
-import kotlinx.datetime.format.DateTimeComponents.Companion.Format
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format.char
+import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.stringResource
 
-private val dateFormat = Format {
+private val dateFormat = LocalDate.Format {
     year()
     char('년')
     char(' ')
@@ -331,8 +332,16 @@ private fun SessionItem(
     }
 }
 
+// Formatted in the device's zone, not UTC. kotlinx-datetime's Instant.format
+// defaults to UtcOffset.ZERO, which in KST put everything saved between midnight
+// and 09:00 under the previous day — the drawer's date headers disagreed with the
+// message timestamps inside them (MessageActionsSheet already converts locally).
 private fun formatDate(epochMillis: Long): String = try {
-    kotlin.time.Instant.fromEpochMilliseconds(epochMillis).format(dateFormat)
+    dateFormat.format(
+        kotlin.time.Instant.fromEpochMilliseconds(epochMillis)
+            .toLocalDateTime(TimeZone.currentSystemDefault())
+            .date,
+    )
 } catch (_: Exception) {
     ""
 }

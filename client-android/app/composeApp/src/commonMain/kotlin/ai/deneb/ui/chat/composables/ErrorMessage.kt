@@ -9,9 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -21,10 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import deneb.composeapp.generated.resources.Res
-import deneb.composeapp.generated.resources.ic_refresh
 import org.jetbrains.compose.resources.stringResource
-import org.jetbrains.compose.resources.vectorResource
 
 @Composable
 internal fun uiErrorText(error: UiError): String = when (error) {
@@ -36,7 +31,7 @@ internal fun uiErrorText(error: UiError): String = when (error) {
 @Composable
 internal fun ErrorMessage(
     error: UiError,
-    retry: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
     val text = uiErrorText(error)
     val haptics = rememberHaptics()
@@ -66,16 +61,13 @@ internal fun ErrorMessage(
                 modifier = Modifier.handCursor(),
                 onClick = {
                     haptics.tap()
-                    retry()
+                    onDismiss()
                 },
             ) {
-                Icon(
-                    imageVector = vectorResource(Res.drawable.ic_refresh),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onErrorContainer,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text("다시 시도", color = MaterialTheme.colorScheme.onErrorContainer)
+                // "확인", not "다시 시도": the failed text is already restored in the
+                // composer, so the retry the user wants is pressing send — a retry
+                // button here would send it a second time.
+                Text("확인", color = MaterialTheme.colorScheme.onErrorContainer)
             }
         }
     }

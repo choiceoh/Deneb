@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -180,4 +181,60 @@ func jsonlAppendRaw(path, content string) error {
 		return err
 	}
 	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+func TestStorePullFlagsTruncatedCursorBelowRetainedWindow(t *testing.T) {
+	// Post-prune retention shape: the head (seqs 1..500) is gone and the file
+	// starts mid-stream. Seeded directly because tripping a real prune needs
+	// >maxLogBytes of rows (see TestStoreAppendPrunesWhenOverCap) — Pull's
+	// truncation predicate only cares that seqs are contiguous.
+	path := filepath.Join(t.TempDir(), "native_sync.jsonl")
+	var b strings.Builder
+	for seq := 501; seq <= 505; seq++ {
+		b.WriteString(`{"seq":` + strconv.Itoa(seq) + `,"type":"workfeed.created","timestampMs":1}` + "\n")
+	}
+	if err := jsonlAppendRaw(path, b.String()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	store := NewStore(path)
+
+	// Cursor inside the pruned head: the (200, 501] range was rotated away
+	// unseen — the client must be told the delta has a hole.
+	got, err := store.Pull(200, 10)
+	if err != nil {
+		t.Fatalf("pull below window: %v", err)
+	}
+	if !got.Truncated {
+		t.Fatalf("pull(cursor=200) truncated = false, want true")
+	}
+	if len(got.Events) != 5 || got.Events[0].Seq != 501 {
+		t.Fatalf("events = %+v, want retained window 501..505", got.Events)
+	}
+
+	// Cursor exactly at the last pruned seq: nothing unseen was lost.
+	got, err = store.Pull(500, 10)
+	if err != nil {
+		t.Fatalf("pull at window edge: %v", err)
+	}
+	if got.Truncated {
+		t.Fatalf("pull(cursor=500) truncated = true, want false")
+	}
+
+	// Fresh-client baseline pull (cursor 0) is not a gap.
+	got, err = store.Pull(0, 10)
+	if err != nil {
+		t.Fatalf("pull fresh: %v", err)
+	}
+	if got.Truncated {
+		t.Fatalf("pull(cursor=0) truncated = true, want false")
+	}
+
+	// Cursor at head: nothing retained past it, no gap.
+	got, err = store.Pull(505, 10)
+	if err != nil {
+		t.Fatalf("pull at head: %v", err)
+	}
+	if got.Truncated {
+		t.Fatalf("pull(cursor=505) truncated = true, want false")
+	}
 }

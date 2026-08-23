@@ -101,7 +101,7 @@ internal fun chatStatesBody(scheme: ColorScheme) {
         Surface(color = MaterialTheme.colorScheme.background) {
             Column(Modifier.width(412.dp)) {
                 DenebSectionLabel("오류", Modifier.padding(start = 24.dp, top = 16.dp))
-                ErrorMessage(UiError.Text("게이트웨이에 연결하지 못했습니다 (timeout after 30s)"), retry = {})
+                ErrorMessage(UiError.Text("게이트웨이에 연결하지 못했습니다 (timeout after 30s)"), onDismiss = {})
 
                 DenebSectionLabel("하트비트 배너", Modifier.padding(start = 24.dp, top = 8.dp))
                 HeartbeatBanner(visible = true, onTap = {}, onDismiss = {})

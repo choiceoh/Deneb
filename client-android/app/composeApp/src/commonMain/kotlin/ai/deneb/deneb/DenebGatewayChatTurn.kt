@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.DenebLog
 import ai.deneb.data.UiSubmission
 import ai.deneb.ui.chat.History
 import kotlinx.coroutines.CancellationException
@@ -33,7 +34,12 @@ internal suspend fun DenebGatewayClient.askGateway(
         historyEpoch++
         _chatHistory.update { list ->
             val withUser = if (displayText.isNotEmpty()) {
-                list + History(role = History.Role.USER, content = displayText)
+                // Carry the submission on the row. Without it the chat list's guard
+                // (uiSubmission == null -> draw a bubble) never fires, so a card
+                // button showed its internal English label — "Pressed: confirm" —
+                // as if the user had typed it, and the card never froze into its
+                // answered state.
+                list + History(role = History.Role.USER, content = displayText, uiSubmission = uiSubmission)
             } else {
                 list
             }
@@ -145,7 +151,8 @@ internal suspend fun DenebGatewayClient.askGateway(
                     askActive = false
                     throw cancel
                 } catch (sendError: Exception) {
-                    GatewayReply("⚠️ ${sendError.message ?: "gateway request failed"}", ok = false)
+                    DenebLog.warn("chat", "blocking send failed: $sendError")
+                    GatewayReply(gatewayFailureText(sendError), ok = false)
                 }
             } else {
                 GatewayReply(text = accumulated.toString(), ok = false)
