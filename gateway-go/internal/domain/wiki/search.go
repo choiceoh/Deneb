@@ -136,7 +136,7 @@ func (s *searchDB) indexPage(relPath string, page *Page) {
 	defer s.mu.Unlock()
 	s.idx.UpsertFields(relPath, searchablePageFieldsWithBoost(page, s.fieldBoost, s.facetBoost)...)
 	if page != nil {
-		s.validity[relPath] = validityFactor(relPath, page.Meta, s.now())
+		s.validity[relPath] = validityFactor(relPath, page, s.now())
 	}
 }
 
@@ -153,7 +153,8 @@ func (s *searchDB) removePage(relPath string) {
 // living pages in recall; old "updated" stamps decay gently — operational
 // facts (ports, prices, configs) rot, and recall presenting a year-old fact
 // as current is exactly the failure this guards against.
-func validityFactor(relPath string, meta Frontmatter, now time.Time) float64 {
+func validityFactor(relPath string, page *Page, now time.Time) float64 {
+	meta := page.Meta
 	f := 1.0
 	if meta.Archived {
 		f *= 0.3
@@ -177,8 +178,26 @@ func validityFactor(relPath string, meta Frontmatter, now time.Time) float64 {
 	if IsUnlinkedMailAnalysisPath(relPath) {
 		f *= 0.25
 	}
+	// Person stubs: a contacts-sync or mention-seeded page with no prose is a
+	// name-resolution entry, not an answer. 2026-07-27 seeded 204 of them in one
+	// sync and ~90% of the 인물 corpus never grew a sentence, yet each carries a
+	// "<회사> 소속" summary that the identity field boost ranks like a fact — so
+	// they crowd the recall block's eight evidence slots (a probe for "탑솔라 회사
+	// 개요" returned five of them in the top eight). Demote instead of archiving:
+	// archived pages are labelled "보관됨(현행이 아닐 수 있음)" in the recall block,
+	// which is the wrong caption for a live contact, and they drop out of
+	// research selection entirely. The page stays readable, resolvable by name
+	// and email, and one written sentence lifts the demotion.
+	if isPersonStubPage(relPath, page) {
+		f *= personStubValidity
+	}
 	return f
 }
+
+// personStubValidity is how far a prose-less person page is demoted. Chosen so
+// a stub still outranks an archived page (0.3) — it is current, just empty —
+// while losing to any curated page on an equal keyword match.
+const personStubValidity = 0.45
 
 // applyValidity multiplies result scores by each page's validity factor and
 // re-sorts. Pages never indexed (factor missing) pass through unchanged.
@@ -293,7 +312,7 @@ func (s *searchDB) rebuildIndex(dir string) error {
 			return nil //nolint:nilerr // skip unparseable files
 		}
 		s.idx.UpsertFields(rel, searchablePageFieldsWithBoost(page, s.fieldBoost, s.facetBoost)...)
-		s.validity[rel] = validityFactor(rel, page.Meta, s.now())
+		s.validity[rel] = validityFactor(rel, page, s.now())
 		return nil
 	})
 }
