@@ -12,8 +12,16 @@ func (s *Server) handleFactJournalFailure(cause error) {
 	if s == nil {
 		return
 	}
-	chat.DisableFactDerivedCaches()
+	// Admission and active work must stop before any best-effort disk cleanup:
+	// the journal may already contain a revision this process did not apply.
 	s.ready.Store(false)
+	if s.chatHandler != nil {
+		s.chatHandler.FatalDrain(cause)
+	}
+	if s.lifecycleCancel != nil {
+		s.lifecycleCancel()
+	}
+	chat.DisableFactDerivedCaches()
 	if s.logger != nil {
 		s.logger.Error("fact journal entered ambiguous state; restarting gateway", "error", cause)
 	}
