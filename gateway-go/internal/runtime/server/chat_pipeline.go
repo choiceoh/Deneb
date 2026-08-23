@@ -114,6 +114,13 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 			if cutoverErr != nil {
 				cutoverErr = fmt.Errorf("import legacy facts: %w", cutoverErr)
 			}
+			// Bullets the cutover could not convert are skipped, not fatal — but
+			// never silently: they stay in the preserved *.legacy.md copy and this
+			// is the only place anyone would learn they did not become facts.
+			if skips := wikiStore.LegacyFactImportSkips(); len(skips) > 0 {
+				s.logger.Warn("wiki: legacy fact bullets skipped during cutover",
+					"count", len(skips), "examples", strings.Join(skips, "; "))
+			}
 		}
 		if cutoverErr == nil {
 			cutoverErr = wikiStore.SetFactProjectionDir(workspaceDir)
