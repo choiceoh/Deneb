@@ -14,9 +14,9 @@ type Logger interface {
 }
 
 // Go runs fn in a new goroutine with panic recovery. A panic is logged via
-// logger with the given name as context; it does not propagate.
-// If logger is nil, panics are silently swallowed — callers are strongly
-// encouraged to pass a real logger.
+// logger with the given name as context; it does not propagate. A nil logger
+// falls back to slog.Default() — a recovered panic is never swallowed, because
+// a goroutine that died silently is exactly the failure nobody can diagnose.
 func Go(logger Logger, name string, fn func()) {
 	go func() {
 		defer recoverPanic(logger, name)
@@ -26,13 +26,12 @@ func Go(logger Logger, name string, fn func()) {
 
 // GoWithSlog is a convenience wrapper for callers that already have
 // a *slog.Logger handy and do not want to pass the Logger interface manually.
+// A nil logger falls back to slog.Default() like Go.
 func GoWithSlog(logger *slog.Logger, name string, fn func()) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				if logger != nil {
-					logger.Error("panic in background goroutine", "goroutine", name, "panic", r)
-				}
+				panicLogger(logger).Error("panic in background goroutine", "goroutine", name, "panic", r)
 			}
 		}()
 		fn()
@@ -41,8 +40,18 @@ func GoWithSlog(logger *slog.Logger, name string, fn func()) {
 
 func recoverPanic(logger Logger, name string) {
 	if r := recover(); r != nil {
-		if logger != nil {
-			logger.Error("panic in background goroutine", "goroutine", name, "panic", r)
+		if logger == nil {
+			logger = slog.Default()
 		}
+		logger.Error("panic in background goroutine", "goroutine", name, "panic", r)
 	}
+}
+
+// panicLogger returns logger, or the process default when the caller passed
+// nil — the recovery path must always have somewhere to report.
+func panicLogger(logger *slog.Logger) *slog.Logger {
+	if logger == nil {
+		return slog.Default()
+	}
+	return logger
 }
