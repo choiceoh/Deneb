@@ -63,6 +63,9 @@ type PeopleClient interface {
 type PeopleDeps struct {
 	Client    func() (PeopleClient, error)
 	WikiStore func() (MemorySearcher, error)
+	// PhoneLedgerDir roots the phoneledger daily files; empty disables the
+	// dossier's call/notification section (everything else still serves).
+	PhoneLedgerDir string
 }
 
 const (
@@ -89,7 +92,8 @@ func PeopleMethods(deps PeopleDeps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.people.list": peopleList(deps),
+		"miniapp.people.list":    peopleList(deps),
+		"miniapp.person.dossier": personDossier(deps),
 	}
 }
 

@@ -554,6 +554,36 @@ data class OrgTreeOut(
 
 @Immutable
 @Serializable
+data class PersonDossierCallOut(
+    val ts: String = "",
+    val type: String = "",
+    val source: String = "",
+    val text: String = "",
+)
+
+@Immutable
+@Serializable
+data class PersonDossierOut(
+    val email: String = "",
+    val name: String = "",
+    val wikiPath: String = "",
+    val wikiSummary: String = "",
+    val mailCount: Int = 0,
+    val lastMailAt: String = "",
+    val recentSubjects: List<String> = emptyList(),
+    val calls: List<PersonDossierCallOut> = emptyList(),
+    val wikiRefs: List<PersonDossierWikiRefOut> = emptyList(),
+)
+
+@Immutable
+@Serializable
+data class PersonDossierWikiRefOut(
+    val path: String = "",
+    val summary: String = "",
+)
+
+@Immutable
+@Serializable
 data class PersonRow(
     val email: String = "",
     val name: String = "",

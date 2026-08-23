@@ -2007,6 +2007,105 @@ class MiniappWireValueContractTest {
             invalidValue = JsonObject(mapOf("not" to JsonPrimitive("a-list"))),
         ),
         wireContract(
+            name = "PersonDossierCallOut",
+            serializer = PersonDossierCallOut.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "ts",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "type",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "source",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "text",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "ts",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "PersonDossierOut",
+            serializer = PersonDossierOut.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "email",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "name",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "wikiPath",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "wikiSummary",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "mailCount",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "lastMailAt",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "recentSubjects",
+                    value = stringList,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "calls",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "wikiRefs",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+            ),
+            invalidField = "email",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "PersonDossierWikiRefOut",
+            serializer = PersonDossierWikiRefOut.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "path",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "summary",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "path",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
             name = "PersonRow",
             serializer = PersonRow.serializer(),
             fields = listOf(

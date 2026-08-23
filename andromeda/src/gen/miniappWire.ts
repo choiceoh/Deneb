@@ -455,6 +455,30 @@ export interface OrgTreeOut {
   nodes?: OrgNodeOut[]
 }
 
+export interface PersonDossierCallOut {
+  ts?: string
+  type?: string
+  source?: string
+  text?: string
+}
+
+export interface PersonDossierOut {
+  email?: string
+  name?: string
+  wikiPath?: string
+  wikiSummary?: string
+  mailCount?: number
+  lastMailAt?: string
+  recentSubjects?: string[]
+  calls?: PersonDossierCallOut[]
+  wikiRefs?: PersonDossierWikiRefOut[]
+}
+
+export interface PersonDossierWikiRefOut {
+  path?: string
+  summary?: string
+}
+
 export interface PersonRow {
   email?: string
   name?: string
