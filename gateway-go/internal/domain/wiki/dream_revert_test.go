@@ -2,7 +2,9 @@ package wiki
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -81,5 +83,46 @@ func TestDreamCycleRevertRoundTrip(t *testing.T) {
 	}
 	if p, _ := s.ReadPage("업무/신규.md"); p != nil {
 		t.Fatal("cycle-created page must be deleted by selective revert")
+	}
+}
+
+// The commit lookup resolves a (hash → record) from the ledger the feed's
+// per-page revert actions address, and the page list keeps the canonical order
+// those actions' indexes were minted in — learned, merged, expired, moved,
+// deduped.
+func TestDreamCycleChangesByCommitAndPageList(t *testing.T) {
+	s, wd := newVerifyStore(t)
+	cycle := &dreamCycle{
+		appliedPaths: []string{"프로젝트/a/대표.md", "기타/b.md"},
+		mergedPages:  []string{"업무/c.md"},
+	}
+	wd.recordDreamCycleChanges("hash1", cycle)
+	wd.recordDreamCycleChanges("hash2", &dreamCycle{appliedPaths: []string{"기타/d.md"}})
+
+	rec, ok := s.DreamCycleChangesByCommit("hash1")
+	if !ok || len(rec.Learned) != 2 || rec.Merged[0] != "업무/c.md" {
+		t.Fatalf("lookup hash1 = %+v ok=%v", rec, ok)
+	}
+	if _, ok := s.DreamCycleChangesByCommit("missing"); ok {
+		t.Fatal("unknown commit must not resolve")
+	}
+
+	pages := DreamRevertPageList(rec)
+	want := "프로젝트/a/대표.md|기타/b.md|업무/c.md"
+	if strings.Join(pages, "|") != want {
+		t.Fatalf("page list = %v, want canonical order %v", pages, want)
+	}
+	// A page present in two lists appears once (learned wins the slot).
+	dup := DreamRevertPageList(DreamCycleChanges{
+		Learned: []string{"x.md"}, Merged: []string{"x.md", "y.md"},
+	})
+	if strings.Join(dup, "|") != "x.md|y.md" {
+		t.Fatalf("dedup order = %v", dup)
+	}
+
+	// The ledger file is read straight from the store dir — a fresh Store on the
+	// same dir resolves too (feed actions run long after the dreamer is gone).
+	if raw, err := os.ReadFile(filepath.Join(s.Dir(), ".dream-cycle-changes.jsonl")); err != nil || len(raw) == 0 {
+		t.Fatalf("ledger file must exist in the store dir: %v", err)
 	}
 }

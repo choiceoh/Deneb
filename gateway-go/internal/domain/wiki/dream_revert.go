@@ -96,6 +96,45 @@ func (wd *WikiDreamer) LoadRecentDreamCycles(n int) []DreamCycleChanges {
 	return all
 }
 
+// DreamCycleChangesByCommit returns the newest cycle record for a snapshot
+// commit. The feed's per-page revert actions carry only (hash, index); this
+// resolves the index against the same ledger recordDreamCycleChanges wrote, so
+// page paths never ride inside action payloads.
+func (s *Store) DreamCycleChangesByCommit(hash string) (DreamCycleChanges, bool) {
+	hash = strings.TrimSpace(hash)
+	if s == nil || hash == "" {
+		return DreamCycleChanges{}, false
+	}
+	raw, err := os.ReadFile(filepath.Join(s.dir, dreamCycleChangesFile))
+	if err != nil {
+		return DreamCycleChanges{}, false
+	}
+	var found DreamCycleChanges
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var rec DreamCycleChanges
+		if json.Unmarshal([]byte(line), &rec) == nil && rec.Commit == hash {
+			found = rec // append-only ledger: the last match is the newest
+		}
+	}
+	return found, found.Commit != ""
+}
+
+// DreamRevertPageList flattens a cycle record into the canonical page order the
+// feed card mints per-page revert actions in (learned → merged → expired →
+// moved), so an action's index resolves identically at card-build and run time.
+func DreamRevertPageList(rec DreamCycleChanges) []string {
+	pages := make([]string, 0, len(rec.Learned)+len(rec.Merged)+len(rec.Expired)+len(rec.Moved))
+	pages = append(pages, rec.Learned...)
+	pages = append(pages, rec.Merged...)
+	pages = append(pages, rec.Expired...)
+	pages = append(pages, rec.Moved...)
+	return dedupeStrings(pages)
+}
+
 // RevertDreamCycle undoes one whole dream cycle (git revert of its snapshot
 // commit) and rebuilds the search index to match the restored tree.
 func (s *Store) RevertDreamCycle(ctx context.Context, hash string) error {

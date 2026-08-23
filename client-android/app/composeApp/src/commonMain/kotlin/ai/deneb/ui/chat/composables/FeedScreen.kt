@@ -542,6 +542,12 @@ private fun FeedRowWithBody(
             }
         }
     }
+    // Card-specific operations (a dream card's 전체/페이지별 되돌리기) that are not
+    // part of the universal inbox lifecycle. Question cards already render their
+    // chips through WorkFeedAnswerBlock; groupware approvals keep inline buttons.
+    if (expanded && !item.question && !usesInlineApprovalActions) {
+        WorkFeedActionChips(item = item, onRunAction = onRunAction)
+    }
     // A question card the agent is waiting on: inline answer chips / reply field.
     if (expanded && item.question && !usesInlineApprovalActions) {
         WorkFeedAnswerBlock(item = item, onAnswer = onAnswer)
