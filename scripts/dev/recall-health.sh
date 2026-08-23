@@ -14,6 +14,22 @@
 set -euo pipefail
 cd "$(dirname "$0")/../../gateway-go"
 
+# The srv4 self-hosted runner's PATH has no Go toolchain (it lives in
+# ~/go-sdk/go/bin), so every scheduled run of this script died on "go: command
+# not found" — and because the nightly job pipes us through `tee`, the pipeline
+# returned tee's success and the job stayed green. The trend line this script
+# exists to produce was empty from its first run (2026-07-20) to 2026-08-23.
+for candidate in "$HOME/go-sdk/go/bin" "/usr/local/go/bin"; do
+    if [[ -x "$candidate/go" ]]; then
+        export PATH="$candidate:$PATH"
+        break
+    fi
+done
+if ! command -v go >/dev/null 2>&1; then
+    echo "recall-health: go toolchain not found (checked PATH, ~/go-sdk/go/bin, /usr/local/go/bin)" >&2
+    exit 1
+fi
+
 WIKI_SRC="${DENEB_WIKI_DIR:-$HOME/.deneb/wiki}"
 DIARY_SRC="${DENEB_DIARY_DIR:-$HOME/.deneb/diary}"
 GOLD="${DENEB_WIKI_GOLD:-$HOME/.deneb/wiki-qa-gold.jsonl}"
@@ -66,9 +82,19 @@ trap 'rm -rf "$scratch"' EXIT
 cp -a "$WIKI_SRC" "$scratch/wiki"
 [[ -d "$DIARY_SRC" ]] && cp -a "$DIARY_SRC" "$scratch/diary" || mkdir -p "$scratch/diary"
 
+bench_out="$scratch/bench.txt"
 go run ./cmd/recall-bench \
     --wiki "$scratch/wiki" --diary "$scratch/diary" \
-    --gold "$GOLD" --health "$@"
+    --gold "$GOLD" --health "$@" | tee "$bench_out"
+
+# Self-verification: a run that produces no score did not measure anything, and
+# an advisory job that reports "green" for a run that never happened is worse
+# than a red one — that is exactly how 45 consecutive nightly runs hid a broken
+# harness. Fail loudly instead.
+if ! grep -q "RECALL_HEALTH score=" "$bench_out"; then
+    echo "recall-health: no RECALL_HEALTH line in the bench output — the run did not measure anything" >&2
+    exit 1
+fi
 
 # Optional repair worklist: re-run the analysis-path gold set verbosely and
 # classify the misses into wiki repair categories (thin folder / sibling

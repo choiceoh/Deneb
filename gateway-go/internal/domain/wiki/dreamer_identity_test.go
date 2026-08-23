@@ -67,3 +67,36 @@ func TestMergeDreamUpdate_IDIsFillOnly(t *testing.T) {
 		t.Errorf("direct update must refresh summary, got %q", direct.Meta.Summary)
 	}
 }
+
+// TestUpdateDreamPage_EmptyContentOnMissingTargetCreatesNothing: update-on-
+// missing writes the update's content verbatim, so an empty update minted
+// frontmatter-only pages (three 0-byte pages live). They still enter FTS and
+// the embedding set and compete for recall slots.
+func TestUpdateDreamPage_EmptyContentOnMissingTargetCreatesNothing(t *testing.T) {
+	s, wd := newVerifyStore(t)
+
+	created, err := wd.updateDreamPage(wikiUpdate{
+		Action: "update", Path: "기타/모닝레터-2026-08-19.md",
+		Title: "모닝레터 2026-08-19", Content: "   \n",
+	}, "", "")
+	if err != nil {
+		t.Fatalf("updateDreamPage: %v", err)
+	}
+	if created {
+		t.Error("empty-content update reported a creation")
+	}
+	if p, _ := s.ReadPage("기타/모닝레터-2026-08-19.md"); p != nil {
+		t.Errorf("empty page created: %+v", p.Meta)
+	}
+
+	// With content, the same path still creates.
+	if _, err := wd.updateDreamPage(wikiUpdate{
+		Action: "update", Path: "기타/모닝레터-2026-08-19.md",
+		Title: "모닝레터 2026-08-19", Content: "## 환율\n1,414원",
+	}, "", ""); err != nil {
+		t.Fatalf("updateDreamPage with content: %v", err)
+	}
+	if p, _ := s.ReadPage("기타/모닝레터-2026-08-19.md"); p == nil || !strings.Contains(p.Body, "1,414원") {
+		t.Error("update-on-missing with content did not create the page")
+	}
+}

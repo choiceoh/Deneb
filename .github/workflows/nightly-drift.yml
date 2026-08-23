@@ -272,10 +272,16 @@ jobs:
       # script carries the production-parity defaults so this file cannot drift
       # from the gateway again (it held the retired 1:10:3 with no reranker,
       # scoring a configuration production abandoned on 2026-07-20).
+      # `shell: bash` + pipefail so a failing script is not masked by tee's
+      # exit status — the pipe is why a script that died on a missing Go
+      # toolchain reported success for 45 consecutive nights.
       - name: recall health + repair worklist
+        shell: bash
         env:
           RECALL_WORKLIST: "1"
-        run: scripts/dev/recall-health.sh | tee -a "$GITHUB_STEP_SUMMARY"
+        run: |
+          set -o pipefail
+          scripts/dev/recall-health.sh | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Weekly (Monday runs): grow the traffic gold set from the recall-utility
       # ledger. inject×cite joins are use-confirmed real-query gold at zero
