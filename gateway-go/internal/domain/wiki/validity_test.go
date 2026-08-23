@@ -23,7 +23,7 @@ func TestValidityFactor_ScalesWithAgeArchivedAndSupersededStatus(t *testing.T) {
 		{"superseded-and-old", Frontmatter{SupersededBy: "x.md", Updated: "2024-01-01"}, 0.105, 0.104},
 	}
 	for _, c := range cases {
-		got := validityFactor("", c.meta, now)
+		got := validityFactor("", &Page{Meta: c.meta}, now)
 		if got > c.max+1e-9 || got < c.min-1e-9 {
 			t.Errorf("%s: factor=%v want [%v,%v]", c.name, got, c.min, c.max)
 		}
@@ -154,10 +154,10 @@ func TestSearch_ValiditySurvivesRestart(t *testing.T) {
 func TestValidityFactor_DemotesUnlinkedMailAnalysis(t *testing.T) {
 	now := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	meta := Frontmatter{Updated: "2026-08-20"}
-	if got := validityFactor("프로젝트/메일분석/orphan@x.com.md", meta, now); got > 0.26 || got < 0.24 {
+	if got := validityFactor("프로젝트/메일분석/orphan@x.com.md", &Page{Meta: meta}, now); got > 0.26 || got < 0.24 {
 		t.Errorf("unlinked mail factor=%v want 0.25", got)
 	}
-	if got := validityFactor("프로젝트/nde-sun-cbl-001/메일분석/orphan@x.com.md", meta, now); got != 1.0 {
+	if got := validityFactor("프로젝트/nde-sun-cbl-001/메일분석/orphan@x.com.md", &Page{Meta: meta}, now); got != 1.0 {
 		t.Errorf("filed mail factor=%v want 1.0", got)
 	}
 }

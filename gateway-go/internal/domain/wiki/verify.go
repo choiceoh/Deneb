@@ -190,6 +190,14 @@ func (wd *WikiDreamer) enrichRelatedLinks(ctx context.Context) int {
 		if perr != nil || page == nil || len(page.Meta.Related) > 0 {
 			continue
 		}
+		// Template-identical person stubs sit on top of each other in embedding
+		// space, so "nearest neighbour" here means "another empty page whose name
+		// looks similar" — 강동민 got 강민수/강은구/강동화. Those become graph edges
+		// the RRF ranker trusts, so a person query pulls in namesakes ahead of the
+		// mail that actually mentions them.
+		if isPersonStubPage(filepath.ToSlash(rp), page) {
+			continue
+		}
 		sugg := wd.store.suggestRelated(ctx, rp, maxEnrichPerPage)
 		if len(sugg) == 0 {
 			continue
