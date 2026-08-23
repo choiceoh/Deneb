@@ -92,7 +92,7 @@ func TestReclassifyTarget_TwoDistinctRelatedProjectsReturnsEmpty(t *testing.T) {
 			"프로젝트/해남-희망에너지-epc/대표.md",
 		},
 	}}
-	if got, _ := reclassifyTarget(ambiguous, projects); got != "" {
+	if got, _, _ := reclassifyTarget(ambiguous, projects); got != "" {
 		t.Errorf("two distinct related projects must be ambiguous, got %q", got)
 	}
 
@@ -103,7 +103,7 @@ func TestReclassifyTarget_TwoDistinctRelatedProjectsReturnsEmpty(t *testing.T) {
 			`프로젝트\기아-화성\로그.md`, // same project, other slot + windows separators
 		},
 	}}
-	if got, _ := reclassifyTarget(sameTwice, projects); got != "기아-화성" {
+	if got, _, _ := reclassifyTarget(sameTwice, projects); got != "기아-화성" {
 		t.Errorf("agreeing related entries = %q, want 기아-화성", got)
 	}
 
@@ -327,11 +327,11 @@ func TestReclassifyTarget_ClientMentionReturnsEmpty(t *testing.T) {
 	projects := store.KnownProjects()
 
 	bare := &Page{Meta: Frontmatter{Title: "금호타이어 태양광 문의"}}
-	if got, _ := reclassifyTarget(bare, projects); got != "" {
+	if got, _, _ := reclassifyTarget(bare, projects); got != "" {
 		t.Errorf("bare client title must stay put, got %q", got)
 	}
 	specific := &Page{Meta: Frontmatter{Title: "금호타이어 곡성 2단계 준공 서류"}}
-	if got, _ := reclassifyTarget(specific, projects); got != "금호타이어-곡성-2단계" {
+	if got, _, _ := reclassifyTarget(specific, projects); got != "금호타이어-곡성-2단계" {
 		t.Errorf("specific title = %q, want 금호타이어-곡성-2단계", got)
 	}
 }
@@ -362,5 +362,78 @@ func TestMatchProjectsInTextReturnsRankedMatches(t *testing.T) {
 	}
 	if hits := store.MatchProjectsInText("기아 화성 근황", 2); len(hits) != 0 {
 		t.Errorf("closed project matched: %+v", hits)
+	}
+}
+
+// TestReclassifyTarget_MailEdgeIsNotOwnership: a related entry pointing at
+// another MAIL is a topical link the analyzer or link repair wrote, not
+// evidence the project owns this mail. Counting those filed a 광주 quote under a
+// 태안 project and split one thread across two (all 9 related-signal moves in
+// 2026-08 rested on mail↔mail edges alone).
+func TestReclassifyTarget_MailEdgeIsNotOwnership(t *testing.T) {
+	store := newReclassifyStore(t)
+	projects := store.KnownProjects()
+
+	mailEdgeOnly := &Page{Meta: Frontmatter{
+		Title:   "광주 남구 루프탑 전기안전관리대행 견적",
+		Related: []string{"프로젝트/기아-화성/메일분석/19e9190f319b95e3.md"},
+	}}
+	if got, _, amb := reclassifyTarget(mailEdgeOnly, projects); got != "" || amb {
+		t.Errorf("mail↔mail edge treated as ownership: project=%q ambiguous=%v", got, amb)
+	}
+
+	withRep := &Page{Meta: Frontmatter{
+		Title: "견적 회신",
+		Related: []string{
+			"프로젝트/기아-화성/메일분석/19e9190f319b95e3.md",
+			"프로젝트/기아-화성/대표.md",
+		},
+	}}
+	if got, sig, _ := reclassifyTarget(withRep, projects); got != "기아-화성" || sig != "related" {
+		t.Errorf("rep edge = %q/%q, want 기아-화성/related", got, sig)
+	}
+}
+
+// TestReclassifyTarget_AmbiguityBlocksTheDomainFallback: a mail whose rep edges
+// name two projects is not "no signal" — falling through to sender-domain
+// evidence would file a mail that demonstrably belongs to two projects into a
+// third.
+func TestReclassifyTarget_AmbiguityBlocksTheDomainFallback(t *testing.T) {
+	store := newReclassifyStore(t)
+	projects := store.KnownProjects()
+
+	page := &Page{Meta: Frontmatter{
+		Title: "비교 검토",
+		Related: []string{
+			"프로젝트/기아-화성/대표.md",
+			"프로젝트/해남-희망에너지-epc/대표.md",
+		},
+	}}
+	got, _, ambiguous := reclassifyTarget(page, projects)
+	if got != "" || !ambiguous {
+		t.Fatalf("project=%q ambiguous=%v, want empty + ambiguous", got, ambiguous)
+	}
+}
+
+// TestReclassifyUnlinkedMailAnalyses_SkipsRetiredPages: an archived or
+// superseded mail is already out of the working set — re-filing it re-dates it
+// and re-proposes it every cycle (the observe loop's 584-line repeat).
+func TestReclassifyUnlinkedMailAnalyses_SkipsRetiredPages(t *testing.T) {
+	store := newReclassifyStore(t)
+	writeUnlinkedMail(t, store, "retired1", "견적 회신", []string{"프로젝트/기아-화성/대표.md"})
+	rel := "프로젝트/메일분석/retired1.md"
+	if err := store.UpdatePage(rel, func(cur *Page) (*Page, error) {
+		cur.Meta.Archived = true
+		return cur, nil
+	}); err != nil {
+		t.Fatalf("archive seed: %v", err)
+	}
+
+	moved, proposals := store.ReclassifyUnlinkedMailAnalyses(time.Now(), 10)
+	if len(moved) != 0 || len(proposals) != 0 {
+		t.Errorf("retired mail acted on: moved=%+v proposals=%+v", moved, proposals)
+	}
+	if p, _ := store.ReadPage(rel); p == nil {
+		t.Error("retired mail left the bucket")
 	}
 }
