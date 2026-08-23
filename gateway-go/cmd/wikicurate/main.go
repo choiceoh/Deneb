@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -60,6 +61,10 @@ func run() error {
 	}
 	if err := foldDeals(store, now, *apply, rep); err != nil {
 		return err
+	}
+	if err := restoreDealLedgers(store, *apply, rep); err != nil {
+		fmt.Fprintln(os.Stderr, "restoreDealLedgers:", err)
+		os.Exit(1)
 	}
 	if err := emptyMiscDeals(store, *apply, rep); err != nil {
 		return err
@@ -368,8 +373,16 @@ func wikiMergeCue(existing []string, add string) []string {
 }
 
 func emptyMiscDeals(store *wiki.Store, apply bool, rep *report) error {
-	// 01:07 warehouse: deals back to 프로젝트/거래, orgs to 인물/. Keep
-	// 업무/거래 (경비) and 인물/거래 (사람) alone.
+	// Empty the 01:07 warehouse: EVERY counterparty ledger goes back to
+	// 프로젝트/거래.
+	//
+	// This used to route organizations to 인물/ on the taxonomy reading
+	// "인명·조직=인물", which put type: deal pages in a category no ledger
+	// consumer reads: UpsertDealPage writes 프로젝트/거래/<slug>.md and
+	// knownCounterparties lists only that folder, so a relocated ledger loses
+	// its recall anchor and the next approval capture re-mints a duplicate at
+	// the fixed path. One ledger location, and the company's narrative page
+	// (업무/<회사>.md) stays a separate document that links to it.
 	backToDeals := []string{"대한전선-당진공장.md", "현대.md"}
 	for _, name := range backToDeals {
 		moveOrFold(store, "기타/거래/"+name, "프로젝트/거래/"+name, apply, rep)
@@ -392,7 +405,54 @@ func emptyMiscDeals(store *wiki.Store, apply bool, rep *report) error {
 			continue
 		}
 		base := filepath.Base(rp)
-		moveOrFold(store, rp, "인물/"+base, apply, rep)
+		moveOrFold(store, rp, "프로젝트/거래/"+base, apply, rep)
+	}
+	return nil
+}
+
+// gatherStrayLedgers returns every type: deal page that sits outside
+// 프로젝트/거래 — the ledger's single canonical folder. Sources seen live: the
+// verify pass's LLM category moves (인물/거래, 업무/거래) and this tool's earlier
+// organizations-to-인물 rule.
+func gatherStrayLedgers(store *wiki.Store) ([]string, error) {
+	pages, err := store.ListPages("")
+	if err != nil {
+		return nil, err
+	}
+	var stray []string
+	for _, rp := range pages {
+		rp = filepath.ToSlash(rp)
+		if strings.HasPrefix(rp, "프로젝트/거래/") {
+			continue
+		}
+		// A page inside a project folder is placed by the layout, whatever its
+		// type says: 프로젝트/남도에코-케이블/대표.md carries type: deal because it is
+		// a cross-project supply ledger, and it belongs to its folder.
+		if _, inProject := wiki.ProjectNameOf(rp); inProject {
+			continue
+		}
+		page, perr := store.ReadPage(rp)
+		if perr != nil || page == nil || !strings.EqualFold(strings.TrimSpace(page.Meta.Type), "deal") {
+			continue
+		}
+		stray = append(stray, rp)
+	}
+	sort.Strings(stray)
+	return stray, nil
+}
+
+// restoreDealLedgers moves every stray ledger back to 프로젝트/거래/<slug>.md.
+func restoreDealLedgers(store *wiki.Store, apply bool, rep *report) error {
+	stray, err := gatherStrayLedgers(store)
+	if err != nil {
+		return err
+	}
+	if len(stray) == 0 {
+		rep.add("deal ledgers: none stray")
+		return nil
+	}
+	for _, rp := range stray {
+		moveOrFold(store, rp, "프로젝트/거래/"+filepath.Base(rp), apply, rep)
 	}
 	return nil
 }
