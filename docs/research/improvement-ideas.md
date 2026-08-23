@@ -51,6 +51,7 @@
 | 22 | 개인 MCP 브로커 — tailnet 경유 읽기 전용 노출 — ✅ 구현됨 | P2 | M |
 | 23 | 인물·거래 도시에 (Business Dossier) — ✅ 구현됨 | P2 | M |
 | 24 | 주간 기억 다이제스트 + dreamer 피드백 루프 — ✅ 구현됨 | P2 | S |
+| 25 | 드리머 팩트 원장 — 사실 단위 감사 로그 + 카운터 실측 — ✅ 구현됨 | P1 | M |
 
 ---
 
@@ -457,6 +458,18 @@
 
 ---
 
+### 5.6 드리머 팩트 원장 + 카운터 실측 — **P1 / M · implemented 2026-08-23**
+
+**무엇.** 드리머의 모든 뮤테이션(합성 적용·중복 병합·아카이브·재분류 이동)을 사실 단위로 `.dream-fact-ledger.jsonl`에 기록하고, `DreamReport`의 팩트 카운터를 원장에서 실측해 채운다.
+
+**배경.** `DreamReport.FactsVerified/FactsPruned`는 레거시 SQL-드리머의 이름을 물려받아 WikiDreamer가 한 번도 설정한 적 없는 필드였다(항상 0). 4.9 다이제스트가 이 카운터를 집계해 "검증 0 · 병합 0 · 만료 0"이 찍히는 결함이 있었다(2026-08-23 발견). 병합·아카이브는 구조화 기록 자체가 없어 밤사이 무엇이 정리됐는지는 git 역사를 뒤져야만 알 수 있었다.
+
+**구현.** `wiki/dream_fact_ledger.go` — `{ts, phase, op, page, refPage, detail}` append 원장(베스트에포트). 적용 지점: `dreamer_apply.go`(learned), `verify_apply.go`의 레코더 콜백(merged/expired/moved) → `rebuildAndVerifyDreamWiki`가 카운터(`FactsMerged/FactsExpired/FactsMoved`)와 함께 기록. `FactsLearned = len(appliedPaths)`(가드로 탈락한 제안 미집계). 레거시 `FactsVerified/FactsPruned`는 wire 호환으로 남기며 주석으로 폐기 명시. 4.9 다이제스트 제목·본문을 실측값(학습/병합/만료/재분류)으로 교체.
+
+**왜.** 잘못된 기억의 추적·디버깅 경로가 생기고, 다이제스트가 정직해지며, 5.7(팩트 단위 피드백)이 짚을 키가 마련된다.
+
+---
+
 ## 6. 인프라/운영 (Ops)
 
 ### 6.1 Live-test 시간 단축 — **P2 / M**
@@ -510,6 +523,7 @@
 - 4.8 인물·거래 도시에 Business Dossier (implemented 2026-08-23)
 - 4.9 주간 기억 다이제스트 + dreamer 피드백 (implemented 2026-08-23)
 - 5.5 개인 MCP 브로커 (implemented 2026-08-23 — §8 개정 완료)
+- 5.6 드리머 팩트 원장 + 카운터 실측 (implemented 2026-08-23)
 
 ### Later — 분기 단위 (P3)
 
@@ -548,6 +562,7 @@
 | 2026-08-23 | ZCode (GLM-5.3) | 4.7 Trust Inbox 구현 — 자기교정 감시 태스크(신규 후보 승인/거절 카드) + dream 카드 확인 액션 + 안드로이드 알림 tray 승인/거절 버튼. 기존 auto-apply 표면(meta·graduation·evolve verdict) 카드는 이미 존재해 재활용 |
 | 2026-08-23 | ZCode (GLM-5.3) | 4.9 주간 기억 다이제스트 구현 — DreamReport 롤업(`dream-reports.jsonl`) + 주간 다이제스트 카드(확인/틀린 기억 알리기 → 정정 턴) |
 | 2026-08-23 | ZCode (GLM-5.3) | 4.8 Business Dossier 구현 — `miniapp.person.dossier` RPC(메일 롤업 + phoneledger 통화·알림 + 위키 전문검색 조인) + 안드로이드 사람 화면·안드로메다 PersonCard 도시에 섹션 |
+| 2026-08-23 | ZCode (GLM-5.3) | 드리머 개선 3건(5.6–5.8) 착수 — 5.6 팩트 원장 구현 완료. 사실: 4.9 다이제스트가 항상 0이던 레거시 카운터를 집계하고 있었음을 발견·수정 |
 | 2026-08-23 | ZCode (GLM-5.3) | 5.5 개인 MCP 브로커 구현 — `DENEB_MCP_TOKEN` 전용 토큰 분리(상수시간 비교, 클라이언트 토큰 공존) + §8 스코프 명시 개정 + `docs/tools/mcp-broker.md` 가이드. tailnet serve 노출은 운영자 절차로 가이드 |
 
 ---

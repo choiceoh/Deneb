@@ -66,7 +66,7 @@ func TestDreamDigestTaskPostsWeeklyOnlyWithFreshReports(t *testing.T) {
 	if !strings.Contains(card.Actions[1].Prompt, "다이제스트") {
 		t.Fatalf("feedback prompt must carry the digest summary: %q", card.Actions[1].Prompt)
 	}
-	if !strings.Contains(card.Body, "검증 14") || !strings.Contains(card.Body, "3회") { // all window reports aggregate
+	if !strings.Contains(card.Body, "학습 14") || !strings.Contains(card.Body, "3회") { // all window reports aggregate
 		t.Fatalf("body must aggregate the window: %q", card.Body)
 	}
 
@@ -84,13 +84,13 @@ func TestDreamDigestTaskPostsWeeklyOnlyWithFreshReports(t *testing.T) {
 	assertFeedCount(t, s, 1)
 }
 
-func appendTestDreamReport(t *testing.T, verified, merged, expired int) {
+func appendTestDreamReport(t *testing.T, learned, merged, expired int) {
 	t.Helper()
 	s := &Server{logger: slog.Default()}
 	s.appendDreamReport(&autonomous.DreamReport{
-		FactsVerified: verified,
-		FactsMerged:   merged,
-		FactsExpired:  expired,
+		FactsLearned: learned,
+		FactsMerged:  merged,
+		FactsExpired: expired,
 	})
 }
 

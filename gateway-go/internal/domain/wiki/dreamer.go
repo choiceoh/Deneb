@@ -706,6 +706,9 @@ func (wd *WikiDreamer) applyDreamUpdates(ctx context.Context, cycle *dreamCycle)
 	cycle.report.WikiPagesCreated = created
 	cycle.report.WikiPagesUpdated = updated
 	cycle.report.UserModelUpdated = userPages
+	// Fact-level counter (5.6): proposals that actually wrote a page — the
+	// per-page detail lives in .dream-fact-ledger.jsonl.
+	cycle.report.FactsLearned = len(appliedPaths)
 	if len(oversized) > 0 {
 		cycle.addPhaseError("oversized pages: %s", strings.Join(oversized, ", "))
 	}
@@ -806,7 +809,23 @@ func (wd *WikiDreamer) rebuildAndVerifyDreamWiki(ctx context.Context, cycle *dre
 	if len(findings) == 0 {
 		return
 	}
-	applied := wd.applyVerifyFixes(findings)
+	// Fact ledger + measured counters (5.6): every applied verify fix records
+	// its page-level mutation and feeds the real DreamReport numbers the
+	// weekly digest reports.
+	recordFix := func(f verifyFinding) {
+		switch f.Fix.Kind {
+		case "merge":
+			cycle.report.FactsMerged++
+			wd.recordDreamFact("verify", "merged", f.PageA, f.PageB, f.Detail)
+		case "archive":
+			cycle.report.FactsExpired++
+			wd.recordDreamFact("verify", "expired", f.PageA, "", f.Detail)
+		case "move":
+			cycle.report.FactsMoved++
+			wd.recordDreamFact("verify", "moved", f.Fix.NewPath, f.PageA, f.Detail)
+		}
+	}
+	applied := wd.applyVerifyFixes(findings, recordFix)
 	// Only FIRST-TIME advisory findings are reported verbatim; ones the
 	// operator has already been shown fold into a single count so the dream
 	// notification announces news, not the standing backlog.
