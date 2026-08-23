@@ -629,13 +629,11 @@ class ChatViewModel(
         dataRepository.loadConversation(id)
         _state.update {
             // Queued messages belong to the conversation they were sent in — they
-            // must never auto-fire into the one we're switching to. (The cancel
-            // above rethrows CancellationException inside askInternal, so its
-            // catch-side queue fold never runs — clear here.) User-typed entries
-            // are restored into the input box via failedInput; programmatic card
-            // prompts are dropped (their card side effects already ran). An empty
-            // queue folds to null, which also clears any stale failedInput so it
-            // can't restore into the wrong conversation later.
+            // must never auto-fire or appear in the destination composer. (The
+            // cancel above rethrows CancellationException inside askInternal, so
+            // its catch-side queue fold never runs — clear here.) Composer drafts
+            // are per-session; failedInput is cleared so the old queue cannot
+            // restore into the wrong conversation.
             it.copy(
                 error = null,
                 isLoading = false,
@@ -882,8 +880,7 @@ class ChatViewModel(
         dataRepository.startNewChat()
         _state.update {
             // Same queue hygiene as loadConversation: never carry queued messages
-            // into the fresh conversation — restore user-typed ones to the input,
-            // drop programmatic ones, and clear any stale failedInput.
+            // into the fresh conversation, and clear any stale failedInput.
             it.copy(
                 error = null,
                 isLoading = false,

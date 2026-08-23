@@ -71,13 +71,13 @@ internal class GatewayHttpHarness {
             body = raw.body.bodyText(),
             bodyContentType = raw.body.contentType,
         )
-        requests += request
         // Session focus is a fire-and-forget sidecar on switchSession. Auto-reply
-        // so it never consumes a queued transcript/recent payload the test body
-        // actually arranged.
+        // and omit it from `requests` so it neither consumes a queued
+        // transcript/recent payload nor becomes requests.first()/single().
         val reply = if (request.rpcMethod == "miniapp.sessions.focus") {
             Reply(body = """{"ok":true,"payload":{"sessionKey":""}}""")
         } else {
+            requests += request
             val producer = if (queued.isNotEmpty()) queued.removeFirst() else fallback
             producer?.invoke(request)
                 ?: error("No queued response for ${request.method.value} ${request.url}")

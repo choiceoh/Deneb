@@ -111,14 +111,14 @@ class ChatViewModelQueueTest {
 
             // Switching conversation cancels the running turn (a rethrown
             // CancellationException skips the catch-side queue fold) — the switch
-            // itself must clear the queue and hand the text back via failedInput.
+            // itself must clear the queue without leaking it into the next composer.
             queuedState.actions.loadConversation("some-other-conversation")
 
             var switchedState: ChatUiState
             do {
                 switchedState = awaitItem()
             } while (switchedState.pendingQuestions.isNotEmpty() || switchedState.isLoading)
-            assertEquals("queued follow-up", switchedState.failedInput)
+            assertNull(switchedState.failedInput)
             assertEquals(1, fakeRepository.askCalls.size)
 
             // A later successful turn in the new conversation must NOT auto-send
@@ -142,7 +142,7 @@ class ChatViewModelQueueTest {
     }
 
     @Test
-    fun `startNewChat clears the queue and restores user-typed text`() = runTest {
+    fun `startNewChat clears the queue without leaking it into the new conversation`() = runTest {
         val gate = CompletableDeferred<Unit>()
         fakeRepository.askGate = gate
         val viewModel = createViewModel()
@@ -167,7 +167,7 @@ class ChatViewModelQueueTest {
             do {
                 switchedState = awaitItem()
             } while (switchedState.pendingQuestions.isNotEmpty() || switchedState.isLoading)
-            assertEquals("queued follow-up", switchedState.failedInput)
+            assertNull(switchedState.failedInput)
             assertEquals(1, fakeRepository.askCalls.size)
 
             gate.complete(Unit)
