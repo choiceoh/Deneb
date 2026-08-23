@@ -206,16 +206,25 @@ func selfCorrectionReopenBlocked(existing []SelfCorrectionCandidateRecord, sourc
 	if sourceTwins > selfCorrectionReopenCap {
 		return true
 	}
-	if normalizeSelfCorrectionStatus(newest.Status) != SelfCorrectionStatusApplied {
-		return true // live twin, or operator-ruled (rejected/superseded) → block
+	// Live twins (proposed/accepted) block; a REJECTED twin is the operator's
+	// standing veto and blocks for good. SUPERSEDED is a review-lane ruling
+	// ("something else covers this"), not a veto — when the finding is still
+	// standing a cooldown later, that is a new fact and the signature may
+	// re-file. 2026-07-23 → 08-23: runtime-error-rate was superseded two
+	// minutes after filing and the runtime lane then stayed dead for a month.
+	switch normalizeSelfCorrectionStatus(newest.Status) {
+	case SelfCorrectionStatusApplied, selfCorrectionStatusSuperseded:
+	default:
+		return true
 	}
 	if result := newest.ImpactResult; result != nil && result.CheckedAt > 0 &&
 		(result.Status == selfCorrectionImpactNoEffect || result.Status == selfCorrectionImpactRegressed) {
 		return true
 	}
-	// Applied: re-open only if the fix had time to prove itself AND the signature
-	// recurred again after its latest lifecycle update. UpdatedAt is the actual
-	// watch/impact boundary on folded rows; CreatedAt is the legacy fallback.
+	// Applied/superseded: re-open only if the ruling had time to prove itself
+	// AND the signature recurred again after its latest lifecycle update.
+	// UpdatedAt is the actual watch/impact/supersession boundary on folded rows;
+	// CreatedAt is the legacy fallback.
 	appliedAt := max(newest.CreatedAt, newest.UpdatedAt)
 	cooled := now.UnixMilli()-appliedAt >= selfCorrectionReopenCooldown.Milliseconds()
 	recurredAgain := freshLastAt > appliedAt

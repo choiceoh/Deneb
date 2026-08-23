@@ -227,8 +227,24 @@ class ReopenBlockedTest(unittest.TestCase):
 
     def test_when_operator_veto_never_refiles(self):
         old = NOW - 10 * REOPEN_COOLDOWN_MS
-        for status in ("rejected", "superseded"):
-            self.assertIsNotNone(reopen_blocked(self._existing(status, old), self.SRC, NOW))
+        self.assertIsNotNone(reopen_blocked(self._existing("rejected", old), self.SRC, NOW))
+
+    def test_when_superseded_twin_reopens_after_cooldown(self):
+        # Superseded is a review ruling, not an operator veto: the runtime lane
+        # stayed dead for a month (2026-07-23 → 08-23) behind one superseded
+        # twin. Inside the cooldown it still blocks; cooled, it may re-file.
+        recent = NOW - REOPEN_COOLDOWN_MS // 2
+        self.assertIn("inside reopen cooldown", reopen_blocked(self._existing("superseded", recent), self.SRC, NOW))
+        old = NOW - 10 * REOPEN_COOLDOWN_MS
+        self.assertIsNone(reopen_blocked(self._existing("superseded", old), self.SRC, NOW))
+
+    def test_when_updated_at_is_newer_it_anchors_the_cooldown(self):
+        # Parity with genesis: UpdatedAt is the real lifecycle boundary on
+        # folded rows; an old createdAt with a fresh updatedAt is still cooling.
+        old = NOW - 10 * REOPEN_COOLDOWN_MS
+        existing = self._existing("applied", old)
+        existing[0]["updatedAt"] = NOW - REOPEN_COOLDOWN_MS // 2
+        self.assertIn("inside reopen cooldown", reopen_blocked(existing, self.SRC, NOW))
 
     def test_when_applied_blocks_inside_cooldown_then_reopens(self):
         fresh = self._existing("applied", NOW - REOPEN_COOLDOWN_MS + 60_000)
@@ -593,3 +609,26 @@ class MinerStatusTests(unittest.TestCase):
                 payload = json.load(handle)
             self.assertEqual(payload["structuralSource"], "unavailable")
             self.assertTrue(payload["fallbackReason"])
+
+
+class ClassifySkipsTest(unittest.TestCase):
+    """planned=0 with skips is a BLOCKED lane; the status drop must say which
+    kind so rsi-status can render 공급 차단 instead of a clean green row
+    (2026-08-23: 13/13 candidates blocked for weeks, status read as healthy)."""
+
+    def test_buckets_every_reason_kind(self):
+        import health_finding_miner as hfm
+
+        skipped = [
+            ({"source": "a"}, "rejected twin sc-1"),
+            ({"source": "b"}, "reopen cap exceeded (6 twins > 5)"),
+            ({"source": "c"}, "applied twin sc-2 inside reopen cooldown"),
+            ({"source": "d"}, "superseded twin sc-3 inside reopen cooldown"),
+            ({"source": "e"}, "per-run cap reached"),
+            ({"source": "f"}, "proposed twin sc-4"),
+        ]
+        self.assertEqual(
+            hfm.classify_skips(skipped),
+            {"permanent": 2, "cooldown": 2, "capped": 1, "other": 1},
+        )
+        self.assertEqual(hfm.classify_skips([]), {"permanent": 0, "cooldown": 0, "capped": 0, "other": 0})

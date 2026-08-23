@@ -98,7 +98,7 @@ func toolSkillManage(getSnapshot SkillsSnapshotProvider, workspaceDir, bundledSk
 		case "create":
 			result, err = skillCreate(workspaceDir, p.Name, p.Category, p.Content, effectiveInvalidate)
 		case "patch", "delete", "read", "list_files", "write_file", "remove_file":
-			skillPath, rerr := resolveSkillPath(getSnapshot, workspaceDir, p.Name)
+			skillPath, canonicalName, rerr := resolveSkillPath(getSnapshot, workspaceDir, p.Name)
 			if rerr != nil {
 				return "", rerr
 			}
@@ -120,7 +120,12 @@ func toolSkillManage(getSnapshot SkillsSnapshotProvider, workspaceDir, bundledSk
 				// After resolution on purpose: a name that doesn't resolve is
 				// not a consult, and phantom names must not accrue usage stats
 				// (Add is nil-safe when no recorder is wired for this run).
-				toolport.SkillConsultLogFromContext(ctx).Add(p.Name)
+				// Record the CATALOG name, not the sanitized input: the lookup
+				// matches sanitized-to-sanitized, so "Playwright (Automation +
+				// MCP + Scraper)" resolves from "playwright-automation-mcp-scraper"
+				// — but usage stats keyed by the sanitized form belong to a skill
+				// the evolver's exact catalog lookup can never find.
+				toolport.SkillConsultLogFromContext(ctx).Add(canonicalName)
 				return skillRead(skillPath, p.FilePath)
 			case "list_files":
 				return skillListFiles(skillPath)
@@ -431,34 +436,39 @@ func cleanSupportFilePath(filePath string) (string, error) {
 // walk alone misses — the root cause of catalog-visible-but-unreadable skills.
 // Falls back to findSkillPath for a skill just created this turn that isn't
 // re-indexed yet (and to keep tests hermetic when no snapshot is supplied).
-func resolveSkillPath(getSnapshot SkillsSnapshotProvider, workspaceDir, name string) (string, error) {
+// The second return is the skill's CANONICAL catalog name (the snapshot's
+// Name when it matched there; the lookup name otherwise — the workspace
+// layout keys skills by directory name, which IS the canonical name).
+func resolveSkillPath(getSnapshot SkillsSnapshotProvider, workspaceDir, name string) (string, string, error) {
 	if getSnapshot != nil {
 		if snap := getSnapshot(); snap != nil {
-			if fp := skillFilePathFromSnapshot(snap, name); fp != "" {
+			if fp, canonical := skillFilePathFromSnapshot(snap, name); fp != "" {
 				if expanded := expandSkillHome(fp); skillFileExists(expanded) {
-					return expanded, nil
+					return expanded, canonical, nil
 				}
 			}
 		}
 	}
-	return findSkillPath(workspaceDir, name)
+	fp, err := findSkillPath(workspaceDir, name)
+	return fp, name, err
 }
 
 // skillFilePathFromSnapshot looks up a skill's real FilePath in the catalog
-// snapshot by (sanitized) name. Returns "" if the snapshot doesn't list it.
-func skillFilePathFromSnapshot(snap *skills.FullSkillSnapshot, name string) string {
+// snapshot by (sanitized) name and returns it with the skill's canonical
+// catalog Name. Returns "", "" if the snapshot doesn't list it.
+func skillFilePathFromSnapshot(snap *skills.FullSkillSnapshot, name string) (string, string) {
 	if snap == nil {
-		return ""
+		return "", ""
 	}
 	want := sanitizeSkillName(name)
 	for _, list := range [][]skills.PromptSkill{snap.ResolvedSkills, snap.DiscoverableSkills} {
 		for _, s := range list {
 			if sanitizeSkillName(s.Name) == want {
-				return s.FilePath
+				return s.FilePath, s.Name
 			}
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // expandSkillHome restores a "~/"-compacted FilePath (CompactSkillPaths shortens
