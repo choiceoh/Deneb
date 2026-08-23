@@ -89,6 +89,9 @@ type Deps struct {
 	// miniapp.chat.steer. Kept off ChatHandler so the native bridge stays
 	// free of the async chat.send/abort/steer contract.
 	SteerNative func(sessionKey, note string) bool
+	// AbortNative cancels the interactive run a native client is watching, for
+	// the chat stop button. Optional; nil disables miniapp.chat.abort.
+	AbortNative func(sessionKey string) bool
 }
 
 // ComputerResult is the desktop's report for one dispatched computer-use

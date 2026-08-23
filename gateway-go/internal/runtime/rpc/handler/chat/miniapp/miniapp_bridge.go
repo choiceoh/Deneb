@@ -97,6 +97,11 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 	if deps.SteerNative != nil {
 		m["miniapp.chat.steer"] = handleMiniappChatSteer(deps)
 	}
+	// Stop button. Optional for the same reason as steer: a Chat-ready gateway
+	// without the pipeline hook still exposes send.
+	if deps.AbortNative != nil {
+		m["miniapp.chat.abort"] = handleMiniappChatAbort(deps)
+	}
 	// Image capture (share a photo/screenshot to Deneb) needs the OCR sidecar
 	// wired; skip the method cleanly when it isn't.
 	if deps.OcrImage != nil {
@@ -1038,6 +1043,40 @@ func handleMiniappChatSteer(deps Deps) rpcutil.HandlerFunc {
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":         true,
 			"steered":    steered,
+			"sessionKey": sessionKey,
+		})
+	}
+}
+
+// handleMiniappChatAbort stops the run the native client is watching.
+//
+// The native chat stream deliberately detaches its run from the HTTP request so
+// a backgrounded phone does not kill a turn in progress. That makes closing the
+// socket useless as a stop signal, which is why the stop button needs a method
+// of its own — without it the run kept generating and its answer replaced the
+// "stopped" reply at the next reconcile.
+//
+// Params:
+//   - sessionKey (string, optional): defaults to the native session.
+//
+// Returns { ok, aborted, sessionKey }. `aborted` is false when nothing was
+// running — a stop that arrives just after the turn finished is not an error.
+func handleMiniappChatAbort(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[struct {
+			SessionKey string `json:"sessionKey"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		sessionKey := chatport.DefaultNativeSessionKey(p.SessionKey)
+		if deps.AbortNative == nil {
+			return rpcerr.Unavailable("abort not available").Response(req.ID)
+		}
+		aborted := deps.AbortNative(sessionKey)
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"ok":         true,
+			"aborted":    aborted,
 			"sessionKey": sessionKey,
 		})
 	}

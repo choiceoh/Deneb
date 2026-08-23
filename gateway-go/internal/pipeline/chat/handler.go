@@ -501,6 +501,33 @@ func (h *Handler) SteerNative(sessionKey, note string) bool {
 	return true
 }
 
+// AbortNative cancels the interactive run a native client is watching.
+//
+// The native chat stream detaches its run from the request context on purpose,
+// so closing the socket does NOT stop the turn — the answer keeps being
+// generated and lands in the transcript. That is right for a backgrounded phone
+// and wrong for the stop button, which is a deliberate "stop spending tokens on
+// this". Without an explicit abort the stop was cosmetic: the run continued and
+// its answer replaced the "중단됨" reply at the next reconcile.
+//
+// Reports whether a run was actually cancelled; false means nothing was running
+// (the turn had already finished, or this session had no interactive run).
+func (h *Handler) AbortNative(sessionKey string) bool {
+	if h == nil || h.abort == nil {
+		return false
+	}
+	key := strings.TrimSpace(sessionKey)
+	if key == "" {
+		return false
+	}
+	runID := h.abort.CancelBySessionKey(key)
+	if runID == "" {
+		return false
+	}
+	h.logger.Info("native-abort: cancelled the run the client stopped", "sessionKey", key, "runID", runID)
+	return true
+}
+
 // SteerQueue returns the queue for internal wiring (used by runDeps to
 // give the agent run goroutine access without leaking the Handler).
 func (h *Handler) SteerQueue() *SteerQueue {
