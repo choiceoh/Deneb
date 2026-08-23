@@ -50,7 +50,7 @@ func TestSenderContextReturnsRecentMailAndWikiHits(t *testing.T) {
 		WikiStore: func() (MemorySearcher, error) { return store, nil },
 	}
 	h := senderContext(deps)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{
 		"sender": "Alice <alice@example.com>",
 	}))
 
@@ -98,7 +98,7 @@ func TestSenderContextFallsBackToRawEmailForWikiQueryWhenNoDisplayName(t *testin
 		},
 	}
 	h := senderContext(deps)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{
 		"sender": "bare@example.com",
 	}))
 
@@ -136,7 +136,7 @@ func TestSenderContextSkipsGmailSearchWhenEmailIsEmpty(t *testing.T) {
 		},
 	}
 	h := senderContext(deps)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{
 		"sender": "Alice",
 	}))
 
@@ -154,7 +154,7 @@ func TestSenderContext_MissingSenderParam(t *testing.T) {
 		Client: func() (GmailClient, error) { return &fakeGmailClient{}, nil },
 	}
 	h := senderContext(deps)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{}))
 	if resp.OK {
 		t.Fatalf("expected error, got OK")
 	}
@@ -167,7 +167,7 @@ func TestSenderContextRejectsUnauthenticatedRequest(t *testing.T) {
 	h := senderContext(GmailContextDeps{
 		Client: func() (GmailClient, error) { return &fakeGmailClient{}, nil },
 	})
-	resp := h(context.Background(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+	resp := h(context.Background(), reqWith(t, "miniapp.mail.sender_context", map[string]any{
 		"sender": "a@b.com",
 	}))
 	if resp.OK {
@@ -192,7 +192,7 @@ func TestSenderContext_GmailDownStillReturnsWiki(t *testing.T) {
 		WikiStore: func() (MemorySearcher, error) { return store, nil },
 	}
 	h := senderContext(deps)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{
 		"sender": "Alice <alice@x.com>",
 	}))
 
@@ -222,7 +222,7 @@ func TestSenderContext_WikiDownStillReturnsRecent(t *testing.T) {
 		WikiStore: func() (MemorySearcher, error) { return nil, errors.New("wiki disabled") },
 	}
 	h := senderContext(deps)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{
 		"sender": "alice@x.com",
 	}))
 
@@ -259,7 +259,7 @@ func TestSenderContextReturnsWikiFactsFromSenderFactsCallback(t *testing.T) {
 		},
 	}
 	h := senderContext(deps)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{
 		"sender": "Alice <alice@example.com>",
 	}))
 
@@ -286,7 +286,7 @@ func TestSenderContext_OmitsWikiFactsWhenGraphifyReturnsEmpty(t *testing.T) {
 		SenderFacts: func(_ context.Context, _ string) string { return "" },
 	}
 	h := senderContext(deps)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{
 		"sender": "Alice <alice@example.com>",
 	}))
 	var got map[string]any
@@ -319,7 +319,7 @@ func TestSenderContext_TimesOutSlowGraphifyButReturnsWiki(t *testing.T) {
 	h := senderContext(deps)
 
 	start := time.Now()
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{
 		"sender": "Alice <alice@example.com>",
 	}))
 	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
@@ -394,7 +394,7 @@ func TestSenderContext_PicksFirstNonEmptyDate(t *testing.T) {
 		},
 	}
 	h := senderContext(deps)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{"sender": "alice@example.com"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{"sender": "alice@example.com"}))
 
 	var got map[string]any
 	decode(t, resp, &got)
@@ -424,7 +424,7 @@ func TestSenderContext_TruncatedFlag(t *testing.T) {
 		},
 	}
 	h := senderContext(deps)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{"sender": "alice@example.com"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{"sender": "alice@example.com"}))
 
 	var got map[string]any
 	decode(t, resp, &got)
@@ -470,7 +470,7 @@ func TestSenderContextRunsGmailWikiAndSenderFactsConcurrently(t *testing.T) {
 	}
 	h := senderContext(deps)
 	start := time.Now()
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{
 		"sender": "Alice <alice@x.com>",
 	}))
 	elapsed := time.Since(start)
@@ -524,13 +524,13 @@ func TestSenderContextCacheServesSecondCallWithoutRefetchingSources(t *testing.T
 	}
 	h := senderContext(deps)
 
-	first := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+	first := h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{
 		"sender": "Alice <alice@x.com>",
 	}))
 	if !first.OK {
 		t.Fatalf("first call failed: %+v", first.Error)
 	}
-	second := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+	second := h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{
 		// Different display name + casing on the email should still
 		// hit the cache because the normalized key is the lower-cased
 		// email.
@@ -577,9 +577,9 @@ func TestSenderContextCacheEntryExpiresAfterTTL(t *testing.T) {
 		CacheTTL: 30 * time.Millisecond,
 	}
 	h := senderContext(deps)
-	h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{"sender": "a@b.com"}))
+	h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{"sender": "a@b.com"}))
 	time.Sleep(60 * time.Millisecond)
-	h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{"sender": "a@b.com"}))
+	h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{"sender": "a@b.com"}))
 	if g := gmailCalls.Load(); g != 2 {
 		t.Errorf("gmail calls = %d, want 2 (TTL should have expired)", g)
 	}
@@ -602,8 +602,8 @@ func TestSenderContextIgnoresCacheWhenTTLIsNegative(t *testing.T) {
 		CacheTTL: -1,
 	}
 	h := senderContext(deps)
-	h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{"sender": "a@b.com"}))
-	h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{"sender": "a@b.com"}))
+	h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{"sender": "a@b.com"}))
+	h(authedCtx(), reqWith(t, "miniapp.mail.sender_context", map[string]any{"sender": "a@b.com"}))
 	if g := gmailCalls.Load(); g != 2 {
 		t.Errorf("gmail calls = %d, want 2 (cache disabled)", g)
 	}

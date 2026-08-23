@@ -54,7 +54,7 @@ func TestGmailAnalyzeReturnsSubjectAnalysisAndDuration(t *testing.T) {
 	}
 	h := gmailAnalyze(analyzeDeps(gmailClient, pipeline))
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.analyze", map[string]any{"id": "m1"}))
 	var got map[string]any
 	decode(t, resp, &got)
 
@@ -93,7 +93,7 @@ func TestGmailAnalyzeUpdatesWorkStateOnSuccess(t *testing.T) {
 	deps.WorkState = store
 	h := gmailAnalyze(deps)
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.analyze", map[string]any{"id": "m1"}))
 	if !resp.OK {
 		t.Fatalf("expected OK, got %+v", resp.Error)
 	}
@@ -105,7 +105,7 @@ func TestGmailAnalyzeUpdatesWorkStateOnSuccess(t *testing.T) {
 
 func TestGmailAnalyze_MissingID(t *testing.T) {
 	h := gmailAnalyze(analyzeDeps(&fakeGmailClient{}, &fakeAnalyzePipeline{}))
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.analyze", map[string]any{}))
 	if resp.OK {
 		t.Fatalf("expected error, got OK")
 	}
@@ -116,7 +116,7 @@ func TestGmailAnalyze_MissingID(t *testing.T) {
 
 func TestGmailAnalyzeRejectsUnauthenticatedRequest(t *testing.T) {
 	h := gmailAnalyze(analyzeDeps(&fakeGmailClient{}, &fakeAnalyzePipeline{}))
-	resp := h(context.Background(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"}))
+	resp := h(context.Background(), reqWith(t, "miniapp.mail.analyze", map[string]any{"id": "m1"}))
 	if resp.OK {
 		t.Fatalf("expected unauthorized, got OK")
 	}
@@ -132,7 +132,7 @@ func TestGmailAnalyzeReturnsNotFoundWhenMessageMissing(t *testing.T) {
 		},
 	}
 	h := gmailAnalyze(analyzeDeps(gmailClient, &fakeAnalyzePipeline{}))
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "missing"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.analyze", map[string]any{"id": "missing"}))
 	if resp.OK {
 		t.Fatalf("expected error")
 	}
@@ -153,7 +153,7 @@ func TestGmailAnalyze_PipelineFailure(t *testing.T) {
 		},
 	}
 	h := gmailAnalyze(analyzeDeps(gmailClient, pipeline))
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.analyze", map[string]any{"id": "m1"}))
 	if resp.OK {
 		t.Fatalf("expected error")
 	}
@@ -178,7 +178,7 @@ func TestGmailAnalyze_RecordsWorkflowFailure(t *testing.T) {
 	deps.WorkState = store
 	h := gmailAnalyze(deps)
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.analyze", map[string]any{"id": "m1"}))
 	if resp.OK {
 		t.Fatalf("expected error")
 	}
@@ -200,7 +200,7 @@ func TestGmailAnalyze_EmptyAnalysisIsRejected(t *testing.T) {
 		},
 	}
 	h := gmailAnalyze(analyzeDeps(gmailClient, pipeline))
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.analyze", map[string]any{"id": "m1"}))
 	if resp.OK {
 		t.Fatalf("expected error for empty analysis")
 	}
@@ -231,7 +231,7 @@ func TestGmailAnalyze_WikiSinkFailure_NonFatal(t *testing.T) {
 	deps.SaveToWiki = func(WikiAnalysisInput) error { return errors.New("disk full") }
 	h := gmailAnalyze(deps)
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.analyze", map[string]any{"id": "m1"}))
 	if !resp.OK {
 		t.Fatalf("expected OK despite wiki failure, got %+v", resp.Error)
 	}
@@ -245,7 +245,7 @@ func TestGmailAnalyze_PipelineFactoryError(t *testing.T) {
 		},
 	}
 	h := gmailAnalyze(deps)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.analyze", map[string]any{"id": "m1"}))
 	if resp.OK {
 		t.Fatalf("expected error")
 	}
@@ -290,7 +290,7 @@ func TestGmailAnalyzeCacheHitReturnsWithoutCallingPipelineOrWiki(t *testing.T) {
 		},
 	}
 	h := gmailAnalyze(deps)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.analyze", map[string]any{"id": "m1"}))
 	if !resp.OK {
 		t.Fatalf("expected OK on cache hit, got error %+v", resp.Error)
 	}
@@ -347,10 +347,10 @@ func TestGmailAnalyzeAndAnalysisCachedClearLegacyWikiFactsBlock(t *testing.T) {
 	}
 
 	t.Run("analyze cache hit", func(t *testing.T) {
-		assertClean(t, gmailAnalyze(deps)(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"})))
+		assertClean(t, gmailAnalyze(deps)(authedCtx(), reqWith(t, "miniapp.mail.analyze", map[string]any{"id": "m1"})))
 	})
 	t.Run("analysis_cached", func(t *testing.T) {
-		assertClean(t, gmailAnalysisCached(deps)(authedCtx(), reqWith(t, "miniapp.gmail.analysis_cached", map[string]any{"id": "m1"})))
+		assertClean(t, gmailAnalysisCached(deps)(authedCtx(), reqWith(t, "miniapp.mail.analysis_cached", map[string]any{"id": "m1"})))
 	})
 }
 
@@ -382,7 +382,7 @@ func TestGmailAnalyzeCacheMissRunsPipelineAndSavesResult(t *testing.T) {
 	}
 	h := gmailAnalyze(deps)
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m2"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.analyze", map[string]any{"id": "m2"}))
 	var got map[string]any
 	decode(t, resp, &got)
 	if !resp.OK {
@@ -436,7 +436,7 @@ func TestGmailAnalyzeForceParamBypassesCacheAndUpdatesStoredResult(t *testing.T)
 	deps.Cache = cache
 	h := gmailAnalyze(deps)
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.analyze", map[string]any{
 		"id": "m3", "force": true,
 	}))
 	if !resp.OK {
@@ -492,11 +492,11 @@ func TestGmailAnalysisCached_HitReturnsProjects(t *testing.T) {
 		Pipeline: func() (AnalyzePipeline, error) { return &fakeAnalyzePipeline{}, nil },
 		Cache:    cache,
 	}
-	h := GmailAnalyzeMethods(deps)["miniapp.gmail.analysis_cached"]
+	h := GmailAnalyzeMethods(deps)["miniapp.mail.analysis_cached"]
 	if h == nil {
 		t.Fatal("analysis_cached handler not registered")
 	}
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analysis_cached", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.analysis_cached", map[string]any{"id": "m1"}))
 	if !resp.OK {
 		t.Fatalf("expected OK, got %+v", resp.Error)
 	}
@@ -523,8 +523,8 @@ func TestGmailAnalysisCached_MissReturnsNotCached(t *testing.T) {
 		Pipeline: func() (AnalyzePipeline, error) { return &fakeAnalyzePipeline{}, nil },
 		Cache:    NewAnalysisStore(t.TempDir()),
 	}
-	h := GmailAnalyzeMethods(deps)["miniapp.gmail.analysis_cached"]
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analysis_cached", map[string]any{"id": "nope"}))
+	h := GmailAnalyzeMethods(deps)["miniapp.mail.analysis_cached"]
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.analysis_cached", map[string]any{"id": "nope"}))
 	if !resp.OK {
 		t.Fatalf("expected OK on miss, got %+v", resp.Error)
 	}

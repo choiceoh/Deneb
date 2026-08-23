@@ -27,7 +27,7 @@ const listCacheTTL = 30 * time.Second
 // is dead and the caller fetches synchronously.
 const listCacheStaleServeCeiling = 5 * time.Minute
 
-// listCache is a tiny TTL cache for miniapp.gmail.list_recent payloads.
+// listCache is a tiny TTL cache for miniapp.mail.list_recent payloads.
 // Single-operator deployment: the inbox belongs to one user, so a flat
 // map keyed by (query|limit|pageToken) with coarse whole-cache
 // invalidation is enough — no per-key eviction, no LRU. Every method is

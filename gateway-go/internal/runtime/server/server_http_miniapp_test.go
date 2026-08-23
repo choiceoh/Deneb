@@ -131,14 +131,17 @@ func withMiniappAttachmentClientFactory(t *testing.T, factory func() (nativeatta
 	t.Cleanup(func() { miniappMailAttachmentClientFactory = orig })
 }
 
-func TestHandleMiniappRPCWhoamiReturnsNativeIdentity(t *testing.T) {
+// miniapp.ping is the authenticated liveness probe: a valid client token must
+// reach the handler (which itself requires the native identity the HTTP bridge
+// stores on the context), and the payload must carry the liveness fields.
+func TestHandleMiniappRPCPingAcceptsClientTokenAndReturnsLiveness(t *testing.T) {
 	token := withClientToken(t)
 	s := newTestServer(t)
 
 	rec := postMiniappRPC(t, s, token, map[string]any{
 		"type":   "req",
 		"id":     "1",
-		"method": "miniapp.whoami",
+		"method": "miniapp.ping",
 	})
 
 	if rec.Code != http.StatusOK {
@@ -154,13 +157,15 @@ func TestHandleMiniappRPCWhoamiReturnsNativeIdentity(t *testing.T) {
 	if !got.OK {
 		t.Fatalf("response not OK: %s", rec.Body.String())
 	}
-	var user map[string]any
-	if err := json.Unmarshal(got.Payload, &user); err != nil {
+	var payload map[string]any
+	if err := json.Unmarshal(got.Payload, &payload); err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}
-	// Native-client sessions carry the synthetic operator identity.
-	if user["firstName"] != "Deneb Native Client" {
-		t.Errorf("firstName = %v, want Deneb Native Client", user["firstName"])
+	if payload["ok"] != true {
+		t.Errorf("ok = %v, want true", payload["ok"])
+	}
+	if ts, _ := payload["tsMs"].(float64); ts <= 0 {
+		t.Errorf("tsMs = %v, want a positive unix-ms timestamp", payload["tsMs"])
 	}
 }
 

@@ -135,23 +135,6 @@ func senderEmailFromHeader(from string) string {
 	return ""
 }
 
-// withMailAliases returns a miniapp.gmail.* method map extended with a
-// miniapp.mail.* alias for every method (same handler, both names dispatch).
-// The mail domain is archive-first — LMTP-ingested mail on the local archive
-// is the primary store and the Gmail API only a legacy fallback — so mail.*
-// is the accurate namespace going forward; gmail.* stays registered for
-// client compatibility until both native clients migrate.
-func withMailAliases(m map[string]rpcutil.HandlerFunc) map[string]rpcutil.HandlerFunc {
-	out := make(map[string]rpcutil.HandlerFunc, len(m)*2)
-	for name, h := range m {
-		out[name] = h
-		if rest, ok := strings.CutPrefix(name, "miniapp.gmail."); ok {
-			out["miniapp.mail."+rest] = h
-		}
-	}
-	return out
-}
-
 // earlyMethodCapabilities contains the shared, phase-local dependencies created
 // before early RPC domains are registered. It is deliberately private to this
 // composition root: handler Deps remain assembled inline below.
@@ -271,9 +254,9 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 		Logger: hub.Logger(),
 	}
 
-	// Improvement-loop liveness digest, registered twice like observe above
-	// (in-process observatory.* + client-token-gated miniapp.observatory.*).
-	// denebDir is the resolved state dir the watchdog reads too.
+	// Improvement-loop liveness digest, in-process observatory.* only (the
+	// client-token-gated miniapp.observatory.* mirror had no caller and was
+	// removed). denebDir is the resolved state dir the watchdog reads too.
 	observatoryDeps := handlerobservatory.Deps{
 		StateDir: func() string { return denebDir },
 	}
@@ -416,7 +399,6 @@ func (s *Server) earlyCoreMethods(hub *rpcutil.GatewayHub, denebDir string, capa
 func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities earlyMethodCapabilities) []map[string]rpcutil.HandlerFunc {
 	return []map[string]rpcutil.HandlerFunc{
 		handlerobserve.MiniappMethods(capabilities.observe),
-		handlerobservatory.MiniappMethods(capabilities.observatory),
 		s.earlyMiniappGatewayMethods(hub),
 		capabilities.miniapp,
 		// DeliveryEnabled keeps the client on background SSE when FCM is missing
@@ -461,7 +443,7 @@ func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities 
 
 func (s *Server) earlyMailAndCalendarMethods(denebDir string) []map[string]rpcutil.HandlerFunc {
 	return []map[string]rpcutil.HandlerFunc{
-		withMailAliases(handlermail.GmailMethods(handlermail.GmailDeps{
+		handlermail.GmailMethods(handlermail.GmailDeps{
 			Client: s.miniappMailClientFactory(denebDir),
 			// Native-sync mirror: archive/trash from one client force-warms the
 			// mail list on the others. Warn on failure — TTL revalidation backstops.
@@ -488,7 +470,7 @@ func (s *Server) earlyMailAndCalendarMethods(denebDir string) []map[string]rpcut
 					return string(tier), hint
 				}
 			}(),
-		})),
+		}),
 		minischedule.CalendarMethods(minischedule.CalendarDeps{
 			Client: func() (minischedule.CalendarClient, error) {
 				return calendar.DefaultClient()
@@ -667,7 +649,7 @@ func (s *Server) earlyKnowledgeMethods(hub *rpcutil.GatewayHub) []map[string]rpc
 			CurrentKey: configresolve.CurrentTopicKey,
 			ApplyNow:   prompt.Cache.ClearAllTopicSnapshots,
 		}),
-		withMailAliases(handlermail.GmailContextMethods(handlermail.GmailContextDeps{
+		handlermail.GmailContextMethods(handlermail.GmailContextDeps{
 			Client: func() (handlermail.GmailClient, error) {
 				return gmail.DefaultClient()
 			},
@@ -678,7 +660,7 @@ func (s *Server) earlyKnowledgeMethods(hub *rpcutil.GatewayHub) []map[string]rpc
 				}
 				return mailanalysis.ExtractSenderFacts(ctx, from)
 			},
-		})),
+		}),
 		miniknowledge.PeopleMethods(miniknowledge.PeopleDeps{
 			Client: func() (miniknowledge.PeopleClient, error) {
 				return gmail.DefaultClient()

@@ -9,12 +9,8 @@ import (
 func TestSnapshotHandlersReturnReportAndMarkdown(t *testing.T) {
 	deps := Deps{StateDir: func() string { return t.TempDir() }}
 	local := Methods(deps)
-	remote := MiniappMethods(deps)
 	if len(local) != 1 || local["observatory.snapshot"] == nil {
 		t.Fatalf("local methods = %v", local)
-	}
-	if len(remote) != 1 || remote["miniapp.observatory.snapshot"] == nil {
-		t.Fatalf("miniapp methods = %v", remote)
 	}
 
 	resp := rpctest.Call(local, "observatory.snapshot", nil)

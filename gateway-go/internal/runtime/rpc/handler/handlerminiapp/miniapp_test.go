@@ -170,62 +170,14 @@ func TestClientHelloReturnsUnauthorizedWithoutIdentity(t *testing.T) {
 	}
 }
 
-func TestWhoami_WithIdentity(t *testing.T) {
-	h := whoami()
-	ctx := clientauth.WithContext(context.Background(), sampleIdentity())
-
-	resp := h(ctx, newReq(t, "miniapp.whoami"))
-	got := decodePayload(t, resp)
-
-	if id, _ := got["id"].(float64); int64(id) != 42 {
-		t.Errorf("id = %v, want 42", got["id"])
-	}
-	if got["firstName"] != "오선택" {
-		t.Errorf("firstName = %v, want 오선택", got["firstName"])
-	}
-	if got["username"] != "choiceoh" {
-		t.Errorf("username = %v, want choiceoh", got["username"])
-	}
-	if got["isPremium"] != true {
-		t.Errorf("isPremium = %v, want true", got["isPremium"])
-	}
-}
-
-func TestWhoamiReturnsUnauthorizedWithoutIdentity(t *testing.T) {
-	h := whoami()
-	resp := h(context.Background(), newReq(t, "miniapp.whoami"))
-
-	if resp.OK {
-		t.Fatalf("expected error response, got OK")
-	}
-	if resp.Error.Code != protocol.ErrUnauthorized {
-		t.Errorf("error code = %s, want %s", resp.Error.Code, protocol.ErrUnauthorized)
-	}
-}
-
-func TestWhoamiReturnsUnauthorizedWhenUserNil(t *testing.T) {
-	data := sampleIdentity()
-	data.User = nil
-	h := whoami()
-	ctx := clientauth.WithContext(context.Background(), data)
-
-	resp := h(ctx, newReq(t, "miniapp.whoami"))
-	if resp.OK {
-		t.Fatalf("expected error response, got OK")
-	}
-	if resp.Error.Code != protocol.ErrUnauthorized {
-		t.Errorf("error code = %s, want %s", resp.Error.Code, protocol.ErrUnauthorized)
-	}
-}
-
 func TestMethodsReturnsCoreMethodSet(t *testing.T) {
 	got := Methods(Deps{Version: "x"})
-	for _, name := range []string{"miniapp.ping", "miniapp.whoami", "miniapp.client.hello"} {
+	for _, name := range []string{"miniapp.ping", "miniapp.client.hello"} {
 		if _, ok := got[name]; !ok {
 			t.Errorf("Methods() missing %q", name)
 		}
 	}
-	if len(got) != 3 {
-		t.Errorf("len(Methods()) = %d, want 3", len(got))
+	if len(got) != 2 {
+		t.Errorf("len(Methods()) = %d, want 2", len(got))
 	}
 }

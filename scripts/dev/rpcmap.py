@@ -52,9 +52,7 @@ TOOL_DIRS = ["gateway-go/internal/pipeline/chat"]
 EVENT_DIRS = ["gateway-go/internal/pipeline/chat", "gateway-go/internal/runtime"]
 
 # Runtime-assembled method names static extraction can't see literally.
-# ALIAS_PREFIX: documented, stable aliases (same handler) — resolve back to base.
-ALIAS_PREFIX = {"miniapp.mail.": "miniapp.gmail."}  # withMailAliases()
-# Other families are built via `methodsWithPrefix(deps, "PREFIX.")` (e.g.
+# Some families are built via `methodsWithPrefix(deps, "PREFIX.")` (e.g.
 # observatory.*) — genuinely computed, so a miss there is a real static limit.
 COMPUTED_HINT = ("일부 메서드명은 런타임 합성이라 안 잡힐 수 있음 "
                  "(observatory.* 등 methodsWithPrefix). base 네임스페이스나 "
@@ -145,14 +143,6 @@ def main():
         exact = [r for r in hits if r[1].lower() == q]
         if exact:
             hits = exact  # prefer exact name match over substring
-        if not hits:  # resolve a documented alias back to its base namespace
-            for pre, base in ALIAS_PREFIX.items():
-                if q.startswith(pre):
-                    q2 = base + q[len(pre):]
-                    hits = [r for r in allrows if r[1].lower() == q2]
-                    if hits:
-                        print(f"({args.query} → {q2} 별칭, 동일 핸들러)", file=sys.stderr)
-                    break
     elif args.list:
         hits = allrows
     else:

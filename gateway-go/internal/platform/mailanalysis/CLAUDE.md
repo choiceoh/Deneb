@@ -4,7 +4,7 @@
 
 ## 무엇 / 왜
 
-신규 메일을 LLM으로 분석하고 결과를 네이티브 클라로 보고하는 **인테이크-불문 메일 분석 파이프라인**. Deneb "업무분석" 모드의 핵심 능동 데이터 경로. 인테이크는 셋: LMTP 푸시(자체 도메인 수신 — 현재 주 경로, `platform/lmtpd`), 카카오/IMAP IDLE 단건 트리거([project_kakao_mail_pipeline]), 그리고 이 패키지가 태어난 이유였던 레거시 Gmail 폴러(`service.go` — config `gmailPoll`로 게이트, Gmail 전용이라 이름 유지). 패키지명은 2026-07 `gmailpoll`→`mailanalysis`로 개명(본체가 파이프라인이므로). RPC는 `miniapp.mail.*`가 정식 네임스페이스이고 `miniapp.gmail.*`는 구 클라 호환 alias (`method_registry.go:withMailAliases`).
+신규 메일을 LLM으로 분석하고 결과를 네이티브 클라로 보고하는 **인테이크-불문 메일 분석 파이프라인**. Deneb "업무분석" 모드의 핵심 능동 데이터 경로. 인테이크는 셋: LMTP 푸시(자체 도메인 수신 — 현재 주 경로, `platform/lmtpd`), 카카오/IMAP IDLE 단건 트리거([project_kakao_mail_pipeline]), 그리고 이 패키지가 태어난 이유였던 레거시 Gmail 폴러(`service.go` — config `gmailPoll`로 게이트, Gmail 전용이라 이름 유지). 패키지명은 2026-07 `gmailpoll`→`mailanalysis`로 개명(본체가 파이프라인이므로). RPC는 `miniapp.mail.*`가 정식 네임스페이스다(구 `miniapp.gmail.*` alias는 두 네이티브 클라가 이관을 마친 2026-08에 제거).
 
 ## 디렉토리 맵 (파일)
 

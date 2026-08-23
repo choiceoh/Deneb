@@ -2,13 +2,11 @@
 // digest over RPC — the same observatory.Snapshot the in-process watchdog
 // alerts on (server_observatory_watchdog.go), now pullable on demand.
 //
-// One read-only method, registered twice (the handler/observe idiom):
-//
-//   - observatory.snapshot          — in-process callers (chat tool, cron)
-//   - miniapp.observatory.snapshot  — remote adapters through the client-token
-//     gate (native dashboard, external CLI). Before this mirror the digest was
-//     unreachable over the wire: handleMiniappRPC confines remote callers to
-//     miniapp.*, and only the 30-minute watchdog ever read the snapshot.
+// One read-only method, observatory.snapshot, for in-process callers (chat
+// tool, cron, the 30-minute watchdog). A miniapp.observatory.* mirror existed
+// for remote adapters but no client or script ever called it; it was removed
+// (2026-08) rather than kept as dead wire surface — re-add the mirror the day
+// a remote consumer exists.
 //
 // The package name intentionally matches ai/observatory (same idiom as the
 // observe handler): local symbols (Deps, Methods) are unqualified, and the
@@ -34,12 +32,6 @@ type Deps struct {
 // Methods returns the in-process observatory.* handler map.
 func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 	return methodsWithPrefix(deps, "observatory.")
-}
-
-// MiniappMethods returns the same handler under miniapp.observatory.* so
-// client-token holders can reach the digest over HTTP.
-func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
-	return methodsWithPrefix(deps, "miniapp.observatory.")
 }
 
 func methodsWithPrefix(deps Deps, p string) map[string]rpcutil.HandlerFunc {

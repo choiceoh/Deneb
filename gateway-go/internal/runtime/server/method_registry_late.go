@@ -214,13 +214,13 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			Transcripts: s.genesisTranscripts,
 		}),
 
-		// --- Mini App email analysis (miniapp.gmail.analyze) ---
+		// --- Mini App email analysis (miniapp.mail.analyze) ---
 		// Late-bound because the analyzer needs a configured LLM client
 		// from the model registry, which is wired during memory subsystem
 		// init right before this phase. Lazy factory still — operator
 		// runs without any provider configured, the call returns
 		// UNAVAILABLE rather than crashing the gateway.
-		withMailAliases(handlermail.GmailAnalyzeMethods(handlermail.GmailAnalyzeDeps{
+		handlermail.GmailAnalyzeMethods(handlermail.GmailAnalyzeDeps{
 			// Archive-first client — the same factory the native mail list/detail
 			// surface uses. Mail now arrives via LMTP and lives in the on-box
 			// archive keyed by RFC822 Message-ID. The old gmail.DefaultClient()
@@ -262,7 +262,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				return store, nil
 			},
 			Ask: s.makeMailQAAsk(),
-		})),
+		}),
 	}
 
 	for _, d := range domains {

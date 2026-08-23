@@ -137,7 +137,7 @@ func TestGmailListRecentReturnsDefaultQueryLimitAndRowShape(t *testing.T) {
 	}
 	h := gmailListRecent(depsFor(client), nil)
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 	var got struct {
 		Messages []map[string]any `json:"messages"`
 	}
@@ -169,7 +169,7 @@ func TestGmailListRecent_NilLabelsSerializeAsEmptyArray(t *testing.T) {
 	}
 	h := gmailListRecent(depsFor(client), nil)
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 	if resp == nil || !resp.OK {
 		t.Fatalf("response not OK: %+v", resp)
 	}
@@ -203,7 +203,7 @@ func TestGmailListRecentClearsWarningNoiseFromSnippet(t *testing.T) {
 	}
 	h := gmailListRecent(depsFor(client), nil)
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 	var got struct {
 		Messages []map[string]any `json:"messages"`
 	}
@@ -235,7 +235,7 @@ func TestGmailListRecentOmitsPriorityFieldsWhenScorerReturnsEmpty(t *testing.T) 
 	}
 	h := gmailListRecent(deps, nil)
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 	var got struct {
 		Messages []map[string]any `json:"messages"`
 	}
@@ -297,7 +297,7 @@ func TestGmailListRecentCachedAnalysisOverridesHeuristicPriorityWithFallback(t *
 		return "", ""
 	}
 	h := gmailListRecent(deps, nil)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 	var got struct {
 		Messages []map[string]any `json:"messages"`
 	}
@@ -340,7 +340,7 @@ func TestGmailListRecent_NilPriorityDep(t *testing.T) {
 		},
 	}
 	h := gmailListRecent(depsFor(client), nil)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 	var got struct {
 		Messages []map[string]any `json:"messages"`
 	}
@@ -361,7 +361,7 @@ func TestGmailListRecentSearchesWithCustomQueryAndLimit(t *testing.T) {
 	}
 	h := gmailListRecent(depsFor(client), nil)
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", map[string]any{
 		"query": "is:starred", "limit": 5,
 	}))
 	if !resp.OK {
@@ -403,7 +403,7 @@ func TestGmailListRecent_AbsorbsEmptyPages(t *testing.T) {
 		},
 	}
 	h := gmailListRecent(depsFor(client), nil)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 
 	var got struct {
 		Messages      []map[string]any `json:"messages"`
@@ -434,7 +434,7 @@ func TestGmailListRecent_EmptyPageHopBudget(t *testing.T) {
 		},
 	}
 	h := gmailListRecent(depsFor(client), nil)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 	if !resp.OK {
 		t.Fatalf("expected OK, got %+v", resp.Error)
 	}
@@ -472,7 +472,7 @@ func TestGmailListRecentWorkFilterScansMultipleBackendPagesForFailedAnalysis(t *
 	deps.WorkState = store
 	h := gmailListRecent(deps, nil)
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", map[string]any{
 		"query": "deneb:analysis_failed",
 		"limit": 1,
 	}))
@@ -519,7 +519,7 @@ func TestGmailListRecent_WorkStateFailureBeatsCachedAnalysis(t *testing.T) {
 	deps.WorkState = store
 	h := gmailListRecent(deps, nil)
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", map[string]any{
 		"query": "deneb:analysis_failed",
 	}))
 	var got struct {
@@ -558,7 +558,7 @@ func TestGmailListRecent_PageTokenRoundTrip(t *testing.T) {
 	}
 	h := gmailListRecent(depsFor(client), nil)
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", map[string]any{
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", map[string]any{
 		"pageToken": "incoming-token-xyz",
 	}))
 	var got struct {
@@ -585,7 +585,7 @@ func TestGmailListRecentNormalizesOversizedLimitToMaximum(t *testing.T) {
 	}
 	h := gmailListRecent(depsFor(client), nil)
 
-	h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", map[string]any{"limit": 99999}))
+	h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", map[string]any{"limit": 99999}))
 	if seenLimit != maxGmailLimit {
 		t.Errorf("limit = %d, want clamped to %d", seenLimit, maxGmailLimit)
 	}
@@ -593,7 +593,7 @@ func TestGmailListRecentNormalizesOversizedLimitToMaximum(t *testing.T) {
 
 func TestGmailListRecentRejectsUnauthenticatedRequest(t *testing.T) {
 	h := gmailListRecent(depsFor(&fakeGmailClient{}), nil)
-	resp := h(context.Background(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	resp := h(context.Background(), reqWith(t, "miniapp.mail.list_recent", nil))
 	if resp.OK {
 		t.Fatalf("expected unauthorized, got OK")
 	}
@@ -607,7 +607,7 @@ func TestGmailListRecentReturnsUnavailableWhenClientFactoryFails(t *testing.T) {
 		Client: func() (GmailClient, error) { return nil, errors.New("OAuth not configured") },
 	}
 	h := gmailListRecent(deps, nil)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.list_recent", nil))
 	if resp.OK {
 		t.Fatalf("expected error, got OK")
 	}
@@ -635,7 +635,7 @@ func TestGmailGetReturnsBodyAttachmentsAndReadStatus(t *testing.T) {
 		},
 	}
 	h := gmailGet(depsFor(client))
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.get", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.get", map[string]any{"id": "m1"}))
 
 	var got map[string]any
 	decode(t, resp, &got)
@@ -669,7 +669,7 @@ func TestGmailGet_ReportsUnreadFromLabels(t *testing.T) {
 		},
 	}
 	h := gmailGet(depsFor(client))
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.get", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.get", map[string]any{"id": "m1"}))
 
 	var got map[string]any
 	decode(t, resp, &got)
@@ -692,7 +692,7 @@ func TestGmailGet_ReturnsCleanDisplayBodyAndRawBody(t *testing.T) {
 		},
 	}
 	h := gmailGet(depsFor(client))
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.get", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.get", map[string]any{"id": "m1"}))
 
 	var got map[string]any
 	decode(t, resp, &got)
@@ -723,7 +723,7 @@ func TestGmailGet_TruncatesBody(t *testing.T) {
 		},
 	}
 	h := gmailGet(depsFor(client))
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.get", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.get", map[string]any{"id": "m1"}))
 
 	var got map[string]any
 	decode(t, resp, &got)
@@ -739,7 +739,7 @@ func TestGmailGet_TruncatesBody(t *testing.T) {
 
 func TestGmailGet_MissingID(t *testing.T) {
 	h := gmailGet(depsFor(&fakeGmailClient{}))
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.get", map[string]any{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.get", map[string]any{}))
 	if resp.OK {
 		t.Fatalf("expected error, got OK")
 	}
@@ -755,7 +755,7 @@ func TestGmailGetReturnsNotFoundForMissingMessage(t *testing.T) {
 		},
 	}
 	h := gmailGet(depsFor(client))
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.get", map[string]any{"id": "missing"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.get", map[string]any{"id": "missing"}))
 	if resp.OK {
 		t.Fatalf("expected error, got OK")
 	}
@@ -778,7 +778,7 @@ func TestGmailMarkRead_RemovesUnreadLabel(t *testing.T) {
 		},
 	}
 	h := gmailMarkRead(depsFor(client))
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.mark_read", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.mark_read", map[string]any{"id": "m1"}))
 
 	var got map[string]any
 	decode(t, resp, &got)
@@ -803,7 +803,7 @@ func TestGmailArchiveUpdatesLabelsByRemovingInbox(t *testing.T) {
 		},
 	}
 	h := gmailArchive(depsFor(client), nil)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.archive", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.archive", map[string]any{"id": "m1"}))
 
 	if !resp.OK {
 		t.Fatalf("expected OK, got %+v", resp.Error)
@@ -820,7 +820,7 @@ func TestGmailArchive_ModifyFails(t *testing.T) {
 		},
 	}
 	h := gmailArchive(depsFor(client), nil)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.archive", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.archive", map[string]any{"id": "m1"}))
 	if resp.OK {
 		t.Fatalf("expected error, got OK")
 	}
@@ -840,7 +840,7 @@ func TestGmailTrashReturnsOkAfterCallingClientTrash(t *testing.T) {
 		},
 	}
 	h := gmailTrash(depsFor(client), nil)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.trash", map[string]any{"id": "m1"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.trash", map[string]any{"id": "m1"}))
 
 	var got map[string]any
 	decode(t, resp, &got)
@@ -854,7 +854,7 @@ func TestGmailTrashReturnsOkAfterCallingClientTrash(t *testing.T) {
 
 func TestGmailTrash_MissingID(t *testing.T) {
 	h := gmailTrash(depsFor(&fakeGmailClient{}), nil)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.trash", map[string]any{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.trash", map[string]any{}))
 	if resp.OK {
 		t.Fatalf("expected error, got OK")
 	}
@@ -865,7 +865,7 @@ func TestGmailTrash_MissingID(t *testing.T) {
 
 func TestGmailTrashRejectsUnauthenticatedRequest(t *testing.T) {
 	h := gmailTrash(depsFor(&fakeGmailClient{}), nil)
-	resp := h(context.Background(), reqWith(t, "miniapp.gmail.trash", map[string]any{"id": "m1"}))
+	resp := h(context.Background(), reqWith(t, "miniapp.mail.trash", map[string]any{"id": "m1"}))
 	if resp.OK {
 		t.Fatalf("expected unauthorized, got OK")
 	}
@@ -881,7 +881,7 @@ func TestGmailTrash_ClientError(t *testing.T) {
 		},
 	}
 	h := gmailTrash(depsFor(client), nil)
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.trash", map[string]any{"id": "missing"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.trash", map[string]any{"id": "missing"}))
 	if resp.OK {
 		t.Fatalf("expected error, got OK")
 	}
@@ -934,12 +934,12 @@ func TestGmailMethods_NilClientReturnsNil(t *testing.T) {
 func TestGmailMethodsReturnsHandlersForAllExpectedRPCNames(t *testing.T) {
 	got := GmailMethods(depsFor(&fakeGmailClient{}))
 	for _, name := range []string{
-		"miniapp.gmail.list_recent",
-		"miniapp.gmail.get",
-		"miniapp.gmail.mark_read",
-		"miniapp.gmail.archive",
-		"miniapp.gmail.trash",
-		"miniapp.gmail.native_status",
+		"miniapp.mail.list_recent",
+		"miniapp.mail.get",
+		"miniapp.mail.mark_read",
+		"miniapp.mail.archive",
+		"miniapp.mail.trash",
+		"miniapp.mail.native_status",
 	} {
 		if _, ok := got[name]; !ok {
 			t.Errorf("missing method %q", name)
@@ -966,7 +966,7 @@ func TestGmailNativeStatusReturnsMailboxAndOverlayDetailsForArchiveClient(t *tes
 		},
 	}))
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.native_status", nil))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.native_status", nil))
 	var got mailNativeStatusOut
 	decode(t, resp, &got)
 	if got.Source != "archive" || !got.Available || !got.OfflineCapable || got.GeneratedAt != "2026-06-17T01:02:03Z" {
@@ -982,7 +982,7 @@ func TestGmailNativeStatusReturnsMailboxAndOverlayDetailsForArchiveClient(t *tes
 
 func TestGmailNativeStatus_GmailFallbackClient(t *testing.T) {
 	h := gmailNativeStatus(depsFor(&fakeGmailClient{}))
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.native_status", nil))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.native_status", nil))
 	var got mailNativeStatusOut
 	decode(t, resp, &got)
 	if got.Source != "gmail" || !got.Available || got.OfflineCapable {
@@ -999,7 +999,7 @@ func TestGmailNativeStatus_SurfacePipelineStateError(t *testing.T) {
 	deps.WorkState = mailwork.New(path)
 	h := gmailNativeStatus(deps)
 
-	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.native_status", nil))
+	resp := h(authedCtx(), reqWith(t, "miniapp.mail.native_status", nil))
 	var got mailNativeStatusOut
 	decode(t, resp, &got)
 	if got.Pipeline.Error != "state_load_failed" {
@@ -1049,17 +1049,17 @@ func TestMutationsNotifyChanged_MarkReadStaysSilent(t *testing.T) {
 	deps.NotifyChanged = func(id string) { notified = append(notified, id) }
 	cache := newListCache(30 * time.Second)
 
-	if resp := gmailMarkRead(deps)(authedCtx(), reqWith(t, "miniapp.gmail.mark_read", map[string]any{"id": "m1"})); !resp.OK {
+	if resp := gmailMarkRead(deps)(authedCtx(), reqWith(t, "miniapp.mail.mark_read", map[string]any{"id": "m1"})); !resp.OK {
 		t.Fatalf("mark_read failed: %+v", resp.Error)
 	}
 	if len(notified) != 0 {
 		t.Fatalf("mark_read notified %v, want silence", notified)
 	}
 
-	if resp := gmailArchive(deps, cache)(authedCtx(), reqWith(t, "miniapp.gmail.archive", map[string]any{"id": "m1"})); !resp.OK {
+	if resp := gmailArchive(deps, cache)(authedCtx(), reqWith(t, "miniapp.mail.archive", map[string]any{"id": "m1"})); !resp.OK {
 		t.Fatalf("archive failed: %+v", resp.Error)
 	}
-	if resp := gmailTrash(deps, cache)(authedCtx(), reqWith(t, "miniapp.gmail.trash", map[string]any{"id": "m2"})); !resp.OK {
+	if resp := gmailTrash(deps, cache)(authedCtx(), reqWith(t, "miniapp.mail.trash", map[string]any{"id": "m2"})); !resp.OK {
 		t.Fatalf("trash failed: %+v", resp.Error)
 	}
 	if len(notified) != 2 || notified[0] != "m1" || notified[1] != "m2" {

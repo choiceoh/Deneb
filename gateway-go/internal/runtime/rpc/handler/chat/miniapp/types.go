@@ -6,15 +6,15 @@ import (
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // ChatHandler is the narrow chat pipeline surface consumed by the native
 // miniapp bridge. It intentionally excludes async chat.send/abort/steer so the
 // native bridge does not share the standard chat.* RPC dependency contract.
+// (miniapp.chat.history was removed — clients read transcripts through
+// miniapp.sessions.transcript; in-process chat.history is unaffected.)
 type ChatHandler interface {
 	chatport.SyncRunner
-	History(context.Context, *protocol.RequestFrame) *protocol.ResponseFrame
 }
 
 // WorkFeedStore is the native bridge's work-feed persistence port.

@@ -90,11 +90,10 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	m := map[string]rpcutil.HandlerFunc{
-		"miniapp.chat.send":    handleMiniappChatSend(deps),
-		"miniapp.chat.history": handleMiniappHistory(deps),
+		"miniapp.chat.send": handleMiniappChatSend(deps),
 	}
 	// Mid-turn steer is optional so a Chat-ready gateway without the
-	// pipeline hook still exposes send/history.
+	// pipeline hook still exposes send.
 	if deps.SteerNative != nil {
 		m["miniapp.chat.steer"] = handleMiniappChatSteer(deps)
 	}
@@ -152,12 +151,6 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 		m["miniapp.computer.result"] = handleMiniappComputerResult(deps)
 	}
 	return m
-}
-
-func handleMiniappHistory(deps Deps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return deps.Chat.History(ctx, req)
-	}
 }
 
 // handleMiniappCaptureImage OCRs a directly-shared image and runs one agent turn

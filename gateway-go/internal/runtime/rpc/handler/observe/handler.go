@@ -82,7 +82,8 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 // prefix so remote adapters (the native dashboard, the external CLI holding a
 // client token) can reach the observation plane. Because the wire surface is
 // gated to miniapp.*, this is the only path in — and it inherits client-token
-// auth for free, so the broader RPC surface stays closed.
+// auth for free, so the broader RPC surface stays closed. (miniapp.observe.turn
+// has no client caller; it stays for scripts/observe.sh.)
 func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	return methodsWithPrefix(deps, "miniapp.observe.")
 }

@@ -64,6 +64,11 @@ func SelfImprovementCodingMethods(deps SelfImprovementCodingDeps) map[string]rpc
 	methods := map[string]rpcutil.HandlerFunc{
 		"miniapp.self_improvement_coding.list": selfImprovementCodingList(deps),
 	}
+	// record / dispatch / impact are CLI-and-script-only writers (the L4 miners
+	// under scripts/audit/ and scripts/dev/self_correction_dispatch.py reach them
+	// with the client token); no native client calls them — .list is the only
+	// client-facing read. Kept on the miniapp surface on purpose: the token gate
+	// is what lets out-of-process tooling write to the queue at all.
 	if deps.RecordCandidate != nil {
 		methods["miniapp.self_improvement_coding.record"] = selfImprovementCodingRecord(deps)
 	}

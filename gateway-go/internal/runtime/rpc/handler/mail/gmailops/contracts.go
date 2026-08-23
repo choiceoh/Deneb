@@ -1,4 +1,4 @@
-// Package gmailops holds the miniapp.gmail.* Gmail-triage RPC handlers
+// Package gmailops holds the miniapp.mail.* Gmail-triage RPC handlers
 // (list/get/mark_read/archive/trash/native_status) plus the on-disk
 // analysis cache they share with the analyzebind package. Split out of
 // the parent handlermail package as a leaf (like the handlerminiapp

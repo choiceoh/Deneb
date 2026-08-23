@@ -22,10 +22,6 @@ func (s *chatPortStub) RunSync(ctx context.Context, req chatport.SyncRequest) (*
 	return &chatport.SyncResult{}, nil
 }
 
-func (*chatPortStub) History(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-	return &protocol.ResponseFrame{ID: req.ID, OK: true}
-}
-
 func TestMethodsRejectTypedNilPort(t *testing.T) {
 	var typedNil *chatPortStub
 	if got := Methods(Deps{Chat: typedNil}); got != nil {

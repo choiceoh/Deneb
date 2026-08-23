@@ -1,4 +1,4 @@
-// gmail_qa.go — miniapp.gmail.ask RPC: follow-up Q&A about one email.
+// gmail_qa.go — miniapp.mail.ask RPC: follow-up Q&A about one email.
 //
 // The operator reads an analysis in the Mini App and wants to drill in
 // ("이게 무슨 뜻이지?", "그래서 뭘 해야 하지?") without leaving the mail view.

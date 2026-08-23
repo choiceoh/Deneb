@@ -152,8 +152,8 @@ class MapExtractionTests(unittest.TestCase):
 class CLIContractTests(unittest.TestCase):
     MAP = {
         "rpc": [
-            ("miniapp.gmail.list", "gmailList", "runtime/gmail.go", 10),
-            ("miniapp.gmail.list.detail", "gmailDetail", "runtime/gmail.go", 20),
+            ("miniapp.mail.list", "gmailList", "runtime/gmail.go", 10),
+            ("miniapp.mail.list.detail", "gmailDetail", "runtime/gmail.go", 20),
             ("miniapp.people.list", "peopleList", "runtime/people.go", 30),
         ],
         "tool": [
@@ -177,7 +177,7 @@ class CLIContractTests(unittest.TestCase):
         self.assertIn("Give a name", stderr)
 
     def test_returns_exact_name_match_over_substring_hits(self) -> None:
-        rc, stdout, stderr = self.invoke(["miniapp.gmail.list"])
+        rc, stdout, stderr = self.invoke(["miniapp.mail.list"])
         self.assertEqual((rc, stderr), (0, ""))
         self.assertIn("→ gmailList", stdout)
         self.assertNotIn("gmailDetail", stdout)
@@ -194,12 +194,6 @@ class CLIContractTests(unittest.TestCase):
         self.assertIn("[rpc] miniapp.mail.send", stdout)
         self.assertIn("[tool] mail-send", stdout)
 
-    def test_when_resolves_documented_mail_alias_to_gmail_base_name(self) -> None:
-        rc, stdout, stderr = self.invoke(["miniapp.mail.list"])
-        self.assertEqual(rc, 0)
-        self.assertIn("miniapp.gmail.list", stdout)
-        self.assertIn("miniapp.mail.list → miniapp.gmail.list 별칭", stderr)
-
     def test_returns_deterministic_unicode_safe_json_list(self) -> None:
         rc, stdout, stderr = self.invoke(["--list", "--json"])
         self.assertEqual((rc, stderr), (0, ""))
@@ -207,7 +201,7 @@ class CLIContractTests(unittest.TestCase):
         self.assertEqual([row["kind"] for row in payload], ["rpc", "rpc", "rpc", "tool", "tool", "event"])
         self.assertEqual(payload[0], {
             "kind": "rpc",
-            "name": "miniapp.gmail.list",
+            "name": "miniapp.mail.list",
             "handler": "gmailList",
             "file": "runtime/gmail.go",
             "line": 10,

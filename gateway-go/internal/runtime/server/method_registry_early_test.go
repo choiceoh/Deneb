@@ -43,7 +43,7 @@ func TestEarlyCapabilityHelpers_PreserveMethodNames(t *testing.T) {
 		{
 			name: "native gateway",
 			got:  srv.earlyMiniappGatewayMethods(hub),
-			want: []string{"miniapp.client.hello", "miniapp.ping", "miniapp.whoami"},
+			want: []string{"miniapp.client.hello", "miniapp.ping"},
 		},
 		{
 			name: "projects",

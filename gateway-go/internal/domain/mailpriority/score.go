@@ -5,7 +5,7 @@
 // and an optional VIP (address-book) lookup.
 //
 // Design intent (Stage 1 of the mail priority queue): the score must be cheap
-// enough to run inline on every miniapp.gmail.list_recent row, so the native
+// enough to run inline on every miniapp.mail.list_recent row, so the native
 // inbox can show a 🔴/🟡 marker without waiting on analysis. Deeper LLM-based
 // triage stays in the analysis pipeline; this package only answers "should
 // this row catch the eye first?".

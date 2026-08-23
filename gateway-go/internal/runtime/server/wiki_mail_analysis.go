@@ -1,4 +1,4 @@
-// wiki_mail_analysis.go — adapter between miniapp.gmail.analyze and the
+// wiki_mail_analysis.go — adapter between miniapp.mail.analyze and the
 // wiki store. Lifted out of method_registry.go so the wiring there
 // stays a single line and the page-shaping logic has room to breathe.
 //
