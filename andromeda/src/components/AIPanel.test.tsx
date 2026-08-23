@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   useModels: vi.fn(),
   useComposerBehavior: vi.fn(),
   useAttachPipeline: vi.fn(),
+  useSessionDraft: vi.fn(),
   useSessions: vi.fn(),
   useStickyScroll: vi.fn(),
   useFileDrop: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock("@/useChatSurface", () => ({
   useModels: mocks.useModels,
   useComposerBehavior: mocks.useComposerBehavior,
   useAttachPipeline: mocks.useAttachPipeline,
+  useSessionDraft: mocks.useSessionDraft,
 }));
 
 vi.mock("@/useSessions", () => ({ useSessions: mocks.useSessions }));
@@ -99,6 +101,10 @@ const sessionActions = {
   toggleSessions: vi.fn(),
   selectSession: vi.fn(),
   removeSession: vi.fn(),
+  renameSession: vi.fn(),
+  pinConversation: vi.fn(),
+  searchConversationHits: vi.fn(async () => []),
+  resetConversationModel: vi.fn(),
   newChat: vi.fn(),
 };
 
@@ -123,6 +129,7 @@ beforeEach(() => {
     removeStaged: vi.fn(),
     sendStaged: vi.fn(async () => {}),
   });
+  mocks.useSessionDraft.mockReturnValue({ clearDraft: vi.fn() });
   mocks.useSessions.mockReturnValue({ ...sessionActions });
   mocks.useStickyScroll.mockReturnValue({
     ref: { current: null },
