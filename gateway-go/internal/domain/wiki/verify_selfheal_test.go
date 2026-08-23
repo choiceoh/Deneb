@@ -323,7 +323,7 @@ func TestDetectStalePersonStubs_ArchivesOldUnusedKeepsRecalled(t *testing.T) {
 	if len(findings) != 1 || findings[0].PageA != "인물/김스텁.md" || findings[0].Fix == nil || findings[0].Fix.Kind != "archive" {
 		t.Fatalf("want one archive fix on the old unused stub, got %+v", findings)
 	}
-	if n := wd.applyVerifyFixes(findings); n != 1 {
+	if n := wd.applyVerifyFixes(findings, nil); n != 1 {
 		t.Fatalf("apply=%d, want 1", n)
 	}
 	got := testMustRead(t, store, "인물/김스텁.md")
