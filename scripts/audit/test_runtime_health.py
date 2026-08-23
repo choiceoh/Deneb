@@ -259,3 +259,57 @@ class McpStderrPassthroughTest(unittest.TestCase):
         signals = health.parse(lines)
         self.assertEqual(signals.other_errors, 1)
         self.assertEqual(signals.mcp_stderr_lines, 0)
+
+
+class RunKindCohortTest(unittest.TestCase):
+    """Latency is a user-facing question; automation lanes pin p95 to their own
+    budget caps, so mixing them made the pillar score 0.0 on every window."""
+
+    HEADER = "2026-08-22T10:00:0{n}+0900 host deneb-gateway[1]: "
+
+    def runs(self, *specs: tuple[str, int, str]) -> list[str]:
+        return [
+            self.HEADER.format(n=i % 10)
+            + f"agent loop complete runKind={kind} agentMs={ms} llmMs={ms} toolMs=0 "
+            f"turns=1 totalToolCalls=1 stopReason={stop}"
+            for i, (kind, ms, stop) in enumerate(specs)
+        ]
+
+    def test_latency_scores_only_user_facing_runs(self) -> None:
+        lines = self.runs(
+            ("chat", 5_000, "end_turn"),
+            ("chat", 7_000, "end_turn"),
+            ("heartbeat", 300_000, "timeout"),
+            ("cron", 300_000, "end_turn"),
+        )
+        signals = health.parse(lines)
+        self.assertEqual(signals.interactive_ms, [5_000, 7_000])
+        _, dimensions = health.compute(signals)
+        latency = next(d for d in dimensions if d.name == "latency")
+        self.assertTrue(latency.extra["scoped_to_interactive"])
+        self.assertEqual(latency.extra["p95_s"], 7.0)
+        self.assertEqual(latency.score, 100.0)
+
+    def test_falls_back_to_all_runs_without_the_label(self) -> None:
+        lines = [
+            self.HEADER.format(n=0)
+            + "agent loop complete agentMs=300000 llmMs=1 toolMs=0 turns=1 totalToolCalls=1 stopReason=end_turn",
+        ]
+        signals = health.parse(lines)
+        _, dimensions = health.compute(signals)
+        latency = next(d for d in dimensions if d.name == "latency")
+        self.assertFalse(latency.extra["scoped_to_interactive"])
+        self.assertEqual(latency.extra["p95_s"], 300.0)
+
+    def test_timeouts_stay_global_but_name_the_lane(self) -> None:
+        lines = self.runs(
+            ("chat", 5_000, "end_turn"),
+            ("skill-review", 90_000, "timeout"),
+            ("skill-review", 90_000, "timeout"),
+        )
+        signals = health.parse(lines)
+        _, dimensions = health.compute(signals)
+        turn = next(d for d in dimensions if d.name == "turn-reliability")
+        self.assertEqual(turn.extra["timeout_runs"], 2)
+        self.assertEqual(turn.extra["by_kind"], {"skill-review": 2})
+        self.assertTrue(any("skill-review 2/2" in line for line in turn.detail))
