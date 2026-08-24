@@ -353,6 +353,30 @@ func webFetchViaStealth(ctx context.Context, localAI *LocalAIExtractor, targetUR
 				return fetchOutcome{Content: fullResult, Assess: assessMetaBody(meta.Signals, md)}, nil
 			}
 		}
+		// Gone for good (404/410) — not blocked, not flaky. The archive usually
+		// still has the reference material this assistant follows, and an old
+		// copy answers the question a dead URL cannot. Only after the escalations
+		// above have declined, so a live page is never replaced by a stale one.
+		if isGoneStatus(statusFromFetchErrCode(classified.Code)) {
+			if snap, ok := waybackLookupFn(ctx, targetURL); ok {
+				if archived, err := fetchWithRetryFn(ctx, snap.URL, maxBytes); err == nil {
+					raw := normalizeCharset(archived.Data, archived.ContentType)
+					meta := webFetchMeta{
+						URL: targetURL, FinalURL: snap.URL,
+						ContentType: archived.ContentType, StatusCode: archived.StatusCode,
+						FetchMs: time.Since(fetchStart).Milliseconds(), Provider: "wayback",
+						OrigChars: len(raw),
+						Signals:   []string{"archived_copy"},
+					}
+					body := processFetchedContent(ctx, raw, archived.Data, archived.ContentType, snap.URL, localAI, &meta)
+					meta.ExtractChars = len(body)
+					logWaybackRecovery(targetURL, snap)
+					envelope := strings.Replace(formatFetchResult(meta, body),
+						"</metadata>", waybackNote(targetURL, snap)+"\n</metadata>", 1)
+					return fetchOutcome{Content: envelope, Assess: assessMetaBody(meta.Signals, body)}, nil
+				}
+			}
+		}
 		slog.Info("web fetch",
 			"url", targetURL, "provider", "stealth", "cache_hit", false,
 			"fetch_ms", fetchMs, "error", err.Error())
@@ -511,6 +535,12 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 	sb.WriteString("<search_results query=\"" + query + "\">\n")
 	sb.WriteString(searchOutput)
 	sb.WriteString("\n</search_results>\n\n")
+
+	// Reorder before choosing what to fetch: search+fetch only pulls the first
+	// few, so the order here decides which pages the model ever sees. The
+	// displayed result list above keeps the provider's order — reordering what
+	// the user reads and what we fetch are different decisions.
+	organic = rerankSearchResults(ctx, query, organic)
 
 	poolSize := fetchCandidatePoolSize(count, fetchTop)
 	candidates, fstats := rankFetchCandidates(query, answerLink, knowledgeLink, organic, poolSize)

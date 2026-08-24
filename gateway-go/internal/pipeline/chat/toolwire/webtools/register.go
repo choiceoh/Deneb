@@ -1,6 +1,7 @@
 package webtools
 
 import (
+	airerank "github.com/choiceoh/deneb/gateway-go/internal/ai/rerank"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/browseops"
@@ -12,6 +13,9 @@ import (
 func Register(registry toolport.ToolRegistrar, spill tooldeps.SpilloverStore) {
 	webCache := web.NewFetchCache()
 	localAI := web.NewLocalAIExtractor()
+	// Same resident sidecar wiki recall and code search use. Nil when it is not
+	// configured, which leaves provider order untouched.
+	web.SetSearchReranker(airerank.NewFromEnv())
 
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "web",
