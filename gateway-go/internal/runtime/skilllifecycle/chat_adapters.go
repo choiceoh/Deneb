@@ -27,6 +27,14 @@ type chatUsageRecorderAdapter struct {
 	// disables the gate (records everything, the prior behavior).
 	relevanceClient *llm.Client
 	relevanceModel  string
+	// spawn runs validation-case capture off the caller's goroutine. Production
+	// detaches it (safego.GoWithSlog) so a chat turn never waits on corpus
+	// bookkeeping. Tests substitute a synchronous runner: a detached goroutine
+	// writing under $HOME outlives the test that started it, and racing
+	// t.TempDir()'s cleanup made this package fail roughly one run in four
+	// ("TempDir RemoveAll cleanup: .../.deneb: directory not empty"). Sleeping
+	// long enough to "usually" win that race is the same bug with a timer.
+	spawn func(logger *slog.Logger, name string, fn func())
 }
 
 // NewChatUsageRecorder adapts a genesis tracker to chatport.SkillUsageRecorder.
@@ -38,6 +46,7 @@ func NewChatUsageRecorder(t *genesis.Tracker, transcripts toolport.TranscriptSto
 	return &chatUsageRecorderAdapter{
 		inner: t, transcripts: transcripts, logger: logger, replayEnabled: replayEnabled,
 		relevanceClient: relevanceClient, relevanceModel: strings.TrimSpace(relevanceModel),
+		spawn: safego.GoWithSlog,
 	}
 }
 
@@ -73,7 +82,7 @@ func (a *chatUsageRecorderAdapter) recordSkillUse(sessionKey, skillName string, 
 		a.logger.Warn("genesis: skill usage record failed", "skill", skillName, "error", err)
 	}
 	if !success {
-		safego.GoWithSlog(a.logger, "skill-failed-use-validation-case", func() {
+		a.spawnCapture("skill-failed-use-validation-case", func() {
 			a.recordValidationCaseFromFailedUse(sessionKey, skillName, errMsg)
 		})
 	} else if a.replayEnabled {
@@ -84,7 +93,7 @@ func (a *chatUsageRecorderAdapter) recordSkillUse(sessionKey, skillName string, 
 		// is inert. Gated by the same flag as the gate (DENEB_SKILL_EVOLVE_REPLAY)
 		// so capture and consume turn on together, and the far-more-frequent
 		// successful turns don't write cases nothing reads.
-		safego.GoWithSlog(a.logger, "skill-success-use-validation-case", func() {
+		a.spawnCapture("skill-success-use-validation-case", func() {
 			a.recordValidationCaseFromSuccessfulUse(sessionKey, skillName)
 		})
 	}
@@ -313,4 +322,15 @@ func replayToolCallAssertionWeight(calls []genesis.SkillReplayToolCallRecord) in
 		}
 	}
 	return weight
+}
+
+// spawnCapture runs deferred validation-case capture, defaulting to a detached
+// goroutine so a zero-value adapter (constructed outside NewChatUsageRecorder)
+// still behaves like production rather than panicking on a nil hook.
+func (a *chatUsageRecorderAdapter) spawnCapture(name string, fn func()) {
+	spawn := a.spawn
+	if spawn == nil {
+		spawn = safego.GoWithSlog
+	}
+	spawn(a.logger, name, fn)
 }
