@@ -46,7 +46,8 @@ func TestWatch_YouTubeWindowedRequestBypassesFetcher(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	out, err := ToolWatch("", fetch)(ctx, json.RawMessage(
-		`{"source":"https://youtu.be/dQw4w9WgXcQ","start":720,"end":900}`))
+		`{"source":"https://youtu.be/dQw4w9WgXcQ","start":720,"end":900}`,
+	))
 	if called {
 		t.Fatalf("windowed request delegated to the whole-video fetcher (out=%q err=%v)", out, err)
 	}
