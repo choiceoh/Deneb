@@ -1,5 +1,25 @@
 # Changelog
 
+## [5.5.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.4.0...deneb-v5.5.0) (2026-08-24)
+
+
+### ✨ Features
+
+* **browser:** 북마크 롱탭에 수정과 휴지통 ([#4663](https://github.com/choiceoh/Deneb/issues/4663)) ([224e7b9](https://github.com/choiceoh/Deneb/commit/224e7b9efe01b8eaccd4e551c42d9bfb359e6ae6))
+* **browser:** 원격 규칙·새 창 번역·주소창 자동완성·탭 상한 완화·탭 복원 ([#4665](https://github.com/choiceoh/Deneb/issues/4665)) ([127d1ed](https://github.com/choiceoh/Deneb/commit/127d1eda4639fcb7dac359c778c6e216373ecd92))
+* **chat:** 대화 목록 검색은 돋보기, 핀·삭제는 롱탭 ([#4661](https://github.com/choiceoh/Deneb/issues/4661)) ([35df414](https://github.com/choiceoh/Deneb/commit/35df414c8e5a932f8074f9cf20468596d4cdf938))
+
+
+### 🐛 Bug Fixes
+
+* **android:** ship the patch notes that were silently dropped, and stop logging card bodies ([#4658](https://github.com/choiceoh/Deneb/issues/4658)) ([51b329c](https://github.com/choiceoh/Deneb/commit/51b329cedcfd4972bce2e09a8c63ae432f85f8b4))
+* **andromeda:** resync wholesale when native sync reports retention truncation ([#4667](https://github.com/choiceoh/Deneb/issues/4667)) ([4586f05](https://github.com/choiceoh/Deneb/commit/4586f05f330ecde3db0b56054d31f02ac36a93fa))
+* **memory:** close fact lifecycle review gaps ([#4659](https://github.com/choiceoh/Deneb/issues/4659)) ([6000d25](https://github.com/choiceoh/Deneb/commit/6000d254339f915862d450c220c2615e55aa13f5))
+* **memory:** 정본 사실 평면의 쓰기 권위·부팅 경로·측정 공백 개선 ([#4664](https://github.com/choiceoh/Deneb/issues/4664)) ([3eceb98](https://github.com/choiceoh/Deneb/commit/3eceb985c7a8fa8238ecd01ee7d94ed945dea19a))
+* **wiki:** let a fact axis key keep its own kind instead of the heading's ([#4662](https://github.com/choiceoh/Deneb/issues/4662)) ([9793f44](https://github.com/choiceoh/Deneb/commit/9793f44c22b2917267ce9a390b44941f2d5ffb96))
+* **wiki:** let the legacy fact cutover skip a bullet instead of taking the gateway down ([#4660](https://github.com/choiceoh/Deneb/issues/4660)) ([d3c2a90](https://github.com/choiceoh/Deneb/commit/d3c2a900eddd59b6652dba1bc8b5bdc9acd73526))
+* **wiki:** skip fact projections during link pruning ([#4666](https://github.com/choiceoh/Deneb/issues/4666)) ([292cfe3](https://github.com/choiceoh/Deneb/commit/292cfe3e60a369fdf5ba341b842f787a037ca632))
+
 ## [5.4.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.3.0...deneb-v5.4.0) (2026-08-23)
 
 
