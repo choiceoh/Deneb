@@ -68,6 +68,11 @@ func RecordAnswerCitations(store *wiki.Store, sessionKey, answer string, logger 
 		return
 	}
 	cited := matchCitedPaths(answer, injected, pageIdentityResolver(store))
+	// Content-grounded second pass (recall_cite_content.go): pages the answer
+	// used without ever naming — it quotes their figures and proper nouns
+	// instead. Only paths the name pass missed are re-examined, bounded by the
+	// handful of injected pages per turn, all after delivery.
+	cited = appendContentCitations(cited, injected, answer, store)
 	if len(cited) == 0 {
 		return
 	}
@@ -145,6 +150,36 @@ func citeNameMatches(answer, name string) bool {
 		return false
 	}
 	return strings.Contains(answer, name)
+}
+
+// appendContentCitations runs the content-grounded matcher over the injected
+// paths the name-based pass did not credit, appending the ones whose
+// distinctive body content the answer reproduces.
+func appendContentCitations(cited, injected []string, answer string, store *wiki.Store) []string {
+	if store == nil {
+		return cited
+	}
+	already := make(map[string]struct{}, len(cited))
+	for _, p := range cited {
+		already[p] = struct{}{}
+	}
+	for _, p := range injected {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if _, done := already[p]; done {
+			continue
+		}
+		page, err := store.ReadPage(p)
+		if err != nil || page == nil {
+			continue
+		}
+		if citeContentMatches(answer, page.Body, store.TokenRarity) {
+			cited = append(cited, p)
+		}
+	}
+	return cited
 }
 
 // pageIdentityResolver reads the title and project code of an injected page.
