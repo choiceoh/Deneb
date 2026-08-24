@@ -8,7 +8,7 @@
 #   devlib_load_dotenv                 Load ~/.deneb/.env
 #   devlib_version                     Get deneb version from git tags
 #   devlib_build BINARY [REPO]         Build gateway binary
-#   devlib_gen_config OUT              Generate dev config
+#   devlib_gen_config OUT [STATE_DIR]   Generate dev config (workspace → STATE_DIR/workspace)
 #   devlib_start_gateway BIN PORT CFG STATE LOG [nohup]
 #   devlib_wait_healthy HOST PORT [MAX]
 #   devlib_stop_pid PID [TIMEOUT_DS]
@@ -116,12 +116,41 @@ devlib_build() {
 #   $1 — output path (required)
 devlib_gen_config() {
   local out="$1"
-  "$DEVLIB_SCRIPT_DIR/config-gen.sh" --out "$out" >/dev/null 2>&1
+  # Workspace isolation is unconditional: default to a sibling of the config
+  # when the caller passed no state dir, so no code path can fall through to
+  # the production workspace (whose MEMORY.md/USER.md are fact-plane
+  # projections a second gateway would clobber — 2026-08-24 incident).
+  local state_dir="${2:-${out%.json}}"
+  DENEB_DEV_WORKSPACE="$state_dir/workspace"     "$DEVLIB_SCRIPT_DIR/config-gen.sh" --out "$out" >/dev/null 2>&1
 }
 
 # ---------------------------------------------------------------------------
 # Server lifecycle
 # ---------------------------------------------------------------------------
+
+# Seed the ISOLATED dev workspace with read-only copies of production's context
+# files so chat behaves realistically (memory, user profile, tool notes) without
+# ever writing into the production workspace. The dev gateway owns its copies:
+# its fact-plane cutover and projections operate on them freely. Refreshed on
+# every start so the copies do not go stale.
+#   $1 — dev state dir
+devlib_seed_workspace() {
+  local ws="$1/workspace"
+  mkdir -p "$ws"
+  local f
+  for f in MEMORY.md USER.md TOOLS.md; do
+    [[ -f "$HOME/.deneb/workspace/$f" ]] && cp -f "$HOME/.deneb/workspace/$f" "$ws/$f" 2>/dev/null || true
+  done
+  # Also seed the fact journal into the ISOLATED dev wiki dir: the copied
+  # MEMORY.md/USER.md are generated projections (the cutover rightly refuses to
+  # re-import those as legacy), so without the journal a dev gateway serves
+  # zero facts and chat realism drops. With it, dev replays production's
+  # revision into its own /tmp state — realistic and still write-isolated.
+  if [[ -f "$HOME/.deneb/wiki/.fact-mutations.jsonl" && ! -f "$1/wiki/.fact-mutations.jsonl" ]]; then
+    mkdir -p "$1/wiki"
+    cp -f "$HOME/.deneb/wiki/.fact-mutations.jsonl" "$1/wiki/" 2>/dev/null || true
+  fi
+}
 
 # Mirror the standalone native-client auth token into a dev gateway's state dir.
 #
@@ -193,6 +222,7 @@ devlib_start_gateway() {
 
   mkdir -p "$state_dir"
   devlib_seed_client_token "$state_dir"
+  devlib_seed_workspace "$state_dir"
 
   # Enable the native-client (miniapp.*) auth path so chat/quality tests can
   # inject through POST /api/v1/miniapp/rpc even when production has not yet
