@@ -551,28 +551,55 @@ func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Ro
 	return modelOrRole, "", false
 }
 
-// RoleForModel returns the role that matches the given full model ID (e.g., "google/gemini-3.1-pro").
-// Returns ("", false) if no role matches.
-func (r *Registry) RoleForModel(fullModelID string) (Role, bool) {
+// roleMatchOrder is the order roles are scanned when mapping a model back to a
+// role.
+//
+// Lightweight precedes tiny so a deployment that leaves tiny at the lightweight
+// default maps that shared model back to the lightweight role (preserving prior
+// behavior); an explicitly configured tiny model still matches its own role.
+// Main2 and submain scan last so a model shared with a legacy role (e.g. glm
+// serving coding, main2, and submain at once) keeps mapping to the role it
+// mapped to before rather than being remapped to a newer role.
+var roleMatchOrder = []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleFallback, RoleVision, RoleMain2, RoleSubmain}
+
+// RoleForModel returns the role that matches the given model ID, provider
+// qualified ("google/gemini-3.1-pro") or bare ("gemini-3.1-pro"). Returns
+// ("", false) if no role matches.
+//
+// The bare form matters because the agent log records requestedModel without a
+// provider prefix. Matching only the qualified form meant no chat run ever
+// mapped back to a role, so the usage screen labelled every role with a raw
+// model id — "deepseek-v4-flash-api" instead of "폴백". That is not cosmetic:
+// it is why a fallback role pointing at a paid cloud endpoint read as ordinary
+// traffic for three weeks (2026-08-02..24).
+func (r *Registry) RoleForModel(modelID string) (Role, bool) {
+	if role, ok := r.roleForModel(modelID, true); ok {
+		return role, true
+	}
+	// A qualified id that matched nothing is simply unknown; only an unqualified
+	// one is worth retrying, and retrying it cannot shadow a qualified match
+	// because that pass already ran.
+	if strings.Contains(modelID, "/") {
+		return "", false
+	}
+	return r.roleForModel(modelID, false)
+}
+
+// roleForModel scans roleMatchOrder comparing either the provider-qualified id
+// or the bare model name.
+func (r *Registry) roleForModel(modelID string, qualified bool) (Role, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	// Lightweight precedes tiny so a deployment that leaves tiny at the
-	// lightweight default maps that shared model back to the lightweight role
-	// (preserving prior behavior); an explicitly configured tiny model
-	// still matches its own role.
-	// Main2 and submain scan last so a model shared with a legacy role (e.g. glm
-	// serving coding, main2, and submain at once) keeps mapping to the role it
-	// mapped to before rather than being remapped to a newer role.
-	for _, role := range []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleFallback, RoleVision, RoleMain2, RoleSubmain} {
+	for _, role := range roleMatchOrder {
 		cfg, ok := r.models[role]
 		if !ok {
 			continue
 		}
-		fid := cfg.ProviderID + "/" + cfg.Model
-		if cfg.ProviderID == "" {
-			fid = cfg.Model
+		candidate := cfg.Model
+		if qualified && cfg.ProviderID != "" {
+			candidate = cfg.ProviderID + "/" + cfg.Model
 		}
-		if fid == fullModelID {
+		if candidate == modelID {
 			return role, true
 		}
 	}

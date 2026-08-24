@@ -619,9 +619,17 @@ func recordRunCompletion(rec runCompletionRecord, logger *slog.Logger) {
 			compacted = sess.CompactionFired
 		}
 	}
+	// RequestedModel is documented as "the model/role the run ASKED for
+	// (params.Model)", but what was recorded here was the RESOLVED id, so a run
+	// that asked for a role by name ("fallback", "submain") logged the model
+	// that role happened to point at. Per-role usage then had to map the model
+	// back to a role at read time, which fails the moment a role is retargeted —
+	// the point at which someone is most likely to be looking. Record the asked
+	// name when there is one; runs that asked for nothing keep logging the
+	// resolved id so a session-level override stays attributable.
 	runLog.LogEnd(agentlog.RunEndData{
 		Model:               actualModel,
-		RequestedModel:      model,
+		RequestedModel:      requestedModelForLog(params.Model, model),
 		StopReason:          agentResult.StopReason,
 		Turns:               agentResult.Turns,
 		InputTokens:         agentResult.Usage.InputTokens,
@@ -878,4 +886,22 @@ func activeGroundingNotebook(deps runDeps, sessionKey string) (id string, update
 		return "", 0, false
 	}
 	return id, nb.Updated, true
+}
+
+// requestedModelForLog picks what a run is attributed to in per-role usage.
+//
+// asked is params.Model as the caller wrote it — a role name ("fallback",
+// "submain"), a raw model id, or "" for the default. resolved is what that
+// turned into after registry resolution.
+//
+// The asked name wins whenever there is one. Recording the resolved id instead
+// forced per-role usage to map model back to role at READ time, which fails the
+// moment a role is retargeted — precisely when someone is looking at the usage
+// screen. A run that asked for nothing keeps the resolved id so a session-level
+// model override stays attributable rather than collapsing into main.
+func requestedModelForLog(asked, resolved string) string {
+	if asked != "" {
+		return asked
+	}
+	return resolved
 }
