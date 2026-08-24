@@ -111,7 +111,7 @@ func (s *Store) VerifyFactSource(ref, value string) FactSourceEvidence {
 	}
 	evidence.Path = normalizePagePath(path)
 
-	if !factContainsBoundedValue(page.Body+"\n"+factSourceMetaClaims(page), value) {
+	if !factSourceStatesValue(page, value) {
 		evidence.Reason = "source page does not contain the asserted value"
 		return evidence
 	}
@@ -157,17 +157,29 @@ func factSourceRefLayer(ref string) (string, bool) {
 	return layer, true
 }
 
-// factSourceMetaClaims gathers the frontmatter fields that state facts in their
-// own right, so a page whose deadline lives in `due:` rather than in prose is
-// not reported as failing to mention it.
-func factSourceMetaClaims(page *Page) string {
+// factSourceStatesValue reports whether the page says the value — in its prose,
+// or in one of the frontmatter fields that state facts in their own right, so a
+// page whose deadline lives in `due:` rather than in a sentence is not reported
+// as failing to mention it.
+//
+// Each field is searched on its own. Joining them first would let fragments from
+// two unrelated fields (`status: 진행중` next to `client: ABC`) run together into
+// a phrase neither field states, and this reporting is only honest while every
+// match comes from one place that actually holds the text.
+func factSourceStatesValue(page *Page, value string) bool {
 	meta := page.Meta
-	fields := []string{
+	claims := []string{
+		page.Body,
 		meta.Due, meta.DueDone, meta.Status, meta.Stage, meta.Client, meta.Address,
 		meta.ContractDate, meta.ConstructionStart, meta.ModuleDelivery,
 		meta.PreUseInspection, meta.CompletionInspection, meta.Summary,
 	}
-	return strings.Join(fields, "\n")
+	for _, claim := range claims {
+		if claim != "" && factContainsBoundedValue(claim, value) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseFactSourceDate(raw string) (time.Time, bool) {

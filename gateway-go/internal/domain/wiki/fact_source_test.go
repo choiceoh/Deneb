@@ -165,3 +165,24 @@ func TestVerifyFactSourceReadsFrontmatterClaims(t *testing.T) {
 		t.Errorf("a value in neither body nor frontmatter must not verify: %+v", absent)
 	}
 }
+
+// Frontmatter fields are searched one at a time. Joining them would let two
+// unrelated fields run together into a phrase neither one states.
+func TestVerifyFactSourceDoesNotMatchAcrossFields(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	page := NewPage("프로젝트/교차.md", "프로젝트", nil)
+	page.Meta.Updated = "2026-08-01"
+	page.Meta.Status = "진행중"
+	page.Meta.Client = "ABC건설"
+	page.Body = "# 교차\n"
+	if err := store.WritePage("프로젝트/교차.md", page); err != nil {
+		t.Fatal(err)
+	}
+
+	if spliced := store.VerifyFactSource("w:프로젝트/교차", "진행중 ABC건설"); spliced.Verified {
+		t.Errorf("a phrase spliced from two fields must not verify: %+v", spliced)
+	}
+	if single := store.VerifyFactSource("w:프로젝트/교차", "ABC건설"); !single.Verified {
+		t.Errorf("a value one field states must still verify: %+v", single)
+	}
+}
