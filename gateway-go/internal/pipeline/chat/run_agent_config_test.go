@@ -238,7 +238,7 @@ func TestBuildAgentConfig_PreservesCombinedPolicyAndHookContracts(t *testing.T) 
 	// Skill-usage attribution moved out of the OnToolTurn hook (which now only
 	// drives the nudger) to an end-of-run recordRunSkillUsage against the
 	// returned consult log; the resolved model is supplied at record time.
-	recordRunSkillUsage(usage, skillConsults, &agent.AgentResult{Text: "done"}, nil, params.SessionKey, "resolved-model")
+	recordRunSkillUsage(usage, skillConsults, &agent.AgentResult{Text: "done"}, nil, params.SessionKey, "resolved-model", nil)
 	if len(usage.calls) != 1 || usage.calls[0].skill != "risk-skill" || usage.calls[0].model != "resolved-model" {
 		t.Fatalf("skill usage attribution = %+v", usage.calls)
 	}

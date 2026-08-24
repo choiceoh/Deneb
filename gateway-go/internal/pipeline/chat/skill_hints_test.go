@@ -180,7 +180,7 @@ func TestRecordRunSkillUsageIgnoresReviewForks(t *testing.T) {
 	rec := &hintFakeRecorder{}
 	log := NewSkillConsultLog()
 	log.Add("topsolar-db")
-	recordRunSkillUsage(rec, log, nil, nil, "system:skill-review:cron:email:123", "m1")
+	recordRunSkillUsage(rec, log, nil, nil, "system:skill-review:cron:email:123", "m1", nil)
 	if rec.calls != 0 {
 		t.Fatalf("review-fork consult recorded as usage (%d calls)", rec.calls)
 	}
@@ -188,7 +188,7 @@ func TestRecordRunSkillUsageIgnoresReviewForks(t *testing.T) {
 	// A real session still records.
 	log2 := NewSkillConsultLog()
 	log2.Add("topsolar-db")
-	recordRunSkillUsage(rec, log2, &agent.AgentResult{Text: "done"}, nil, "client:main", "m1")
+	recordRunSkillUsage(rec, log2, &agent.AgentResult{Text: "done"}, nil, "client:main", "m1", nil)
 	if rec.calls != 1 {
 		t.Fatalf("real-session consult not recorded (%d calls)", rec.calls)
 	}

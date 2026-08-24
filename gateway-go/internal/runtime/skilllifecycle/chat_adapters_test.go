@@ -9,6 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 type usageRecorderTranscriptStore struct {
@@ -149,5 +150,44 @@ func TestChatUsageRecorderAutoValidationCaseRefreshesRicherFailedUseTrace(t *tes
 		len(replay.RequiredTools) != 1 ||
 		replay.RequiredTools[0] != "exec" {
 		t.Fatalf("expected richer replay to preserve recovery and forbidden calls, got %+v", replay)
+	}
+}
+
+// The attribution written by the chat pipeline must survive the whole seam —
+// adapter → tracker → on-disk record — or the layer split downstream reads
+// every real record as unattributable.
+func TestChatUsageRecorderPersistsAttribution(t *testing.T) {
+	tracker := newUsageRecorderTracker(t)
+	rec := NewChatUsageRecorder(tracker, usageRecorderTranscriptStore{}, slog.Default(), false, nil, "")
+
+	attributed, ok := rec.(chatport.SkillUsageAttributionRecorder)
+	if !ok {
+		t.Fatal("chat usage recorder must implement the attribution capability")
+	}
+	attributed.RecordSkillUseAttributed("client:main", "kb", false, "run failed: tool web errored", "m1",
+		chatport.SkillUseAttribution{
+			Delivery:  chatport.SkillDeliveryAutoLoad,
+			Exercised: chatport.SkillExercisedNo,
+		})
+
+	summary, err := tracker.UsageQualitySummary("kb")
+	if err != nil {
+		t.Fatalf("UsageQualitySummary: %v", err)
+	}
+	if summary.FailureLayers.UnexercisedFailures != 1 {
+		t.Fatalf("attribution lost across the seam: %+v", summary.FailureLayers)
+	}
+	if summary.FailureLayers.AutoLoadFailures != 1 {
+		t.Errorf("delivery lost across the seam: %+v", summary.FailureLayers)
+	}
+
+	// The plain path must still work for callers that have no attribution.
+	rec.RecordSkillUse("client:main", "kb", false, "run failed: no result", "m1")
+	summary, err = tracker.UsageQualitySummary("kb")
+	if err != nil {
+		t.Fatalf("UsageQualitySummary: %v", err)
+	}
+	if summary.FailureLayers.UnattributableFailures != 1 {
+		t.Errorf("unattributed record misfiled: %+v", summary.FailureLayers)
 	}
 }
