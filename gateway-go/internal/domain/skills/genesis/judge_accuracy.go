@@ -424,6 +424,13 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 			// clears it, and the answer to a ceiling is another rung.
 			if t.reorderTierUnlocked(rec.JudgeVersion) {
 				pairs = append(pairs, buildReorderJudgeDegradationPairs(entries, judgeBenchMaxPairs*metaBenchScale())...)
+				// Tier 6 turns the measurement around: every rung up to here
+				// asks "was something removed?", and a judge can be perfect on
+				// all of them while still being movable by rhetoric alone
+				// (2608.08975). Opens on tier-5 saturation like the others.
+				if t.rhetoricTierUnlocked(rec.JudgeVersion) {
+					pairs = append(pairs, buildRhetoricJudgeDegradationPairs(entries, judgeBenchMaxPairs*metaBenchScale())...)
+				}
 			}
 		}
 	}
@@ -536,10 +543,20 @@ func (t *JudgeAccuracyTask) reorderTierUnlocked(judgeVersion string) bool {
 	return t.tierSaturated(judgeVersion, exclusivityJudgeDegradations)
 }
 
-// probeCeilingSaturated reports that the incumbent has outgrown the highest
-// planted rung (tier 5 reorder). Full-corpus replay then produces no labels.
-func (t *JudgeAccuracyTask) probeCeilingSaturated(judgeVersion string) bool {
+// rhetoricTierUnlocked is the rung test above tier 5. Same conservative shape
+// as the rungs below: callers gate it behind reorderTierUnlocked, so a judge
+// never shown tier 5 reads as not-yet-saturated rather than ready.
+func (t *JudgeAccuracyTask) rhetoricTierUnlocked(judgeVersion string) bool {
 	return t.tierSaturated(judgeVersion, reorderJudgeDegradations)
+}
+
+// probeCeilingSaturated reports that the incumbent has outgrown the highest
+// planted rung — now tier 6 (rhetorical inflation), not tier 5. Thinning to a
+// canary at tier-5 saturation would have skipped the newest rung entirely: the
+// ceiling test must always name the TOP table, or adding a rung silently
+// changes nothing. Full-corpus replay then produces no labels.
+func (t *JudgeAccuracyTask) probeCeilingSaturated(judgeVersion string) bool {
+	return t.tierSaturated(judgeVersion, rhetoricJudgeDegradations)
 }
 
 // thinPairsToCanary keeps the first pair of each degradation class so a

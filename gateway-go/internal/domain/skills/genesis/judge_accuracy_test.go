@@ -346,8 +346,9 @@ func addAccuracySkill(t *testing.T, task *JudgeAccuracyTask, name string) {
 }
 
 // Once the highest planted rung saturates, the lane must not replay every
-// catalog pair — one per class is enough to notice a regression.
-func TestJudgeAccuracyRunThinsToCanaryWhenReorderCeilingSaturated(t *testing.T) {
+// catalog pair — one per class is enough to notice a regression. The ceiling
+// tracks the TOP table, which is tier 6 (rhetorical inflation) since 2608.08975.
+func TestJudgeAccuracyRunThinsToCanaryWhenRhetoricCeilingSaturated(t *testing.T) {
 	task, tr := accuracyFixture(t)
 	addAccuracySkill(t, task, "sk2")
 	addAccuracySkill(t, task, "sk3")
@@ -357,15 +358,16 @@ func TestJudgeAccuracyRunThinsToCanaryWhenReorderCeilingSaturated(t *testing.T) 
 		if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 			JudgeVersion: version, Pairs: 2, Correct: 2,
 			ByClass: map[string][2]int{
-				"step-reorder":          {1, 1},
-				"contradiction-example": {1, 1},
+				"certainty-inflation":  {1, 1},
+				"evidence-fabrication": {1, 1},
+				"novelty-superiority":  {1, 1},
 			},
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if !task.probeCeilingSaturated(version) {
-		t.Fatal("ceiling not saturated after seeded reorder window")
+		t.Fatal("ceiling not saturated after seeded rhetoric window")
 	}
 	task.verdictFn = func(_ context.Context, _, _, _ string) (judgeVerdict, error) {
 		return judgeVerdict{Pass: false}, nil
