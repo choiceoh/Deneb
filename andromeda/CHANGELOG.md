@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.120](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.119...andromeda-v0.0.120) (2026-08-24)
+
+
+### ✨ Features
+
+* **browser:** 원격 규칙·새 창 번역·주소창 자동완성·탭 상한 완화·탭 복원 ([#4665](https://github.com/choiceoh/Deneb/issues/4665)) ([127d1ed](https://github.com/choiceoh/Deneb/commit/127d1eda4639fcb7dac359c778c6e216373ecd92))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** resync wholesale when native sync reports retention truncation ([#4667](https://github.com/choiceoh/Deneb/issues/4667)) ([4586f05](https://github.com/choiceoh/Deneb/commit/4586f05f330ecde3db0b56054d31f02ac36a93fa))
+
 ## [0.0.119](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.118...andromeda-v0.0.119) (2026-08-23)
 
 
