@@ -607,7 +607,11 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 			logger.Warn("meta-evolution: no judge model wired, evaluator proposal dropped")
 			return record(false, "", "judge bench unavailable: no model wired")
 		}
-		pairs := buildJudgeDegradationPairs(t.Evolver.catalogEntries(), judgeBenchMaxPairs*metaBenchScale())
+		// Salt the exam by the incumbent judge version: each accepted revision
+		// rotates which catalog skills grade the next one, so a revision
+		// lineage cannot saturate one frozen pair set (2608.06301).
+		pairs := buildSaltedJudgeDegradationPairs(t.Evolver.catalogEntries(),
+			judgeBenchMaxPairs*metaBenchScale(), t.judgeBenchSalt())
 		inc := runJudgeDegradationBench(ctx, incumbent, pairs, verdict)
 		prop := runJudgeDegradationBench(ctx, proposal, pairs, verdict)
 		benchIncumbent, benchProposal = &inc, &prop
@@ -747,7 +751,8 @@ func (t *MetaEvolutionTask) benchIncumbentOnSkip(ctx context.Context, epoch, inc
 		if verdict == nil {
 			return nil, nil, nil
 		}
-		pairs := buildJudgeDegradationPairs(t.Evolver.catalogEntries(), judgeBenchMaxPairs*metaBenchScale())
+		pairs := buildSaltedJudgeDegradationPairs(t.Evolver.catalogEntries(),
+			judgeBenchMaxPairs*metaBenchScale(), t.judgeBenchSalt())
 		if len(pairs) == 0 {
 			return nil, nil, nil
 		}
@@ -1385,6 +1390,14 @@ func (t *MetaEvolutionTask) builderModel() (*llm.Client, string, string) {
 	}
 	client, model := t.Evolver.primaryModel()
 	return client, model, "primary"
+}
+
+// judgeBenchSalt keys the promotion exam's rotation to the incumbent judge
+// version, falling back to the artifact default. Stable within a cycle,
+// changes exactly when a revision lands — the property the salted exam needs.
+func (t *MetaEvolutionTask) judgeBenchSalt() string {
+	fallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
+	return t.Meta.Version(generation.MetaSkillJudgeSystemPrompt, fallback)
 }
 
 // propose asks the strongest wired model for one targeted artifact revision.
