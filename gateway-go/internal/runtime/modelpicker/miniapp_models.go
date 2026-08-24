@@ -307,15 +307,10 @@ func (s *Controller) setMiniappModel(ctx context.Context, role, requested string
 	if role == "" {
 		role = "main"
 	}
-	// Must mirror the native picker's ModelRole enum (ConfigModelTab.kt) and the
-	// roles reported by roleMiniappModels. This gate has repeatedly drifted behind
-	// new roles: tiny/analysis (added to the picker + list response in #2065) and
-	// then the opt-in vision role were each rejected here ("unknown model role" →
-	// "모델 전환에 실패했어요") because this case list wasn't updated alongside the
-	// picker. Keep all three lists in sync.
-	switch role {
-	case "main", "tiny", "lightweight", "coding", "fallback", "vision":
-	default:
+	// Derived from pickerRoles rather than restated: this gate repeatedly
+	// drifted behind new roles when it was its own list, rejecting picker
+	// entries with "unknown model role" → "모델 전환에 실패했어요".
+	if !isPickerRole(role) {
 		return "", rpcerr.InvalidRequest("unknown model role: " + role)
 	}
 
@@ -358,33 +353,20 @@ func (s *Controller) roleMiniappModels() []handlerminiapp.RoleModel {
 	if s.modelRegistry == nil {
 		return nil
 	}
-	roleList := []modelrole.Role{
-		modelrole.RoleMain,
-		modelrole.RoleTiny,
-		modelrole.RoleLightweight,
-		modelrole.RoleFallback,
-	}
-	out := make([]handlerminiapp.RoleModel, 0, len(roleList))
-	for _, r := range roleList {
-		out = append(out, handlerminiapp.RoleModel{
-			Role:  string(r),
-			Model: s.modelRegistry.FullModelID(r),
-		})
-	}
-	if s.chatReady() {
-		if m := s.chatHandler.DefaultModel(); m != "" {
-			out[0].Model = m
+	out := make([]handlerminiapp.RoleModel, 0, len(pickerRoles))
+	for _, r := range pickerRoles {
+		model := s.modelRegistry.FullModelID(r.role)
+		if r.role == modelrole.RoleMain && s.chatReady() {
+			if m := s.chatHandler.DefaultModel(); m != "" {
+				model = m
+			}
 		}
-	}
-	// Coding role is opt-in: report it only after assignment so the native
-	// picker can show "미설정" until an operator binds a code-editing model.
-	if cm := s.modelRegistry.FullModelID(modelrole.RoleCoding); cm != "" {
-		out = append(out, handlerminiapp.RoleModel{Role: string(modelrole.RoleCoding), Model: cm})
-	}
-	// Vision role, like coding, is opt-in: report it only when assigned so the
-	// picker shows "미설정" until an operator binds a multimodal model.
-	if v := s.modelRegistry.FullModelID(modelrole.RoleVision); v != "" {
-		out = append(out, handlerminiapp.RoleModel{Role: string(modelrole.RoleVision), Model: v})
+		// An opt-in role with nothing bound is omitted so the picker shows
+		// "미설정" rather than implying a default it does not have.
+		if r.optIn && model == "" {
+			continue
+		}
+		out = append(out, handlerminiapp.RoleModel{Role: string(r.role), Model: model})
 	}
 	return out
 }
