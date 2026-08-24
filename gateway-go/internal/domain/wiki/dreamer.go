@@ -511,6 +511,7 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	wd.applyDreamUpdates(ctx, cycle)
 	wd.closeDreamStaleDues(cycle)
 	wd.curateOversizedDreamPages()
+	wd.purgeDreamPersonStubs(time.Now())
 	wd.captureDreamOpenLoops(ctx, cycle)
 	wd.captureDreamThemes(ctx, cycle)
 	wd.captureDreamSelfComparison(ctx, cycle)
