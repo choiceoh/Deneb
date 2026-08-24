@@ -173,7 +173,10 @@ globs:
   고정한다(`assert_fact`는 `source_refs` 필수). `direct_user`는 인증된 네이티브 직접 발화
   induction만, `primary_document`/`runtime_observation`은 자기 출처를 인증하는 내부 ingestion만
   발급한다. 그래서 도구 호출은 사용자가 직접 말한 사실을 덮거나 지울 수 없고, 시도는
-  `ignored_lower_authority`로 이력에만 남는다. promptware로 오염된 턴에서는 두 mutation op이
+  `ignored_lower_authority`로 이력에만 남는다. `source_refs`는 서버가 열어보고 그 페이지가
+  주장 값을 담고 있는지 도구 응답으로 **보고**하지만(`Store.VerifyFactSource`), 그것으로
+  권위가 올라가지는 않는다 — 모델이 자기가 쓴 페이지를 인용할 수 있어 승격은 페이지
+  provenance가 생긴 뒤로 막아뒀다. promptware로 오염된 턴에서는 두 mutation op이
   비가역 도구 게이트에 걸려 아예 실행되지 않는다.
 - **저널 세그먼트**: 저널은 컴팩션하지 않는다(영구 이력). 활성 세그먼트가 임계치를
   넘으면 스냅샷을 durable하게 만든 뒤 `.fact-mutations.<revision>.jsonl` 아카이브로

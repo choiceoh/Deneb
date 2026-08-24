@@ -295,12 +295,30 @@ func (a *wikiAdapter) RecordFact(_ context.Context, opts FactRecordOptions) (Fac
 	if actor == "" {
 		actor = "knowledge-tool"
 	}
+	// The authority is capped at agent_confirmed by parseFactAuthority and stays
+	// there. Checking the cited sources is worth doing anyway — a citation that
+	// does not open, or opens on a page that never states this value, is a bad
+	// citation the caller should hear about — but the result is REPORTED, never
+	// promoted: this wiki has no page-level provenance, so a model can author the
+	// page it cites (see wiki/fact_source.go). Verification failures are not
+	// errors; the claim is recorded either way.
+	sourceEvidence, verified := a.store.VerifyFactSources(opts.Sources, opts.Value)
 	result, err := a.store.UpsertFact(wiki.FactInput{
 		Subject: opts.Subject, Key: opts.Key, Value: opts.Value,
 		Kind: kind, Authority: authority, Sources: opts.Sources,
 		BasisAt: basisAt, Actor: actor, Reason: opts.Reason,
 	})
-	return adaptFactMutationResult(result), err
+	adapted := adaptFactMutationResult(result)
+	adapted.Authority = string(authority)
+	switch {
+	case verified:
+		adapted.VerifiedSource = sourceEvidence.Path
+	case sourceEvidence.Checked:
+		// Only a citation this store actually judged is worth nagging about; a ref
+		// naming another layer is left alone rather than reported as broken.
+		adapted.SourceNote = sourceEvidence.Reason
+	}
+	return adapted, err
 }
 
 func (a *wikiAdapter) ForgetFact(_ context.Context, opts FactForgetOptions) (FactMutationResult, error) {

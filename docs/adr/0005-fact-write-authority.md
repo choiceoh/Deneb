@@ -60,6 +60,26 @@ PR #4653은 모델이 부르는 `knowledge(op="assert_fact"|"forget_fact")`에 `
 - `primary_document`/`runtime_observation`은 **여전히 도달 불가능**하다. 그 권위를
   쓰려면 출처를 인증하는 ingestion 경로(예: 메일·문서 파이프라인)를 만들어 `Store`를
   직접 호출해야 하며, 그때 이 ADR을 supersede하지 말고 그 경로를 추가하면 된다.
+- **"인용한 페이지를 열어보고 승격"은 그 경로가 아니다** (검토된 뒤 철회 —
+  `wiki/fact_source.go` 머리말). 이 위키에는 **페이지 단위 provenance가 없다**:
+  같은 모델이 `knowledge(op="record")`로 아무 페이지나 쓸 수 있고 어댑터가 거기에
+  오늘 날짜를 찍는다. 그래서 "본문에 값이 있고 날짜가 있는 페이지"는 모델이 방금
+  만들어낼 수 있는 조건이고, `primary_document`는 amount/deadline/contract에서
+  `direct_user`보다 **위**라 결과적으로 모델 주장이 사용자 발화를 덮게 된다 — 이 ADR이
+  막으려던 세탁이 다른 문으로 돌아온다. 덧붙여 본문에 문자열이 있다는 것은 그 페이지가
+  그 값을 **현행으로 주장한다**는 뜻이 아니다(기각된 안·이력 줄·생성된 projection이
+  모두 같게 읽힌다). 따라서 승격의 **선결 조건은 페이지 provenance** — 인증된 ingestion이
+  쓴 페이지와 모델이 쓴 페이지를 저장 계층에서 구분하는 것 — 이며, 그전까지 승격은 없다.
+- `source_refs`는 그래도 서버가 열어본다(`Store.VerifyFactSource`). 다만 결과는 **권위가
+  아니라 보고**다: ref가 열리지 않거나 그 페이지가(본문이든 frontmatter든) 주장 값을 담고
+  있지 않으면 도구 응답이 그렇게 말해준다. 위키가 아닌 계층(`f:`·`file:`·`session:`·
+  `workspace:`·`doc:`…)은 **미검증으로 남기고 지적하지 않는다** — `source_refs`는 감사
+  계약이라 지식 읽기 계층보다 넓고(사실 평면 자신도 `session:`·`workspace:`로 인용한다),
+  이 저장소가 바깥의 유효한 식별자를 열거할 수 없기 때문이다. 다만 접두어만 있고 문서
+  ID가 없는 ref(`f:`)는 어떤 문서도 가리키지 않으므로 잘못된 인용으로 알려준다.
+  생성된 fact projection(`사용자/현행-사실.md`, `@facts/…`)은 fact 평면을 되풀이할 뿐이라
+  거부한다 — 자기 자신을 한 다리 건너 인용하는 셈이다. 기록되는 권위는 어느 쪽이든
+  `agent_confirmed` 그대로다.
 - 도구로 기록된 사실은 사용자 정정에 항상 진다. 사용자가 직접 말한 값이 있으면
   에이전트 주장은 `superseded`로 이력에만 남는다.
 - 근거 없는 주장은 도구 오류로 되돌아온다. 모델은 먼저 `knowledge(op="recall")`로

@@ -117,6 +117,17 @@ type FactMutationResult struct {
 	Resolution      string
 	Committed       bool
 	ProjectionError string
+	// Authority is the authority the write was actually recorded at. It is an
+	// OUTPUT, never an input: a caller states evidence and the store decides what
+	// that evidence is worth (ADR-0005).
+	Authority string
+	// VerifiedSource names a cited page the store opened and found the value in.
+	// It is corroboration reported back to the caller, not a promotion: the
+	// authority above is unchanged by it (ADR-0005).
+	VerifiedSource string
+	// SourceNote explains why no cited source held up, so a caller learns its
+	// citation was bad instead of assuming it landed.
+	SourceNote string
 }
 
 // FactMutationObserver runs synchronously after a canonical fact assertion or

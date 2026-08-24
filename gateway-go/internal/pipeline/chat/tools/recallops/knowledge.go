@@ -304,6 +304,18 @@ func knowledgeAssertFact(ctx context.Context, router *knowledge.Router, opts kno
 	}
 	message := fmt.Sprintf("%s: revision=%d status=%s resolution=%s claim=%s", prefix,
 		result.Revision, result.Status, result.Resolution, result.ClaimID)
+	// Tell the model whether its citation actually holds up. This changes no
+	// authority (the server fixes that), but a ref that does not open — or opens
+	// on a page that never states this value — is a bad citation the model should
+	// fix rather than keep repeating.
+	switch {
+	case result.VerifiedSource != "":
+		message += fmt.Sprintf("\n근거 확인됨 — `%s`가 이 값을 담고 있다(권위는 %s 그대로).",
+			result.VerifiedSource, result.Authority)
+	case result.SourceNote != "":
+		message += fmt.Sprintf("\n근거 미확인(%s) — 권위 %s로 기록됨. 인용한 ref가 열리는지, 그 페이지가 이 값을 담고 있는지 확인하라.",
+			result.SourceNote, result.Authority)
+	}
 	if result.ProjectionError != "" {
 		message += "\n⚠ 정본은 커밋됐지만 호환 projection 갱신이 지연됨: " + result.ProjectionError
 	}

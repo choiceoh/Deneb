@@ -363,3 +363,100 @@ func TestWikiAdapterRecallUsesDefaultRerankPath(t *testing.T) {
 		t.Fatalf("default options must invoke applyModelRerank, got %+v", def.Diagnostics.Rerank)
 	}
 }
+
+// ADR-0005: citing a page is checked and REPORTED, never promoted. A model can
+// author the page it cites (op="record" stamps today's date on caller-supplied
+// text), so a page that states the value proves nothing about who said it.
+func TestWikiAdapterReportsSourceEvidenceWithoutRaisingAuthority(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	t.Cleanup(func() { _ = store.Close() })
+
+	page := wiki.NewPage("프로젝트/abc-견적.md", "프로젝트", nil)
+	page.Meta.Updated = "2026-07-01"
+	page.Body = "# ABC 견적\n\n- 견적 금액: 1억 2,000만원\n"
+	if err := store.WritePage("프로젝트/abc-견적.md", page); err != nil {
+		t.Fatal(err)
+	}
+
+	facts := NewWikiAdapter(store).(FactWriter)
+	ctx := context.Background()
+
+	backed, err := facts.RecordFact(ctx, FactRecordOptions{
+		Subject: "project:abc", Key: "quote.amount", Value: "1억 2,000만원", Kind: "amount",
+		Sources: []string{"w:프로젝트/abc-견적"},
+	})
+	if err != nil || !backed.Committed {
+		t.Fatalf("backed = %+v, err = %v", backed, err)
+	}
+	if backed.Authority != "agent_confirmed" {
+		t.Fatalf("a cited page must not raise the authority, got %q", backed.Authority)
+	}
+	if !strings.Contains(backed.VerifiedSource, "abc-견적") {
+		t.Fatalf("the corroborating page should be reported, got %q", backed.VerifiedSource)
+	}
+	history, err := facts.Facts(ctx, "project:abc", "quote.amount")
+	if err != nil || len(history) != 1 {
+		t.Fatalf("history = %+v, err = %v", history, err)
+	}
+	if history[0].Authority != "agent_confirmed" || history[0].BasisAtMs != 0 {
+		// The page's own `updated` must not become the claim's basis either: it is
+		// stamped by whoever last wrote the page.
+		t.Fatalf("stored claim = %+v", history[0])
+	}
+
+	// A citation that does not hold up is reported rather than failing the write.
+	unbacked, err := facts.RecordFact(ctx, FactRecordOptions{
+		Subject: "project:abc", Key: "quote.terms", Value: "선금 30%", Kind: "contract",
+		Sources: []string{"w:프로젝트/abc-견적"},
+	})
+	if err != nil || !unbacked.Committed {
+		t.Fatalf("unbacked = %+v, err = %v", unbacked, err)
+	}
+	if unbacked.Authority != "agent_confirmed" || unbacked.VerifiedSource != "" {
+		t.Fatalf("unbacked claim = %+v", unbacked)
+	}
+	if !strings.Contains(unbacked.SourceNote, "does not contain") {
+		t.Fatalf("source note = %q", unbacked.SourceNote)
+	}
+}
+
+// The laundering path this PR withdrew, pinned as a regression: the model
+// writes a page saying what it wants, cites it, and must still not outrank the
+// user — on an amount axis, where primary_document would have won.
+func TestWikiAdapterSelfAuthoredPageCannotOutrankTheUser(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	t.Cleanup(func() { _ = store.Close() })
+
+	adapter := NewWikiAdapter(store)
+	ctx := context.Background()
+	if _, err := adapter.(Writer).Record(ctx, RecordOptions{
+		Page: "프로젝트/모델-메모.md", Category: "프로젝트",
+		Body: "- 견적 금액: 3억원\n",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertFact(wiki.FactInput{
+		Subject: "project:abc", Key: "quote.amount", Value: "1억 2,000만원",
+		Kind: wiki.FactKindAmount, Authority: wiki.FactAuthorityDirectUser,
+		At: time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	written, err := adapter.(FactWriter).RecordFact(ctx, FactRecordOptions{
+		Subject: "project:abc", Key: "quote.amount", Value: "3억원", Kind: "amount",
+		Sources: []string{"w:프로젝트/모델-메모"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written.Authority != "agent_confirmed" {
+		t.Fatalf("a self-authored page must buy no authority: %+v", written)
+	}
+	_, active := store.ActiveFactSnapshot("project:abc")
+	if len(active) != 1 || active[0].Value != "1억 2,000만원" {
+		t.Fatalf("the user's own amount must still win: %+v", active)
+	}
+}
