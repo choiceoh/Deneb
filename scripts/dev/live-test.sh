@@ -92,7 +92,7 @@ cmd_start() {
   fi
 
   local dev_config="${DEVLIB_TMP_PREFIX}-dev-config.json"
-  devlib_gen_config "$dev_config"
+  devlib_gen_config "$dev_config" "$DEV_STATE_DIR"
   echo "    Config: production"
 
   echo "==> Starting dev gateway on $DEV_HOST:$DEV_PORT..."

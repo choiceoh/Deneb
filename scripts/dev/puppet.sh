@@ -224,7 +224,7 @@ cmd_start() {
   printf '%s\n%s\n' "$DEVLIB_INSTANCE" "$PUPPET_URL" > "$PUPPET_ACTIVE_MARKER"
 
   echo "==> Generating puppet config (production config + puppet provider)..."
-  devlib_gen_config "$PUPPET_CONFIG"
+  devlib_gen_config "$PUPPET_CONFIG" "$DEV_STATE_DIR"
   _overlay_config "$all_roles" >/dev/null
   if [[ "$all_roles" == "1" ]]; then
     echo "    Roles: ALL LLM roles possessed, one seat per role"

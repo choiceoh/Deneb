@@ -166,7 +166,7 @@ echo "ok (${BUILD_MS}ms)"
 # the live-test dev gateway (iterate.sh already holds an flock for its own run).
 echo -n "start... "
 DEV_CONFIG="${DEVLIB_TMP_PREFIX}-iterate-config.json"
-devlib_gen_config "$DEV_CONFIG"
+devlib_gen_config "$DEV_CONFIG" "$ITERATE_STATE_DIR"
 
 # Chat/quality metrics inject through the native miniapp RPC; point the test
 # client at this iterate gateway + state dir (same contract as live-test.sh).

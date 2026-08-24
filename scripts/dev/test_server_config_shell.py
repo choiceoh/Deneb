@@ -286,10 +286,13 @@ class ConfigGeneratorTests(unittest.TestCase):
             "scripts/dev/config-gen.sh", "--diff", "--prod", str(active), env=self.env()
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout.count("  - "), 6)
+        self.assertEqual(proc.stdout.count("  - "), 7)
         for field in ("gmailPoll.enabled", "cron.enabled", "mailLmtp.enabled"):
             self.assertIn(field, proc.stdout)
         self.assertIn("Storage isolation", proc.stdout)
+        # The workspace is part of the isolation contract: MEMORY.md/USER.md are
+        # fact-plane projections a second gateway would clobber (2026-08-24).
+        self.assertIn("agents workspace", proc.stdout)
 
         safe = self.root / "safe.json"
         safe.write_text(json.dumps({
@@ -301,6 +304,28 @@ class ConfigGeneratorTests(unittest.TestCase):
             "scripts/dev/config-gen.sh", "--diff", "--prod", str(safe), env=self.env()
         )
         self.assertIn("No fields modified (config is dev-safe as-is)", proc.stdout)
+
+    def test_generate_redirects_agent_workspace_when_dev_workspace_env_set(self) -> None:
+        active = self.root / "active.json"
+        active.write_text(json.dumps({
+            "agents": {
+                "defaults": {"workspace": "~/.deneb/workspace"},
+                "list": [{"id": "main", "default": True, "workspace": "~/.deneb/workspace"}],
+            },
+        }), encoding="utf-8")
+        output = self.root / "out.json"
+        env = self.env()
+        env["DENEB_DEV_WORKSPACE"] = "/tmp/dev-ws"
+        proc = run_script(
+            "scripts/dev/config-gen.sh", "--out", str(output), "--prod", str(active), env=env
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        config = json.loads(output.read_text(encoding="utf-8"))
+        # Both levels must move: per-agent workspace beats defaults in
+        # ResolveAgentWorkspaceDir, so overriding only defaults would leave the
+        # dev gateway pointed at the production workspace.
+        self.assertEqual(config["agents"]["defaults"]["workspace"], "/tmp/dev-ws")
+        self.assertEqual(config["agents"]["list"][0]["workspace"], "/tmp/dev-ws")
 
     def test_dotenv_can_supply_production_path_and_invalid_json_preserves_existing_output(self) -> None:
         production = self.root / "from-env.json"

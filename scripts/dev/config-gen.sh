@@ -100,6 +100,7 @@ print('Storage isolation (set by live-test.sh / iterate.sh):')
 print('  - DENEB_STATE_DIR → /tmp/deneb-dev-state (or /tmp/deneb-iterate-state)')
 print('  - DENEB_WIKI_DIR → isolated from ~/.deneb/wiki')
 print('  - DENEB_WIKI_DIARY_DIR → isolated from ~/.deneb/memory/diary')
+print('  - agents workspace → isolated from ~/.deneb/workspace (fact projections)')
 "
     ;;
 
@@ -127,6 +128,29 @@ cfg.setdefault('cron', {})['enabled'] = False
 ml = cfg.get('mailLmtp')
 if ml and isinstance(ml, dict):
     ml['enabled'] = False
+
+# Redirect the agent workspace into the dev state dir. The production
+# workspace is NOT a shared read surface any more: since the fact-plane
+# cutover, MEMORY.md/USER.md are generated projections of the owning
+# gateway's journal, so a dev gateway pointed at the production workspace
+# re-projects its own (empty, revision-0) fact state over production's view.
+# That exact clobber happened twice on 2026-08-23/24 — the second time it
+# also masqueraded as a mysterious 'self-healing desync'. Per-agent
+# workspaces win over defaults in ResolveAgentWorkspaceDir, so both levels
+# are overridden.
+import os
+ws = os.environ.get('DENEB_DEV_WORKSPACE', '').strip()
+if ws:
+    agents = cfg.get('agents')
+    if isinstance(agents, dict):
+        defaults = agents.setdefault('defaults', {})
+        if isinstance(defaults, dict):
+            defaults['workspace'] = ws
+        for agent in agents.get('list') or []:
+            if isinstance(agent, dict) and agent.get('workspace'):
+                agent['workspace'] = ws
+    else:
+        cfg['agents'] = {'defaults': {'workspace': ws}}
 
 with open('$OUT', 'w') as f:
     json.dump(cfg, f, indent=2, ensure_ascii=False)
