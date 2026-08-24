@@ -209,6 +209,47 @@ func TestVerifyFactSourceRefusesTheGeneratedProjection(t *testing.T) {
 	}
 }
 
+// The tool schema shows `file:/계약/2026-01.pdf` as a source_refs example, so
+// both spellings of the files layer must be left unjudged rather than reported
+// as broken — otherwise the tool tells the model its own documentation is wrong.
+func TestVerifyFactSourceAcceptsBothFilesLayerSpellings(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	for _, ref := range []string{"f:/계약/2026-01.pdf", "file:/계약/2026-01.pdf"} {
+		evidence := store.VerifyFactSource(ref, "값")
+		if evidence.Checked || evidence.Verified {
+			t.Errorf("%q must be left unjudged: %+v", ref, evidence)
+		}
+		if !strings.Contains(evidence.Reason, "files layer") {
+			t.Errorf("%q reason = %q", ref, evidence.Reason)
+		}
+	}
+}
+
+// Canonical frontmatter states facts in every shape it has — a slice of sites, a
+// numeric capacity, a program slug — and a citation to one of them is good.
+func TestVerifyFactSourceReadsEveryCanonicalMetaShape(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	page := NewPage("프로젝트/군산.md", "프로젝트", []string{"태그값"})
+	page.Meta.Updated = "2026-08-01"
+	page.Meta.Sites = []string{"전북 군산시 옥구읍 수산리"}
+	page.Meta.Program = "비금-130mw"
+	page.Meta.Capacity = 130.9
+	page.Body = "# 군산\n"
+	if err := store.WritePage("프로젝트/군산.md", page); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, value := range []string{"전북 군산시 옥구읍 수산리", "비금-130mw", "130.9"} {
+		if evidence := store.VerifyFactSource("w:프로젝트/군산", value); !evidence.Verified {
+			t.Errorf("canonical meta %q must back a claim: %+v", value, evidence)
+		}
+	}
+	// Tags are navigation, not a claim the page makes about its subject.
+	if tagged := store.VerifyFactSource("w:프로젝트/군산", "태그값"); tagged.Verified {
+		t.Errorf("a tag must not read as a stated fact: %+v", tagged)
+	}
+}
+
 // A prefix naming no real layer is a bad citation, not an unjudged one: nothing
 // could open it, so the caller must hear about it.
 func TestVerifyFactSourceReportsUnknownLayers(t *testing.T) {

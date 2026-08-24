@@ -85,10 +85,11 @@ func (s *Store) VerifyFactSource(ref, value string) FactSourceEvidence {
 	}
 
 	if layer, ok := factSourceRefLayer(evidence.Ref); ok && layer != factSourceWikiLayer {
-		if layer == factSourceFilesLayer {
-			// Refs carry their layer (`w:` wiki, `f:` files). The files layer is a
-			// real citation this store simply cannot open, so it is left unjudged
-			// rather than reported as broken.
+		if factSourceFilesLayers[layer] {
+			// Refs carry their layer (`w:` wiki, `f:`/`file:` files — the tool
+			// schema publishes the long spelling in its own example). The files
+			// layer is a real citation this store simply cannot open, so it is left
+			// unjudged rather than reported as broken.
 			evidence.Reason = "source ref names the files layer, which this store cannot open"
 			return evidence
 		}
@@ -160,10 +161,13 @@ func (s *Store) VerifyFactSources(refs []string, value string) (FactSourceEviden
 	return last, false
 }
 
-const (
-	factSourceWikiLayer  = "w"
-	factSourceFilesLayer = "f"
-)
+const factSourceWikiLayer = "w"
+
+// factSourceFilesLayers are the spellings of the files layer a caller may use.
+// `f:` is the canonical ref prefix (knowledge/ref.go); `file:` is what the
+// knowledge tool schema shows in its own source_refs example, so refusing it
+// would be telling the model its own documentation is wrong.
+var factSourceFilesLayers = map[string]bool{"f": true, "file": true}
 
 // factSourceRefLayer reports the layer prefix a ref carries, if any. A bare
 // wiki path ("프로젝트/abc") and a fact ref ("@facts/…") carry none.
@@ -191,11 +195,24 @@ func factSourceRefLayer(ref string) (string, bool) {
 func factSourceStatesValue(page *Page, value string) bool {
 	meta := page.Meta
 	claims := []string{
-		page.Body,
-		meta.Due, meta.DueDone, meta.Status, meta.Stage, meta.Client, meta.Address,
-		meta.ContractDate, meta.ConstructionStart, meta.ModuleDelivery,
-		meta.PreUseInspection, meta.CompletionInspection, meta.Summary,
+		page.Body, meta.Summary,
+		// Identity and classification the page asserts about its subject.
+		meta.Code, meta.PID, meta.Resource, meta.Client, meta.Program,
+		meta.Stage, meta.Status, meta.Address, meta.Type, meta.Confidence,
+		// Milestone dates.
+		meta.Due, meta.DueDone, meta.ContractDate, meta.ConstructionStart,
+		meta.ModuleDelivery, meta.PreUseInspection, meta.CompletionInspection,
 	}
+	claims = append(claims, meta.Sites...)
+	claims = append(claims, meta.Kinds...)
+	claims = append(claims, meta.Emails...)
+	if meta.Capacity > 0 {
+		claims = append(claims, strconv.FormatFloat(meta.Capacity, 'f', -1, 64))
+	}
+	// Deliberately absent: tags, related, cues and sources. Those are navigation
+	// and provenance — they help a page be FOUND, they do not state a fact about
+	// its subject, and matching a value there would report a citation the page
+	// never makes.
 	for _, claim := range claims {
 		if claim != "" && factContainsBoundedValue(claim, value) {
 			return true
