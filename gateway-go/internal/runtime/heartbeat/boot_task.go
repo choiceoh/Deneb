@@ -39,6 +39,18 @@ type bootTask struct {
 	// cloud reachability is least trustworthy — and its judgment ("anything
 	// worth telling the user?") is low-stakes, measured well within local-tier
 	// quality (2026-08-01 0731 evals). 사용량 화면 "부팅 점검".
+	//
+	// "local" is the whole argument, so agents.fallbackModel has to keep
+	// pointing at a locally served model. Between 2026-08-02 and 2026-08-24 it
+	// pointed at deepseek-v4-flash-*api* — the cloud twin of the local model,
+	// one suffix apart — and this turn billed an outbound API call on every
+	// boot while the reasoning above still claimed it could not. Nothing
+	// detected it: the gateway does not know which routes wormhole serves
+	// locally, and the usage screen labels this role by model id rather than
+	// "폴백", so the cloud calls read as ordinary local traffic. If you retarget
+	// this role, check the wormhole route's `local` flag first — the router
+	// already chains local→local→cloud, so pointing at the local head keeps the
+	// cloud escape hatch without paying for it on every boot.
 	model    string
 	firstRun atomic.Bool // true after the initial boot run
 }
