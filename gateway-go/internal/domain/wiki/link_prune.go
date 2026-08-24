@@ -168,6 +168,9 @@ func (s *Store) PruneDeadRelatedLinks() (PruneStats, error) {
 	var stats PruneStats
 	for _, rp := range pages {
 		rp = strings.ReplaceAll(rp, "\\", "/")
+		if isFactProjectionReservedPath(rp) {
+			continue
+		}
 		repointed, removed := 0, 0
 		if err := s.UpdatePageMetaOnly(rp, func(cur *Page) (*Page, error) {
 			if cur == nil || len(cur.Meta.Related) == 0 {
@@ -249,6 +252,9 @@ func (s *Store) PruneDeadWikiLinks() (PruneStats, error) {
 	var stats PruneStats
 	for _, rp := range pages {
 		rp = strings.ReplaceAll(rp, "\\", "/")
+		if isFactProjectionReservedPath(rp) {
+			continue
+		}
 		repointed, unresolved := 0, 0
 		if err := s.UpdatePage(rp, func(cur *Page) (*Page, error) {
 			if cur == nil || !strings.Contains(cur.Body, "[[") {

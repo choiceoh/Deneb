@@ -22,8 +22,7 @@ func isGeneratedFactProjectionPage(relPath string, page *Page) bool {
 	if page == nil {
 		return false
 	}
-	cleaned := filepath.ToSlash(filepath.Clean(filepath.FromSlash(normalizePagePath(relPath))))
-	return cleaned == factProfilePagePath && strings.Contains(page.Body, factGeneratedMarker)
+	return isFactProjectionReservedPath(relPath) && strings.Contains(page.Body, factGeneratedMarker)
 }
 
 // isCurrentOrdinaryPage is the shared admission rule for background model
@@ -39,12 +38,16 @@ func isCurrentOrdinaryPage(relPath string, page *Page) bool {
 
 func rejectFactProjectionMutation(operation string, paths ...string) error {
 	for _, relPath := range paths {
-		cleaned := filepath.ToSlash(filepath.Clean(filepath.FromSlash(normalizePagePath(relPath))))
-		if cleaned == factProfilePagePath || strings.HasPrefix(cleaned, factSearchPathPrefix) {
+		if isFactProjectionReservedPath(relPath) {
 			return fmt.Errorf("wiki: %s: %q is a reserved fact-journal projection", operation, factProfilePagePath)
 		}
 	}
 	return nil
+}
+
+func isFactProjectionReservedPath(relPath string) bool {
+	cleaned := filepath.ToSlash(filepath.Clean(filepath.FromSlash(normalizePagePath(relPath))))
+	return cleaned == factProfilePagePath || strings.HasPrefix(cleaned, factSearchPathPrefix)
 }
 
 // SetFactProjectionDir enables generated MEMORY.md and USER.md compatibility
