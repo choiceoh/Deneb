@@ -18,7 +18,11 @@ import (
 // it is available when the contacts tool is wired during chat init.
 // Embedded in Server so fields are promoted and existing access patterns are unchanged.
 type MemorySubsystem struct {
-	wikiStore     *wiki.Store     // set during initMemorySubsystem()
+	wikiStore *wiki.Store // set during initMemorySubsystem()
+	// factCutover bounds how many consecutive startups may die on a failing
+	// fact-plane cutover before the gateway starts with wiki disabled instead
+	// (fact_cutover_guard.go). Lazily built so a zero-value Server is usable.
+	factCutover   *factCutoverGuard
 	notebookStore *notebook.Store // set during initToolsAndDeps(); deal-anchored source collections
 	contactsStore *contacts.Store // set during registerEarlyMethods()
 	workFeedStore *workfeed.Store // set during registerEarlyMethods()
