@@ -43,7 +43,6 @@ func TestVerifyFactSourceAcceptsOnlyAProvenValue(t *testing.T) {
 
 func TestVerifyFactSourceRefusesUnusableRefs(t *testing.T) {
 	store, _, _ := newFactTestStore(t)
-	seedSourcePage(t, store, "프로젝트/무날짜.md", "", "- 금액: 5,000만원\n")
 	if _, err := store.UpsertFact(FactInput{
 		Subject: "self", Key: "communication.language", Value: "한국어로 답변",
 		Kind: FactKindPreference, Authority: FactAuthorityDirectUser,
@@ -65,7 +64,6 @@ func TestVerifyFactSourceRefusesUnusableRefs(t *testing.T) {
 		{"empty ref", "", "값", "empty source ref"},
 		{"missing page", "w:프로젝트/없는페이지", "값", "not readable"},
 		{"escaping path", "w:../../etc/passwd", "root", "not readable"},
-		{"page without a date", "w:프로젝트/무날짜", "5,000만원", "no usable date"},
 		{
 			// A fact citing the fact plane would corroborate itself.
 			"fact reference", "@facts/" + active[0].ID + ".md", "한국어로 답변",
@@ -82,6 +80,21 @@ func TestVerifyFactSourceRefusesUnusableRefs(t *testing.T) {
 				t.Fatalf("reason = %q, want it to mention %q", evidence.Reason, tc.reason)
 			}
 		})
+	}
+}
+
+// The page date fed the withdrawn promotion. A dateless page still states what
+// it states, so it must not be reported as a bad citation.
+func TestVerifyFactSourceDoesNotRequireAPageDate(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	seedSourcePage(t, store, "프로젝트/무날짜.md", "", "- 금액: 5,000만원\n")
+
+	evidence := store.VerifyFactSource("w:프로젝트/무날짜", "5,000만원")
+	if !evidence.Verified {
+		t.Fatalf("a dateless page that states the value must verify: %+v", evidence)
+	}
+	if !evidence.BasisAt.IsZero() {
+		t.Errorf("a dateless page must report no date, got %v", evidence.BasisAt)
 	}
 }
 

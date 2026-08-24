@@ -35,13 +35,14 @@ type FactSourceEvidence struct {
 	Ref string
 	// Path is the wiki page the ref resolved to, empty when it resolved to none.
 	Path string
-	// BasisAt is the document's own date — the page's `updated` frontmatter. It
-	// is reported for the audit trail only; it does not become a claim's basis,
-	// because `updated` is stamped by whoever last wrote the page, including the
-	// model itself.
+	// BasisAt is the document's own date — the page's `updated` frontmatter, zero
+	// when the page carries none. It is reported for the audit trail only; it
+	// does not become a claim's basis, because `updated` is stamped by whoever
+	// last wrote the page, including the model itself. A missing date therefore
+	// does not sink a citation: nothing downstream needs it.
 	BasisAt time.Time
-	// Verified reports whether the page exists, carries a date, and actually
-	// contains the asserted value.
+	// Verified reports whether the page exists and actually contains the
+	// asserted value.
 	Verified bool
 	// Reason explains a refusal, so a caller can be told what would fix it.
 	Reason string
@@ -57,12 +58,13 @@ const factSourceRefPrefix = "w:"
 // here says who wrote the page. Callers may show this to a model; no caller may
 // raise an authority from it.
 //
-// Three things must hold, and each failure is reported rather than guessed at:
-// the ref resolves to a real page in this store, that page carries a date to use
-// as the basis, and the asserted value occurs in the page body on a token
-// boundary. A near-miss (the page says "120,000,000원" while the claim says
-// "1억 2,000만원") deliberately does not verify: this checks that a document
-// SAYS the value, which is the only thing a text match can honestly establish.
+// Two things must hold, and each failure is reported rather than guessed at: the
+// ref resolves to a real page in this store, and the asserted value occurs in
+// the page body on a token boundary. A near-miss (the page says "120,000,000원"
+// while the claim says "1억 2,000만원") deliberately does not verify: this checks
+// that a document SAYS the value, which is the only thing a text match can
+// honestly establish. The page's date is reported when it has one and is not
+// required — it fed the withdrawn promotion, and nothing consumes it now.
 func (s *Store) VerifyFactSource(ref, value string) FactSourceEvidence {
 	evidence := FactSourceEvidence{Ref: strings.TrimSpace(ref)}
 	if s == nil || evidence.Ref == "" {
@@ -94,18 +96,11 @@ func (s *Store) VerifyFactSource(ref, value string) FactSourceEvidence {
 	}
 	evidence.Path = normalizePagePath(path)
 
-	basis, ok := parseFactSourceDate(page.Meta.Updated)
-	if !ok {
-		// A citation with no date cannot be placed in time against a competing
-		// one, which is most of what makes it worth reporting.
-		evidence.Reason = "source page has no usable date"
-		return evidence
-	}
 	if !factContainsBoundedValue(page.Body, value) {
 		evidence.Reason = "source page does not contain the asserted value"
 		return evidence
 	}
-	evidence.BasisAt = basis
+	evidence.BasisAt, _ = parseFactSourceDate(page.Meta.Updated)
 	evidence.Verified = true
 	return evidence
 }
