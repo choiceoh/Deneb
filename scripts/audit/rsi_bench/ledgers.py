@@ -436,6 +436,91 @@ def _soft_skills_from_usage(
     return {name for name, n in uses.items() if n >= soft_confirm_uses}
 
 
+@dataclass
+class PathwayWindow:
+    """Post-evolve usage split by whether the skill's procedure actually ran.
+
+    PAST-Bench (arXiv:2608.04003) separates a headline gain from evidence that
+    the gain followed the intended save → retrieve → update pathway: two agents
+    with the same confirm rate can differ completely in whether retained
+    experience is what produced it. Our confirm signal has exactly that hole —
+    a post-evolve use is credited to the evolved skill whether or not the skill
+    was exercised, so a skill can be "confirmed" by turns its procedure never
+    touched.
+
+    The split reads the delivery/exercised attribution written on real usage
+    records; records predating it count as unattributed (unknown, not
+    supporting).
+    """
+
+    post_uses: int = 0
+    exercised: int = 0
+    unexercised: int = 0
+    unattributed: int = 0
+    skills: int = 0
+
+    @property
+    def attributed(self) -> int:
+        return self.exercised + self.unexercised
+
+    @property
+    def support_rate(self) -> float | None:
+        """Share of ATTRIBUTED post-evolve uses that actually ran the skill."""
+        if self.attributed <= 0:
+            return None
+        return self.exercised / self.attributed
+
+    @property
+    def coverage(self) -> float:
+        """Share of post-evolve uses carrying attribution at all."""
+        if self.post_uses <= 0:
+            return 0.0
+        return self.attributed / self.post_uses
+
+
+def load_pathway_window(data: Path | None = None, *, days: int = _SOFT_USAGE_HORIZON_DAYS) -> PathwayWindow:
+    """Attribute post-evolve real uses for skills evolved inside the horizon."""
+    root = data or data_dir()
+    cutoff = now_ms() - days * 86400 * 1000
+    latest_evolve: dict[str, int] = {}
+    for row in iter_jsonl(root / "skill_genesis_log.jsonl"):
+        if str(row.get("type") or "") != "evolved":
+            continue
+        ts = _created_at_ms(row)
+        if ts is None or ts < cutoff:
+            continue
+        name = str(row.get("skillName") or row.get("skill") or "").strip()
+        if name:
+            latest_evolve[name] = max(latest_evolve.get(name, 0), ts)
+    out = PathwayWindow()
+    if not latest_evolve:
+        return out
+    seen: set[str] = set()
+    for row in iter_jsonl(root / "skill_usage.jsonl"):
+        name = str(row.get("skillName") or row.get("skill") or "").strip()
+        if name not in latest_evolve:
+            continue
+        if str(row.get("source") or "").strip().lower() not in {"", "real"}:
+            continue
+        try:
+            used_ms = int(row.get("usedAt") or 0)
+        except (TypeError, ValueError):
+            continue
+        if used_ms < latest_evolve[name]:
+            continue
+        out.post_uses += 1
+        seen.add(name)
+        exercised = str(row.get("exercised") or "").strip().lower()
+        if exercised == "yes":
+            out.exercised += 1
+        elif exercised == "no":
+            out.unexercised += 1
+        else:
+            out.unattributed += 1
+    out.skills = len(seen)
+    return out
+
+
 def load_watch_window(data: Path | None = None, *, soft_confirm_uses: int = 3) -> WatchWindow:
     root = data or data_dir()
     path = root / "skill_evolve_watch.json"

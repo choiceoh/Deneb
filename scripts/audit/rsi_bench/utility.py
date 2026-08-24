@@ -13,6 +13,7 @@ from .ledgers import (
     DispatchWindow,
     GenesisWindow,
     MetaWindow,
+    PathwayWindow,
     WatchWindow,
     data_dir,
     load_closure_window,
@@ -20,6 +21,7 @@ from .ledgers import (
     load_genesis_window,
     load_impact_window,
     load_meta_window,
+    load_pathway_window,
     load_watch_window,
 )
 from .model import (
@@ -240,8 +242,21 @@ def score_codebase_delta(
     )
 
 
+def _pathway_detail(pathway: PathwayWindow) -> str:
+    """Render the pathway split for the retention evidence line."""
+    if pathway.post_uses <= 0:
+        return " pathway=no-post-uses"
+    if pathway.attributed <= 0:
+        return f" pathway=unattributed({pathway.post_uses} post-uses, 0 attributed)"
+    return (
+        f" pathwaySupport={pathway.support_rate:.2f}"
+        f" ({pathway.exercised}/{pathway.attributed} exercised,"
+        f" coverage={pathway.coverage:.2f}, skills={pathway.skills})"
+    )
+
+
 def _score_retention(
-    genesis: GenesisWindow, health: dict[str, Any], watch: WatchWindow
+    genesis: GenesisWindow, health: dict[str, Any], watch: WatchWindow, pathway: PathwayWindow | None = None
 ) -> tuple[float, Evidence, list[Finding]]:
     if health.get("confirm_rate") is not None and int(health.get("resolved_evolves_7d") or 0) >= MIN_RESOLVED_FOR_HARD:
         rate = float(health["confirm_rate"])
@@ -261,7 +276,8 @@ def _score_retention(
             Evidence(
                 "utility-retention-proxy",
                 "bootstrap",
-                f"resolved=0; CPE retention unmeasured (watches={watch.watches} soft={watch.soft_confirmed})",
+                f"resolved=0; CPE retention unmeasured (watches={watch.watches} soft={watch.soft_confirmed})"
+                + _pathway_detail(pathway or PathwayWindow()),
                 required=False,
             ),
             [],
@@ -269,14 +285,49 @@ def _score_retention(
     score = grade_rate_high_good(rate, soft=0.70, hard=0.20)
     if mode == "soft":
         score = min(score, SOFT_RESOLVE_SCORE_CAP)
+    pathway = pathway or PathwayWindow()
+    findings: list[Finding] = []
+    # ADVISORY: the pathway split explains the confirm rate, it does not move
+    # the score. Re-weighting a ratcheted metric on a signal with no production
+    # history is how a bench starts scoring its own instrumentation; the split
+    # has to accumulate records before it can justify gating.
+    if (
+        rate >= 0.70
+        and pathway.attributed >= MIN_RESOLVED_FOR_HARD
+        and pathway.coverage >= 0.5
+        and (pathway.support_rate or 0.0) < 0.5
+    ):
+        findings.append(
+            Finding(
+                id=stable_id("retention-pathway", f"{pathway.exercised}/{pathway.attributed}"),
+                domain="utility",
+                pillar="retention-proxy",
+                severity="medium",
+                path="skill_usage.jsonl",
+                evidence=(
+                    f"confirmRate={rate:.2f} but only {pathway.exercised}/{pathway.attributed} "
+                    f"post-evolve uses actually exercised the skill"
+                ),
+                why=(
+                    "PAST-Bench: a headline gain unsupported by the save→retrieve→update "
+                    "pathway is not evidence that retained experience improved anything"
+                ),
+                remediation=(
+                    "Check whether the evolved skills are being loaded but ignored "
+                    "(delivery/exercised split in UsageQualitySummary) before crediting the confirm rate"
+                ),
+                verify="python3 scripts/audit/rsi-bench.py --format json",
+                priority=70.0,
+            )
+        )
     return (
         score,
         Evidence(
             "utility-retention-proxy",
             "measured",
-            f"confirmRate={rate:.3f} resolved={resolved} mode={mode}",
+            f"confirmRate={rate:.3f} resolved={resolved} mode={mode}" + _pathway_detail(pathway),
         ),
-        [],
+        findings,
     )
 
 
@@ -344,11 +395,12 @@ def evaluate_utility(
     closure = load_closure_window(data_path)
     watch = load_watch_window(data_path)
     dispatch = load_dispatch_window(data_path)
+    pathway = load_pathway_window(data_path)
 
     c_score, c_ev, c_f = score_closure_land(closure)
     o_score, o_ev, o_f = score_operator_verdict(meta)
     d_score, d_ev, d_f = score_codebase_delta(root, cache=cache)
-    r_score, r_ev, r_f = _score_retention(genesis, health, watch)
+    r_score, r_ev, r_f = _score_retention(genesis, health, watch, pathway)
     x_score, x_ev, x_f = _score_dispatch(dispatch)
 
     # 25+20+20+15+20 = 100
