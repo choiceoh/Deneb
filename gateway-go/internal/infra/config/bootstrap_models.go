@@ -59,6 +59,8 @@ func PersistRoleModel(configPath, role, model string, logger *slog.Logger) error
 		field = "fallbackModel"
 	case "vision":
 		field = "visionModel"
+	case "submain":
+		field = "submainModel"
 	default:
 		return fmt.Errorf("unknown model role %q", role)
 	}

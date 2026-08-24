@@ -568,7 +568,9 @@ private enum class ModelHealth(val color: Color, val suffix: String) {
  *  used to look up the current model); [label] is the Korean segmented-button text;
  *  [desc] is the one-line role explanation shown in the "?" tooltip. Descriptions
  *  mirror the gateway's modelrole registry (main / coding / vision / tiny /
- *  lightweight / fallback). */
+ *  lightweight / fallback / submain). The wire keys and their order must equal
+ *  the gateway's pickerRoles list — TestNativePickerEnumMatchesPickerRoles
+ *  reads this enum and fails when they drift. */
 private enum class ModelRole(val wire: String, val label: String, val desc: String) {
     MAIN("main", "메인", "대화·분석·도구 호출을 담당하는 기본 모델"),
     CODING("coding", "코딩", "코드 수정·구현자 서브에이전트·스킬 진화 패치를 담당하는 전용 모델. 미설정이면 기존 기본 모델을 사용"),
@@ -576,6 +578,7 @@ private enum class ModelRole(val wire: String, val label: String, val desc: Stri
     TINY("tiny", "초경량", "세션 제목·메일 1차 추출 같은 사소한 분류·추출"),
     LIGHTWEIGHT("lightweight", "경량", "위키 병합·파일럿·스킬 리뷰 같은 범위가 정해진 요약"),
     FALLBACK("fallback", "폴백", "메인 모델이 실패했을 때 대신 쓰는 모델"),
+    SUBMAIN("submain", "자율", "하트비트·폰 이벤트 판정·워크플로 같은 자율 동작이 쓰는 모델. 대화 트래픽과 분리해 메인 구독을 아낀다. 미설정이면 메인 모델을 사용"),
 }
 
 /** "24h · 12회 · 입력 1.2M(캐시 0.9M) · 출력 45K" — the model row's rolling-24h
