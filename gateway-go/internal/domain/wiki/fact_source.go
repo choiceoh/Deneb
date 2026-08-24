@@ -84,19 +84,21 @@ func (s *Store) VerifyFactSource(ref, value string) FactSourceEvidence {
 		return evidence
 	}
 
-	if layer, ok := factSourceRefLayer(evidence.Ref); ok && layer != factSourceWikiLayer {
-		if factSourceFilesLayers[layer] {
-			// Refs carry their layer (`w:` wiki, `f:`/`file:` files — the tool
-			// schema publishes the long spelling in its own example). The files
-			// layer is a real citation this store simply cannot open, so it is left
-			// unjudged rather than reported as broken.
-			evidence.Reason = "source ref names the files layer, which this store cannot open"
+	if layer, id, ok := factSourceRefLayer(evidence.Ref); ok && layer != factSourceWikiLayer {
+		if id == "" {
+			// A ref that is only a prefix names no document at all, whatever layer
+			// it claims — `source_refs` is then satisfied in form but not in fact.
+			evidence.Checked = true
+			evidence.Reason = "source ref names no document"
 			return evidence
 		}
-		// Any other prefix names no layer that exists: knowledge(op="read") could
-		// not open it either, so it IS a bad citation and the caller should hear so.
-		evidence.Checked = true
-		evidence.Reason = "source ref names unknown layer " + strconv.Quote(layer)
+		// Only the wiki layer is this store's to open. Every other prefix is left
+		// unjudged rather than called broken: `source_refs` is an AUDIT contract
+		// wider than the knowledge read layers — the fact plane's own writers use
+		// `session:` and `workspace:` refs, and the schema names document and
+		// runtime observation identifiers too. This store cannot enumerate what is
+		// valid out there, so it does not pretend to.
+		evidence.Reason = "source ref names the " + layer + " layer, which this store cannot open"
 		return evidence
 	}
 	evidence.Checked = true
@@ -141,9 +143,14 @@ func (s *Store) VerifyFactSource(ref, value string) FactSourceEvidence {
 // pass everything it has and report the one that held up — or, when none did,
 // the most informative refusal.
 func (s *Store) VerifyFactSources(refs []string, value string) (FactSourceEvidence, bool) {
-	// Bound the reads to the refs the store would actually keep. A caller can
-	// ignore the schema's maxItems and send thousands; verifying all of them
-	// would be disk I/O spent on refs that normalization is about to drop.
+	// Spend no I/O on a request the store will refuse anyway: UpsertFact runs
+	// validateFactInputBounds on the ORIGINAL slice, so an over-long list (or an
+	// over-long ref) is rejected outright rather than trimmed. Checking the same
+	// bounds first means a caller that ignores the schema's maxItems gets the
+	// store's error, not sixteen page reads followed by it.
+	if err := validateFactSourceBounds(refs); err != nil {
+		return FactSourceEvidence{}, false
+	}
 	var last FactSourceEvidence
 	for _, ref := range normalizeFactSources(refs) {
 		evidence := s.VerifyFactSource(ref, value)
@@ -163,24 +170,18 @@ func (s *Store) VerifyFactSources(refs []string, value string) (FactSourceEviden
 
 const factSourceWikiLayer = "w"
 
-// factSourceFilesLayers are the spellings of the files layer a caller may use.
-// `f:` is the canonical ref prefix (knowledge/ref.go); `file:` is what the
-// knowledge tool schema shows in its own source_refs example, so refusing it
-// would be telling the model its own documentation is wrong.
-var factSourceFilesLayers = map[string]bool{"f": true, "file": true}
-
-// factSourceRefLayer reports the layer prefix a ref carries, if any. A bare
-// wiki path ("프로젝트/abc") and a fact ref ("@facts/…") carry none.
-func factSourceRefLayer(ref string) (string, bool) {
+// factSourceRefLayer splits the layer prefix a ref carries from its id. A bare
+// wiki path ("프로젝트/abc") and a fact ref ("@facts/…") carry no prefix.
+func factSourceRefLayer(ref string) (layer, id string, ok bool) {
 	colon := strings.IndexByte(ref, ':')
 	if colon <= 0 {
-		return "", false
+		return "", "", false
 	}
-	layer := ref[:colon]
+	layer = ref[:colon]
 	if strings.ContainsAny(layer, "/\\ ") {
-		return "", false
+		return "", "", false
 	}
-	return layer, true
+	return layer, strings.TrimSpace(ref[colon+1:]), true
 }
 
 // factSourceStatesValue reports whether the page says the value — in its prose,

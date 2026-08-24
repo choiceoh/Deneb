@@ -209,22 +209,6 @@ func TestVerifyFactSourceRefusesTheGeneratedProjection(t *testing.T) {
 	}
 }
 
-// The tool schema shows `file:/계약/2026-01.pdf` as a source_refs example, so
-// both spellings of the files layer must be left unjudged rather than reported
-// as broken — otherwise the tool tells the model its own documentation is wrong.
-func TestVerifyFactSourceAcceptsBothFilesLayerSpellings(t *testing.T) {
-	store, _, _ := newFactTestStore(t)
-	for _, ref := range []string{"f:/계약/2026-01.pdf", "file:/계약/2026-01.pdf"} {
-		evidence := store.VerifyFactSource(ref, "값")
-		if evidence.Checked || evidence.Verified {
-			t.Errorf("%q must be left unjudged: %+v", ref, evidence)
-		}
-		if !strings.Contains(evidence.Reason, "files layer") {
-			t.Errorf("%q reason = %q", ref, evidence.Reason)
-		}
-	}
-}
-
 // Canonical frontmatter states facts in every shape it has — a slice of sites, a
 // numeric capacity, a program slug — and a citation to one of them is good.
 func TestVerifyFactSourceReadsEveryCanonicalMetaShape(t *testing.T) {
@@ -260,35 +244,60 @@ func TestVerifyFactSourceReadsEveryCanonicalMetaShape(t *testing.T) {
 	}
 }
 
-// A prefix naming no real layer is a bad citation, not an unjudged one: nothing
-// could open it, so the caller must hear about it.
-func TestVerifyFactSourceReportsUnknownLayers(t *testing.T) {
+// `source_refs` is an audit contract wider than the knowledge read layers — the
+// fact plane's own writers cite `session:` and `workspace:` — so a prefix this
+// store cannot open is left unjudged rather than called broken.
+func TestVerifyFactSourceLeavesEveryNonWikiLayerUnjudged(t *testing.T) {
 	store, _, _ := newFactTestStore(t)
-	evidence := store.VerifyFactSource("x:계약서", "값")
-	if evidence.Verified || !evidence.Checked {
-		t.Fatalf("an unknown layer must be reported as a bad ref: %+v", evidence)
-	}
-	if !strings.Contains(evidence.Reason, "unknown layer") {
-		t.Errorf("reason = %q", evidence.Reason)
+	for _, ref := range []string{
+		"f:/계약/견적서.pdf", "file:/계약/2026-01.pdf",
+		"session:sess-42", "workspace:MEMORY.md#L3", "doc:2026-계약서", "runtime:probe-7",
+	} {
+		evidence := store.VerifyFactSource(ref, "값")
+		if evidence.Checked || evidence.Verified {
+			t.Errorf("%q must be left unjudged: %+v", ref, evidence)
+		}
 	}
 }
 
-// A caller that ignores the schema's maxItems must not turn one tool call into
-// unbounded disk reads: only the refs the store would keep are opened.
-func TestVerifyFactSourcesBoundsTheRefsItReads(t *testing.T) {
+// A ref that is only a prefix names no document at all, so it satisfies the
+// source_refs contract in form but not in fact — that one IS worth reporting.
+func TestVerifyFactSourceReportsARefWithNoDocument(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	for _, ref := range []string{"f:", "file:", "session:"} {
+		evidence := store.VerifyFactSource(ref, "값")
+		if evidence.Verified || !evidence.Checked {
+			t.Fatalf("%q must be reported as a bad ref: %+v", ref, evidence)
+		}
+		if !strings.Contains(evidence.Reason, "names no document") {
+			t.Errorf("%q reason = %q", ref, evidence.Reason)
+		}
+	}
+}
+
+// A caller that ignores the schema's maxItems gets the store's rejection, not
+// sixteen page reads followed by it: UpsertFact validates the ORIGINAL slice.
+func TestVerifyFactSourcesSkipsRequestsTheStoreWillRefuse(t *testing.T) {
 	store, _, _ := newFactTestStore(t)
 	seedSourcePage(t, store, "프로젝트/계약.md", "2026-08-01", "- 납기: 2026-12-31\n")
 
-	flood := make([]string, 0, 200)
+	flood := []string{"w:프로젝트/계약"}
 	for i := range 200 {
 		flood = append(flood, "w:프로젝트/없는페이지-"+strconv.Itoa(i))
 	}
-	// The proving ref sits at the front, outside the tail the store keeps, so a
-	// bounded verification cannot find it — that is the bound being enforced.
-	if _, ok := store.VerifyFactSources(append([]string{"w:프로젝트/계약"}, flood...), "2026-12-31"); ok {
-		t.Fatal("verification read past the refs the store would keep")
+	if _, ok := store.VerifyFactSources(flood, "2026-12-31"); ok {
+		t.Fatal("an out-of-bounds request must not be verified at all")
 	}
-	if _, ok := store.VerifyFactSources(append(flood, "w:프로젝트/계약"), "2026-12-31"); !ok {
-		t.Fatal("a kept ref must still verify")
+	// The same store refuses that write, so nothing was lost by not reading.
+	if _, err := store.UpsertFact(FactInput{
+		Subject: "self", Key: "a.b", Value: "값", Sources: flood,
+		At: time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC),
+	}); err == nil {
+		t.Fatal("the store should reject an over-long source list")
+	}
+
+	// A request within bounds is verified normally.
+	if _, ok := store.VerifyFactSources(flood[:8], "2026-12-31"); !ok {
+		t.Fatal("an in-bounds request must still verify")
 	}
 }
