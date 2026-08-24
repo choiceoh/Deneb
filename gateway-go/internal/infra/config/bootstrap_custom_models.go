@@ -362,9 +362,9 @@ func customModelCount(providerConfig map[string]any) int {
 }
 
 // clearRolesReferencingModel deletes any agents.{default,tiny,lightweight,
-// coding,fallback,vision}Model field equal to fullModelID and returns the affected
-// modelrole role names, so the caller can reset the live registry. Mirrors
-// PersistRoleModel's mapping.
+// coding,fallback,vision,submain}Model field equal to fullModelID and returns
+// the affected modelrole role names, so the caller can reset the live registry.
+// Mirrors PersistRoleModel's mapping.
 func clearRolesReferencingModel(raw map[string]any, fullModelID string) []string {
 	agents, ok := raw["agents"].(map[string]any)
 	if !ok {
@@ -377,6 +377,7 @@ func clearRolesReferencingModel(raw map[string]any, fullModelID string) []string
 		{"codingModel", "coding"},
 		{"fallbackModel", "fallback"},
 		{"visionModel", "vision"},
+		{"submainModel", "submain"},
 	}
 	var cleared []string
 	for _, f := range fields {
