@@ -80,9 +80,12 @@ func ToolWatch(workspaceDir string, fetchYouTube YouTubeFetcher) toolport.ToolFu
 		// YouTube + transcript (the default) → the shared transcript engine
 		// (metadata + a detailed, chapter-sectioned summary, chunked for long
 		// talks), injected via fetchYouTube. This is the single YouTube path now
-		// (the web tool steers here). Frames mode, local files, and a nil fetcher
-		// fall through to the native download/caption path below.
-		if fetchYouTube != nil && detail == watchDetailTranscript && media.IsYouTubeURL(p.Source) {
+		// (the web tool steers here). Frames mode, local files, a nil fetcher,
+		// and windowed (start/end) requests fall through to the native path
+		// below — the fetcher summarizes the WHOLE video and cannot honor a
+		// window, while WatchVideo transcribes just that window's audio.
+		windowed := p.Start > 0 || p.End > 0
+		if fetchYouTube != nil && detail == watchDetailTranscript && !windowed && media.IsYouTubeURL(p.Source) {
 			out, ferr := fetchYouTube(ctx, p.Source)
 			if ferr != nil {
 				return "", fmt.Errorf("유튜브 자막 처리 실패: %w", ferr)
