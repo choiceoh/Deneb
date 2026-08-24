@@ -16,6 +16,7 @@ type (
 	QueryExpander           = wiki.QueryExpander
 	Config                  = wiki.Config
 	SearchOptions           = wiki.SearchOptions
+	DeadWikiLink            = wiki.DeadWikiLink
 	RecallEvent             = wiki.RecallEvent
 	RecallMiss              = wiki.RecallMiss
 	RecallUsage             = wiki.RecallUsage

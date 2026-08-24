@@ -25,6 +25,15 @@ import (
 	"strings"
 )
 
+// DeadWikiLink is one body [[link]] whose path-shaped target no page resolves.
+// The review task tracks these across sweeps: a target can come back (a purged
+// person gets re-seeded, a page returns under the same path), so a dead link is
+// given a grace window to self-heal before it is unwrapped to prose.
+type DeadWikiLink struct {
+	Page   string
+	Target string
+}
+
 // PruneStats summarizes one dead-link sweep.
 type PruneStats struct {
 	PagesChanged int
@@ -238,30 +247,32 @@ func (s *Store) PruneDeadRelatedLinks() (PruneStats, error) {
 // unresolvable link is counted, never deleted — removing a link would destroy
 // the author's statement that a relationship exists. Metadata-only in spirit,
 // so it preserves `updated` like the Related sweep.
-func (s *Store) PruneDeadWikiLinks() (PruneStats, error) {
+func (s *Store) PruneDeadWikiLinks() (PruneStats, []DeadWikiLink, error) {
 	pages, err := s.ListPages("")
 	if err != nil {
-		return PruneStats{}, fmt.Errorf("wiki: prune wikilinks: %w", err)
+		return PruneStats{}, nil, fmt.Errorf("wiki: prune wikilinks: %w", err)
 	}
 	resolver := s.newLinkResolver(pages)
 	if resolver.indexEntries == 0 && len(pages) > 0 {
 		slog.Warn("wiki: wikilink prune skipped — index empty but pages exist", "pages", len(pages))
-		return PruneStats{}, nil
+		return PruneStats{}, nil, nil
 	}
 
 	var stats PruneStats
+	var deadLinks []DeadWikiLink
 	for _, rp := range pages {
 		rp = strings.ReplaceAll(rp, "\\", "/")
 		if isFactProjectionReservedPath(rp) {
 			continue
 		}
 		repointed, unresolved := 0, 0
+		var deadHere []string
 		if err := s.UpdatePage(rp, func(cur *Page) (*Page, error) {
 			if cur == nil || !strings.Contains(cur.Body, "[[") {
 				return nil, nil
 			}
 			body, rep, dead := rewriteWikiLinks(cur.Body, rp, resolver)
-			repointed, unresolved = rep, dead
+			repointed, unresolved, deadHere = rep, len(dead), dead
 			if body == cur.Body {
 				return nil, nil
 			}
@@ -281,18 +292,22 @@ func (s *Store) PruneDeadWikiLinks() (PruneStats, error) {
 		}
 		stats.Repointed += repointed
 		stats.Removed += unresolved // reported as "still dead", not deleted
+		for _, target := range deadHere {
+			deadLinks = append(deadLinks, DeadWikiLink{Page: rp, Target: target})
+		}
 		if repointed > 0 {
 			stats.PagesChanged++
 		}
 	}
-	return stats, nil
+	return stats, deadLinks, nil
 }
 
 // rewriteWikiLinks rewrites [[target]] targets that resolve to a different live
 // page, preserving |alias and #section suffixes. Returns the new body, how many
-// links were repointed, and how many remain unresolved.
-func rewriteWikiLinks(body, self string, resolver *linkResolver) (string, int, int) {
-	repointed, unresolved := 0, 0
+// links were repointed, and the path-shaped targets that stay unresolved.
+func rewriteWikiLinks(body, self string, resolver *linkResolver) (string, int, []string) {
+	repointed := 0
+	var dead []string
 	out := wikiLinkRe.ReplaceAllStringFunc(body, func(match string) string {
 		inner := strings.TrimSuffix(strings.TrimPrefix(match, "[["), "]]")
 		target, suffix := inner, ""
@@ -312,7 +327,7 @@ func rewriteWikiLinks(body, self string, resolver *linkResolver) (string, int, i
 		}
 		resolved := resolver.resolve(trimmed)
 		if resolved == "" {
-			unresolved++
+			dead = append(dead, trimmed)
 			return match
 		}
 		// A link that already points at a live page — by path, title, or code —
@@ -327,5 +342,60 @@ func rewriteWikiLinks(body, self string, resolver *linkResolver) (string, int, i
 		repointed++
 		return "[[" + resolved + suffix + "]]"
 	})
-	return out, repointed, unresolved
+	return out, repointed, dead
+}
+
+// UnwrapWikiLinks turns the given still-dead [[targets]] in one page into plain
+// prose — the alias when the author wrote one ([[path|label]] → label), else
+// the target's readable basename. The author's statement survives as text; only
+// the markup's promise of a destination is dropped.
+//
+// This is the terminal step of the dead-link ladder and deliberately NOT part
+// of the sweep itself: a dead target can come back (a purged person re-seeded,
+// a page recreated under the same path), and a still-wrapped link then heals on
+// the next sweep for free. The review task therefore only condemns a link here
+// after it has stayed dead across a grace window.
+func (s *Store) UnwrapWikiLinks(relPath string, targets map[string]bool) (int, error) {
+	if len(targets) == 0 {
+		return 0, nil
+	}
+	unwrapped := 0
+	err := s.UpdatePage(relPath, func(cur *Page) (*Page, error) {
+		if cur == nil || !strings.Contains(cur.Body, "[[") {
+			return nil, nil
+		}
+		body := wikiLinkRe.ReplaceAllStringFunc(cur.Body, func(match string) string {
+			inner := strings.TrimSuffix(strings.TrimPrefix(match, "[["), "]]")
+			target, alias := inner, ""
+			if i := strings.IndexAny(inner, "|#"); i >= 0 {
+				target = inner[:i]
+				if inner[i] == '|' {
+					alias = inner[i+1:]
+				}
+			}
+			trimmed := strings.TrimSpace(target)
+			if !targets[trimmed] {
+				return match
+			}
+			unwrapped++
+			if strings.TrimSpace(alias) != "" {
+				return strings.TrimSpace(alias)
+			}
+			base := path.Base(strings.ReplaceAll(trimmed, "\\", "/"))
+			return strings.TrimSuffix(base, ".md")
+		})
+		if body == cur.Body {
+			return nil, nil
+		}
+		// Same "no new knowledge" contract as the repoint sweep: dropping rotten
+		// markup says nothing new about the subject, so the page keeps its date.
+		updated := cur.Meta.Updated
+		cur.Body = body
+		cur.Meta.Updated = updated
+		return cur, nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return unwrapped, nil
 }

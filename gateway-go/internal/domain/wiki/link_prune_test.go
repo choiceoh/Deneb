@@ -225,7 +225,7 @@ func TestPruneDeadLinksSkipGeneratedFactProjection(t *testing.T) {
 	if relatedStats.Failed != 0 {
 		t.Fatalf("PruneDeadRelatedLinks failed on generated fact projection: %+v", relatedStats)
 	}
-	bodyStats, err := store.PruneDeadWikiLinks()
+	bodyStats, _, err := store.PruneDeadWikiLinks()
 	if err != nil {
 		t.Fatalf("PruneDeadWikiLinks: %v", err)
 	}
