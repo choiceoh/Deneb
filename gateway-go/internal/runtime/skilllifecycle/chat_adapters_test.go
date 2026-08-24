@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
@@ -42,6 +41,23 @@ func newUsageRecorderTracker(t *testing.T) *genesis.Tracker {
 	return tracker
 }
 
+// newSyncUsageRecorder builds the recorder with validation-case capture running
+// inline. Production detaches that work; a test cannot join a detached
+// goroutine, and one that writes under the t.TempDir()-rooted HOME races the
+// directory's cleanup — this package failed about one run in four on
+// "TempDir RemoveAll cleanup: .../.deneb: directory not empty". Running it
+// inline makes the assertions deterministic instead of timed.
+func newSyncUsageRecorder(t *testing.T, tracker *genesis.Tracker, store toolport.TranscriptStore, replayEnabled bool) chatport.SkillUsageRecorder {
+	t.Helper()
+	rec := NewChatUsageRecorder(tracker, store, slog.Default(), replayEnabled, nil, "")
+	adapter, ok := rec.(*chatUsageRecorderAdapter)
+	if !ok {
+		t.Fatalf("unexpected recorder type %T", rec)
+	}
+	adapter.spawn = func(_ *slog.Logger, _ string, fn func()) { fn() }
+	return rec
+}
+
 func TestChatUsageRecorderAutoValidationCaseFromFailedUse(t *testing.T) {
 	tracker := newUsageRecorderTracker(t)
 	store := usageRecorderTranscriptStore{msgs: []toolport.ChatMessage{
@@ -53,27 +69,18 @@ func TestChatUsageRecorderAutoValidationCaseFromFailedUse(t *testing.T) {
 			{"type":"tool_result","tool_use_id":"tu_1","content":"Active: failed","is_error":true}
 		]`)},
 	}}
-	rec := NewChatUsageRecorder(tracker, store, slog.Default(), true, nil, "")
+	rec := newSyncUsageRecorder(t, tracker, store, true)
 
 	rec.RecordSkillUse("client:main:srv1", "srv1-ops", false, "turn failed: tool exec errored", "m1")
 
-	var cases []genesis.SkillValidationCaseRecord
-	var err error
-	for i := 0; i < 20; i++ {
-		cases, err = tracker.RecentSkillValidationCases("srv1-ops", 5)
-		if err != nil {
-			t.Fatalf("RecentSkillValidationCases: %v", err)
-		}
-		if len(cases) > 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
+	cases, err := tracker.RecentSkillValidationCases("srv1-ops", 5)
+	if err != nil {
+		t.Fatalf("RecentSkillValidationCases: %v", err)
 	}
 	if len(cases) != 1 {
 		t.Fatalf("expected one auto validation case, got %+v", cases)
 	}
 	rec.RecordSkillUse("client:main:srv1", "srv1-ops", false, "turn failed: tool exec errored", "m1")
-	time.Sleep(50 * time.Millisecond)
 	tc := cases[0]
 	if tc.Source != "auto-failed-skill-use" ||
 		tc.ID != "session-client:main:srv1" ||
@@ -158,7 +165,7 @@ func TestChatUsageRecorderAutoValidationCaseRefreshesRicherFailedUseTrace(t *tes
 // every real record as unattributable.
 func TestChatUsageRecorderPersistsAttribution(t *testing.T) {
 	tracker := newUsageRecorderTracker(t)
-	rec := NewChatUsageRecorder(tracker, usageRecorderTranscriptStore{}, slog.Default(), false, nil, "")
+	rec := newSyncUsageRecorder(t, tracker, usageRecorderTranscriptStore{}, false)
 
 	attributed, ok := rec.(chatport.SkillUsageAttributionRecorder)
 	if !ok {
