@@ -38,11 +38,11 @@ func TestLiveKnowledgeRecallTiming(t *testing.T) {
 	}
 
 	t0 := time.Now()
-	cold := router.Recall(ctx, q, 10)
+	cold := router.RecallPacket(ctx, q, 10, RecallOptions{}).Results
 	coldMS := time.Since(t0)
 
 	t1 := time.Now()
-	warm := router.Recall(ctx, q, 10)
+	warm := router.RecallPacket(ctx, q, 10, RecallOptions{}).Results
 	warmMS := time.Since(t1)
 
 	t.Logf("query=%q cold=%s hits=%d warm=%s hits=%d", q, coldMS, len(cold), warmMS, len(warm))

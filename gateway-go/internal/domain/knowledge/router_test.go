@@ -154,7 +154,7 @@ func TestRouter_Recall_MergesAndReturnsHighestFirst(t *testing.T) {
 	}
 	r := New(wikiA, hsA)
 
-	got := r.Recall(context.Background(), "박부장", 5)
+	got := r.RecallPacket(context.Background(), "박부장", 5, RecallOptions{}).Results
 	if len(got) != 3 {
 		t.Fatalf("got %d hits, want 3", len(got))
 	}
@@ -347,7 +347,7 @@ func TestRouter_Recall_RRFPrefersWikiRankOverFilesCosine(t *testing.T) {
 		{Ref: Ref{Layer: LayerFiles, ID: "/b.pdf"}, Score: 0.90},
 	}}
 	r := New(wikiA, files)
-	got := r.Recall(context.Background(), "q", 5)
+	got := r.RecallPacket(context.Background(), "q", 5, RecallOptions{}).Results
 	if len(got) != 3 {
 		t.Fatalf("got %d hits, want 3", len(got))
 	}
@@ -378,18 +378,18 @@ func TestRouter_Recall_FileIntentUsesPlannerPriorityForCrossLayerTie(t *testing.
 	}
 }
 
-func TestRouter_RecallWithMeta_FilesTimeoutNote(t *testing.T) {
+func TestRouter_RecallPacket_FilesTimeoutNote(t *testing.T) {
 	wikiA := &mockAdapter{layer: LayerWiki, results: []Result{
 		{Ref: Ref{Layer: LayerWiki, ID: "p"}, Score: 0.7},
 	}}
 	files := &mockAdapter{layer: LayerFiles, recErr: ErrFilesRecallTimeout}
 	r := New(wikiA, files)
-	hits, notes := r.RecallWithMeta(context.Background(), "q", 5)
-	if len(hits) != 1 || hits[0].Ref.Layer != LayerWiki {
-		t.Fatalf("hits = %+v, want single wiki hit", hits)
+	packet := r.RecallPacket(context.Background(), "q", 5, RecallOptions{})
+	if len(packet.Results) != 1 || packet.Results[0].Ref.Layer != LayerWiki {
+		t.Fatalf("hits = %+v, want single wiki hit", packet.Results)
 	}
-	if len(notes) != 1 || !strings.Contains(notes[0], "타임아웃") {
-		t.Fatalf("notes = %v, want files timeout note", notes)
+	if len(packet.Notes) != 1 || !strings.Contains(packet.Notes[0], "타임아웃") {
+		t.Fatalf("notes = %v, want files timeout note", packet.Notes)
 	}
 }
 
@@ -412,7 +412,7 @@ func TestRouter_Recall_LayerQuotaPreservesOtherLayerHit(t *testing.T) {
 	r := New(wikiA, files)
 
 	// limit 5 → quota = ceil(5*0.6) = 3 files max, leaving room for the wiki hit.
-	got := r.Recall(context.Background(), "q", 5)
+	got := r.RecallPacket(context.Background(), "q", 5, RecallOptions{}).Results
 	var wikiSeen, fileCount int
 	for _, h := range got {
 		if h.Ref.Layer == LayerWiki {
@@ -441,7 +441,7 @@ func TestRouter_Recall_SingleLayerReturnsAllHits(t *testing.T) {
 		})
 	}
 	r := New(wikiA)
-	got := r.Recall(context.Background(), "q", 5)
+	got := r.RecallPacket(context.Background(), "q", 5, RecallOptions{}).Results
 	if len(got) != 5 {
 		t.Fatalf("single-layer router should not be quota-throttled: got %d, want 5", len(got))
 	}
@@ -455,7 +455,7 @@ func TestRouter_Recall_EmptySelectedLayerDoesNotThrottleOnlyContributor(t *testi
 		})
 	}
 	files := &mockAdapter{layer: LayerFiles}
-	got := New(wikiA, files).Recall(context.Background(), "q", 5)
+	got := New(wikiA, files).RecallPacket(context.Background(), "q", 5, RecallOptions{}).Results
 	if len(got) != 5 {
 		t.Fatalf("empty sibling layer throttled the only contributor: got %d, want 5", len(got))
 	}
@@ -473,7 +473,7 @@ func TestRouter_Recall_OneFails(t *testing.T) {
 		recErr: errors.New("backend down"),
 	}
 	r := New(good, bad)
-	got := r.Recall(context.Background(), "x", 5)
+	got := r.RecallPacket(context.Background(), "x", 5, RecallOptions{}).Results
 	if len(got) != 1 {
 		t.Errorf("got %d hits, want 1 (bad adapter swallowed)", len(got))
 	}
