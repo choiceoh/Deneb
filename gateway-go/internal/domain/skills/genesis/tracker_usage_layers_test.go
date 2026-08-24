@@ -81,3 +81,27 @@ func TestUsageQualityLayersIgnoreFilteredRecords(t *testing.T) {
 		t.Errorf("review-fork record entered the layer split: %+v", got.FailureLayers)
 	}
 }
+
+// The workout lane re-records the same held-out replay failure every cycle.
+// Those synthetic records are evidence for clustering at most (isRealUsageRecord
+// excludes them from the success rate), so counting them here would steadily
+// inflate the failure layers and pass synthetic drift off as real-use evidence.
+func TestUsageQualityIgnoresSyntheticWorkoutRecords(t *testing.T) {
+	tr := newTestTracker(t)
+	if err := tr.RecordUsage(UsageRecord{
+		SkillName: "kb", Source: usageSourceWorkout, Success: false,
+		ErrorMsg: "held-out replay assertion failure",
+	}); err != nil {
+		t.Fatalf("record usage: %v", err)
+	}
+	got, err := tr.UsageQualitySummary("kb")
+	if err != nil {
+		t.Fatalf("summary: %v", err)
+	}
+	if got.CountedRecords != 0 || got.FailureLayers != (SkillFailureLayers{}) {
+		t.Errorf("workout record counted as real use: counted=%d layers=%+v", got.CountedRecords, got.FailureLayers)
+	}
+	if got.IgnoredSyntheticRecords != 1 {
+		t.Errorf("IgnoredSyntheticRecords = %d, want 1", got.IgnoredSyntheticRecords)
+	}
+}

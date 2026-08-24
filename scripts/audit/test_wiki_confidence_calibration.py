@@ -22,14 +22,23 @@ def _row(path: str, confidence: str) -> str:
     return "\t".join(["id", path, "t", "s", "", "0.5", "", "note", confidence, "", "", ""])
 
 
-def _corpus(tmp: Path, pages: list[tuple[str, str]], hits: list[str]) -> Path:
+def _corpus(
+    tmp: Path,
+    pages: list[tuple[str, str]],
+    hits: list[str],
+    ledger_lines: list[str] | None = None,
+    write_ledger: bool = True,
+) -> Path:
     (tmp / "index.md").write_text(
         "# index\n\n" + HEADER + "\n" + "\n".join(_row(p, c) for p, c in pages) + "\n",
         encoding="utf-8",
     )
-    (tmp / ".recall-hits.jsonl").write_text(
-        "".join(json.dumps({"path": p, "at": 1}) + "\n" for p in hits), encoding="utf-8"
-    )
+    if write_ledger:
+        if ledger_lines is None:
+            ledger_lines = [json.dumps({"path": p, "at": 1}) for p in hits]
+        (tmp / ".recall-hits.jsonl").write_text(
+            "".join(line + "\n" for line in ledger_lines), encoding="utf-8"
+        )
     return tmp
 
 
@@ -101,6 +110,78 @@ class CalibrationTests(unittest.TestCase):
             (root / ".recall-hits.jsonl").write_text("{not json\n", encoding="utf-8")
             cal = calibrate(root)
         self.assertEqual((cal.pages, cal.hit_paths), (0, 0))
+
+    def test_missing_ledger_is_unmeasured_not_flat(self) -> None:
+        # A fresh install has an index but no recall ledger yet. Every band
+        # reads rate 0.0, which the verdict logic would call "flat" — claiming
+        # the confidence label measures nothing from data that measures
+        # nothing at all.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _corpus(
+                Path(tmp), _pages("high", 4) + _pages("low", 4), [], write_ledger=False
+            )
+            cal = calibrate(root)
+        self.assertFalse(cal.ledger_present)
+        self.assertEqual(cal.verdict, "unmeasured")
+        self.assertIn("ledger missing", render(cal))
+
+    def test_zero_injection_ledger_is_unmeasured(self) -> None:
+        # A ledger that exists but records zero injections is also no
+        # observation, for the same reason.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _corpus(Path(tmp), _pages("high", 4) + _pages("low", 4), [])
+            cal = calibrate(root)
+        self.assertTrue(cal.ledger_present)
+        self.assertEqual(cal.verdict, "unmeasured")
+
+    def test_read_and_cite_events_do_not_count_as_recall(self) -> None:
+        # read/cite are the model USING a page (it opened it, it cited it) —
+        # not the preflight serving it. Counting them would inflate bands
+        # recall never surfaced.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _corpus(
+                Path(tmp),
+                _pages("high", 4) + _pages("low", 4),
+                [],
+                ledger_lines=[
+                    json.dumps({"path": "high/0.md", "at": 1, "event": "read"}),
+                    json.dumps({"path": "high/1.md", "at": 1, "event": "cite"}),
+                    json.dumps({"path": "low/0.md", "at": 1, "event": "inject"}),
+                ],
+            )
+            cal = calibrate(root)
+        self.assertEqual(cal.hit_paths, 1)
+        self.assertEqual(cal.bands["high"].recalled, 0)
+        self.assertEqual(cal.bands["high"].hits, 0)
+        self.assertEqual(cal.bands["low"].recalled, 1)
+
+    def test_non_dict_ledger_lines_are_skipped_not_fatal(self) -> None:
+        # Valid JSON that is not an object (null, a string, an array) must
+        # degrade like a malformed line, not abort the whole advisory audit.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _corpus(
+                Path(tmp),
+                _pages("high", 4) + _pages("low", 4),
+                [],
+                ledger_lines=["null", '"a-string"', "[1,2]", "{not json", json.dumps({"path": "high/0.md", "at": 1})],
+            )
+            cal = calibrate(root)
+        self.assertEqual(cal.hit_paths, 1)
+        self.assertEqual(cal.bands["high"].recalled, 1)
+
+    def test_nonmonotonic_is_adverse_evidence_not_unmeasured(self) -> None:
+        # high 0.5, medium 0.0, low 0.5: a spread wide enough to matter that
+        # fits neither direction. Folding it into "unmeasured" would silently
+        # keep a label the data argues against.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _corpus(
+                Path(tmp),
+                _pages("high", 4) + _pages("medium", 4) + _pages("low", 4),
+                ["high/0.md", "high/1.md", "low/0.md", "low/1.md"],
+            )
+            cal = calibrate(root)
+        self.assertEqual(cal.verdict, "nonmonotonic")
+        self.assertIn("NON-MONOTONIC", render(cal))
 
 
 if __name__ == "__main__":

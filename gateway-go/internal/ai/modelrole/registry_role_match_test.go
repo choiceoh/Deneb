@@ -14,6 +14,7 @@ func TestRoleForModelAcceptsBareModelID(t *testing.T) {
 		MainModel:     "kimi/k3",
 		FallbackModel: "wormhole/deepseek-v4-flash",
 		TinyModel:     "wormhole/dsv4-nothink",
+		SubmainModel:  "openrouter/anthropic/claude-opus-4.7",
 	})
 
 	for _, tc := range []struct {
@@ -28,8 +29,14 @@ func TestRoleForModelAcceptsBareModelID(t *testing.T) {
 		{"bare tiny", "dsv4-nothink", RoleTiny, true},
 		{"unknown bare", "not-a-model", "", false},
 		// A qualified id naming a real model under the wrong provider must stay
-		// unmatched: the bare retry only applies when no provider was given.
+		// unmatched: it equals neither that role's qualified id nor its bare
+		// model name.
 		{"wrong provider", "openrouter/deepseek-v4-flash", "", false},
+		// HF/vLLM-style model names carry their own slash: after ParseModelID
+		// strips the provider, the logged id still contains one and the old
+		// slash gate skipped the bare comparison entirely.
+		{"model name with its own slash", "anthropic/claude-opus-4.7", RoleSubmain, true},
+		{"fully qualified slash-model", "openrouter/anthropic/claude-opus-4.7", RoleSubmain, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			role, ok := reg.RoleForModel(tc.id)

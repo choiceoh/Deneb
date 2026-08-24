@@ -516,6 +516,14 @@ func (s *Controller) deleteMiniappCustomModel(_ context.Context, id string) (han
 			if s.modelRegistry != nil {
 				s.modelRegistry.ClearRole(modelrole.RoleVision)
 			}
+		case "submain":
+			// Submain (autonomous lane) is opt-in like coding: clear the role
+			// so heartbeat/phone-event judgment falls back to main instead of
+			// dangling on the deleted model (config already cleared
+			// submainModel).
+			if s.modelRegistry != nil {
+				s.modelRegistry.ClearRole(modelrole.RoleSubmain)
+			}
 		}
 	}
 
