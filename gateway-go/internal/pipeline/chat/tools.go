@@ -44,10 +44,11 @@ type ToolRegistry struct {
 	tools          map[string]ToolDef
 	order          []string // preserves registration order
 	postProcess    *PostProcessRegistry
-	spillStore     tooldeps.SpilloverStore // optional; spills large tool results to disk
-	provenanceRoot string                  // optional workspace root for content-free file effect metadata
-	cachedLLMTools []llm.Tool              // cached tool list; invalidated on RegisterTool
-	catalogRev     uint64                  // increments on registration; used by fetch_tools search caches
+	spillStore     tooldeps.SpilloverStore     // optional; spills large tool results to disk
+	provenanceRoot string                      // optional workspace root for content-free file effect metadata
+	errorAdvisor   func(string, string) string // optional error-time correction lookup (retry-correction ledger)
+	cachedLLMTools []llm.Tool                  // cached tool list; invalidated on RegisterTool
+	catalogRev     uint64                      // increments on registration; used by fetch_tools search caches
 }
 
 // NewToolRegistry creates an empty tool registry.
@@ -389,6 +390,26 @@ func (r *ToolRegistry) ToolProvenanceRoot() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.provenanceRoot
+}
+
+// SetToolErrorAdvisor attaches the error-time correction lookup. It is called
+// by the agent executor only when a tool call fails; nil disables the hint.
+func (r *ToolRegistry) SetToolErrorAdvisor(fn func(toolName, errText string) string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.errorAdvisor = fn
+}
+
+// ToolErrorAdvice returns a learned correction for a failed tool call, or "".
+// It satisfies the agent executor's optional advisor interface.
+func (r *ToolRegistry) ToolErrorAdvice(toolName, errText string) string {
+	r.mu.RLock()
+	fn := r.errorAdvisor
+	r.mu.RUnlock()
+	if fn == nil {
+		return ""
+	}
+	return fn(toolName, errText)
 }
 
 // ApplyMaxOutputs sets per-tool max output budgets from a name→chars map.

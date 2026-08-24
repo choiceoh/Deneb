@@ -38,6 +38,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelpanel"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/notebooksource"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
 )
 
 // wikiMemoryInitMu serializes enabled-wiki construction within one process.
@@ -472,6 +473,14 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 
 	// Core tools (file I/O, exec, process, sessions, gateway, cron, image).
 	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
+
+	// Error-time correction memory: when a tool call fails, hand back the fix
+	// this agent already found for the same failure in an earlier session
+	// (read-only view of the mined retry-correction ledger; the sweep's miner
+	// stays the only writer). Consulted ONLY on a failed call.
+	chatCfg.Tools.SetToolErrorAdvisor(
+		skilllifecycle.NewRetryHintIndex(config.ResolveStateDir(), s.logger).Advice,
+	)
 
 	// External MCP servers (Plaud recorder) as deferred tools — discovered in
 	// the background so a slow npx cold start never blocks boot.

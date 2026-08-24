@@ -16,6 +16,7 @@ type (
 	GenesisBundle        = core.GenesisBundle
 	CoreBuildInput       = core.CoreBuildInput
 	RetryCorrectionMiner = core.RetryCorrectionMiner
+	RetryHintIndex       = core.RetryHintIndex
 )
 
 const DefaultNudgeInterval = core.DefaultNudgeInterval
@@ -27,4 +28,5 @@ var (
 	NewNudgerFromEnvWithTrackerAndReviewer = core.NewNudgerFromEnvWithTrackerAndReviewer
 	NewSkillNudger                         = core.NewSkillNudger
 	NewRetryCorrectionMiner                = core.NewRetryCorrectionMiner
+	NewRetryHintIndex                      = core.NewRetryHintIndex
 )

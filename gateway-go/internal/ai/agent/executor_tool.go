@@ -268,6 +268,12 @@ func finishToolCall(
 	}
 	if toolErr != nil {
 		block.Content = fmt.Sprintf("Error: %s", toolErr.Error())
+		// Reactive correction memory: if this exact failure was already fixed
+		// in an earlier session, hand the fix back now instead of waiting for
+		// the sweep to fold it into a skill days later (AMD 2608.07169).
+		if advice := toolErrorAdvice(tools, tc.Name, toolErr.Error()); advice != "" {
+			block.Content += "\n\n" + advice
+		}
 		block.IsError = true
 	} else {
 		block.Content = fenceUntrustedToolOutput(tc.Name, toolOutput, logger, prep.meta)
