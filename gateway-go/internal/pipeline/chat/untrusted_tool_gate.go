@@ -23,6 +23,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/recallops"
 	"github.com/choiceoh/deneb/gateway-go/pkg/promptguard"
 )
 
@@ -156,8 +157,16 @@ func (g *untrustedToolGate) markTainted(source string) {
 // visible effects that must not run on a promptware-tainted turn. Other tools
 // — reads, searches, wiki writes (checkpointed, internal) — stay available so a
 // tainted turn can still do safe work and explain itself.
-func isIrreversibleTool(name string, _ []byte) bool {
+func isIrreversibleTool(name string, input []byte) bool {
 	switch name {
+	case "knowledge":
+		// Only the two fact mutations. knowledge is otherwise a read/search tool
+		// plus a checkpointed wiki page write, and blocking all of it would make a
+		// tainted turn unable to look anything up while it explains itself.
+		// assert_fact/forget_fact append to the canonical fact journal, which
+		// steers every later recall — the same durable-mutation class as
+		// preference, and appended history cannot be un-appended.
+		return isKnowledgeFactMutation(input)
 	case "exec":
 		// exec = arbitrary shell (RCE).
 		return true
@@ -171,6 +180,21 @@ func isIrreversibleTool(name string, _ []byte) bool {
 	default:
 		return false
 	}
+}
+
+// isKnowledgeFactMutation reports whether a knowledge tool call is one of the
+// two canonical fact mutations. Op resolution is the tool's own (op, then the
+// action alias, alias-normalized); an unparsable payload is treated as a
+// mutation so a malformed call cannot slip past the gate.
+func isKnowledgeFactMutation(input []byte) bool {
+	if len(input) == 0 {
+		return false
+	}
+	op := recallops.KnowledgeOpFromInput(input)
+	if op == "" {
+		return true
+	}
+	return recallops.IsKnowledgeFactMutationOp(op)
 }
 
 // readsExternalOrigin reports whether a tool returns content sourced from

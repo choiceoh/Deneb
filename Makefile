@@ -299,6 +299,11 @@ codesearch:
 codesearch-bench:
 	@cd gateway-go && go run ./cmd/codesearch bench
 
+# 정본 사실 평면의 라이프사이클 점수 (recall-bench는 page-only이므로 이 평면을
+# 측정하지 않는다). 정정·삭제 후 stale 노출 0이 게이트, 검색 노출은 advisory.
+fact-bench:
+	@cd gateway-go && go run ./cmd/fact-bench
+
 # 메모리 파일(레포 밖)의 코드 참조 감사 — advisory, CI 밖. 메모리 규칙의
 # "회상된 file:line은 검증하라"를 일괄 실행하는 수동/주기용 진입점.
 memory-ref-audit:

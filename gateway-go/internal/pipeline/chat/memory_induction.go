@@ -100,6 +100,7 @@ func maybeRunMemoryInduction(deps runDeps, params RunParams, result *agent.Agent
 	if ind == nil {
 		return
 	}
+	recordDirectMemoryMiss(params, ind, msg, logger)
 	// Episodic/drop need no disk work — avoid spawning a goroutine for the common case.
 	if ind.Route == memory.RouteDiaryOnly || ind.Route == memory.RouteDrop || ind.Route == memory.RouteUnspecified {
 		return
@@ -227,6 +228,28 @@ func maybeRunMemoryInduction(deps runDeps, params RunParams, result *agent.Agent
 				"session", sessionKey,
 				"workspace", workspace != "",
 			)
+		}
+	})
+}
+
+// recordDirectMemoryMiss notes a turn that was shaped like an explicit memory
+// command but bound to no canonical axis. Only trusted direct-user turns are
+// recorded: a miss on any other origin says nothing about the grammar, because
+// those turns could not have written a fact even with a perfect match. The
+// ledger is a diagnostic for extending direct_grammar.json, never an input to
+// this turn — nothing downstream reads it.
+func recordDirectMemoryMiss(params RunParams, ind *memory.Induced, msg string, logger *slog.Logger) {
+	if !trustedMemoryInductionRun(params) {
+		return
+	}
+	miss, found := memory.DirectMemoryMissFor(msg, ind)
+	if !found {
+		return
+	}
+	path := memory.DefaultGrammarMissPath(config.ResolveStateDir())
+	safego.GoWithSlog(logger, "memory-grammar-miss", func() {
+		if err := memory.RecordDirectMemoryMiss(path, miss); err != nil {
+			logger.Warn("direct memory grammar miss not recorded", "error", err)
 		}
 	})
 }

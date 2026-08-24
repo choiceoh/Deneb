@@ -1486,7 +1486,13 @@ func KnowledgeToolSchema() map[string]any {
 			},
 			"fact_key": map[string]any{
 				"type":        "string",
-				"description": "조회할 안정 키 (op=facts, 예: communication.response_length, project.quote.amount). 비우면 주체의 현행 사실 조회",
+				"description": "정정·충돌 해결의 안정 키 (예: communication.response_length, project.quote.amount). op=facts에서 비우면 주체의 현행 사실 조회",
+			},
+			"fact_kind": map[string]any{
+				"type":        "string",
+				"description": "충돌 우선순위 정책을 고르는 사실 종류 (op=assert_fact, 기본 generic)",
+				"default":     "generic",
+				"enum":        []string{"generic", "preference", "identity", "amount", "deadline", "contract", "system_state"},
 			},
 			"importance": map[string]any{
 				"type":        "number",
@@ -1503,8 +1509,8 @@ func KnowledgeToolSchema() map[string]any {
 			},
 			"op": map[string]any{
 				"type":        "string",
-				"description": "recall/read/record: 지식 검색·읽기·페이지 기록. facts: 검증된 정본의 현행 또는 key 이력 조회. 정본 변경은 모델 도구가 아니라 인증된 직접 사용자 발화와 검증된 내부 ingestion만 수행.",
-				"enum":        []string{"recall", "read", "record", "facts"},
+				"description": "recall/read/record: 지식 검색·읽기·페이지 기록. assert_fact: fact_key 단위 현행 주장/정정 (근거 ref 필수, 권위는 서버가 agent_confirmed로 고정). forget_fact: 영구 이력을 보존한 soft tombstone. facts: 정본의 현행 또는 key 이력 조회. 사용자 본인의 선호·정체성 정정은 이 도구가 아니라 인증된 직접 발화 induction이 담당한다.",
+				"enum":        []string{"recall", "read", "record", "assert_fact", "forget_fact", "facts"},
 			},
 			"page": map[string]any{
 				"type":        "string",
@@ -1513,6 +1519,10 @@ func KnowledgeToolSchema() map[string]any {
 			"query": map[string]any{
 				"type":        "string",
 				"description": "검색 키워드 (op=recall)",
+			},
+			"reason": map[string]any{
+				"type":        "string",
+				"description": "정정·tombstone 사유 (감사 이력용)",
 			},
 			"ref": map[string]any{
 				"type":        "string",
@@ -1532,6 +1542,14 @@ func KnowledgeToolSchema() map[string]any {
 					"type": "string",
 				},
 			},
+			"source_refs": map[string]any{
+				"type":        "array",
+				"description": "주장을 검증할 수 있는 내부 ref/문서/런타임 관측 식별자 (assert_fact 필수, forget_fact 권장). 예: `w:프로젝트/ABC-견적`, `file:/계약/2026-01.pdf`",
+				"maxItems":    16,
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
 			"sources": map[string]any{
 				"type":        "array",
 				"description": "검색할 소스 제한 (op=recall, 생략 시 planner가 사용 가능한 소스를 모두 병렬 검색)",
@@ -1542,7 +1560,7 @@ func KnowledgeToolSchema() map[string]any {
 			},
 			"subject": map[string]any{
 				"type":        "string",
-				"description": "조회할 사실 주체 (op=facts, 기본 self). 타인 사실은 안정 subject id 사용",
+				"description": "사실 주체 (assert_fact/forget_fact/facts, 기본 self). 타인 사실은 안정 subject id 사용",
 				"default":     "self",
 			},
 			"summary": map[string]any{
@@ -1566,6 +1584,10 @@ func KnowledgeToolSchema() map[string]any {
 			"title": map[string]any{
 				"type":        "string",
 				"description": "페이지 제목 (op=record, 미지정 시 page의 마지막 segment 사용)",
+			},
+			"value": map[string]any{
+				"type":        "string",
+				"description": "현행 주장 값 (op=assert_fact)",
 			},
 		},
 		"required": []string{"op"},

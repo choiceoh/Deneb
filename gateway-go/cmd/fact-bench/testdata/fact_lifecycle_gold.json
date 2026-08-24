@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "preference-correction",
+      "subject": "self",
+      "key": "communication.response_length",
+      "kind": "preference",
+      "ops": [
+        {"op": "assert", "value": "답변은 아주 길고 상세하게", "authority": "direct_user"},
+        {"op": "assert", "value": "답변은 짧고 간결하게", "authority": "direct_user"}
+      ],
+      "query": "답변 길이 선호",
+      "current": "답변은 짧고 간결하게",
+      "stale": ["답변은 아주 길고 상세하게"],
+      "evidence": ["예전 메모에 따르면 사용자는 답변은 아주 길고 상세하게 받기를 원한다"]
+    },
+    {
+      "id": "identity-correction",
+      "subject": "self",
+      "key": "identity.address",
+      "kind": "identity",
+      "ops": [
+        {"op": "assert", "value": "김 대리", "authority": "direct_user"},
+        {"op": "assert", "value": "김 과장", "authority": "direct_user"}
+      ],
+      "query": "호칭",
+      "current": "김 과장",
+      "stale": ["김 대리"],
+      "evidence": ["회의록: 김 대리라고 부르기로 함"]
+    },
+    {
+      "id": "forget-is-not-a-value",
+      "subject": "self",
+      "key": "diet.vegan",
+      "kind": "identity",
+      "ops": [
+        {"op": "assert", "value": "비건 식단 유지", "authority": "direct_user"},
+        {"op": "forget", "authority": "direct_user"}
+      ],
+      "query": "식단",
+      "current": "",
+      "stale": ["비건 식단 유지"],
+      "evidence": ["작년 노트: 비건 식단 유지 중이라고 적혀 있음"]
+    },
+    {
+      "id": "agent-cannot-overwrite-direct-user",
+      "subject": "self",
+      "key": "communication.language",
+      "kind": "preference",
+      "ops": [
+        {"op": "assert", "value": "한국어로 답변", "authority": "direct_user"},
+        {"op": "assert", "value": "영어로 답변", "authority": "agent_confirmed"}
+      ],
+      "query": "답변 언어",
+      "current": "한국어로 답변",
+      "stale": [],
+      "evidence": []
+    },
+    {
+      "id": "agent-tombstone-cannot-erase-direct-user",
+      "subject": "self",
+      "key": "goals.long_term",
+      "kind": "preference",
+      "ops": [
+        {"op": "assert", "value": "2026년까지 재귀적 자가개선 완성", "authority": "direct_user"},
+        {"op": "forget", "authority": "agent_confirmed"}
+      ],
+      "query": "장기 목표",
+      "current": "2026년까지 재귀적 자가개선 완성",
+      "stale": [],
+      "evidence": []
+    },
+    {
+      "id": "primary-document-wins-on-amount",
+      "subject": "project:abc",
+      "key": "quote.amount",
+      "kind": "amount",
+      "ops": [
+        {"op": "assert", "value": "8,000만원", "authority": "direct_user"},
+        {"op": "assert", "value": "1억 2,000만원", "authority": "primary_document", "basisAt": "2026-07-01"}
+      ],
+      "query": "abc 견적 금액",
+      "current": "1억 2,000만원",
+      "stale": ["8,000만원"],
+      "evidence": ["구두 합의 당시 금액은 8,000만원이었다"]
+    },
+    {
+      "id": "other-subject-stays-scoped",
+      "subject": "project:xyz",
+      "key": "owner",
+      "kind": "identity",
+      "ops": [
+        {"op": "assert", "value": "박 부장", "authority": "direct_user"},
+        {"op": "assert", "value": "최 차장", "authority": "direct_user"}
+      ],
+      "query": "xyz 담당자",
+      "current": "최 차장",
+      "stale": ["박 부장"],
+      "evidence": ["xyz 프로젝트 담당자는 박 부장이다"]
+    }
+  ]
+}

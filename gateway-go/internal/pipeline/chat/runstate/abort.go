@@ -27,6 +27,11 @@ type AbortTracker struct {
 	fatal       bool                   // rejects even previously admitted continuations
 	drained     chan struct{}          // closed once every accepted run completes
 	drainedDone bool                   // prevents double-close of drained
+	// idleWaiters holds one broadcast channel per session that something is
+	// waiting on. It is closed (and dropped) the moment that session's last
+	// entry leaves the registry, so ingress queueing is a wakeup rather than a
+	// poll. Sessions nobody waits on never allocate one.
+	idleWaiters map[string]chan struct{}
 }
 
 // NewAbortTracker creates a ready-to-use AbortTracker and starts its GC loop.
@@ -113,6 +118,7 @@ func (at *AbortTracker) FatalDrain(cause error) {
 	at.entries = make(map[string]*AbortEntry)
 	at.running = make(map[string]struct{})
 	at.admissions = 0
+	at.signalIdleWaitersLocked()
 	at.signalDrainedLocked()
 	at.mu.Unlock()
 }
@@ -148,6 +154,7 @@ func (at *AbortTracker) Cleanup(clientRunID string) {
 	at.mu.Lock()
 	delete(at.entries, clientRunID)
 	delete(at.running, clientRunID)
+	at.signalIdleWaitersLocked()
 	at.signalDrainedLocked()
 	at.mu.Unlock()
 }
@@ -181,6 +188,56 @@ func (at *AbortTracker) signalDrainedLocked() {
 	}
 }
 
+// SessionIdleWait returns a channel that is closed when sessionKey has no
+// registered run. An already-idle session returns an already-closed channel, so
+// a caller can take the channel BEFORE it decides what to do and never miss the
+// transition that happens in between.
+func (at *AbortTracker) SessionIdleWait(sessionKey string) <-chan struct{} {
+	at.mu.Lock()
+	defer at.mu.Unlock()
+	if !at.hasActiveRunLocked(sessionKey) {
+		closed := make(chan struct{})
+		close(closed)
+		return closed
+	}
+	if at.idleWaiters == nil {
+		at.idleWaiters = make(map[string]chan struct{})
+	}
+	if waiter, ok := at.idleWaiters[sessionKey]; ok {
+		return waiter
+	}
+	waiter := make(chan struct{})
+	at.idleWaiters[sessionKey] = waiter
+	return waiter
+}
+
+// signalIdleWaitersLocked wakes every waiter whose session just went idle. It
+// runs on each registry removal, which is rare compared to the polls it
+// replaces, and only over sessions somebody is actually waiting on.
+//
+// EVERY path that removes an entry must call this: cancel paths drop the entry
+// outright, so a waiter left behind can no longer be rescued by Cleanup or by
+// the expiry sweep (both look for an entry that is already gone) and the
+// session's ingress queue would wedge until the request context dies.
+func (at *AbortTracker) signalIdleWaitersLocked() {
+	for sessionKey, waiter := range at.idleWaiters {
+		if at.hasActiveRunLocked(sessionKey) {
+			continue
+		}
+		close(waiter)
+		delete(at.idleWaiters, sessionKey)
+	}
+}
+
+func (at *AbortTracker) hasActiveRunLocked(sessionKey string) bool {
+	for _, entry := range at.entries {
+		if entry.SessionKey == sessionKey {
+			return true
+		}
+	}
+	return false
+}
+
 // HasActiveRun reports whether at least one run is active for the session.
 // ActiveRunCount returns accepted-but-unfinished runs (registered actives plus
 // admissions not yet registered) — the same population the shutdown drain waits
@@ -195,12 +252,7 @@ func (at *AbortTracker) ActiveRunCount() int {
 func (at *AbortTracker) HasActiveRun(sessionKey string) bool {
 	at.mu.Lock()
 	defer at.mu.Unlock()
-	for _, entry := range at.entries {
-		if entry.SessionKey == sessionKey {
-			return true
-		}
-	}
-	return false
+	return at.hasActiveRunLocked(sessionKey)
 }
 
 // HasActiveInteractiveRun reports whether a NON-automation run is active for
@@ -260,6 +312,7 @@ func (at *AbortTracker) InterruptSession(sessionKey string) {
 	for _, id := range toDelete {
 		delete(at.entries, id)
 	}
+	at.signalIdleWaitersLocked()
 	at.signalDrainedLocked()
 	at.mu.Unlock()
 }
@@ -274,6 +327,7 @@ func (at *AbortTracker) CancelByRunID(runID string) (sessionKey, abortedRunID st
 		sessionKey = entry.SessionKey
 		abortedRunID = runID
 		delete(at.entries, runID)
+		at.signalIdleWaitersLocked()
 		at.signalDrainedLocked()
 	}
 	return sessionKey, abortedRunID
@@ -300,6 +354,7 @@ func (at *AbortTracker) CancelBySessionKeyWithCause(sessionKey string, cause err
 			delete(at.entries, id)
 		}
 	}
+	at.signalIdleWaitersLocked()
 	at.signalDrainedLocked()
 	return abortedRunID
 }
@@ -321,6 +376,7 @@ func (at *AbortTracker) Close() {
 		at.draining = true
 		at.drained = make(chan struct{})
 	}
+	at.signalIdleWaitersLocked()
 	at.signalDrainedLocked()
 	at.mu.Unlock()
 }
@@ -342,6 +398,10 @@ func (at *AbortTracker) gcLoop() {
 					delete(at.entries, id)
 				}
 			}
+			// An expired entry is the self-healing path for a run that died
+			// without cleanup. Ingress waiters must be released with it, or a
+			// leaked entry would hold the session's queue closed forever.
+			at.signalIdleWaitersLocked()
 			at.signalDrainedLocked()
 			at.mu.Unlock()
 		}

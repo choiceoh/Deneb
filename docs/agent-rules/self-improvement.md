@@ -123,6 +123,27 @@ Deterministic promotion lives in `tracker_recurrence_promotion.go`:
   **rejected** never reopens (operator veto is respected). Per-tick promotion is
   capped. (PR #3367; drain-side hardening PR #3380.)
 
+## Direct-Memory Grammar (data, not code)
+
+정본 사실을 사용자 발화에서 유도하는 **축 카탈로그는 데이터**다:
+`gateway-go/internal/domain/memory/direct_grammar.json` (go:embed, 로더/검증은
+`direct_grammar.go`). 축 하나 = 안정 fact key 하나 + 그 축에 묶이는 한국어/영어 표현
+(classify 패턴, 영어 assert/forward 명령, 삭제 명령의 목적어·큐).
+
+- **왜 데이터인가**: 이 카탈로그가 정본 기억의 유일하게 좁은 입구다. 못 잡는 표현은
+  곧 조용히 잊히는 사실이므로 계속 자라야 하고, JSON 한 파일이면 개선 루프가 직접
+  넓힐 수 있다. 반면 **구조적 가드는 Go에 남는다** — 전문(傳聞)·임시 스코프·따옴표
+  페이로드·제3자 주어는 축별 규칙이 아니고, 데이터 수정으로 약화돼선 안 된다.
+- **축 추가 절차**: JSON에 축을 추가 → `go test ./internal/domain/memory/`
+  (카탈로그 검증 + 축별 바인딩 테스트) → 필요하면 `make fact-bench`로 라이프사이클
+  영향 확인. 새 축은 `key`(네임스페이스), `kind`(preference|identity), `classify`
+  패턴이 필수다.
+- **미탐 캡처**: 명령 형태(기억해/앞으로/정정/remember/from now on/forget)인데 어떤
+  축에도 안 묶인 신뢰된 직접 발화는 `~/.deneb/data/memory_grammar_misses.jsonl`에
+  기록된다 (`DirectMemoryMissFor` → `RecordDirectMemoryMiss`, 상한 1MB). 순수
+  진단이며 그 턴의 동작에는 영향이 없다 — 카탈로그를 넓힐 근거를 모으는 용도다.
+  권위 경계는 [ADR-0005](../adr/0005-fact-write-authority.md).
+
 ## Meta-Evolution (L2) — the Slow Loop
 
 Distinct from L1 skill evolution: `MetaEvolutionTask` (`meta_evolution.go`) is a
