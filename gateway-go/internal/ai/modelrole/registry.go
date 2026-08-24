@@ -573,33 +573,25 @@ var roleMatchOrder = []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, Rol
 // it is why a fallback role pointing at a paid cloud endpoint read as ordinary
 // traffic for three weeks (2026-08-02..24).
 func (r *Registry) RoleForModel(modelID string) (Role, bool) {
-	if role, ok := r.roleForModel(modelID, true); ok {
-		return role, true
-	}
-	// A qualified id that matched nothing is simply unknown; only an unqualified
-	// one is worth retrying, and retrying it cannot shadow a qualified match
-	// because that pass already ran.
-	if strings.Contains(modelID, "/") {
-		return "", false
-	}
-	return r.roleForModel(modelID, false)
-}
-
-// roleForModel scans roleMatchOrder comparing either the provider-qualified id
-// or the bare model name.
-func (r *Registry) roleForModel(modelID string, qualified bool) (Role, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	// Every candidate is compared BOTH qualified and bare, in one pass. The
+	// bare comparison must not be gated on the input containing no slash:
+	// HF/vLLM-style model names carry their own ("anthropic/claude-opus-4.7"
+	// under provider openrouter), and gating on "/" left exactly those ids
+	// unmapped — the same raw-id labelling this function exists to fix. A
+	// QUALIFIED id naming a real model under a different provider still stays
+	// unmatched: it equals neither that role's qualified id nor its bare model
+	// name.
 	for _, role := range roleMatchOrder {
 		cfg, ok := r.models[role]
 		if !ok {
 			continue
 		}
-		candidate := cfg.Model
-		if qualified && cfg.ProviderID != "" {
-			candidate = cfg.ProviderID + "/" + cfg.Model
+		if cfg.Model == modelID {
+			return role, true
 		}
-		if candidate == modelID {
+		if cfg.ProviderID != "" && cfg.ProviderID+"/"+cfg.Model == modelID {
 			return role, true
 		}
 	}
