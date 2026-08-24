@@ -2,7 +2,9 @@ package media
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 )
 
 func TestSelectWatchFrameCountReturnsBucketedCountsByDuration(t *testing.T) {
@@ -81,6 +83,49 @@ func TestExtractFramesFromPathStopsOnCancelledContext(t *testing.T) {
 	frames, kept := extractFramesFromPath(ctx, "nonexistent.mp4", []float64{1, 2, 3})
 	if len(frames) != 0 || len(kept) != 0 {
 		t.Fatalf("expected no frames after cancellation, got %d frames / %d timestamps", len(frames), len(kept))
+	}
+}
+
+// An extraction killed by the per-frame bound means ffmpeg HUNG on that seek —
+// and an input that hangs one seek hangs them all. The batch must stop after
+// the first bounded failure instead of paying the timeout once per remaining
+// timestamp (up to ~200 oversampled candidates ≈ 50 minutes at the 15s bound).
+func TestExtractFramesFromPathAbortsBatchAfterTimedOutExtraction(t *testing.T) {
+	prevRunner, prevTimeout := runFrameExtraction, watchFrameExtractTimeout
+	runFrameExtraction = func(ctx context.Context, _ []string) error {
+		<-ctx.Done() // hang until the per-frame bound kills us
+		return ctx.Err()
+	}
+	watchFrameExtractTimeout = 20 * time.Millisecond
+	t.Cleanup(func() {
+		runFrameExtraction = prevRunner
+		watchFrameExtractTimeout = prevTimeout
+	})
+
+	frames, kept := extractFramesFromPath(context.Background(), "hung.mp4", []float64{1, 2, 3})
+	if len(frames) != 0 || len(kept) != 0 {
+		t.Fatalf("expected no frames from a hung input, got %d frames / %d timestamps", len(frames), len(kept))
+	}
+}
+
+// A runner that fails on its OWN (ffmpeg exits nonzero, well inside the bound)
+// is a per-seek boundary miss, not a hang: the loop must keep extracting the
+// remaining timestamps.
+func TestExtractFramesFromPathContinuesAfterOwnExitFailure(t *testing.T) {
+	prevRunner := runFrameExtraction
+	calls := 0
+	runFrameExtraction = func(_ context.Context, _ []string) error {
+		calls++
+		return errors.New("exit status 1")
+	}
+	t.Cleanup(func() { runFrameExtraction = prevRunner })
+
+	frames, kept := extractFramesFromPath(context.Background(), "video.mp4", []float64{1, 2, 3})
+	if calls != 3 {
+		t.Fatalf("extraction ran %d times, want 3 (own-exit failure must not abort the batch)", calls)
+	}
+	if len(frames) != 0 || len(kept) != 0 {
+		t.Fatalf("expected no frames from an all-failing runner, got %d/%d", len(frames), len(kept))
 	}
 }
 

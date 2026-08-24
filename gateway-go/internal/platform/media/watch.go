@@ -90,14 +90,17 @@ const (
 
 	// watchVideoDownloadTimeout bounds the yt-dlp video download.
 	watchVideoDownloadTimeout = 120 * time.Second
-	// watchFrameExtractTimeout bounds one ffmpeg single-frame seek+decode. A
-	// normal extraction takes well under a second; a hung ffmpeg must not be
-	// able to stall the whole watch call.
-	watchFrameExtractTimeout = 15 * time.Second
 	// watchMaxVideoBytes caps a downloaded video file (200 MB) so a long 4K
 	// video cannot exhaust disk. Frame extraction only needs a watchable copy.
 	watchMaxVideoBytes = 200 * 1024 * 1024
+)
 
+// watchFrameExtractTimeout bounds one ffmpeg single-frame seek+decode. A
+// normal extraction takes well under a second; a hung ffmpeg must not be able
+// to stall the whole watch call. A var (not a const) so tests can tighten it.
+var watchFrameExtractTimeout = 15 * time.Second
+
+const (
 	// Scene-change frame selection (single ffmpeg scan pass over the window).
 	//
 	// sceneChangeThreshold is ffmpeg's scene score cutoff (fraction of the frame
@@ -473,12 +476,16 @@ func extractFramesFromPath(ctx context.Context, videoPath string, timestamps []f
 			outPath,
 		}
 		frameCtx, cancel := context.WithTimeout(ctx, watchFrameExtractTimeout)
-		cmd := exec.CommandContext(frameCtx, "ffmpeg", args...)
-		cmd.Stderr = nil
-		cmd.Stdout = nil
-		runErr := cmd.Run()
+		runErr := runFrameExtraction(frameCtx, args)
+		bounded := frameCtx.Err() != nil // ffmpeg killed by the deadline/turn end, not its own exit
 		cancel()
 		if runErr != nil {
+			if bounded {
+				// An input whose seek hangs will hang on every remaining seek
+				// too: stop the batch instead of paying the per-frame timeout
+				// up to ~200 more times (~50 minutes at the 15s bound).
+				break
+			}
 			continue
 		}
 		data, err := os.ReadFile(outPath)
@@ -489,6 +496,15 @@ func extractFramesFromPath(ctx context.Context, videoPath string, timestamps []f
 		kept = append(kept, ts)
 	}
 	return frames, kept
+}
+
+// runFrameExtraction executes one bounded ffmpeg single-frame extraction. A
+// package-level function value so tests can substitute a fake runner.
+var runFrameExtraction = func(ctx context.Context, args []string) error {
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	cmd.Stderr = nil
+	cmd.Stdout = nil
+	return cmd.Run()
 }
 
 // selectWatchFrameCount maps video duration to a frame budget (see spec scale).
