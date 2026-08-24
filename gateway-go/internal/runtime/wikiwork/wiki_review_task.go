@@ -75,6 +75,41 @@ type wikiReviewState struct {
 	// (observe mode), newest last, capped — the operator's audit trail for
 	// deciding when to arm DENEB_WIKI_REVIEW_AUTOMERGE=1.
 	Observed []string `json:"observed,omitempty"`
+	// DeadLinks tracks when each still-dead body wikilink ("page\x00target")
+	// was first seen by the prune sweep. A dead target can self-heal — a purged
+	// person re-seeded, a page recreated — so a link is only unwrapped to prose
+	// after staying dead across the whole grace window. Healed or unwrapped
+	// entries are dropped, so the map tracks current rot, not history.
+	DeadLinks map[string]int64 `json:"deadLinks,omitempty"`
+}
+
+// wikiDeadLinkGraceDays is how long a dead body wikilink may wait for its
+// target to come back before being unwrapped to prose.
+const wikiDeadLinkGraceDays = 14
+
+// reconcileDeadLinks updates the observed-dead ledger against the current
+// sweep's findings and returns the links whose grace has run out, grouped by
+// page. Pure — the task's Run wires the store calls around it.
+func reconcileDeadLinks(ledger map[string]int64, current []wiki.DeadWikiLink, now time.Time) (map[string]int64, map[string]map[string]bool) {
+	next := make(map[string]int64, len(current))
+	condemned := map[string]map[string]bool{}
+	cutoff := now.AddDate(0, 0, -wikiDeadLinkGraceDays).UnixMilli()
+	for _, d := range current {
+		key := d.Page + "\x00" + d.Target
+		first, seen := ledger[key]
+		if !seen {
+			first = now.UnixMilli()
+		}
+		if first <= cutoff {
+			if condemned[d.Page] == nil {
+				condemned[d.Page] = map[string]bool{}
+			}
+			condemned[d.Page][d.Target] = true
+			continue // unwrapped this cycle — do not carry forward
+		}
+		next[key] = first
+	}
+	return next, condemned
 }
 
 // wikiReviewObservedCap bounds the observe-mode audit trail in the state file.
@@ -193,13 +228,41 @@ func (t *wikiReviewTask) Run(ctx context.Context) error {
 	}
 	// Same ladder over body [[links]]: an unambiguous rename is rewritten, an
 	// ambiguous or vanished target stays as prose and is only counted.
-	bodyLinks, blerr := t.wikiStore.PruneDeadWikiLinks()
+	bodyLinks, deadNow, blerr := t.wikiStore.PruneDeadWikiLinks()
 	if blerr != nil {
 		t.logger.Warn("wiki-review: wikilink prune failed", "error", blerr)
-	} else if bodyLinks.PagesChanged > 0 || bodyLinks.Removed > 0 {
-		t.logger.Info("wiki-review: body wikilinks repaired",
-			"pages", bodyLinks.PagesChanged, "repointed", bodyLinks.Repointed,
-			"stillDead", bodyLinks.Removed)
+	} else {
+		if bodyLinks.PagesChanged > 0 || bodyLinks.Removed > 0 {
+			t.logger.Info("wiki-review: body wikilinks repaired",
+				"pages", bodyLinks.PagesChanged, "repointed", bodyLinks.Repointed,
+				"stillDead", bodyLinks.Removed)
+		}
+		// Terminal rung of the ladder: a link that stayed dead across the whole
+		// grace window has proven its target is not coming back — unwrap it to
+		// prose so it stops rendering as a broken destination.
+		nextLedger, condemned := reconcileDeadLinks(state.DeadLinks, deadNow, time.Now())
+		unwrapped := 0
+		for page, targets := range condemned {
+			n, uerr := t.wikiStore.UnwrapWikiLinks(page, targets)
+			if uerr != nil {
+				t.logger.Warn("wiki-review: dead-link unwrap failed", "page", page, "error", uerr)
+				// Keep the ledger entries so the next cycle retries instead of
+				// restarting their grace from zero.
+				for target := range targets {
+					nextLedger[page+"\x00"+target] = time.Now().AddDate(0, 0, -wikiDeadLinkGraceDays).UnixMilli()
+				}
+				continue
+			}
+			unwrapped += n
+		}
+		if unwrapped > 0 {
+			t.logger.Info("wiki-review: dead body wikilinks unwrapped to prose",
+				"links", unwrapped, "pages", len(condemned))
+		}
+		state.DeadLinks = nextLedger
+		if err := t.saveState(state); err != nil {
+			t.logger.Warn("wiki-review: failed to persist dead-link ledger", "error", err)
+		}
 	}
 	// Retroactive mail filing: unlinked analyses whose project has since become
 	// known move into that project's 메일분석 slot (deterministic signals only).
