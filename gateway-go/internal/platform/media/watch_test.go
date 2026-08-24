@@ -1,6 +1,9 @@
 package media
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestSelectWatchFrameCountReturnsBucketedCountsByDuration(t *testing.T) {
 	tests := []struct {
@@ -67,6 +70,17 @@ func TestSelectWatchTimestamps_UnknownDuration(t *testing.T) {
 		if v < 0 {
 			t.Errorf("timestamp[%d]=%f negative", i, v)
 		}
+	}
+}
+
+func TestExtractFramesFromPathStopsOnCancelledContext(t *testing.T) {
+	// A cancelled turn must not keep spawning per-timestamp ffmpeg runs: the
+	// loop checks ctx before each extraction and bails out with nothing.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	frames, kept := extractFramesFromPath(ctx, "nonexistent.mp4", []float64{1, 2, 3})
+	if len(frames) != 0 || len(kept) != 0 {
+		t.Fatalf("expected no frames after cancellation, got %d frames / %d timestamps", len(frames), len(kept))
 	}
 }
 

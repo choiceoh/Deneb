@@ -90,6 +90,10 @@ const (
 
 	// watchVideoDownloadTimeout bounds the yt-dlp video download.
 	watchVideoDownloadTimeout = 120 * time.Second
+	// watchFrameExtractTimeout bounds one ffmpeg single-frame seek+decode. A
+	// normal extraction takes well under a second; a hung ffmpeg must not be
+	// able to stall the whole watch call.
+	watchFrameExtractTimeout = 15 * time.Second
 	// watchMaxVideoBytes caps a downloaded video file (200 MB) so a long 4K
 	// video cannot exhaust disk. Frame extraction only needs a watchable copy.
 	watchMaxVideoBytes = 200 * 1024 * 1024
@@ -129,9 +133,11 @@ func WatchVideo(ctx context.Context, source string, opts WatchOptions) (*WatchRe
 
 // watchYouTube downloads a YouTube video, extracts frames, and pulls subtitles.
 func watchYouTube(ctx context.Context, url string, opts WatchOptions) (*WatchResult, error) {
-	ytdlpPath, err := exec.LookPath("yt-dlp")
+	// probeYtDlp (not a bare LookPath) so a broken venv shim surfaces as an
+	// actionable error instead of a confusing "metadata fetch" failure below.
+	ytdlpPath, err := probeYtDlp(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("yt-dlp not found: install with `pip install yt-dlp`")
+		return nil, err
 	}
 
 	tmpDir, err := os.MkdirTemp("", "deneb-watch-*")
@@ -308,7 +314,7 @@ func extractFramesAtWindow(ctx context.Context, videoPath string, duration int, 
 	if len(stamps) == 0 {
 		stamps = selectWatchTimestamps(duration, candidateCount, opts.StartSec, opts.EndSec)
 	}
-	frames, timestamps = extractFramesFromPath(videoPath, stamps)
+	frames, timestamps = extractFramesFromPath(ctx, videoPath, stamps)
 	if len(frames) == 0 {
 		return nil, nil, fmt.Errorf("no frames extracted (ffmpeg may be unavailable)")
 	}
@@ -443,8 +449,10 @@ func evenSampleTimestamps(candidates []float64, n int) []float64 {
 
 // extractFramesFromPath extracts one JPEG per timestamp from a video file on
 // disk. Returns the frames and the timestamps that actually produced a frame
-// (some seeks may fail near boundaries and are skipped).
-func extractFramesFromPath(videoPath string, timestamps []float64) (frames [][]byte, kept []float64) {
+// (some seeks may fail near boundaries and are skipped). Each ffmpeg run is
+// bounded by watchFrameExtractTimeout, and a cancelled ctx stops the loop —
+// a cancelled turn must not keep spawning up to ~200 oversampled extractions.
+func extractFramesFromPath(ctx context.Context, videoPath string, timestamps []float64) (frames [][]byte, kept []float64) {
 	tmpDir, err := os.MkdirTemp("", "deneb-watch-frames-*")
 	if err != nil {
 		return nil, nil
@@ -452,6 +460,9 @@ func extractFramesFromPath(videoPath string, timestamps []float64) (frames [][]b
 	defer os.RemoveAll(tmpDir)
 
 	for i, ts := range timestamps {
+		if ctx.Err() != nil {
+			break
+		}
 		outPath := filepath.Join(tmpDir, fmt.Sprintf("frame_%03d.jpg", i))
 		args := []string{
 			"-ss", fmt.Sprintf("%.2f", ts),
@@ -461,10 +472,13 @@ func extractFramesFromPath(videoPath string, timestamps []float64) (frames [][]b
 			"-y",
 			outPath,
 		}
-		cmd := exec.CommandContext(context.Background(), "ffmpeg", args...)
+		frameCtx, cancel := context.WithTimeout(ctx, watchFrameExtractTimeout)
+		cmd := exec.CommandContext(frameCtx, "ffmpeg", args...)
 		cmd.Stderr = nil
 		cmd.Stdout = nil
-		if err := cmd.Run(); err != nil {
+		runErr := cmd.Run()
+		cancel()
+		if runErr != nil {
 			continue
 		}
 		data, err := os.ReadFile(outPath)
