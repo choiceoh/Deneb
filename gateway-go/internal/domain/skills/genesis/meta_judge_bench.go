@@ -13,6 +13,7 @@ package genesis
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -112,6 +113,43 @@ var blatantJudgeDegradations = []namedDegradation{
 // in a fixed order, stops at limit.
 func buildJudgeDegradationPairs(entries []skills.SkillEntry, limit int) []judgeBenchPair {
 	return buildDegradationPairsWith(entries, limit, blatantJudgeDegradations)
+}
+
+// buildSaltedJudgeDegradationPairs is the promotion gate's variant: the same
+// deterministic constructor, but the catalog order is ROTATED by a stable hash
+// of salt before the limit cuts.
+//
+// Why (HarnessOpt-Bench, arXiv:2608.06301): a held-out test the optimizer can
+// never touch is what makes an optimization loop's score mean anything. Our
+// promotion gate capped pairs at the FIRST judgeBenchMaxPairs catalog entries
+// in a fixed order, so every epoch — and every accepted revision — retook the
+// identical tiny exam. No pair content leaks into the proposal prompt, but a
+// lineage of revisions ratcheting on one frozen exam overfits it generation by
+// generation anyway; that is static-testset saturation, not judge quality.
+// Salting by the incumbent artifact version rotates which skills examine each
+// cycle while keeping the ONE property fairness needs: within a cycle,
+// incumbent and proposal replay the exact same pairs.
+func buildSaltedJudgeDegradationPairs(entries []skills.SkillEntry, limit int, salt string) []judgeBenchPair {
+	return buildDegradationPairsWith(rotateEntriesBySalt(entries, salt), limit, blatantJudgeDegradations)
+}
+
+// rotateEntriesBySalt returns entries rotated by hash(salt) — a copy, never
+// mutating the catalog snapshot. Rotation (not shuffling) keeps the walk
+// exhaustive and the result trivially auditable from the salt alone.
+func rotateEntriesBySalt(entries []skills.SkillEntry, salt string) []skills.SkillEntry {
+	if len(entries) < 2 {
+		return entries
+	}
+	h := fnv.New32a()
+	h.Write([]byte(salt))
+	off := int(h.Sum32() % uint32(len(entries)))
+	if off == 0 {
+		return entries
+	}
+	out := make([]skills.SkillEntry, 0, len(entries))
+	out = append(out, entries[off:]...)
+	out = append(out, entries[:off]...)
+	return out
 }
 
 // judgeBenchVerdictFn executes ONE judge verdict with an explicit system
