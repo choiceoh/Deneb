@@ -62,6 +62,13 @@ const SYNC_TYPE_BASE_RESOURCE: Record<string, string> = {
   wiki: "wiki",
 };
 
+// Every list the native-sync change feed can invalidate. Used when the server
+// reports retention truncation so we refetch current state instead of trusting
+// the retained-tail delta alone (battery doc §3.1 / #4649).
+const SYNC_WHOLESALE_RESOURCES = [
+  ...new Set(Object.values(SYNC_TYPE_BASE_RESOURCE).flatMap((r) => relatedResourcesForResource(r))),
+];
+
 export function resourcesForSyncEventType(type: string): string[] {
   const base = type.split(".")[0];
   const resource = SYNC_TYPE_BASE_RESOURCE[base];
@@ -76,11 +83,13 @@ export async function drainSync(
   pull: (cursor: number) => Promise<SyncPullResult>,
   fromCursor: number,
   maxPages = SYNC_MAX_PAGES,
-): Promise<{ cursor: number; affected: string[] }> {
+): Promise<{ cursor: number; affected: string[]; truncated: boolean }> {
   let cursor = fromCursor;
   const affected = new Set<string>();
+  let truncated = false;
   for (let pages = 0; pages < maxPages; pages++) {
     const res = await pull(cursor);
+    if (res.truncated) truncated = true;
     for (const ev of res.events ?? []) {
       for (const r of resourcesForSyncEventType(ev.type)) affected.add(r);
     }
@@ -89,7 +98,7 @@ export async function drainSync(
     cursor = next;
     if (!res.hasMore || !advanced) break;
   }
-  return { cursor, affected: [...affected] };
+  return { cursor, affected: [...affected], truncated };
 }
 
 // Background catch-up: while connected, reconcile the sync log on connect and
@@ -113,10 +122,14 @@ export function useNativeSync(cfg: GatewayConfig, connected: boolean): void {
           saveSyncCursor(Math.max(res.latestSeq ?? 0, res.cursor ?? 0));
           return;
         }
-        const { cursor, affected } = await drainSync((c) => syncPull(cfg, c), stored);
+        const { cursor, affected, truncated } = await drainSync((c) => syncPull(cfg, c), stored);
         if (cancelled) return;
         saveSyncCursor(cursor);
-        for (const resource of affected) {
+        const refresh = truncated ? SYNC_WHOLESALE_RESOURCES : affected;
+        if (truncated) {
+          syncLog.info("retention truncated past cursor — refetching sync-backed lists wholesale");
+        }
+        for (const resource of refresh) {
           clearCachedResource(resource);
           invalidate({ resource, invalidates: ["list"] });
         }

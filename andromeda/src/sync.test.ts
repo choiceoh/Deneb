@@ -77,11 +77,27 @@ describe("drainSync", () => {
   it("stops if the cursor fails to advance (defensive against a stuck server)", async () => {
     const pull = vi.fn(async () => page({ events: [], cursor: 0, hasMore: true }));
 
-    const { cursor, affected } = await drainSync(pull, 0, 4);
+    const { cursor, affected, truncated } = await drainSync(pull, 0, 4);
 
     expect(pull).toHaveBeenCalledTimes(1);
     expect(cursor).toBe(0);
     expect(affected).toEqual([]);
+    expect(truncated).toBe(false);
+  });
+
+  it("surfaces retention truncation so callers can refetch wholesale", async () => {
+    const pull = vi.fn(async () =>
+      page({
+        events: [{ seq: 501, type: "workfeed.created" }],
+        cursor: 501,
+        truncated: true,
+      }),
+    );
+
+    const { truncated, affected } = await drainSync(pull, 200);
+
+    expect(truncated).toBe(true);
+    expect(affected).toEqual(["workfeed"]);
   });
 });
 
