@@ -206,6 +206,34 @@ func TestPruneDeadRelatedLinks_PreservesLiveProjectCodeRefs(t *testing.T) {
 	}
 }
 
+func TestPruneDeadLinksSkipGeneratedFactProjection(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	if _, err := store.UpsertFact(FactInput{
+		Subject: "self", Key: "communication.response_length", Value: "답변은 짧게 유지한다",
+		Kind: FactKindPreference, Authority: FactAuthorityDirectUser,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if page, err := store.ReadPage(factProfilePagePath); err != nil || !isGeneratedFactProjectionPage(factProfilePagePath, page) {
+		t.Fatalf("generated fact projection missing: page=%+v err=%v", page, err)
+	}
+
+	relatedStats, err := store.PruneDeadRelatedLinks()
+	if err != nil {
+		t.Fatalf("PruneDeadRelatedLinks: %v", err)
+	}
+	if relatedStats.Failed != 0 {
+		t.Fatalf("PruneDeadRelatedLinks failed on generated fact projection: %+v", relatedStats)
+	}
+	bodyStats, err := store.PruneDeadWikiLinks()
+	if err != nil {
+		t.Fatalf("PruneDeadWikiLinks: %v", err)
+	}
+	if bodyStats.Failed != 0 {
+		t.Fatalf("PruneDeadWikiLinks failed on generated fact projection: %+v", bodyStats)
+	}
+}
+
 // TestPruneDeadRelatedLinks_SkipsOnEmptyIndex: with a lost/empty master index
 // but pages on disk, the sweep must refuse to run — resolving against the
 // empty index would deem every reference dead and strip Related wiki-wide.
