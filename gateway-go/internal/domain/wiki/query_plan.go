@@ -204,6 +204,7 @@ func (s *Store) SearchPlanWithOptions(ctx context.Context, plan QueryPlan, limit
 	diagnostics.CandidateCount = len(results)
 	baseScores := resultScoreMap(results)
 	results = s.fts.applyValidity(results)
+	results = s.applyRecallTRS(results)
 	lifecycleQuery := factLifecyclePlanQuery(plan)
 	factSnapshot := s.RecallFactSnapshot()
 	beforeLifecycle := len(results)

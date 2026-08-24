@@ -133,6 +133,9 @@ type Store struct {
 	// aggregate-read + compaction. Independent side file, like dealMu/logMu —
 	// never held while holding another Store mutex. See recall_hits.go.
 	recallMu sync.Mutex
+	// trs caches the recall transfer-reliability demotion factors derived from
+	// that ledger (recall_trs.go). Own mutex — refresh takes recallMu inside.
+	trs trsState
 
 	// captureMu serializes SaveCaptureAt's unique-name selection + write in the
 	// captures/ side dir: the second-resolution timestamp collides when captures

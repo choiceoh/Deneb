@@ -755,6 +755,10 @@ func (s *Store) composeSearchReport(
 	}
 	if !options.skipValidity {
 		results = s.fts.applyValidity(results)
+		// Transfer-reliability demotion (recall_trs.go): pages repeatedly
+		// injected as evidence and never used rank below pages that earn
+		// their exposure. Same over-fetch-then-demote discipline as validity.
+		results = s.applyRecallTRS(results)
 	}
 	beforeLifecycle := len(results)
 	results = s.filterFactLifecycleSearchResults(query, results, factSnapshot)
