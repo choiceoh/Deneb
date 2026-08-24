@@ -28,6 +28,7 @@ const (
 	ctxKeyToolExecStats
 	ctxKeyToolDryRun
 	ctxKeyBlackboard
+	ctxKeyTurnQuery
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -342,4 +343,17 @@ func WithDeferredActivation(ctx context.Context, da *DeferredActivation) context
 func DeferredActivationFromContext(ctx context.Context) *DeferredActivation {
 	da, _ := ctx.Value(ctxKeyDeferredActivation).(*DeferredActivation)
 	return da
+}
+
+// WithTurnQuery attaches the turn's user message so relevance-aware tool
+// post-processing (grep overflow rerank) can score output against what the
+// turn is actually about. Plain string, read-only.
+func WithTurnQuery(ctx context.Context, query string) context.Context {
+	return context.WithValue(ctx, ctxKeyTurnQuery, query)
+}
+
+// TurnQueryFromContext returns the turn's user message, or "".
+func TurnQueryFromContext(ctx context.Context) string {
+	q, _ := ctx.Value(ctxKeyTurnQuery).(string)
+	return q
 }

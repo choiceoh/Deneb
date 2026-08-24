@@ -128,6 +128,7 @@ func (s *agentRunState) turnInitializer(params RunParams, sessionToolPreset stri
 		ctx = WithSpawnFlag(ctx, s.spawnFlag)
 		ctx = WithVerifyGate(ctx, s.verifyGate)
 		ctx = toolport.WithToolExecStats(ctx, s.execStats)
+		ctx = toolport.WithTurnQuery(ctx, params.Message)
 		if params.ToolDryRun {
 			ctx = toolport.WithToolDryRun(ctx)
 		}
