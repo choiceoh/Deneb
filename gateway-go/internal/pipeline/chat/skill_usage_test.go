@@ -24,7 +24,7 @@ func TestRecordRunSkillUsageReturnsSuccessForCleanTurn(t *testing.T) {
 	recordRunSkillUsage(rec, log, &agent.AgentResult{
 		Text:           "done",
 		ToolActivities: []agent.ToolActivity{{Name: "skills"}, {Name: "read"}},
-	}, nil, "client:main", "m1")
+	}, nil, "client:main", "m1", nil)
 
 	if len(rec.calls) != 1 {
 		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)
@@ -42,7 +42,7 @@ func TestRecordRunSkillUsage_erroredTurnIsFailure(t *testing.T) {
 	recordRunSkillUsage(rec, log, &agent.AgentResult{
 		Text:           "done",
 		ToolActivities: []agent.ToolActivity{{Name: "skills"}, {Name: "exec", IsError: true}},
-	}, nil, "client:main", "m1")
+	}, nil, "client:main", "m1", nil)
 
 	if len(rec.calls) != 1 {
 		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)
@@ -71,7 +71,7 @@ func TestRecordRunSkillUsage_skillsToolErrorIsNotSkillFailure(t *testing.T) {
 	recordRunSkillUsage(rec, log, &agent.AgentResult{
 		Text:           "done",
 		ToolActivities: []agent.ToolActivity{{Name: "skills", IsError: true}},
-	}, nil, "client:main", "m1")
+	}, nil, "client:main", "m1", nil)
 
 	if len(rec.calls) != 1 {
 		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)
@@ -91,7 +91,7 @@ func TestRecordRunSkillUsage_nonSkillsErrorStillFailsAlongsideSkills(t *testing.
 	recordRunSkillUsage(rec, log, &agent.AgentResult{
 		Text:           "done",
 		ToolActivities: []agent.ToolActivity{{Name: "skills", IsError: true}, {Name: "exec", IsError: true}},
-	}, nil, "client:main", "m1")
+	}, nil, "client:main", "m1", nil)
 
 	if len(rec.calls) != 1 {
 		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)
@@ -103,11 +103,11 @@ func TestRecordRunSkillUsage_nonSkillsErrorStillFailsAlongsideSkills(t *testing.
 
 func TestRecordRunSkillUsageIgnoresEmptyAndNilInputs(t *testing.T) {
 	// Nil recorder must not panic.
-	recordRunSkillUsage(nil, NewSkillConsultLog(), nil, nil, "s", "m1")
+	recordRunSkillUsage(nil, NewSkillConsultLog(), nil, nil, "s", "m1", nil)
 
 	// Nothing consulted → no records.
 	rec := &fakeUsageRecorder{}
-	recordRunSkillUsage(rec, NewSkillConsultLog(), nil, nil, "s", "m1")
+	recordRunSkillUsage(rec, NewSkillConsultLog(), nil, nil, "s", "m1", nil)
 	if len(rec.calls) != 0 {
 		t.Fatalf("no-consult turn recorded %+v, want none", rec.calls)
 	}
@@ -116,8 +116,8 @@ func TestRecordRunSkillUsageIgnoresEmptyAndNilInputs(t *testing.T) {
 	// a second call with nothing new drains empty.
 	log := NewSkillConsultLog()
 	log.Add("once")
-	recordRunSkillUsage(rec, log, &agent.AgentResult{Text: "done"}, nil, "s", "m1")
-	recordRunSkillUsage(rec, log, &agent.AgentResult{Text: "done"}, nil, "s", "m1")
+	recordRunSkillUsage(rec, log, &agent.AgentResult{Text: "done"}, nil, "s", "m1", nil)
+	recordRunSkillUsage(rec, log, &agent.AgentResult{Text: "done"}, nil, "s", "m1", nil)
 	if len(rec.calls) != 1 || rec.calls[0].skill != "once" {
 		t.Fatalf("expected single attribution for 'once', got %+v", rec.calls)
 	}

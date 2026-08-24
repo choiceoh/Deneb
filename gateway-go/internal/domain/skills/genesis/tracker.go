@@ -66,6 +66,17 @@ const (
 	usageSourceWorkout       = "workout"        // synthetic exercise lane (workout.go) — evidence only, never real usage
 )
 
+// Delivery and Exercised values carried by UsageRecord. Mirrors of the chatport
+// constants that produce them; genesis owns the on-disk vocabulary.
+const (
+	UsageDeliveryAutoLoad  = "auto-load"
+	UsageDeliveryModelRead = "model-read"
+
+	UsageExercisedYes     = "yes"
+	UsageExercisedNo      = "no"
+	UsageExercisedUnknown = "unknown"
+)
+
 // UsageRecord represents a single skill usage event.
 type UsageRecord struct {
 	SkillName  string `json:"skillName"`
@@ -79,6 +90,13 @@ type UsageRecord struct {
 	FailureTrace *UsageFailureTrace `json:"failureTrace,omitempty"`
 	UsedAt       int64              `json:"usedAt"`           // unix millis
 	Source       string             `json:"source,omitempty"` // "" = legacy (classified by session prefix)
+	// Delivery and Exercised locate the outcome on the skill's path
+	// (2608.14036): a consult is recorded with the WHOLE run's success, so
+	// without them a skill that was merely loaded and then ignored is
+	// indistinguishable from one whose procedure ran and failed. Empty on
+	// every record written before attribution existed.
+	Delivery  string `json:"delivery,omitempty"`  // auto-load | model-read
+	Exercised string `json:"exercised,omitempty"` // yes | no | unknown
 }
 
 // UsageFailureTrace is the structured failure evidence carried by a real skill

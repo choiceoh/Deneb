@@ -197,8 +197,10 @@ func executeAgentRun(
 			emitPhase(deps, params, "wrapping_up", time.Now())
 		}
 	}
+	autoLoadedSet := make(map[string]bool, len(autoLoadedSkills))
 	for _, name := range autoLoadedSkills {
 		skillConsults.Add(name)
+		autoLoadedSet[name] = true
 	}
 	cfg.Model = model // set the resolved model
 	// Content-prefix-cache providers (kimi) do exact-prefix matching over the
@@ -256,7 +258,7 @@ func executeAgentRun(
 		usageModel = model
 	}
 	if err != nil {
-		recordRunSkillUsage(acd.SkillUsageRecorder, skillConsults, agentResult, err, params.SessionKey, usageModel)
+		recordRunSkillUsage(acd.SkillUsageRecorder, skillConsults, agentResult, err, params.SessionKey, usageModel, autoLoadedSet)
 		// Log run.error here — not in the async-only completion handler — so
 		// every entry path (runAgentAsync, SendSync, SendSyncStream) closes the
 		// run.start it opened in the same per-session log file. The sync paths
@@ -270,10 +272,10 @@ func executeAgentRun(
 	}
 	if err := deps.strictErrors.Err(); err != nil {
 		runErr := fmt.Errorf("briefcase transcript persistence: %w", err)
-		recordRunSkillUsage(acd.SkillUsageRecorder, skillConsults, agentResult, runErr, params.SessionKey, usageModel)
+		recordRunSkillUsage(acd.SkillUsageRecorder, skillConsults, agentResult, runErr, params.SessionKey, usageModel, autoLoadedSet)
 		return nil, runErr
 	}
-	recordRunSkillUsage(acd.SkillUsageRecorder, skillConsults, agentResult, nil, params.SessionKey, usageModel)
+	recordRunSkillUsage(acd.SkillUsageRecorder, skillConsults, agentResult, nil, params.SessionKey, usageModel, autoLoadedSet)
 
 	flushDeltaTail(deltaTranslit, broadcaster)
 

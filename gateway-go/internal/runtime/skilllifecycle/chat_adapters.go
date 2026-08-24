@@ -43,6 +43,16 @@ func NewChatUsageRecorder(t *genesis.Tracker, transcripts toolport.TranscriptSto
 
 // RecordSkillUse records the outcome of one skill invocation.
 func (a *chatUsageRecorderAdapter) RecordSkillUse(sessionKey, skillName string, success bool, errMsg, model string) {
+	a.recordSkillUse(sessionKey, skillName, success, errMsg, model, chatport.SkillUseAttribution{})
+}
+
+// RecordSkillUseAttributed additionally carries WHERE the outcome belongs:
+// how the skill reached the turn and whether its declared tools actually ran.
+func (a *chatUsageRecorderAdapter) RecordSkillUseAttributed(sessionKey, skillName string, success bool, errMsg, model string, attr chatport.SkillUseAttribution) {
+	a.recordSkillUse(sessionKey, skillName, success, errMsg, model, attr)
+}
+
+func (a *chatUsageRecorderAdapter) recordSkillUse(sessionKey, skillName string, success bool, errMsg, model string, attr chatport.SkillUseAttribution) {
 	if a == nil || a.inner == nil {
 		return
 	}
@@ -55,6 +65,8 @@ func (a *chatUsageRecorderAdapter) RecordSkillUse(sessionKey, skillName string, 
 		ErrorMsg:     errMsg,
 		FailureTrace: failureTrace,
 		Source:       genesis.UsageSourceReal,
+		Delivery:     attr.Delivery,
+		Exercised:    attr.Exercised,
 	}); err != nil && a.logger != nil {
 		// Usage telemetry is best-effort — a write failure must never affect the
 		// chat turn, but log it so a persistently failing tracker is visible.

@@ -498,7 +498,7 @@ func buildAgentConfig(
 // recordRunSkillUsage attributes one completed run's outcome to every skill
 // consulted during it. Waiting until the run ends prevents an early clean
 // skill-read turn from hiding a later tool error or missing final answer.
-func recordRunSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, result *agent.AgentResult, runErr error, sessionKey, model string) {
+func recordRunSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, result *agent.AgentResult, runErr error, sessionKey, model string, autoLoaded map[string]bool) {
 	if rec == nil || log == nil {
 		return
 	}
@@ -515,9 +515,62 @@ func recordRunSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, result *a
 		return
 	}
 	errMsg := skillRunFailure(result, runErr)
+	attributed, _ := rec.(chatport.SkillUsageAttributionRecorder)
 	for _, name := range consulted {
-		rec.RecordSkillUse(sessionKey, name, errMsg == "", errMsg, model)
+		if attributed == nil {
+			rec.RecordSkillUse(sessionKey, name, errMsg == "", errMsg, model)
+			continue
+		}
+		attributed.RecordSkillUseAttributed(sessionKey, name, errMsg == "", errMsg, model,
+			skillUseAttribution(name, autoLoaded, result))
 	}
+}
+
+// skillUseAttribution decides, deterministically, WHERE this run's outcome
+// belongs for one consulted skill (Demystifying Agent Skills, 2608.14036):
+// a consult is recorded with the WHOLE run's success, so a skill that was
+// merely loaded and then ignored otherwise takes the blame for the turn.
+//
+// "Exercised" is evidence, not inference: the skill declares the tools its
+// procedure needs (requires_tools), and the run either ran one of them or did
+// not. A skill declaring no tools has nothing to check against and stays
+// unknown rather than being guessed either way.
+func skillUseAttribution(name string, autoLoaded map[string]bool, result *agent.AgentResult) chatport.SkillUseAttribution {
+	attr := chatport.SkillUseAttribution{
+		Delivery:  chatport.SkillDeliveryModelRead,
+		Exercised: chatport.SkillExercisedUnknown,
+	}
+	if autoLoaded[name] {
+		attr.Delivery = chatport.SkillDeliveryAutoLoad
+	}
+	required := skillRequiredToolSet(name)
+	if len(required) == 0 || result == nil {
+		return attr
+	}
+	attr.Exercised = chatport.SkillExercisedNo
+	for _, a := range result.ToolActivities {
+		if required[a.Name] {
+			attr.Exercised = chatport.SkillExercisedYes
+			break
+		}
+	}
+	return attr
+}
+
+// skillRequiredToolSet reads requires_tools off the frozen snapshot — the same
+// source the auto-activation path uses, so the two never disagree.
+func skillRequiredToolSet(name string) map[string]bool {
+	for _, s := range cachedResolvedSkills() {
+		if s.Name != name || len(s.RequiresTools) == 0 {
+			continue
+		}
+		set := make(map[string]bool, len(s.RequiresTools))
+		for _, tool := range s.RequiresTools {
+			set[tool] = true
+		}
+		return set
+	}
+	return nil
 }
 
 func skillRunFailure(result *agent.AgentResult, runErr error) string {
