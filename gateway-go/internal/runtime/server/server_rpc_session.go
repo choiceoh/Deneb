@@ -183,7 +183,14 @@ func (s *Server) newSessionAgentLogWriter() *agentlog.Writer {
 	if err != nil {
 		return nil
 	}
-	return agentlog.NewWriter(home + "/.deneb/agent-logs")
+	writer := agentlog.NewWriter(home + "/.deneb/agent-logs")
+	// Retention runs once per process start, off the startup path: the sweep
+	// stats one directory entry per session ever logged, which had grown to
+	// 5K+ files with no other bound.
+	safego.GoWithSlog(s.logger, "agentlog-retention", func() {
+		writer.PruneStaleFiles(time.Now())
+	})
+	return writer
 }
 
 func (s *Server) wireSessionInsights(agentLogWriter *agentlog.Writer) {
