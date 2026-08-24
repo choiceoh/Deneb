@@ -25,11 +25,16 @@ type (
 	Evolver              = genesis.Evolver
 	Tracker              = genesis.Tracker
 	RetryCorrectionMiner = genesis.RetryCorrectionMiner
+	RetryHintIndex       = genesis.RetryHintIndex
 )
 
 // NewRetryCorrectionMiner re-exports the transcript retry-pair miner
 // constructor (evidence-side; see genesis/retry_correction_miner.go).
 var NewRetryCorrectionMiner = genesis.NewRetryCorrectionMiner
+
+// NewRetryHintIndex re-exports the read-only error-time view of the same
+// ledger (consumption-side; see genesis/retry_correction_hint.go).
+var NewRetryHintIndex = genesis.NewRetryHintIndex
 
 // GenesisBundle is the owning-module port for genesis services wired at boot.
 // Server holds these fields via GenesisSubsystem; construction lives here so

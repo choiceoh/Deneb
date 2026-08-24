@@ -68,6 +68,27 @@ type toolProvenanceRootProvider interface {
 	ToolProvenanceRoot() string
 }
 
+// toolErrorAdvisor is an optional ToolExecutor capability: given a failed tool
+// call, it returns a one-line correction learned from earlier transcripts (the
+// mined failed→successful retry ledger). Optional so the executor stays usable
+// with a bare ToolExecutor in tests and eval runs.
+type toolErrorAdvisor interface {
+	ToolErrorAdvice(toolName, errText string) string
+}
+
+// toolErrorAdvice returns "" unless the executor implements the advisor and
+// has a recurring correction for this exact failure.
+func toolErrorAdvice(tools ToolExecutor, toolName, errText string) string {
+	if tools == nil {
+		return ""
+	}
+	a, ok := tools.(toolErrorAdvisor)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(a.ToolErrorAdvice(toolName, errText))
+}
+
 func toolProvenanceRoot(tools ToolExecutor) string {
 	if tools == nil {
 		return ""
