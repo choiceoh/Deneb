@@ -645,30 +645,30 @@ func TestSemanticIndex_DegradesWithoutEmbedder(t *testing.T) {
 	}
 }
 
-func TestChunkTextTruncatesAtChunkCap(t *testing.T) {
+func TestStructuredChunksTruncatesAtChunkCap(t *testing.T) {
 	// Short text → one chunk.
-	if got := chunkText("hello world 안녕"); len(got) != 1 {
+	if got := structuredChunks("content.txt", "hello world 안녕"); len(got) != 1 {
 		t.Errorf("short text chunks = %d, want 1", len(got))
 	}
 	// Empty / whitespace → no chunks.
-	if got := chunkText("   \n  "); got != nil {
+	if got := structuredChunks("content.txt", "   \n  "); got != nil {
 		t.Errorf("blank text chunks = %v, want nil", got)
 	}
 	// Long text splits into multiple rune-bounded chunks, capped at maxChunksPerFile.
 	long := strings.Repeat("가", chunkRunes*3+50)
-	got := chunkText(long)
+	got := structuredChunks("content.txt", long)
 	if len(got) != 4 { // 3 full + 1 remainder
 		t.Errorf("long text chunks = %d, want 4", len(got))
 	}
 	for i, c := range got {
-		if rc := len([]rune(c)); rc > chunkRunes {
+		if rc := len([]rune(c.Text)); rc > chunkRunes {
 			t.Errorf("chunk %d has %d runes, exceeds cap %d", i, rc, chunkRunes)
 		}
 	}
 
 	// Cap enforcement: text that would yield > maxChunksPerFile chunks is capped.
 	huge := strings.Repeat("나", chunkRunes*(maxChunksPerFile+5))
-	if got := chunkText(huge); len(got) != maxChunksPerFile {
+	if got := structuredChunks("content.txt", huge); len(got) != maxChunksPerFile {
 		t.Errorf("huge text chunks = %d, want cap %d", len(got), maxChunksPerFile)
 	}
 }
