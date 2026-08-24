@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/memory"
 )
 
 const factSearchPathPrefix = "@facts/"
@@ -209,7 +211,19 @@ func factSearchMeaningfulRemainder(tokens map[string]struct{}) map[string]struct
 	return tokens
 }
 
+// factSearchKeyMatch reports whether the query names this fact key.
+//
+// Canonical keys are English (`identity.address`, `goals.long_term`) while this
+// is a Korean-first product, so a literal token match alone made every fact
+// unreachable by the words the operator actually types. Two vocabularies close
+// that gap: published profile axes carry their own alias list in the direct
+// grammar catalog (any alias identifies the axis), and generic structural key
+// tokens translate one-for-one below (every token must still be named, so
+// precision is unchanged).
 func factSearchKeyMatch(queryTokens map[string]struct{}, key string) bool {
+	if factSearchAxisAliasMatch(queryTokens, key) {
+		return true
+	}
 	var keyTokens []string
 	for _, token := range strings.FieldsFunc(strings.ToLower(key), func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
@@ -224,11 +238,54 @@ func factSearchKeyMatch(queryTokens map[string]struct{}, key string) bool {
 		return false
 	}
 	for _, token := range keyTokens {
-		if _, ok := queryTokens[token]; !ok {
+		if !factSearchKeyTokenNamed(queryTokens, token) {
 			return false
 		}
 	}
 	return true
+}
+
+// factSearchAxisAliasMatch resolves a published profile axis by the words a user
+// searches it with. The catalog owns that vocabulary (memory.FactKeyQueryAliases)
+// so an axis added there becomes findable here without a second table.
+func factSearchAxisAliasMatch(queryTokens map[string]struct{}, key string) bool {
+	aliases := memory.FactKeyQueryAliases(key)
+	if len(aliases) == 0 {
+		return false
+	}
+	for _, alias := range aliases {
+		if _, ok := queryTokens[factSearchToken(strings.ToLower(alias))]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// factSearchKeyTokenAliases translates the structural tokens that appear in
+// hand-made fact keys. Deliberately small and one-concept-per-entry: this is a
+// dictionary, not a synonym engine, and every token of a key must still be
+// named for the key to match.
+var factSearchKeyTokenAliases = map[string][]string{
+	"owner":    {"담당자", "담당", "책임자", "오너"},
+	"contact":  {"연락처", "담당자"},
+	"email":    {"이메일", "메일"},
+	"phone":    {"전화", "전화번호", "연락처"},
+	"address":  {"주소", "호칭"},
+	"schedule": {"일정", "스케줄"},
+	"status":   {"상태", "진행"},
+	"note":     {"메모", "노트"},
+}
+
+func factSearchKeyTokenNamed(queryTokens map[string]struct{}, token string) bool {
+	if _, ok := queryTokens[token]; ok {
+		return true
+	}
+	for _, alias := range factSearchKeyTokenAliases[token] {
+		if _, ok := queryTokens[factSearchToken(alias)]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func factSearchGenericKeyPrefix(token string) bool {

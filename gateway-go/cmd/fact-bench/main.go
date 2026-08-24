@@ -70,14 +70,13 @@ type score struct {
 
 	StaleChecked int `json:"staleChecked"`
 	StaleExposed int `json:"staleExposed"`
-	// SearchChecked/SearchMissing are ADVISORY: whether a Korean phrasing
-	// retrieves the winning fact is a retrieval-quality question that belongs to
-	// recall-bench, and self facts reach a turn through `<current-facts>` rather
-	// than through search at all. Reported so a drop is visible; not gated, so
-	// this bench cannot be satisfied by suppressing everything.
-	SearchChecked int      `json:"searchChecked"`
-	SearchMissing int      `json:"searchMissing"`
-	SearchNotes   []string `json:"searchNotes,omitempty"`
+	// SearchChecked/SearchMissing keep this bench honest in the other direction:
+	// suppressing everything would satisfy the stale checks alone. Each goldset
+	// query must be phrased in the axis vocabulary the catalog publishes
+	// (memory.FactKeyQueryAliases) — that is the contract a Korean query relies
+	// on to reach an English-keyed fact at all.
+	SearchChecked int `json:"searchChecked"`
+	SearchMissing int `json:"searchMissing"`
 
 	EvidenceChecked int `json:"evidenceChecked"`
 	EvidenceLeaked  int `json:"evidenceLeaked"`
@@ -86,7 +85,7 @@ type score struct {
 }
 
 func (s score) clean() bool {
-	return s.CurrentWrong == 0 && s.StaleExposed == 0 && s.EvidenceLeaked == 0
+	return s.CurrentWrong == 0 && s.StaleExposed == 0 && s.EvidenceLeaked == 0 && s.SearchMissing == 0
 }
 
 func main() {
@@ -149,17 +148,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 func printSummary(w io.Writer, s score) {
 	fmt.Fprintf(w, "fact lifecycle bench — %d cases\n", s.Cases)
 	fmt.Fprintf(w, "  current value correct : %d/%d\n", s.CurrentChecked-s.CurrentWrong, s.CurrentChecked)
-	fmt.Fprintf(w, "  current value in search: %d/%d (advisory)\n", s.SearchChecked-s.SearchMissing, s.SearchChecked)
+	fmt.Fprintf(w, "  current value in search: %d/%d\n", s.SearchChecked-s.SearchMissing, s.SearchChecked)
 	fmt.Fprintf(w, "  stale value suppressed : %d/%d\n", s.StaleChecked-s.StaleExposed, s.StaleChecked)
 	fmt.Fprintf(w, "  stale evidence denied  : %d/%d\n", s.EvidenceChecked-s.EvidenceLeaked, s.EvidenceChecked)
-	for _, note := range s.SearchNotes {
-		fmt.Fprintf(w, "  ⓘ %s\n", note)
-	}
 	for _, failure := range s.Failures {
 		fmt.Fprintf(w, "  ✗ %s\n", failure)
 	}
 	if s.clean() {
-		fmt.Fprintln(w, "  ✓ no stale exposure")
+		fmt.Fprintln(w, "  ✓ current facts reachable, no stale exposure")
 	}
 }
 
@@ -243,7 +239,7 @@ func scoreCase(ctx context.Context, store *wiki.Store, c goldCase, result *score
 			result.SearchChecked++
 			if !strings.Contains(joined, c.Current) {
 				result.SearchMissing++
-				result.SearchNotes = append(result.SearchNotes,
+				result.Failures = append(result.Failures,
 					fmt.Sprintf("%s: current value is absent from top-8 for %q", c.ID, c.Query))
 			}
 		}

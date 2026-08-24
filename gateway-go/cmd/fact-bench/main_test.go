@@ -30,6 +30,9 @@ func TestCheckedInGoldsetHoldsNoStaleExposure(t *testing.T) {
 	if result.Cases < 5 {
 		t.Fatalf("goldset is too small to be a ratchet: %d cases", result.Cases)
 	}
+	if result.SearchChecked == 0 {
+		t.Fatalf("goldset does not exercise retrieval: %+v", result)
+	}
 	if result.StaleChecked == 0 || result.EvidenceChecked == 0 || result.CurrentChecked == 0 {
 		t.Fatalf("goldset does not exercise every gated boundary: %+v", result)
 	}
@@ -70,6 +73,15 @@ func TestBenchFailsOnStaleExposureAndWrongWinner(t *testing.T) {
 				       {"op":"forget","authority":"inference"}],
 				"current":""}]}`,
 			want: "still current",
+		},
+		{
+			name: "current value unreachable by its query",
+			gold: `{"schemaVersion":1,"cases":[{
+				"id":"unsearchable","subject":"self","key":"communication.language","kind":"preference",
+				"ops":[{"op":"assert","value":"한국어로 답변","authority":"direct_user"}],
+				"query":"이 축을 가리키지 않는 질의",
+				"current":"한국어로 답변"}]}`,
+			want: "absent from top-8",
 		},
 		{
 			name: "stale evidence allowed",
