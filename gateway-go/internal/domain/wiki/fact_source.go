@@ -197,6 +197,10 @@ func factSourceStatesValue(page *Page, value string) bool {
 	meta := page.Meta
 	claims := []string{
 		page.Body, meta.Summary,
+		// Title is the page's canonical name for its SUBJECT — on a 인물 or 거래처
+		// page the name often appears nowhere else — so it states a fact the way
+		// tags never do.
+		meta.Title,
 		// Identity and classification the page asserts about its subject.
 		meta.Code, meta.PID, meta.Client, meta.Program,
 		meta.Stage, meta.Status, meta.Address,

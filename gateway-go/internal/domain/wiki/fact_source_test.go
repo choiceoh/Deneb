@@ -223,7 +223,7 @@ func TestVerifyFactSourceReadsEveryCanonicalMetaShape(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, value := range []string{"전북 군산시 옥구읍 수산리", "비금-130mw", "130.9"} {
+	for _, value := range []string{"전북 군산시 옥구읍 수산리", "비금-130mw", "130.9", "프로젝트/군산.md"} {
 		if evidence := store.VerifyFactSource("w:프로젝트/군산", value); !evidence.Verified {
 			t.Errorf("canonical meta %q must back a claim: %+v", value, evidence)
 		}
