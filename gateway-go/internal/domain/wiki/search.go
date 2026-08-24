@@ -279,6 +279,22 @@ func (s *searchDB) queryMaxRarity(query string) float64 {
 	return s.idx.QueryMaxRarity(query)
 }
 
+// TokenRarity reports how distinctive a single token is in the indexed
+// corpus (0 = common/absent, 1 = rare), for consumers that need a
+// page-attribution guard — the recall citation pass uses it to refuse
+// crediting a page for a token half the wiki carries. Below the same corpus
+// floor the BM25 gate uses, every token reads rare (df estimates are
+// meaningless in a tiny wiki, and at small N there is little to collide with).
+func (s *Store) TokenRarity(token string) float64 {
+	if s.fts == nil {
+		return 1
+	}
+	if s.fts.docCount() < bm25GateMinCorpus {
+		return 1
+	}
+	return s.fts.queryMaxRarity(token)
+}
+
 // docCount returns the number of indexed pages (corpus size N). The lexical
 // rarity gate needs it to stay disabled for corpora too small to estimate
 // "common in corpus" — in a tiny wiki every term looks common (df is a large
