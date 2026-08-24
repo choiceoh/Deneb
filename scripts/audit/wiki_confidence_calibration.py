@@ -25,12 +25,18 @@ Reading it:
 - flat — the label is noise; the axis is measuring nothing.
 - inverted (high < low) — the paper's finding reproduces here and the axis is
   actively rewarding the wrong thing.
+- nonmonotonic — the label tracks recall, but not cleanly in one direction;
+  directional verdicts (monotone/inverted) would both overclaim.
+- unmeasured — there is nothing to read a verdict from: fewer than two bands,
+  or a missing/empty recall ledger. A missing ledger must NOT read as "flat"
+  (zero recalls observed ≠ recalls measured as zero).
 
-Measured 2026-08-24 on 1,195 indexed pages / 1,303 recall hits:
-high 112/186 = 0.602, medium 198/610 = 0.325, low 5/225 = 0.022 — strongly
-monotone. The inversion does NOT reproduce at page level in this corpus, so the
-axis stays as it is; this audit is what makes that claim checkable rather than
-assumed.
+Measured 2026-08-24 on 1,195 indexed pages / 1,303 recall hits (counting
+method predates the inject-only event filter below — it counted every ledger
+event kind): high 112/186 = 0.602, medium 198/610 = 0.325, low 5/225 = 0.022 —
+strongly monotone. The inversion does NOT reproduce at page level in this
+corpus, so the axis stays as it is; this audit is what makes that claim
+checkable rather than assumed.
 
 Read-only and advisory: it never gates and never writes.
 
@@ -86,6 +92,10 @@ class Calibration:
     bands: dict[str, BandStat] = field(default_factory=dict)
     pages: int = 0
     hit_paths: int = 0
+    # Whether the recall ledger was readable at all. A missing ledger means no
+    # observation SOURCE, which is a different state from "observed zero
+    # recalls" and must never be reported as a flat (label-is-noise) verdict.
+    ledger_present: bool = False
 
     def rate(self, band: str) -> float | None:
         stat = self.bands.get(band)
@@ -93,11 +103,16 @@ class Calibration:
 
     @property
     def verdict(self) -> str:
-        """monotone | flat | inverted | unmeasured.
+        """monotone | flat | inverted | nonmonotonic | unmeasured.
 
         Only bands with pages participate: a corpus missing a band cannot be
-        called inverted on the strength of the ones that are present.
+        called inverted on the strength of the ones that are present. A spread
+        wide enough to matter that fits NEITHER direction is adverse measured
+        evidence (nonmonotonic), not missing evidence — folding it into
+        "unmeasured" would silently pass a label the data argues against.
         """
+        if not self.ledger_present or self.hit_paths <= 0:
+            return "unmeasured"
         present = [(band, self.rate(band)) for band in BAND_ORDER if self.rate(band) is not None]
         if len(present) < 2:
             return "unmeasured"
@@ -108,7 +123,7 @@ class Calibration:
             return "monotone"
         if all(a < b for a, b in zip(values, values[1:])):
             return "inverted"
-        return "unmeasured"
+        return "nonmonotonic"
 
 
 def parse_index(path: Path) -> list[dict[str, str]]:
@@ -131,13 +146,21 @@ def parse_index(path: Path) -> list[dict[str, str]]:
     return rows
 
 
-def load_recall_hits(path: Path) -> Counter:
-    """path → number of times it was served, from the recall-hit ledger."""
+def load_recall_hits(path: Path) -> tuple[Counter, bool]:
+    """path → (injection count per page, ledger readable at all).
+
+    Only inject events count (a legacy line without an event field is one):
+    the ledger also records read/cite events for pages the model opened or
+    cited, which are USE of an already-served page, not recall serving it —
+    counting them would inflate bands the preflight never surfaced. Valid JSON
+    that is not an object (null, a bare string, an array) is skipped like a
+    malformed line: the ledger is derived, best-effort data.
+    """
     hits: Counter = Counter()
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
-        return hits
+        return hits, False
     for line in text.splitlines():
         line = line.strip()
         if not line:
@@ -146,17 +169,22 @@ def load_recall_hits(path: Path) -> Counter:
             row = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if not isinstance(row, dict):
+            continue
+        event = str(row.get("event") or "").strip().lower()
+        if event not in ("", "inject"):
+            continue
         page = str(row.get("path") or "").strip()
         if page:
             hits[page] += 1
-    return hits
+    return hits, True
 
 
 def calibrate(wiki: Path | None = None) -> Calibration:
     root = wiki or wiki_dir()
     rows = parse_index(root / "index.md")
-    hits = load_recall_hits(root / ".recall-hits.jsonl")
-    out = Calibration(pages=len(rows), hit_paths=len(hits))
+    hits, ledger_present = load_recall_hits(root / ".recall-hits.jsonl")
+    out = Calibration(pages=len(rows), hit_paths=len(hits), ledger_present=ledger_present)
     for row in rows:
         band = (row.get("confidence") or "").strip().lower() or UNSET_BAND
         stat = out.bands.setdefault(band, BandStat())
@@ -171,7 +199,8 @@ def calibrate(wiki: Path | None = None) -> Calibration:
 def render(cal: Calibration) -> str:
     lines = [
         f"DENEB_WIKI_CONFIDENCE_CALIBRATION pages={cal.pages} "
-        f"recalledPaths={cal.hit_paths} verdict={cal.verdict} [advisory]"
+        f"recalledPaths={cal.hit_paths} ledger={'present' if cal.ledger_present else 'missing'} "
+        f"verdict={cal.verdict} [advisory]"
     ]
     for band in (*BAND_ORDER, UNSET_BAND):
         stat = cal.bands.get(band)
@@ -191,6 +220,18 @@ def render(cal: Calibration) -> str:
             "  FLAT: self-declared confidence carries no recall signal — the "
             "Confidence axis is measuring nothing"
         )
+    elif cal.verdict == "nonmonotonic":
+        lines.append(
+            "  NON-MONOTONIC: confidence tracks recall but not cleanly in one "
+            "direction — neither a monotone nor an inverted reading is supported"
+        )
+    elif cal.verdict == "unmeasured":
+        reason = (
+            "recall ledger missing/unreadable — no observation source"
+            if not cal.ledger_present
+            else "no injections recorded / fewer than two populated bands"
+        )
+        lines.append(f"  UNMEASURED: {reason}")
     return "\n".join(lines)
 
 
@@ -207,6 +248,7 @@ def main(argv: list[str] | None = None) -> int:
                 {
                     "pages": cal.pages,
                     "recalledPaths": cal.hit_paths,
+                    "ledgerPresent": cal.ledger_present,
                     "verdict": cal.verdict,
                     "bands": {
                         band: {
