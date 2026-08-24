@@ -1,6 +1,7 @@
 package wiki
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -184,5 +185,59 @@ func TestVerifyFactSourceDoesNotMatchAcrossFields(t *testing.T) {
 	}
 	if single := store.VerifyFactSource("w:프로젝트/교차", "ABC건설"); !single.Verified {
 		t.Errorf("a value one field states must still verify: %+v", single)
+	}
+}
+
+// The generated projection restates the fact plane, so citing it corroborates a
+// claim with itself one page removed.
+func TestVerifyFactSourceRefusesTheGeneratedProjection(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	if _, err := store.UpsertFact(FactInput{
+		Subject: "self", Key: "communication.language", Value: "한국어로 답변",
+		Kind: FactKindPreference, Authority: FactAuthorityAgent,
+		At: time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	evidence := store.VerifyFactSource("w:"+factProfilePagePath, "한국어로 답변")
+	if evidence.Verified {
+		t.Fatalf("the projection must not corroborate a fact: %+v", evidence)
+	}
+	if !strings.Contains(evidence.Reason, "projection") {
+		t.Errorf("reason = %q", evidence.Reason)
+	}
+}
+
+// A prefix naming no real layer is a bad citation, not an unjudged one: nothing
+// could open it, so the caller must hear about it.
+func TestVerifyFactSourceReportsUnknownLayers(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	evidence := store.VerifyFactSource("x:계약서", "값")
+	if evidence.Verified || !evidence.Checked {
+		t.Fatalf("an unknown layer must be reported as a bad ref: %+v", evidence)
+	}
+	if !strings.Contains(evidence.Reason, "unknown layer") {
+		t.Errorf("reason = %q", evidence.Reason)
+	}
+}
+
+// A caller that ignores the schema's maxItems must not turn one tool call into
+// unbounded disk reads: only the refs the store would keep are opened.
+func TestVerifyFactSourcesBoundsTheRefsItReads(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	seedSourcePage(t, store, "프로젝트/계약.md", "2026-08-01", "- 납기: 2026-12-31\n")
+
+	flood := make([]string, 0, 200)
+	for i := range 200 {
+		flood = append(flood, "w:프로젝트/없는페이지-"+strconv.Itoa(i))
+	}
+	// The proving ref sits at the front, outside the tail the store keeps, so a
+	// bounded verification cannot find it — that is the bound being enforced.
+	if _, ok := store.VerifyFactSources(append([]string{"w:프로젝트/계약"}, flood...), "2026-12-31"); ok {
+		t.Fatal("verification read past the refs the store would keep")
+	}
+	if _, ok := store.VerifyFactSources(append(flood, "w:프로젝트/계약"), "2026-12-31"); !ok {
+		t.Fatal("a kept ref must still verify")
 	}
 }

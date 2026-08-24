@@ -21,6 +21,7 @@
 package wiki
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -84,10 +85,17 @@ func (s *Store) VerifyFactSource(ref, value string) FactSourceEvidence {
 	}
 
 	if layer, ok := factSourceRefLayer(evidence.Ref); ok && layer != factSourceWikiLayer {
-		// Refs carry their layer (`w:` wiki, `f:` files). Only the wiki layer is
-		// this store's to open; another layer's ref is a perfectly good citation
-		// that simply cannot be judged here.
-		evidence.Reason = "source ref names the " + layer + " layer, which this store cannot open"
+		if layer == factSourceFilesLayer {
+			// Refs carry their layer (`w:` wiki, `f:` files). The files layer is a
+			// real citation this store simply cannot open, so it is left unjudged
+			// rather than reported as broken.
+			evidence.Reason = "source ref names the files layer, which this store cannot open"
+			return evidence
+		}
+		// Any other prefix names no layer that exists: knowledge(op="read") could
+		// not open it either, so it IS a bad citation and the caller should hear so.
+		evidence.Checked = true
+		evidence.Reason = "source ref names unknown layer " + strconv.Quote(layer)
 		return evidence
 	}
 	evidence.Checked = true
@@ -101,6 +109,14 @@ func (s *Store) VerifyFactSource(ref, value string) FactSourceEvidence {
 		// A fact cannot be its own document: citing the row just written would
 		// report a claim as corroborated by itself.
 		evidence.Reason = "a fact reference cannot vouch for a fact"
+		return evidence
+	}
+
+	if isFactProjectionReservedPath(path) {
+		// The generated projection restates whatever the fact plane already holds,
+		// so finding a value there means only that the value was written — the
+		// citation would corroborate a claim with itself, one page removed.
+		evidence.Reason = "a generated fact projection cannot vouch for a fact"
 		return evidence
 	}
 
@@ -124,8 +140,11 @@ func (s *Store) VerifyFactSource(ref, value string) FactSourceEvidence {
 // pass everything it has and report the one that held up — or, when none did,
 // the most informative refusal.
 func (s *Store) VerifyFactSources(refs []string, value string) (FactSourceEvidence, bool) {
+	// Bound the reads to the refs the store would actually keep. A caller can
+	// ignore the schema's maxItems and send thousands; verifying all of them
+	// would be disk I/O spent on refs that normalization is about to drop.
 	var last FactSourceEvidence
-	for _, ref := range refs {
+	for _, ref := range normalizeFactSources(refs) {
 		evidence := s.VerifyFactSource(ref, value)
 		if evidence.Verified {
 			return evidence, true
@@ -141,7 +160,10 @@ func (s *Store) VerifyFactSources(refs []string, value string) (FactSourceEviden
 	return last, false
 }
 
-const factSourceWikiLayer = "w"
+const (
+	factSourceWikiLayer  = "w"
+	factSourceFilesLayer = "f"
+)
 
 // factSourceRefLayer reports the layer prefix a ref carries, if any. A bare
 // wiki path ("프로젝트/abc") and a fact ref ("@facts/…") carry none.
