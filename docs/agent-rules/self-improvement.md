@@ -143,6 +143,15 @@ Deterministic promotion lives in `tracker_recurrence_promotion.go`:
   기록된다 (`DirectMemoryMissFor` → `RecordDirectMemoryMiss`, 상한 1MB). 순수
   진단이며 그 턴의 동작에는 영향이 없다 — 카탈로그를 넓힐 근거를 모으는 용도다.
   권위 경계는 [ADR-0005](../adr/0005-fact-write-authority.md).
+- **미탐 읽기**: `make memory-grammar-misses` (`scripts/dev/memory-grammar-misses.py`)가
+  장부를 명령 lead·값을 지운 "형태"로 묶어 빈도순으로 보여주고, 각 묶음에 이미 가까운
+  축이 있으면 그 키를 짚어 준다. 가까운 축이 있으면 그 축의 표현을 넓히는 일이고,
+  없으면 새 축이 필요한지부터 판단할 일이다. 읽기 전용이라 장부를 소비(삭제)하지 않는다.
+- **검색 어휘**: 축의 `queryAliases`는 그 사실을 찾을 때 사용자가 실제로 쓰는 말이다.
+  정본 키는 영어인데 질의는 한국어라, 이 목록이 없으면 위키 fact 검색이 축 사실에
+  아예 닿지 못한다(도입 전 한국어 질의 적중률 0). wiki 검색과 채팅 회상이 같은
+  `memory.FactKeyQueryAliases`를 쓰므로 축에 표현을 더하면 두 표면이 함께 넓어진다.
+  `make fact-bench`가 현행 값 도달 가능성을 게이트로 확인한다.
 
 ## Meta-Evolution (L2) — the Slow Loop
 
