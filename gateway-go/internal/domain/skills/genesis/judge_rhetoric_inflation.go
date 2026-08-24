@@ -27,10 +27,11 @@ package genesis
 // food), never the meta-judge promotion gate, whose floor must stay tied to
 // blatant must-catch pairs.
 //
-// Measured on arrival (2026-08-24, incumbent judge glm-5.2, one bundled skill
-// per class through the live judge prompt): all three classes were REJECTED,
+// Measured on arrival (2026-08-24, one bundled skill per class through the live
+// judge prompt, run against BOTH the wired judge — the main role, kimi/k3 —
+// and glm-5.2): all three classes were REJECTED by both,
 // with reasons naming the exact defect ("근거 없는 검증 주장", "다른 방법은 검토할
-// 필요가 없다 … 자기 스킬 안내와 모순", "대부분→전부 … 자기모순"). So this rung
+// 필요가 없다 … 검토 회피 유도", "대부분→전부 … 과잉 일반화"). So this rung
 // opens saturated rather than producing immediate labels — its value is that
 // the axis is now measured at all: criteria 1 and 9 of the judge prompt are
 // what currently hold the line, and a future evaluator epoch that relaxes
