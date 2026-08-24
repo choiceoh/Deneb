@@ -238,7 +238,7 @@ func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalA
 	// Record the page's shape and, on a re-fetch, say what moved. Computed on the
 	// full content before narrowing, so the answer describes the page rather than
 	// the excerpt the caller happened to ask for.
-	if summary := changeSummary(targetURL, extractEnvelopeContent(out.Content)); summary != "" {
+	if summary := changeSummary(targetURL, extractEnvelopeContent(out.Content), int64(maxChars)); summary != "" {
 		out.Content = strings.Replace(out.Content, "</metadata>", summary+"\n</metadata>", 1)
 	}
 	out.Content = applyFocusAndTruncation(out.Content, focus, maxChars)

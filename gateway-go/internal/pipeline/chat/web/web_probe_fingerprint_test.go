@@ -64,25 +64,23 @@ func TestProbeReportsAbsenceAsAnAnswerNotAFailure(t *testing.T) {
 // A first visit has nothing to compare against and must stay silent rather than
 // claiming the page is new-and-changed.
 func TestFingerprintSaysNothingOnAFirstVisit(t *testing.T) {
-	pageFingerprints.pages = map[string][]sectionFingerprint{}
-	pageFingerprints.order = nil
+	pageFingerprints = newFingerprintMemory("")
 
-	if got := changeSummary("https://example.com/a", probeTestPage); got != "" {
+	if got := changeSummary("https://example.com/a", probeTestPage, 20000); got != "" {
 		t.Fatalf("first visit reported a change: %q", got)
 	}
 }
 
 func TestFingerprintNamesTheSectionsThatMoved(t *testing.T) {
-	pageFingerprints.pages = map[string][]sectionFingerprint{}
-	pageFingerprints.order = nil
+	pageFingerprints = newFingerprintMemory("")
 	url := "https://example.com/b"
-	changeSummary(url, probeTestPage)
+	changeSummary(url, probeTestPage, 20000)
 
 	// Same page, one section edited and one added.
 	edited := strings.Replace(probeTestPage, "Fixed the calendar rollover.", "Fixed the calendar rollover and the midnight bug.", 1)
 	edited += "\n## 3.3\n\nWayback fallback.\n"
 
-	got := changeSummary(url, edited)
+	got := changeSummary(url, edited, 20000)
 	if !strings.Contains(got, "3.1") {
 		t.Fatalf("edited section not reported: %q", got)
 	}
@@ -95,16 +93,66 @@ func TestFingerprintNamesTheSectionsThatMoved(t *testing.T) {
 }
 
 func TestFingerprintIgnoresWhitespaceReflow(t *testing.T) {
-	pageFingerprints.pages = map[string][]sectionFingerprint{}
-	pageFingerprints.order = nil
+	pageFingerprints = newFingerprintMemory("")
 	url := "https://example.com/c"
-	changeSummary(url, probeTestPage)
+	changeSummary(url, probeTestPage, 20000)
 
 	// Same words, rewrapped — a rendering difference, not an edit.
 	reflowed := strings.ReplaceAll(probeTestPage, "Added the browser sidecar and per-domain tier memory.",
 		"Added the browser sidecar\nand per-domain tier   memory.")
 
-	if got := changeSummary(url, reflowed); got != "Changed: none since last fetch" {
+	if got := changeSummary(url, reflowed, 20000); got != "Changed: none since last fetch" {
 		t.Fatalf("reflow was reported as an edit: %q", got)
+	}
+}
+
+// Fingerprints must survive a gateway restart: the comparison that matters
+// happens hours or days later, across the restarts every deploy causes. An
+// in-memory-only store would be empty at exactly the moment it should answer.
+func TestFingerprintsSurviveARestart(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/fingerprints.json"
+
+	first := newFingerprintMemory(path)
+	if _, _, isFirst := first.compare("https://example.com/d", probeTestPage, 20000); !isFirst {
+		t.Fatal("a fresh store should report a first visit")
+	}
+
+	// A new process reading the same file.
+	restarted := newFingerprintMemory(path)
+	edited := strings.Replace(probeTestPage, "Fixed the calendar rollover.", "Fixed the calendar rollover twice.", 1)
+	changed, _, isFirst := restarted.compare("https://example.com/d", edited, 20000)
+	if isFirst {
+		t.Fatal("the restarted store lost what it had recorded")
+	}
+	if len(changed) != 1 || !strings.Contains(changed[0], "3.1") {
+		t.Fatalf("edit not detected across restart: %v", changed)
+	}
+}
+
+// The same URL fetched under a different maxChars saw a different slice of the
+// page, so its sections are not comparable. Reporting them as changes is how a
+// live run produced "(new)" for every section on an unchanged page.
+func TestFingerprintDoesNotCompareAcrossBudgets(t *testing.T) {
+	m := newFingerprintMemory("")
+	if _, _, first := m.compare("https://example.com/e", probeTestPage, 20000); !first {
+		t.Fatal("first visit should report nothing")
+	}
+
+	// Same page, smaller budget → a truncated extraction with fewer sections.
+	shorter := strings.Split(probeTestPage, "## 3.2")[0]
+	changed, _, first := m.compare("https://example.com/e", shorter, 2000)
+
+	if !first {
+		t.Fatalf("a different budget was compared anyway, reporting: %v", changed)
+	}
+	if len(changed) != 0 {
+		t.Fatalf("spurious changes across budgets: %v", changed)
+	}
+
+	// And the new budget becomes the baseline, so the NEXT fetch at that budget
+	// does compare.
+	if _, _, first := m.compare("https://example.com/e", shorter, 2000); first {
+		t.Fatal("the new budget was not recorded as the baseline")
 	}
 }

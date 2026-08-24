@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
 
 // Search+fetch only pulls the first few results, so the order decides which
@@ -101,5 +103,83 @@ func TestArchiveSubstitutionIsDisclosedWithItsDate(t *testing.T) {
 	bare := waybackNote("https://example.com/gone", waybackSnapshot{URL: "x", Timestamp: "nonsense"})
 	if !strings.Contains(bare, "Internet Archive") {
 		t.Fatalf("substitution not disclosed without a date: %q", bare)
+	}
+}
+
+// End-to-end wiring for the archive path: a gone page is looked up, the snapshot
+// is fetched, and the substitution is disclosed. Exercised through the seams
+// because a live 404-that-is-also-archived is situational — the whole point of
+// this path is that it is a last resort the earlier ladders usually prevent.
+func TestGonePageIsServedFromTheArchive(t *testing.T) {
+	origFetch := fetchWithRetryFn
+	origLookup := waybackLookupFn
+	t.Cleanup(func() {
+		fetchWithRetryFn = origFetch
+		waybackLookupFn = origLookup
+	})
+
+	const dead = "https://example.com/removed"
+	const snapshot = "https://web.archive.org/web/20240115120000/https://example.com/removed"
+
+	fetchWithRetryFn = func(_ context.Context, u string, _ int64) (*media.FetchResult, error) {
+		if u == dead {
+			return nil, &media.MediaFetchError{Code: media.ErrHTTPError, Status: http.StatusNotFound, Message: "not found"}
+		}
+		if u != snapshot {
+			t.Fatalf("unexpected fetch of %q", u)
+		}
+		return &media.FetchResult{
+			Data:        []byte("<html><body><h1>Archived title</h1><p>" + strings.Repeat("archived body ", 40) + "</p></body></html>"),
+			ContentType: "text/html",
+			StatusCode:  http.StatusOK,
+			FinalURL:    snapshot,
+		}, nil
+	}
+	waybackLookupFn = func(context.Context, string) (waybackSnapshot, bool) {
+		return waybackSnapshot{URL: snapshot, Timestamp: "20240115120000"}, true
+	}
+
+	out, err := webFetchViaStealth(context.Background(), nil, dead, 20000)
+	if err != nil {
+		t.Fatalf("archive recovery returned an error: %v", err)
+	}
+	if !strings.Contains(out.Content, "archived body") {
+		t.Fatalf("archived content was not served:\n%s", out.Content)
+	}
+	if !strings.Contains(out.Content, "Archived: original "+dead) {
+		t.Fatalf("substitution was not disclosed:\n%s", out.Content)
+	}
+	if !strings.Contains(out.Content, "2024-01-15") {
+		t.Fatalf("snapshot date missing:\n%s", out.Content)
+	}
+	if out.Assess.HasError {
+		t.Fatal("a recovered page was still reported as a failure")
+	}
+}
+
+// A blocked page must go to the stealth ladder, not the archive: answering a
+// 403 with a stale copy would hide a page that is very much still there.
+func TestBlockedPageIsNotAnsweredFromTheArchive(t *testing.T) {
+	origFetch := fetchWithRetryFn
+	origLookup := waybackLookupFn
+	t.Cleanup(func() {
+		fetchWithRetryFn = origFetch
+		waybackLookupFn = origLookup
+	})
+
+	fetchWithRetryFn = func(context.Context, string, int64) (*media.FetchResult, error) {
+		return nil, &media.MediaFetchError{Code: media.ErrHTTPError, Status: http.StatusForbidden, Message: "blocked"}
+	}
+	waybackLookupFn = func(context.Context, string) (waybackSnapshot, bool) {
+		t.Fatal("the archive was consulted for a page that is merely blocked")
+		return waybackSnapshot{}, false
+	}
+
+	out, err := webFetchViaStealth(context.Background(), nil, "https://example.com/blocked", 20000)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.Content, "http_403") {
+		t.Fatalf("the original block was not reported:\n%s", out.Content)
 	}
 }
