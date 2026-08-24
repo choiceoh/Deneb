@@ -342,20 +342,6 @@ func (si *SemanticIndex) Rename(oldPath, newPath string) {
 	}
 }
 
-// chunkText preserves the historical test/helper surface while delegating to
-// the shared structure-aware splitter. Unknown text uses paragraph boundaries.
-func chunkText(s string) []string {
-	chunks := structuredChunks("content.txt", s)
-	if len(chunks) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(chunks))
-	for _, chunk := range chunks {
-		out = append(out, chunk.Text)
-	}
-	return out
-}
-
 func structuredChunks(name, text string) []textchunk.Chunk {
 	chunks := textchunk.Split(name, text, textchunk.Options{TargetRunes: chunkRunes, MaxChunks: maxChunksPerFile})
 	out := chunks[:0]
