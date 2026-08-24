@@ -295,16 +295,14 @@ func (a *wikiAdapter) RecordFact(_ context.Context, opts FactRecordOptions) (Fac
 	if actor == "" {
 		actor = "knowledge-tool"
 	}
-	// The caller's authority is capped at agent_confirmed above. It can still be
-	// EARNED: if the store can open one of the named sources and read this value
-	// inside it, the claim rests on a document rather than on an assertion, and
-	// the document's own date becomes the basis. Verification failures are not
-	// errors — the claim is simply recorded at the authority it could prove.
+	// The authority is capped at agent_confirmed by parseFactAuthority and stays
+	// there. Checking the cited sources is worth doing anyway — a citation that
+	// does not open, or opens on a page that never states this value, is a bad
+	// citation the caller should hear about — but the result is REPORTED, never
+	// promoted: this wiki has no page-level provenance, so a model can author the
+	// page it cites (see wiki/fact_source.go). Verification failures are not
+	// errors; the claim is recorded either way.
 	sourceEvidence, verified := a.store.VerifyFactSources(opts.Sources, opts.Value)
-	if verified && authority == wiki.FactAuthorityAgent {
-		authority = wiki.FactAuthorityPrimaryDoc
-		basisAt = sourceEvidence.BasisAt
-	}
 	result, err := a.store.UpsertFact(wiki.FactInput{
 		Subject: opts.Subject, Key: opts.Key, Value: opts.Value,
 		Kind: kind, Authority: authority, Sources: opts.Sources,

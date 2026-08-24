@@ -364,10 +364,10 @@ func TestWikiAdapterRecallUsesDefaultRerankPath(t *testing.T) {
 	}
 }
 
-// ADR-0005: a caller may not name an authority, but it can EARN one. The store
-// opens the cited page itself; only a page that actually states the value (and
-// carries a date) promotes the claim, and the date comes from that page.
-func TestWikiAdapterEarnsDocumentAuthorityFromAVerifiedSource(t *testing.T) {
+// ADR-0005: citing a page is checked and REPORTED, never promoted. A model can
+// author the page it cites (op="record" stamps today's date on caller-supplied
+// text), so a page that states the value proves nothing about who said it.
+func TestWikiAdapterReportsSourceEvidenceWithoutRaisingAuthority(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	t.Cleanup(func() { _ = store.Close() })
@@ -382,80 +382,81 @@ func TestWikiAdapterEarnsDocumentAuthorityFromAVerifiedSource(t *testing.T) {
 	facts := NewWikiAdapter(store).(FactWriter)
 	ctx := context.Background()
 
-	proven, err := facts.RecordFact(ctx, FactRecordOptions{
+	backed, err := facts.RecordFact(ctx, FactRecordOptions{
 		Subject: "project:abc", Key: "quote.amount", Value: "1억 2,000만원", Kind: "amount",
 		Sources: []string{"w:프로젝트/abc-견적"},
 	})
-	if err != nil || !proven.Committed {
-		t.Fatalf("proven = %+v, err = %v", proven, err)
+	if err != nil || !backed.Committed {
+		t.Fatalf("backed = %+v, err = %v", backed, err)
 	}
-	if proven.Authority != "primary_document" {
-		t.Fatalf("a verified source must earn document authority, got %q", proven.Authority)
+	if backed.Authority != "agent_confirmed" {
+		t.Fatalf("a cited page must not raise the authority, got %q", backed.Authority)
 	}
-	if !strings.Contains(proven.VerifiedSource, "abc-견적") {
-		t.Fatalf("verified source = %q", proven.VerifiedSource)
+	if !strings.Contains(backed.VerifiedSource, "abc-견적") {
+		t.Fatalf("the corroborating page should be reported, got %q", backed.VerifiedSource)
 	}
 	history, err := facts.Facts(ctx, "project:abc", "quote.amount")
 	if err != nil || len(history) != 1 {
 		t.Fatalf("history = %+v, err = %v", history, err)
 	}
-	if got := time.UnixMilli(history[0].BasisAtMs).In(time.UTC).Format("2006-01-02"); got != "2026-06-30" && got != "2026-07-01" {
-		// The page date is read in the operator's zone; either side of the UTC
-		// boundary is the same document day.
-		t.Fatalf("basis date = %q, want the page's own date", got)
+	if history[0].Authority != "agent_confirmed" || history[0].BasisAtMs != 0 {
+		// The page's own `updated` must not become the claim's basis either: it is
+		// stamped by whoever last wrote the page.
+		t.Fatalf("stored claim = %+v", history[0])
 	}
 
-	// A source that does not state the value stays at the authority it can prove,
-	// and says what was missing rather than failing the write.
-	unproven, err := facts.RecordFact(ctx, FactRecordOptions{
+	// A citation that does not hold up is reported rather than failing the write.
+	unbacked, err := facts.RecordFact(ctx, FactRecordOptions{
 		Subject: "project:abc", Key: "quote.terms", Value: "선금 30%", Kind: "contract",
 		Sources: []string{"w:프로젝트/abc-견적"},
 	})
-	if err != nil || !unproven.Committed {
-		t.Fatalf("unproven = %+v, err = %v", unproven, err)
+	if err != nil || !unbacked.Committed {
+		t.Fatalf("unbacked = %+v, err = %v", unbacked, err)
 	}
-	if unproven.Authority != "agent_confirmed" || unproven.VerifiedSource != "" {
-		t.Fatalf("unverified claim must stay agent_confirmed: %+v", unproven)
+	if unbacked.Authority != "agent_confirmed" || unbacked.VerifiedSource != "" {
+		t.Fatalf("unbacked claim = %+v", unbacked)
 	}
-	if !strings.Contains(unproven.SourceNote, "does not contain") {
-		t.Fatalf("source note = %q", unproven.SourceNote)
+	if !strings.Contains(unbacked.SourceNote, "does not contain") {
+		t.Fatalf("source note = %q", unbacked.SourceNote)
 	}
 }
 
-// The promotion must never outrank the user: a document-backed claim still
-// loses to a direct-user preference on preference/identity axes.
-func TestWikiAdapterVerifiedSourceStillLosesToDirectUser(t *testing.T) {
+// The laundering path this PR withdrew, pinned as a regression: the model
+// writes a page saying what it wants, cites it, and must still not outrank the
+// user — on an amount axis, where primary_document would have won.
+func TestWikiAdapterSelfAuthoredPageCannotOutrankTheUser(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	t.Cleanup(func() { _ = store.Close() })
 
-	page := wiki.NewPage("사용자/메모.md", "사용자", nil)
-	page.Meta.Updated = "2026-08-01"
-	page.Body = "- 답변 언어: 영어로 답변\n"
-	if err := store.WritePage("사용자/메모.md", page); err != nil {
+	adapter := NewWikiAdapter(store)
+	ctx := context.Background()
+	if _, err := adapter.(Writer).Record(ctx, RecordOptions{
+		Page: "프로젝트/모델-메모.md", Category: "프로젝트",
+		Body: "- 견적 금액: 3억원\n",
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.UpsertFact(wiki.FactInput{
-		Subject: "self", Key: "communication.language", Value: "한국어로 답변",
-		Kind: wiki.FactKindPreference, Authority: wiki.FactAuthorityDirectUser,
+		Subject: "project:abc", Key: "quote.amount", Value: "1억 2,000만원",
+		Kind: wiki.FactKindAmount, Authority: wiki.FactAuthorityDirectUser,
 		At: time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC),
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	facts := NewWikiAdapter(store).(FactWriter)
-	promoted, err := facts.RecordFact(context.Background(), FactRecordOptions{
-		Key: "communication.language", Value: "영어로 답변", Kind: "preference",
-		Sources: []string{"w:사용자/메모"},
+	written, err := adapter.(FactWriter).RecordFact(ctx, FactRecordOptions{
+		Subject: "project:abc", Key: "quote.amount", Value: "3억원", Kind: "amount",
+		Sources: []string{"w:프로젝트/모델-메모"},
 	})
-	if err != nil || !promoted.Committed {
-		t.Fatalf("promoted = %+v, err = %v", promoted, err)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if promoted.Authority != "primary_document" {
-		t.Fatalf("authority = %q", promoted.Authority)
+	if written.Authority != "agent_confirmed" {
+		t.Fatalf("a self-authored page must buy no authority: %+v", written)
 	}
-	_, active := store.ActiveFactSnapshot("self")
-	if len(active) != 1 || active[0].Value != "한국어로 답변" {
-		t.Fatalf("the user's own preference must still win: %+v", active)
+	_, active := store.ActiveFactSnapshot("project:abc")
+	if len(active) != 1 || active[0].Value != "1억 2,000만원" {
+		t.Fatalf("the user's own amount must still win: %+v", active)
 	}
 }

@@ -1,16 +1,23 @@
-// fact_source.go — earning primary_document authority instead of claiming it.
+// fact_source.go — checking whether a cited source actually says what a claim
+// says, and reporting the answer.
 //
 // ADR-0005 closed the hole where a model could name its own authority: the
 // knowledge tool has no authority field, and writes are capped at
-// agent_confirmed. That left the document-backed policies (amount, deadline,
-// contract) unreachable by design, with the ADR naming an authenticated
-// ingestion path as the way back.
+// agent_confirmed. It is tempting to reopen the document authorities by
+// "verifying" a source ref — open the page, find the value, promote the claim.
+// That does not hold. This wiki has no page-level provenance: `knowledge`
+// (op="record") lets the same model author an arbitrary page, and the adapter
+// stamps today's date on it, so a model that wants primary_document need only
+// write the page it then cites. Because primary_document outranks direct_user
+// on amount/deadline/contract, that would launder a model claim over the
+// user's own — exactly what this ADR exists to prevent, through another door.
 //
-// This is that path, and it authenticates the SOURCE rather than the caller: a
-// claim is promoted only when the store can open the named page itself and read
-// the asserted value inside it, and only with the basis date that page carries.
-// A source ref is then evidence, not decoration — the promotion is something the
-// server verified, never something a caller asserted.
+// So verification here is EVIDENCE REPORTING, never promotion. The store opens
+// the cited page itself and reports whether the page exists, carries a date,
+// and contains the asserted value; the caller learns what its citation is
+// worth and what would fix a bad one. The recorded authority is unaffected.
+// Promotion stays blocked until pages carry provenance that separates
+// authenticated ingestion from model-authored text.
 package wiki
 
 import (
@@ -21,13 +28,17 @@ import (
 )
 
 // FactSourceEvidence is the outcome of checking one source ref against a value.
+// It is advisory: it tells a caller whether its citation holds up, and never
+// decides the authority a claim is recorded at (see the file header).
 type FactSourceEvidence struct {
 	// Ref is the caller-supplied reference, kept for audit even when unverified.
 	Ref string
 	// Path is the wiki page the ref resolved to, empty when it resolved to none.
 	Path string
-	// BasisAt is the document's own date — the page's `updated` frontmatter, not
-	// the time of the call and not a caller-supplied string.
+	// BasisAt is the document's own date — the page's `updated` frontmatter. It
+	// is reported for the audit trail only; it does not become a claim's basis,
+	// because `updated` is stamped by whoever last wrote the page, including the
+	// model itself.
 	BasisAt time.Time
 	// Verified reports whether the page exists, carries a date, and actually
 	// contains the asserted value.
@@ -38,7 +49,13 @@ type FactSourceEvidence struct {
 
 const factSourceRefPrefix = "w:"
 
-// VerifyFactSource reports whether one source ref proves a claim.
+// VerifyFactSource reports whether one source ref backs a claim.
+//
+// "Backs" is deliberately weaker than "proves": a page containing the value is
+// not proof that the page ASSERTS it as current (a rejected option, a history
+// line and a live figure all read the same to a substring check), and nothing
+// here says who wrote the page. Callers may show this to a model; no caller may
+// raise an authority from it.
 //
 // Three things must hold, and each failure is reported rather than guessed at:
 // the ref resolves to a real page in this store, that page carries a date to use
@@ -64,9 +81,8 @@ func (s *Store) VerifyFactSource(ref, value string) FactSourceEvidence {
 		return evidence
 	}
 	if _, isFact := factSearchClaimID(path); isFact {
-		// A fact cannot be its own document. Promoting from the fact plane would
-		// let an agent_confirmed claim launder itself into primary_document by
-		// citing the row it just wrote.
+		// A fact cannot be its own document: citing the row just written would
+		// report a claim as corroborated by itself.
 		evidence.Reason = "a fact reference cannot vouch for a fact"
 		return evidence
 	}
@@ -80,9 +96,8 @@ func (s *Store) VerifyFactSource(ref, value string) FactSourceEvidence {
 
 	basis, ok := parseFactSourceDate(page.Meta.Updated)
 	if !ok {
-		// Without the document's own date there is nothing to order competing
-		// document claims by, and the amount/deadline/contract policies are
-		// exactly the ones that need that ordering.
+		// A citation with no date cannot be placed in time against a competing
+		// one, which is most of what makes it worth reporting.
 		evidence.Reason = "source page has no usable date"
 		return evidence
 	}
@@ -95,8 +110,9 @@ func (s *Store) VerifyFactSource(ref, value string) FactSourceEvidence {
 	return evidence
 }
 
-// VerifyFactSources returns the first ref that proves the value, so a caller can
-// pass everything it has and let the store decide which one earns the promotion.
+// VerifyFactSources returns the first ref that backs the value, so a caller can
+// pass everything it has and report the one that held up — or, when none did,
+// the most informative refusal.
 func (s *Store) VerifyFactSources(refs []string, value string) (FactSourceEvidence, bool) {
 	var last FactSourceEvidence
 	for _, ref := range refs {

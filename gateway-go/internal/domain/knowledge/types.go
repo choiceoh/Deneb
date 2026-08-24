@@ -121,11 +121,12 @@ type FactMutationResult struct {
 	// OUTPUT, never an input: a caller states evidence and the store decides what
 	// that evidence is worth (ADR-0005).
 	Authority string
-	// VerifiedSource names the page that earned a document-backed authority, so
-	// the caller can see which ref carried the claim.
+	// VerifiedSource names a cited page the store opened and found the value in.
+	// It is corroboration reported back to the caller, not a promotion: the
+	// authority above is unchanged by it (ADR-0005).
 	VerifiedSource string
-	// SourceNote explains why no source verified, so a caller learns what would
-	// make the claim document-backed instead of guessing.
+	// SourceNote explains why no cited source held up, so a caller learns its
+	// citation was bad instead of assuming it landed.
 	SourceNote string
 }
 

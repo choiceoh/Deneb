@@ -16,9 +16,9 @@ func seedSourcePage(t *testing.T, store *Store, path, updated, body string) {
 	}
 }
 
-// A source ref earns document authority only when the store can open the page
-// and read the asserted value inside it — the promotion is verified, never
-// asserted (ADR-0005).
+// A source ref counts as corroboration only when the store can open the page
+// and read the asserted value inside it. That is a report, not an authority
+// (ADR-0005) — see the refusal cases below for what it deliberately withholds.
 func TestVerifyFactSourceAcceptsOnlyAProvenValue(t *testing.T) {
 	store, _, _ := newFactTestStore(t)
 	seedSourcePage(t, store, "프로젝트/abc-견적.md", "2026-07-01",
@@ -67,7 +67,7 @@ func TestVerifyFactSourceRefusesUnusableRefs(t *testing.T) {
 		{"escaping path", "w:../../etc/passwd", "root", "not readable"},
 		{"page without a date", "w:프로젝트/무날짜", "5,000만원", "no usable date"},
 		{
-			// A fact citing the fact plane would launder its own authority.
+			// A fact citing the fact plane would corroborate itself.
 			"fact reference", "@facts/" + active[0].ID + ".md", "한국어로 답변",
 			"cannot vouch for a fact",
 		},
@@ -90,7 +90,8 @@ func TestVerifyFactSourcesReturnsTheProvingRef(t *testing.T) {
 	seedSourcePage(t, store, "프로젝트/계약.md", "2026-08-01", "- 납기: 2026-12-31\n")
 
 	evidence, ok := store.VerifyFactSources(
-		[]string{"w:프로젝트/없는페이지", "w:프로젝트/계약"}, "2026-12-31")
+		[]string{"w:프로젝트/없는페이지", "w:프로젝트/계약"}, "2026-12-31",
+	)
 	if !ok || !strings.Contains(evidence.Path, "계약") {
 		t.Fatalf("verification should skip to the proving ref: %+v ok=%v", evidence, ok)
 	}
