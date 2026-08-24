@@ -403,7 +403,7 @@ func selectUsableFetches(candidates []string, results []searchFetchOutcome, fetc
 	return out
 }
 
-type urlFetchDetailedFunc func(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int) (fetchOutcome, error)
+type urlFetchDetailedFunc func(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int, focus string) (fetchOutcome, error)
 
 const hybridFillWave = 2
 
@@ -416,6 +416,7 @@ func fillUsableFetches(
 	spill tooldeps.SpilloverStore,
 	candidates []string,
 	fetchTop, perCandidateChars int,
+	focus string,
 	fetch urlFetchDetailedFunc,
 ) []fetchedPage {
 	if fetch == nil {
@@ -462,7 +463,7 @@ func fillUsableFetches(
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				o, e := fetch(ctx, cache, localAI, spill, candidates[idx], perCandidateChars)
+				o, e := fetch(ctx, cache, localAI, spill, candidates[idx], perCandidateChars, focus)
 				batch[idx] = indexed{url: candidates[idx], out: o, err: e}
 			}(i)
 		}
@@ -473,7 +474,7 @@ func fillUsableFetches(
 	}
 
 	for i := wave; i < len(candidates) && len(out) < fetchTop; i++ {
-		o, e := fetch(ctx, cache, localAI, spill, candidates[i], perCandidateChars)
+		o, e := fetch(ctx, cache, localAI, spill, candidates[i], perCandidateChars, focus)
 		consider(candidates[i], o, e)
 	}
 

@@ -356,6 +356,14 @@
     "type": "number",
     "description": "Auto-fetch top N results per query (1-3, default: 0)"
    },
+   "focus": {
+    "type": "string",
+    "description": "What you are looking for on the page. Keeps only the matching sections (with their parent headings) instead of the top of the page — a long reference page comes back as the part that answers the question. Falls back to the full page when nothing matches."
+   },
+   "probe": {
+    "type": "string",
+    "description": "Check one claim against the page instead of reading it: returns a verdict plus the supporting sentence (tens of tokens, not thousands). Use with url. 'no-mention' is an answer, not a failure — re-fetch without probe to read the page."
+   },
    "maxChars": {
     "type": "number",
     "description": "Maximum content characters total (default: 20000). search+fetch may use a lower internal budget"

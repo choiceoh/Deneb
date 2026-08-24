@@ -213,6 +213,39 @@ func formatFetchError(e webFetchErr) string {
 	return b.String()
 }
 
+// applyFocusAndTruncation narrows a formatted result to what the caller asked
+// about, then truncates whatever is left.
+//
+// Order matters: focusing first means the budget is spent on matching sections
+// instead of on the top of the page. With no focus — or a focus that matched
+// nothing — this is exactly applyTruncation, so the fallback is the old
+// behaviour rather than an empty page.
+func applyFocusAndTruncation(result, focus string, maxChars int) string {
+	if strings.TrimSpace(focus) == "" {
+		return applyTruncation(result, maxChars)
+	}
+	contentStart := strings.Index(result, "<content>\n")
+	if contentStart < 0 {
+		return applyTruncation(result, maxChars)
+	}
+	head := result[:contentStart+len("<content>\n")]
+	body := strings.TrimSuffix(result[contentStart+len("<content>\n"):], "\n</content>")
+
+	// Leave room for the metadata block and the closing tag.
+	budget := maxChars - len(head) - 64
+	excerpt, ok := focusExcerpt(body, focus, budget)
+	if !ok {
+		return applyTruncation(result, maxChars)
+	}
+	// Report the narrowing: the model must be able to tell "this page says little"
+	// from "we only showed you part of it", and ask again without the focus.
+	head = strings.Replace(head, "</metadata>", fmt.Sprintf(
+		"Focus: %s (kept %d/%d sections, %d/%d chars)\n</metadata>",
+		focus, excerpt.KeptSections, excerpt.TotalSections, excerpt.KeptChars, excerpt.TotalChars,
+	), 1)
+	return applyTruncation(head+excerpt.Text+"\n</content>", maxChars)
+}
+
 // applyTruncation truncates a formatted result preserving the metadata section
 // and cutting content at section boundaries rather than mid-sentence.
 func applyTruncation(result string, maxChars int) string {

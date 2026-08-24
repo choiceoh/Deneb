@@ -11,7 +11,7 @@ import (
 // so no fetch/summary runs.
 func TestWebFetch_YouTubeURLRedirectsToWatch(t *testing.T) {
 	cache := NewFetchCache()
-	out, err := webFetchURLDetailed(context.Background(), cache, nil, nil, "https://youtu.be/9H3aTCCNM1M", 0)
+	out, err := webFetchURLDetailed(context.Background(), cache, nil, nil, "https://youtu.be/9H3aTCCNM1M", 0, "")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

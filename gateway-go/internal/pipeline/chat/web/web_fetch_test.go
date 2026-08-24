@@ -572,7 +572,7 @@ func TestWebFetchURLDetailedKeepsFastSerperScrapePath(t *testing.T) {
 		return nil, nil
 	}
 
-	out, err := webFetchURLDetailed(context.Background(), NewFetchCache(), nil, nil, "https://fast-serper.example/article", 20000)
+	out, err := webFetchURLDetailed(context.Background(), NewFetchCache(), nil, nil, "https://fast-serper.example/article", 20000, "")
 	if err != nil {
 		t.Fatalf("webFetchURLDetailed: %v", err)
 	}
@@ -614,7 +614,7 @@ func TestWebFetchURLDetailedStartsOriginAfterSlowSerperGrace(t *testing.T) {
 	}
 
 	start := time.Now()
-	out, err := webFetchURLDetailed(context.Background(), NewFetchCache(), nil, nil, "https://slow-serper.example/article", 20000)
+	out, err := webFetchURLDetailed(context.Background(), NewFetchCache(), nil, nil, "https://slow-serper.example/article", 20000, "")
 	if err != nil {
 		t.Fatalf("webFetchURLDetailed: %v", err)
 	}
@@ -666,7 +666,7 @@ func TestWebFetchURLDetailedWaitsForSerperWhenOriginIsTiny(t *testing.T) {
 		}, nil
 	}
 
-	out, err := webFetchURLDetailed(context.Background(), NewFetchCache(), nil, nil, "https://tiny-origin.example/article", 20000)
+	out, err := webFetchURLDetailed(context.Background(), NewFetchCache(), nil, nil, "https://tiny-origin.example/article", 20000, "")
 	if err != nil {
 		t.Fatalf("webFetchURLDetailed: %v", err)
 	}
@@ -681,7 +681,7 @@ func TestFillUsableFetchesEarlyStop(t *testing.T) {
 	thinEnvelope := "<metadata>\nSignals: js_required\n</metadata>\n<content>\nx\n</content>"
 	var mu sync.Mutex
 	var calls []string
-	fetch := func(_ context.Context, _ *FetchCache, _ *LocalAIExtractor, _ tooldeps.SpilloverStore, u string, _ int) (fetchOutcome, error) {
+	fetch := func(_ context.Context, _ *FetchCache, _ *LocalAIExtractor, _ tooldeps.SpilloverStore, u string, _ int, _ string) (fetchOutcome, error) {
 		mu.Lock()
 		calls = append(calls, u)
 		mu.Unlock()
@@ -701,7 +701,7 @@ func TestFillUsableFetchesEarlyStop(t *testing.T) {
 		"https://d.example/ok2",
 		"https://e.example/ok3",
 	}
-	got := fillUsableFetches(context.Background(), nil, nil, nil, candidates, 2, 1000, fetch)
+	got := fillUsableFetches(context.Background(), nil, nil, nil, candidates, 2, 1000, "", fetch)
 	if len(got) != 2 {
 		t.Fatalf("len=%d want 2: %+v", len(got), got)
 	}
@@ -723,7 +723,7 @@ func TestFillUsableFetchesHybridWaveStopsEarly(t *testing.T) {
 	okEnvelope := "<metadata>\nSignals: serper_scrape\n</metadata>\n<content>\n" + okBody + "\n</content>"
 	var mu sync.Mutex
 	var calls []string
-	fetch := func(_ context.Context, _ *FetchCache, _ *LocalAIExtractor, _ tooldeps.SpilloverStore, u string, _ int) (fetchOutcome, error) {
+	fetch := func(_ context.Context, _ *FetchCache, _ *LocalAIExtractor, _ tooldeps.SpilloverStore, u string, _ int, _ string) (fetchOutcome, error) {
 		mu.Lock()
 		calls = append(calls, u)
 		mu.Unlock()
@@ -734,7 +734,7 @@ func TestFillUsableFetchesHybridWaveStopsEarly(t *testing.T) {
 		"https://b.example/ok2",
 		"https://c.example/ok3",
 	}
-	got := fillUsableFetches(context.Background(), nil, nil, nil, candidates, 2, 1000, fetch)
+	got := fillUsableFetches(context.Background(), nil, nil, nil, candidates, 2, 1000, "", fetch)
 	if len(got) != 2 {
 		t.Fatalf("len=%d: %+v", len(got), got)
 	}
