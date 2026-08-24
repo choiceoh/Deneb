@@ -1359,15 +1359,43 @@ type metaProposalResp struct {
 	RevisedPrompt string `json:"revised_prompt,omitempty"`
 }
 
+// builderModel picks the model that WRITES an artifact revision, strongest
+// first: teacher → judge → primary.
+//
+// The judge rung is not decoration. AI4AI (arXiv:2608.12307) measured where
+// test-time scaffolding gains come from: a STRONGER builder writing the
+// scaffold for whoever executes it, nearly doubling the target's accuracy with
+// no parameter change. Our wiring quietly lost that. init_genesis sets the
+// teacher to nil whenever a dedicated coding model owns rewrites — the default
+// production shape — so this fell straight through to primary, i.e. the
+// producer revising its own operating prompt with no stronger model involved,
+// while the doc comment still claimed "the strongest wired model". The judge is
+// wired to main in exactly that configuration, so it is the strong builder that
+// was already available and unused.
+//
+// Acceptance is untouched: the deterministic meta benches still decide, and
+// they score incumbent and proposal with the SAME executor, so builder identity
+// cannot flatter a candidate through the gate.
+func (t *MetaEvolutionTask) builderModel() (*llm.Client, string, string) {
+	if client, model := t.Evolver.teacherModelSnapshot(); client != nil && model != "" {
+		return client, model, "teacher"
+	}
+	if client, model := t.Evolver.judgeModelSnapshot(); client != nil && model != "" {
+		return client, model, "judge"
+	}
+	client, model := t.Evolver.primaryModel()
+	return client, model, "primary"
+}
+
 // propose asks the strongest wired model for one targeted artifact revision.
 // Returns ("", reason, nil) for an explicit skip.
 func (t *MetaEvolutionTask) propose(ctx context.Context, artifact, incumbent, evidence string) (string, string, error) {
-	client, model := t.Evolver.teacherModelSnapshot()
-	if client == nil {
-		client, model = t.Evolver.primaryModel()
-	}
+	client, model, builder := t.builderModel()
 	if client == nil {
 		return "", "", fmt.Errorf("meta-evolution: no model wired")
+	}
+	if t.Logger != nil {
+		t.Logger.Info("meta-evolution: revision builder", "artifact", artifact, "builder", builder, "model", model)
 	}
 	userPrompt := fmt.Sprintf(`## 대상 아티팩트: %s
 
