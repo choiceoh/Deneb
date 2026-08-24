@@ -57,9 +57,17 @@ PR #4653은 모델이 부르는 `knowledge(op="assert_fact"|"forget_fact")`에 `
 
 ## Consequences
 
-- `primary_document`/`runtime_observation`은 **여전히 도달 불가능**하다. 그 권위를
-  쓰려면 출처를 인증하는 ingestion 경로(예: 메일·문서 파이프라인)를 만들어 `Store`를
-  직접 호출해야 하며, 그때 이 ADR을 supersede하지 말고 그 경로를 추가하면 된다.
+- `primary_document`는 이제 **자칭이 아니라 입증으로** 도달한다 — 이 ADR이 예고한
+  "출처를 인증하는 경로"를 그대로 추가했다. `assert_fact`의 `source_refs`가 이 위키에서
+  실제로 열리고, 그 페이지 본문이 주장한 값을 담고 있으며, 페이지에 날짜가 있으면
+  서버가 권위를 올리고 **기준일도 그 페이지의 `updated`에서 읽는다**
+  (`Store.VerifyFactSource`). 셋 중 하나라도 어긋나면 실패가 아니라 `agent_confirmed`로
+  기록하고 무엇이 모자랐는지 알려준다 — 근거를 제대로 댈수록 세지는 구조다. fact 평면
+  자신을 가리키는 ref(`@facts/…`)는 거부한다: 방금 쓴 행을 인용해 스스로 권위를
+  세탁하는 경로가 되기 때문이다.
+- `runtime_observation`은 **여전히 도달 불가능**하다. 관측을 인증할 주체(런타임 프로브)가
+  아직 없기 때문이며, 생기면 같은 방식으로 "무엇이 그 관측을 증명하는가"를 서버가
+  검증하도록 추가하고 이 ADR을 supersede하지 말 것.
 - 도구로 기록된 사실은 사용자 정정에 항상 진다. 사용자가 직접 말한 값이 있으면
   에이전트 주장은 `superseded`로 이력에만 남는다.
 - 근거 없는 주장은 도구 오류로 되돌아온다. 모델은 먼저 `knowledge(op="recall")`로

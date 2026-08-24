@@ -304,6 +304,17 @@ func knowledgeAssertFact(ctx context.Context, router *knowledge.Router, opts kno
 	}
 	message := fmt.Sprintf("%s: revision=%d status=%s resolution=%s claim=%s", prefix,
 		result.Revision, result.Status, result.Resolution, result.ClaimID)
+	// Say what the evidence bought. The authority is decided by the server from
+	// the sources, so this is the only place the model learns that citing a real
+	// page (and one that actually contains the value) is worth something.
+	switch {
+	case result.VerifiedSource != "":
+		message += fmt.Sprintf("\n근거 확인됨 — `%s`가 이 값을 담고 있어 권위 %s로 기록됨.",
+			result.VerifiedSource, result.Authority)
+	case result.SourceNote != "":
+		message += fmt.Sprintf("\n근거 미확인(%s) — 권위 %s로 기록됨. 값을 그대로 담은 위키 페이지 ref를 대면 문서 권위로 올라간다.",
+			result.SourceNote, result.Authority)
+	}
 	if result.ProjectionError != "" {
 		message += "\n⚠ 정본은 커밋됐지만 호환 projection 갱신이 지연됨: " + result.ProjectionError
 	}

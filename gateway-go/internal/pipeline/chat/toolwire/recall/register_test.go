@@ -36,7 +36,12 @@ func TestRegisterKnowledgeToolPublishesEvidenceOnlyFactBoundary(t *testing.T) {
 	if registry.def.Name != "knowledge" || registry.def.Fn == nil {
 		t.Fatalf("registered definition = %+v", registry.def)
 	}
-	for _, want := range []string{"facts", "assert_fact", "source_refs", "직접 발화", "내부 ingestion", "최대 50건"} {
+	// The description must say that authority is earned from evidence the server
+	// checks, not chosen — that rule is invisible in the schema.
+	for _, want := range []string{
+		"facts", "assert_fact", "source_refs", "직접 발화",
+		"서버가 근거를 열어보고", "primary_document", "최대 50건",
+	} {
 		if !strings.Contains(registry.def.Description, want) {
 			t.Errorf("description missing %q: %s", want, registry.def.Description)
 		}

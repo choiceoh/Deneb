@@ -363,3 +363,99 @@ func TestWikiAdapterRecallUsesDefaultRerankPath(t *testing.T) {
 		t.Fatalf("default options must invoke applyModelRerank, got %+v", def.Diagnostics.Rerank)
 	}
 }
+
+// ADR-0005: a caller may not name an authority, but it can EARN one. The store
+// opens the cited page itself; only a page that actually states the value (and
+// carries a date) promotes the claim, and the date comes from that page.
+func TestWikiAdapterEarnsDocumentAuthorityFromAVerifiedSource(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	t.Cleanup(func() { _ = store.Close() })
+
+	page := wiki.NewPage("프로젝트/abc-견적.md", "프로젝트", nil)
+	page.Meta.Updated = "2026-07-01"
+	page.Body = "# ABC 견적\n\n- 견적 금액: 1억 2,000만원\n"
+	if err := store.WritePage("프로젝트/abc-견적.md", page); err != nil {
+		t.Fatal(err)
+	}
+
+	facts := NewWikiAdapter(store).(FactWriter)
+	ctx := context.Background()
+
+	proven, err := facts.RecordFact(ctx, FactRecordOptions{
+		Subject: "project:abc", Key: "quote.amount", Value: "1억 2,000만원", Kind: "amount",
+		Sources: []string{"w:프로젝트/abc-견적"},
+	})
+	if err != nil || !proven.Committed {
+		t.Fatalf("proven = %+v, err = %v", proven, err)
+	}
+	if proven.Authority != "primary_document" {
+		t.Fatalf("a verified source must earn document authority, got %q", proven.Authority)
+	}
+	if !strings.Contains(proven.VerifiedSource, "abc-견적") {
+		t.Fatalf("verified source = %q", proven.VerifiedSource)
+	}
+	history, err := facts.Facts(ctx, "project:abc", "quote.amount")
+	if err != nil || len(history) != 1 {
+		t.Fatalf("history = %+v, err = %v", history, err)
+	}
+	if got := time.UnixMilli(history[0].BasisAtMs).In(time.UTC).Format("2006-01-02"); got != "2026-06-30" && got != "2026-07-01" {
+		// The page date is read in the operator's zone; either side of the UTC
+		// boundary is the same document day.
+		t.Fatalf("basis date = %q, want the page's own date", got)
+	}
+
+	// A source that does not state the value stays at the authority it can prove,
+	// and says what was missing rather than failing the write.
+	unproven, err := facts.RecordFact(ctx, FactRecordOptions{
+		Subject: "project:abc", Key: "quote.terms", Value: "선금 30%", Kind: "contract",
+		Sources: []string{"w:프로젝트/abc-견적"},
+	})
+	if err != nil || !unproven.Committed {
+		t.Fatalf("unproven = %+v, err = %v", unproven, err)
+	}
+	if unproven.Authority != "agent_confirmed" || unproven.VerifiedSource != "" {
+		t.Fatalf("unverified claim must stay agent_confirmed: %+v", unproven)
+	}
+	if !strings.Contains(unproven.SourceNote, "does not contain") {
+		t.Fatalf("source note = %q", unproven.SourceNote)
+	}
+}
+
+// The promotion must never outrank the user: a document-backed claim still
+// loses to a direct-user preference on preference/identity axes.
+func TestWikiAdapterVerifiedSourceStillLosesToDirectUser(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	t.Cleanup(func() { _ = store.Close() })
+
+	page := wiki.NewPage("사용자/메모.md", "사용자", nil)
+	page.Meta.Updated = "2026-08-01"
+	page.Body = "- 답변 언어: 영어로 답변\n"
+	if err := store.WritePage("사용자/메모.md", page); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertFact(wiki.FactInput{
+		Subject: "self", Key: "communication.language", Value: "한국어로 답변",
+		Kind: wiki.FactKindPreference, Authority: wiki.FactAuthorityDirectUser,
+		At: time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	facts := NewWikiAdapter(store).(FactWriter)
+	promoted, err := facts.RecordFact(context.Background(), FactRecordOptions{
+		Key: "communication.language", Value: "영어로 답변", Kind: "preference",
+		Sources: []string{"w:사용자/메모"},
+	})
+	if err != nil || !promoted.Committed {
+		t.Fatalf("promoted = %+v, err = %v", promoted, err)
+	}
+	if promoted.Authority != "primary_document" {
+		t.Fatalf("authority = %q", promoted.Authority)
+	}
+	_, active := store.ActiveFactSnapshot("self")
+	if len(active) != 1 || active[0].Value != "한국어로 답변" {
+		t.Fatalf("the user's own preference must still win: %+v", active)
+	}
+}

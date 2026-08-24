@@ -295,12 +295,29 @@ func (a *wikiAdapter) RecordFact(_ context.Context, opts FactRecordOptions) (Fac
 	if actor == "" {
 		actor = "knowledge-tool"
 	}
+	// The caller's authority is capped at agent_confirmed above. It can still be
+	// EARNED: if the store can open one of the named sources and read this value
+	// inside it, the claim rests on a document rather than on an assertion, and
+	// the document's own date becomes the basis. Verification failures are not
+	// errors — the claim is simply recorded at the authority it could prove.
+	sourceEvidence, verified := a.store.VerifyFactSources(opts.Sources, opts.Value)
+	if verified && authority == wiki.FactAuthorityAgent {
+		authority = wiki.FactAuthorityPrimaryDoc
+		basisAt = sourceEvidence.BasisAt
+	}
 	result, err := a.store.UpsertFact(wiki.FactInput{
 		Subject: opts.Subject, Key: opts.Key, Value: opts.Value,
 		Kind: kind, Authority: authority, Sources: opts.Sources,
 		BasisAt: basisAt, Actor: actor, Reason: opts.Reason,
 	})
-	return adaptFactMutationResult(result), err
+	adapted := adaptFactMutationResult(result)
+	adapted.Authority = string(authority)
+	if verified {
+		adapted.VerifiedSource = sourceEvidence.Path
+	} else {
+		adapted.SourceNote = sourceEvidence.Reason
+	}
+	return adapted, err
 }
 
 func (a *wikiAdapter) ForgetFact(_ context.Context, opts FactForgetOptions) (FactMutationResult, error) {
