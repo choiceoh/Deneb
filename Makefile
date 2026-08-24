@@ -304,6 +304,10 @@ codesearch-bench:
 fact-bench:
 	@cd gateway-go && go run ./cmd/fact-bench
 
+# 직접 기억 문법이 놓친 명령들을 묶어 축 확장 후보로 보여준다 (읽기 전용).
+memory-grammar-misses:
+	@python3 scripts/dev/memory-grammar-misses.py
+
 # 메모리 파일(레포 밖)의 코드 참조 감사 — advisory, CI 밖. 메모리 규칙의
 # "회상된 file:line은 검증하라"를 일괄 실행하는 수동/주기용 진입점.
 memory-ref-audit:

@@ -448,27 +448,13 @@ func selfFactKeyQueryTokens(key string) []string {
 	return specific
 }
 
+// selfFactCanonicalQueryAliases returns the words a user searches one self axis
+// by. The vocabulary lives in the direct-grammar catalog so this surface and the
+// wiki fact search cannot drift apart — they used to keep separate tables, and
+// the search one simply did not exist, leaving every Korean query unable to
+// reach its own axis.
 func selfFactCanonicalQueryAliases(key string) []string {
-	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "communication.response_length":
-		return []string{"length", "길이", "분량", "간결", "장황"}
-	case "communication.language":
-		return []string{"language", "언어", "한국어", "영어", "한글"}
-	case "communication.answer_first":
-		return []string{"first", "결론", "즉답", "답부터"}
-	case "communication.progress_updates":
-		return []string{"progress", "진행", "진행상황", "중간보고"}
-	case "communication.format":
-		return []string{"format", "형식", "서식", "불릿", "마크다운"}
-	case "identity.address":
-		return []string{"address", "호칭", "이름"}
-	case "wiki.amount_vat_policy":
-		return []string{"vat", "부가세", "공급가액"}
-	case "diet.vegan":
-		return []string{"vegan", "비건", "채식"}
-	default:
-		return nil
-	}
+	return mem.FactKeyQueryAliases(key)
 }
 
 func factClaimMatchesMessage(message string, messageTokens map[string]struct{}, claim wiki.FactClaim) bool {

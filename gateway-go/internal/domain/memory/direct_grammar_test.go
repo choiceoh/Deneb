@@ -24,6 +24,26 @@ func TestDirectGrammarCatalogIsWellFormed(t *testing.T) {
 		if axis.Kind != "preference" && axis.Kind != "identity" {
 			t.Errorf("axis %q kind = %q", axis.Key, axis.Kind)
 		}
+		// Every axis must be reachable by a Korean query: the canonical key is
+		// English, so an English-only alias list leaves the axis unfindable in a
+		// Korean-first product.
+		korean := false
+		for _, alias := range axis.QueryAliases {
+			for _, r := range alias {
+				if r >= 0xAC00 && r <= 0xD7A3 {
+					korean = true
+				}
+			}
+		}
+		if !korean {
+			t.Errorf("axis %q has no Korean query alias: %v", axis.Key, axis.QueryAliases)
+		}
+		if got := FactKeyQueryAliases(axis.Key); len(got) != len(axis.QueryAliases) {
+			t.Errorf("FactKeyQueryAliases(%q) = %v", axis.Key, got)
+		}
+	}
+	if got := FactKeyQueryAliases("not.an.axis"); got != nil {
+		t.Errorf("unknown key aliases = %v", got)
 	}
 }
 
@@ -54,15 +74,24 @@ func TestLoadDirectGrammarRejectsBrokenCatalogs(t *testing.T) {
 	}{
 		{"unsupported version", `{"schemaVersion":99,"axes":[]}`, "unsupported schema version"},
 		{"empty", `{"schemaVersion":1,"axes":[]}`, "catalog is empty"},
-		{"missing key", `{"schemaVersion":1,"axes":[{"kind":"preference","classify":"x"}]}`, "no key"},
+		{"missing key", `{"schemaVersion":1,"axes":[{"kind":"preference","classify":"x","queryAliases":["a"]}]}`, "no key"},
 		{
 			"duplicate key",
-			`{"schemaVersion":1,"axes":[{"key":"a.b","kind":"preference","classify":"x"},{"key":"a.b","kind":"preference","classify":"y"}]}`,
+			`{"schemaVersion":1,"axes":[` +
+				`{"key":"a.b","kind":"preference","classify":"x","queryAliases":["a"]},` +
+				`{"key":"a.b","kind":"preference","classify":"y","queryAliases":["b"]}]}`,
 			"duplicate axis key",
 		},
-		{"bad kind", `{"schemaVersion":1,"axes":[{"key":"a.b","kind":"guess","classify":"x"}]}`, "unsupported kind"},
-		{"missing classify", `{"schemaVersion":1,"axes":[{"key":"a.b","kind":"preference"}]}`, "no classify pattern"},
-		{"bad pattern", `{"schemaVersion":1,"axes":[{"key":"a.b","kind":"preference","classify":"("}]}`, "classify pattern"},
+		{"bad kind", `{"schemaVersion":1,"axes":[{"key":"a.b","kind":"guess","classify":"x","queryAliases":["a"]}]}`, "unsupported kind"},
+		{"missing classify", `{"schemaVersion":1,"axes":[{"key":"a.b","kind":"preference","queryAliases":["a"]}]}`, "no classify pattern"},
+		{"bad pattern", `{"schemaVersion":1,"axes":[{"key":"a.b","kind":"preference","classify":"(","queryAliases":["a"]}]}`, "classify pattern"},
+		// A key nobody can search for is a fact nobody can find.
+		{"missing aliases", `{"schemaVersion":1,"axes":[{"key":"a.b","kind":"preference","classify":"x"}]}`, "no query aliases"},
+		{
+			"multi-word alias",
+			`{"schemaVersion":1,"axes":[{"key":"a.b","kind":"preference","classify":"x","queryAliases":["두 단어"]}]}`,
+			"one bare token",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

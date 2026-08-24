@@ -66,6 +66,10 @@ type factAxis struct {
 	Key   string `json:"key"`
 	Kind  string `json:"kind"`
 	Class string `json:"classify"`
+	// QueryAliases are the words a user actually searches this axis by. The
+	// canonical key is English while queries are Korean, so without them a
+	// search for "호칭" or "장기 목표" never reaches the axis it names.
+	QueryAliases []string `json:"queryAliases,omitempty"`
 	// EnglishAssert / EnglishForward are anchored whole-message commands.
 	EnglishAssert  string `json:"englishAssert,omitempty"`
 	EnglishForward string `json:"englishForward,omitempty"`
@@ -139,6 +143,14 @@ func loadDirectGrammar(raw []byte) ([]*factAxis, error) {
 		if axis.englishForwardRE, err = compileAxisPattern(axis.Key, "englishForward", axis.EnglishForward); err != nil {
 			return nil, err
 		}
+		if len(axis.QueryAliases) == 0 {
+			return nil, fmt.Errorf("axis %q has no query aliases", axis.Key)
+		}
+		for _, alias := range axis.QueryAliases {
+			if strings.TrimSpace(alias) != alias || alias == "" || strings.Contains(alias, " ") {
+				return nil, fmt.Errorf("axis %q query alias %q must be one bare token", axis.Key, alias)
+			}
+		}
 	}
 	return doc.Axes, nil
 }
@@ -152,6 +164,20 @@ func compileAxisPattern(key, field, pattern string) (*regexp.Regexp, error) {
 		return nil, fmt.Errorf("axis %q %s pattern: %w", key, field, err)
 	}
 	return compiled, nil
+}
+
+// FactKeyQueryAliases returns the search vocabulary for a canonical fact key,
+// or nil when the key is not a published axis. It is the single source for both
+// the wiki fact search and chat recall: a key that gains an alias here becomes
+// findable everywhere at once, and no surface keeps its own private table.
+func FactKeyQueryAliases(key string) []string {
+	key = strings.ToLower(strings.TrimSpace(key))
+	for _, axis := range factAxes {
+		if axis.Key == key {
+			return append([]string(nil), axis.QueryAliases...)
+		}
+	}
+	return nil
 }
 
 // axisForEnglishAssertion returns the axis whose explicit English self-assertion

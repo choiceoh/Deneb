@@ -1,10 +1,18 @@
 {
   "schemaVersion": 1,
-  "comment": "Canonical direct-memory axis catalog. Each axis is one stable fact key the agent may write from an explicit user command. Structural guards (reported speech, temporary scope, quoted payloads, third-party subjects) stay in Go — they are not per-axis. Order is significant: the first axis whose classify pattern matches decides the key, and the generic fallback runs only when none does.",
+  "comment": "Canonical direct-memory axis catalog. Each axis is one stable fact key the agent may write from an explicit user command. Structural guards (reported speech, temporary scope, quoted payloads, third-party subjects) stay in Go — they are not per-axis. Order is significant: the first axis whose classify pattern matches decides the key, and the generic fallback runs only when none does. queryAliases는 그 축의 사실을 찾을 때 사용자가 실제로 쓰는 말이다 — 정본 키는 영어인데 질의는 한국어라, 이 목록이 없으면 검색이 축 사실에 닿지 못한다.",
   "axes": [
     {
       "key": "communication.response_length",
       "kind": "preference",
+      "queryAliases": [
+        "length",
+        "길이",
+        "분량",
+        "간결",
+        "장황",
+        "상세"
+      ],
       "classify": "(간결|짧게|짧은 답변|3줄|장황|길게|상세하게|자세하게|긴 답변|답변.{0,8}(길이|분량))",
       "englishAssert": "(?i)^\\s*i\\s+(?:prefer|want|like)\\s+(?:(?:short|brief|concise|long|detailed)\\s+(?:answers?|responses?|replies)|(?:answers?|responses?|replies)\\s+(?:short|brief|concise|long|detailed))\\s*[.!?]*\\s*$",
       "englishForward": "(?i)^\\s*(?:(?:answer|respond|reply)(?:\\s+to\\s+me)?\\s+(?:briefly|concisely|in\\s+detail)|keep\\s+(?:your\\s+)?(?:answers?|responses?|replies)\\s+(?:short|brief|concise|long|detailed))\\s*[.!?]*\\s*$",
@@ -35,6 +43,13 @@
     {
       "key": "communication.language",
       "kind": "preference",
+      "queryAliases": [
+        "language",
+        "언어",
+        "한국어",
+        "영어",
+        "한글"
+      ],
       "classify": "(한국어|영어|한글).{0,12}(전용|답변|답해|답변해|사용|말해|써|작성)",
       "englishAssert": "(?i)^\\s*i\\s+(?:prefer|want|like)\\s+(?:(?:answers?|responses?|replies)\\s+in\\s+)?(?:english|korean)(?:\\s+(?:answers?|responses?|replies))?\\s*[.!?]*\\s*$",
       "englishForward": "(?i)^\\s*(?:answer|respond|reply|speak|write)(?:\\s+to\\s+me)?\\s+(?:in\\s+)?(?:english|korean)\\s*[.!?]*\\s*$",
@@ -56,6 +71,12 @@
     {
       "key": "communication.answer_first",
       "kind": "preference",
+      "queryAliases": [
+        "first",
+        "결론",
+        "즉답",
+        "답부터"
+      ],
       "classify": "(즉답|답부터|결론부터|질문에는.{0,8}답|분석보다.{0,8}답)",
       "englishAssert": "(?i)^\\s*i\\s+(?:prefer|want|like)\\s+(?:the\\s+)?(?:answer|conclusion)\\s+first\\s*[.!?]*\\s*$",
       "englishForward": "(?i)^\\s*(?:put|give)\\s+(?:the\\s+)?(?:answer|conclusion)\\s+first\\s*[.!?]*\\s*$",
@@ -68,6 +89,12 @@
     {
       "key": "communication.progress_updates",
       "kind": "preference",
+      "queryAliases": [
+        "progress",
+        "진행",
+        "진행상황",
+        "중간보고"
+      ],
       "classify": "(진행 상황|진행상황|중간 보고|능동 공지|왜 멈췄)",
       "englishAssert": "(?i)^\\s*i\\s+(?:prefer|want|like)\\s+(?:proactive\\s+)?progress\\s+updates?\\s*[.!?]*\\s*$",
       "englishForward": "(?i)^\\s*(?:give|send)\\s+(?:me\\s+)?(?:proactive\\s+)?progress\\s+updates?\\s*[.!?]*\\s*$",
@@ -80,6 +107,14 @@
     {
       "key": "communication.format",
       "kind": "preference",
+      "queryAliases": [
+        "format",
+        "형식",
+        "서식",
+        "불릿",
+        "마크다운",
+        "목록"
+      ],
       "classify": "(불릿|목록|표 형식|산문|헤더|마크다운).{0,12}(선호|좋아|싫어|해줘|하지)",
       "englishAssert": "(?i)^\\s*i\\s+(?:prefer|want|like)\\s+(?:(?:bullet(?:ed)?\\s+lists?|numbered\\s+lists?|lists?|tables?|markdown|prose)(?:\\s+(?:format|answers?|responses?|replies))?|(?:answers?|responses?|replies)\\s+in\\s+(?:bullet(?:ed)?\\s+lists?|numbered\\s+lists?|lists?|tables?|markdown|prose))\\s*[.!?]*\\s*$",
       "englishForward": "(?i)^\\s*use\\s+(?:bullet(?:ed)?\\s+lists?|numbered\\s+lists?|lists?|tables?|markdown|prose)(?:\\s+format)?\\s*[.!?]*\\s*$",
@@ -94,6 +129,11 @@
     {
       "key": "wiki.amount_vat_policy",
       "kind": "preference",
+      "queryAliases": [
+        "vat",
+        "부가세",
+        "공급가액"
+      ],
       "classify": "(부가세|vat|공급가액).{0,24}(제외|별도|포함|기재|적지)",
       "englishAssert": "(?i)^\\s*i\\s+(?:prefer|want)\\s+(?:vat|tax)\\s+(?:listed\\s+)?(?:separate|excluded|included)\\s*[.!?]*\\s*$",
       "englishForward": "(?i)^\\s*(?:list|show|write)\\s+(?:vat|tax)\\s+(?:separately|as\\s+(?:separate|excluded|included))\\s*[.!?]*\\s*$",
@@ -106,6 +146,10 @@
     {
       "key": "health.allergy",
       "kind": "identity",
+      "queryAliases": [
+        "allergy",
+        "알레르기"
+      ],
       "classify": "(알레르기|못\\s*먹)",
       "englishAssert": "(?i)^\\s*i(?:['’]m|\\s+am)\\s+allergic\\s+to\\s+.{1,32}\\s*[.!?]*\\s*$",
       "forgetCues": [
@@ -119,6 +163,11 @@
     {
       "key": "goals.long_term",
       "kind": "preference",
+      "queryAliases": [
+        "goal",
+        "목표",
+        "장기"
+      ],
       "classify": "(장기\\s*목표)",
       "englishAssert": "(?i)^\\s*my\\s+long[-\\s]?term\\s+goal\\s+is\\s+.{1,40}\\s*[.!?]*\\s*$",
       "forgetCues": [
@@ -132,6 +181,11 @@
     {
       "key": "diet.vegan",
       "kind": "identity",
+      "queryAliases": [
+        "vegan",
+        "비건",
+        "채식"
+      ],
       "classify": "(비건|채식주의|채식주의자)",
       "englishAssert": "(?i)^\\s*i(?:['’]m|\\s+am)\\s+(?:vegan|vegetarian)\\s*[.!?]*\\s*$",
       "forgetObjects": [
@@ -151,6 +205,11 @@
     {
       "key": "identity.address",
       "kind": "identity",
+      "queryAliases": [
+        "address",
+        "호칭",
+        "이름"
+      ],
       "classify": "(?:(나를|저를|호칭|이름).{0,16}(불러|불러줘|라고 해|호칭)|(?:내|나의)\\s*(?:호칭|이름).{0,24}기억)",
       "englishAssert": "(?i)^\\s*my\\s+(?:name|preferred\\s+name)\\s+is\\s+[\\p{L}\\p{N}_-]{1,24}\\s*[.!?]*\\s*$",
       "englishForward": "(?i)^\\s*call\\s+me\\s+[\\p{L}\\p{N}_-]{1,24}\\s*[.!?]*\\s*$",
