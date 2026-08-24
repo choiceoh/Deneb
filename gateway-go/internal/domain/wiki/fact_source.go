@@ -197,8 +197,8 @@ func factSourceStatesValue(page *Page, value string) bool {
 	claims := []string{
 		page.Body, meta.Summary,
 		// Identity and classification the page asserts about its subject.
-		meta.Code, meta.PID, meta.Resource, meta.Client, meta.Program,
-		meta.Stage, meta.Status, meta.Address, meta.Type, meta.Confidence,
+		meta.Code, meta.PID, meta.Client, meta.Program,
+		meta.Stage, meta.Status, meta.Address,
 		// Milestone dates.
 		meta.Due, meta.DueDone, meta.ContractDate, meta.ConstructionStart,
 		meta.ModuleDelivery, meta.PreUseInspection, meta.CompletionInspection,
@@ -209,10 +209,11 @@ func factSourceStatesValue(page *Page, value string) bool {
 	if meta.Capacity > 0 {
 		claims = append(claims, strconv.FormatFloat(meta.Capacity, 'f', -1, 64))
 	}
-	// Deliberately absent: tags, related, cues and sources. Those are navigation
-	// and provenance — they help a page be FOUND, they do not state a fact about
-	// its subject, and matching a value there would report a citation the page
-	// never makes.
+	// Deliberately absent, by the same rule: a field must state a fact about the
+	// page's SUBJECT. Tags, related and cues are navigation; sources and resource
+	// are provenance pointers; type and confidence describe the page itself (its
+	// ontology slot and how sure it is), and nearly every page carries one, so
+	// matching there would report a citation the page never makes.
 	for _, claim := range claims {
 		if claim != "" && factContainsBoundedValue(claim, value) {
 			return true

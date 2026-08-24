@@ -244,9 +244,19 @@ func TestVerifyFactSourceReadsEveryCanonicalMetaShape(t *testing.T) {
 			t.Errorf("canonical meta %q must back a claim: %+v", value, evidence)
 		}
 	}
-	// Tags are navigation, not a claim the page makes about its subject.
-	if tagged := store.VerifyFactSource("w:프로젝트/군산", "태그값"); tagged.Verified {
-		t.Errorf("a tag must not read as a stated fact: %+v", tagged)
+	// Fields that describe the page rather than its subject must not verify: a
+	// tag is navigation, `type`/`confidence` are the page's own slot and rating,
+	// and `resource` points at a backing asset the way `sources` does.
+	page.Meta.Type = "entity"
+	page.Meta.Confidence = "low"
+	page.Meta.Resource = "gmail:thread-42"
+	if err := store.WritePage("프로젝트/군산.md", page); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{"태그값", "entity", "low", "gmail:thread-42"} {
+		if about := store.VerifyFactSource("w:프로젝트/군산", value); about.Verified {
+			t.Errorf("%q describes the page, not its subject: %+v", value, about)
+		}
 	}
 }
 
