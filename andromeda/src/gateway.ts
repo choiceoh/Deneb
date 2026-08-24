@@ -323,6 +323,9 @@ export interface SyncPullResult {
   hasMore: boolean;
   count: number;
   serverTimeMs?: number;
+  // True when the server rotated past the client's cursor: the retained-tail
+  // events still apply, but the pruned range is gone — refetch wholesale.
+  truncated?: boolean;
 }
 
 // Pull events with seq > cursor (0 = from the start). limit is server-capped at 500.
