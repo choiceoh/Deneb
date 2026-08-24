@@ -134,11 +134,13 @@ func TestVerifyFactSourceLeavesOtherLayersUnchecked(t *testing.T) {
 	// A wiki ref alongside it still gets judged, and a checked refusal is the one
 	// worth reporting back when nothing verifies.
 	if evidence, ok := store.VerifyFactSources(
-		[]string{"f:/계약/견적서.pdf", "w:프로젝트/계약"}, "2026-12-31"); !ok || !evidence.Checked {
+		[]string{"f:/계약/견적서.pdf", "w:프로젝트/계약"}, "2026-12-31",
+	); !ok || !evidence.Checked {
 		t.Fatalf("the wiki ref should still verify: %+v ok=%v", evidence, ok)
 	}
 	unproven, ok := store.VerifyFactSources(
-		[]string{"f:/계약/견적서.pdf", "w:프로젝트/계약"}, "2027-01-01")
+		[]string{"f:/계약/견적서.pdf", "w:프로젝트/계약"}, "2027-01-01",
+	)
 	if ok || !unproven.Checked {
 		t.Fatalf("a checked refusal should outrank an unchecked one: %+v ok=%v", unproven, ok)
 	}
