@@ -74,28 +74,9 @@ const layerRecallQuota = 0.6
 // bands; RRF orders by per-layer rank only.
 const mergeRRFK = 20.0
 
-// Recall queries every adapter in parallel and merges the results. Within each
-// layer hits are ordered by score; across layers a per-layer quota
-// (layerRecallQuota) prevents one score band from monopolizing the merged
-// window, then kept rows are fused by per-layer rank RRF (not raw score).
-// Per-adapter errors are swallowed so a single flaky backend does not block
-// the call; callers see the successful subset. Prefer RecallWithMeta when the
-// caller needs degrade notes (e.g. files timeout).
-func (r *Router) Recall(ctx context.Context, query string, limit int) []Result {
-	hits, _ := r.RecallWithMeta(ctx, query, limit)
-	return hits
-}
-
-// RecallWithMeta is Recall plus human-readable degrade notes (e.g. files-layer
-// timeout). Notes are empty when every layer completed normally.
-func (r *Router) RecallWithMeta(ctx context.Context, query string, limit int) ([]Result, []string) {
-	packet := r.RecallPacket(ctx, query, limit, RecallOptions{})
-	return packet.Results, packet.Notes
-}
-
 // RecallPacket plans, fans out, normalizes, and fuses one retrieval request.
-// Existing Recall/RecallWithMeta callers retain their behavior through the
-// wrappers above; new consumers get the typed plan and evidence provenance.
+// Consumers get the typed plan and evidence provenance alongside results and
+// degrade notes.
 func (r *Router) RecallPacket(ctx context.Context, query string, limit int, options RecallOptions) EvidencePacket {
 	if limit <= 0 {
 		limit = 10
