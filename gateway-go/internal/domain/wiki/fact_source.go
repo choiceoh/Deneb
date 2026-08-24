@@ -44,7 +44,13 @@ type FactSourceEvidence struct {
 	// Verified reports whether the page exists and actually contains the
 	// asserted value.
 	Verified bool
-	// Reason explains a refusal, so a caller can be told what would fix it.
+	// Checked reports whether this store was able to judge the ref at all. A ref
+	// naming another knowledge layer (`f:…`) is not checked here, and must not be
+	// reported to a caller as a bad citation — it is simply not this store's to
+	// confirm.
+	Checked bool
+	// Reason explains the outcome, so a caller can be told what would fix a bad
+	// citation — or, when Checked is false, why nothing was judged.
 	Reason string
 }
 
@@ -77,6 +83,15 @@ func (s *Store) VerifyFactSource(ref, value string) FactSourceEvidence {
 		return evidence
 	}
 
+	if layer, ok := factSourceRefLayer(evidence.Ref); ok && layer != factSourceWikiLayer {
+		// Refs carry their layer (`w:` wiki, `f:` files). Only the wiki layer is
+		// this store's to open; another layer's ref is a perfectly good citation
+		// that simply cannot be judged here.
+		evidence.Reason = "source ref names the " + layer + " layer, which this store cannot open"
+		return evidence
+	}
+	evidence.Checked = true
+
 	path := strings.TrimSpace(strings.TrimPrefix(evidence.Ref, factSourceRefPrefix))
 	if path == "" {
 		evidence.Reason = "source ref names no page"
@@ -96,7 +111,7 @@ func (s *Store) VerifyFactSource(ref, value string) FactSourceEvidence {
 	}
 	evidence.Path = normalizePagePath(path)
 
-	if !factContainsBoundedValue(page.Body, value) {
+	if !factContainsBoundedValue(page.Body+"\n"+factSourceMetaClaims(page), value) {
 		evidence.Reason = "source page does not contain the asserted value"
 		return evidence
 	}
@@ -115,11 +130,44 @@ func (s *Store) VerifyFactSources(refs []string, value string) (FactSourceEviden
 		if evidence.Verified {
 			return evidence, true
 		}
-		if last.Ref == "" || (last.Path == "" && evidence.Path != "") {
+		// Prefer the most informative refusal: one this store actually judged, and
+		// among those the one that at least resolved to a page.
+		if last.Ref == "" ||
+			(!last.Checked && evidence.Checked) ||
+			(last.Checked == evidence.Checked && last.Path == "" && evidence.Path != "") {
 			last = evidence
 		}
 	}
 	return last, false
+}
+
+const factSourceWikiLayer = "w"
+
+// factSourceRefLayer reports the layer prefix a ref carries, if any. A bare
+// wiki path ("프로젝트/abc") and a fact ref ("@facts/…") carry none.
+func factSourceRefLayer(ref string) (string, bool) {
+	colon := strings.IndexByte(ref, ':')
+	if colon <= 0 {
+		return "", false
+	}
+	layer := ref[:colon]
+	if strings.ContainsAny(layer, "/\\ ") {
+		return "", false
+	}
+	return layer, true
+}
+
+// factSourceMetaClaims gathers the frontmatter fields that state facts in their
+// own right, so a page whose deadline lives in `due:` rather than in prose is
+// not reported as failing to mention it.
+func factSourceMetaClaims(page *Page) string {
+	meta := page.Meta
+	fields := []string{
+		meta.Due, meta.DueDone, meta.Status, meta.Stage, meta.Client, meta.Address,
+		meta.ContractDate, meta.ConstructionStart, meta.ModuleDelivery,
+		meta.PreUseInspection, meta.CompletionInspection, meta.Summary,
+	}
+	return strings.Join(fields, "\n")
 }
 
 func parseFactSourceDate(raw string) (time.Time, bool) {

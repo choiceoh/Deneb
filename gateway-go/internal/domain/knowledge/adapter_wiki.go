@@ -310,9 +310,12 @@ func (a *wikiAdapter) RecordFact(_ context.Context, opts FactRecordOptions) (Fac
 	})
 	adapted := adaptFactMutationResult(result)
 	adapted.Authority = string(authority)
-	if verified {
+	switch {
+	case verified:
 		adapted.VerifiedSource = sourceEvidence.Path
-	} else {
+	case sourceEvidence.Checked:
+		// Only a citation this store actually judged is worth nagging about; a ref
+		// naming another layer is left alone rather than reported as broken.
 		adapted.SourceNote = sourceEvidence.Reason
 	}
 	return adapted, err

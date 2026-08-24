@@ -115,3 +115,53 @@ func TestVerifyFactSourcesReturnsTheProvingRef(t *testing.T) {
 		t.Fatalf("unproven sources must report a reason: %+v ok=%v", failed, ok)
 	}
 }
+
+// A ref naming another knowledge layer is a valid citation this store cannot
+// open. Reporting it as a bad ref would send the model to fix working input.
+func TestVerifyFactSourceLeavesOtherLayersUnchecked(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	seedSourcePage(t, store, "프로젝트/계약.md", "2026-08-01", "- 납기: 2026-12-31\n")
+
+	files := store.VerifyFactSource("f:/계약/견적서.pdf", "2026-12-31")
+	if files.Verified || files.Checked {
+		t.Fatalf("a files ref must be left unchecked: %+v", files)
+	}
+	if !strings.Contains(files.Reason, "cannot open") {
+		t.Errorf("reason = %q", files.Reason)
+	}
+
+	// A wiki ref alongside it still gets judged, and a checked refusal is the one
+	// worth reporting back when nothing verifies.
+	if evidence, ok := store.VerifyFactSources(
+		[]string{"f:/계약/견적서.pdf", "w:프로젝트/계약"}, "2026-12-31"); !ok || !evidence.Checked {
+		t.Fatalf("the wiki ref should still verify: %+v ok=%v", evidence, ok)
+	}
+	unproven, ok := store.VerifyFactSources(
+		[]string{"f:/계약/견적서.pdf", "w:프로젝트/계약"}, "2027-01-01")
+	if ok || !unproven.Checked {
+		t.Fatalf("a checked refusal should outrank an unchecked one: %+v ok=%v", unproven, ok)
+	}
+}
+
+// Structured pages state their facts in frontmatter. A page whose deadline
+// lives in `due:` backs a deadline claim just as a prose line would.
+func TestVerifyFactSourceReadsFrontmatterClaims(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	page := NewPage("프로젝트/모듈-납품.md", "프로젝트", nil)
+	page.Meta.Updated = "2026-08-01"
+	page.Meta.Due = "2026-12-31"
+	page.Meta.Status = "진행중"
+	page.Body = "# 모듈 납품\n\n본문에는 날짜가 없다.\n"
+	if err := store.WritePage("프로젝트/모듈-납품.md", page); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, value := range []string{"2026-12-31", "진행중"} {
+		if evidence := store.VerifyFactSource("w:프로젝트/모듈-납품", value); !evidence.Verified {
+			t.Errorf("frontmatter claim %q must verify: %+v", value, evidence)
+		}
+	}
+	if absent := store.VerifyFactSource("w:프로젝트/모듈-납품", "2027-01-01"); absent.Verified {
+		t.Errorf("a value in neither body nor frontmatter must not verify: %+v", absent)
+	}
+}
