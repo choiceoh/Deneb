@@ -18,6 +18,7 @@ type UsageQualitySummary struct {
 	IgnoredRecords                                int    `json:"ignoredRecords"`
 	IgnoredReviewRecords                          int    `json:"ignoredReviewRecords,omitempty"`
 	IgnoredConsultInfraFailures                   int    `json:"ignoredConsultInfraFailures,omitempty"`
+	IgnoredSyntheticRecords                       int    `json:"ignoredSyntheticRecords,omitempty"`
 	IgnoredUnactionableLegacyFailures             int    `json:"ignoredUnactionableLegacyFailures,omitempty"`
 	TopIgnoredUnactionableLegacyFailureSkill      string `json:"topIgnoredUnactionableLegacyFailureSkill,omitempty"`
 	TopIgnoredUnactionableLegacyFailureSkillCount int    `json:"topIgnoredUnactionableLegacyFailureSkillCount,omitempty"`
@@ -87,6 +88,13 @@ func (t *Tracker) UsageQualitySummary(skillName string) (UsageQualitySummary, er
 			summary.IgnoredReviewRecords++
 		case !r.Success && isConsultInfraError(r.ErrorMsg):
 			summary.IgnoredConsultInfraFailures++
+		case !realUsageSources[r.Source]:
+			// Source-tagged synthetic lanes (workout, curriculum, …) mirror the
+			// evolver's isRealUsageRecord exclusion: the workout lane re-runs
+			// the same held-out failures every cycle, so counting them here
+			// would steadily inflate CountedRecords and — via the failure
+			// layers — pass synthetic drift off as real-use failure evidence.
+			summary.IgnoredSyntheticRecords++
 		case isUnactionableLegacyFailure(r):
 			summary.IgnoredUnactionableLegacyFailures++
 			ignoredLegacyBySkill[r.SkillName]++
