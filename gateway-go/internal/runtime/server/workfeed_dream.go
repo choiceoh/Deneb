@@ -24,7 +24,9 @@ import (
 // cycles post nothing — a card per idle 8h cycle would be noise. Nil-safe on
 // every dependency (report, feed store).
 func (s *Server) postDreamWorkfeedCard(r *autonomous.DreamReport) {
-	if r == nil || r.WikiPagesCreated+r.WikiPagesUpdated+r.WikiProjectDigests == 0 {
+	// A purge-only cycle changed the wiki too — 49 person pages once vanished
+	// with no card at all because deletions were not in this gate.
+	if r == nil || r.WikiPagesCreated+r.WikiPagesUpdated+r.WikiProjectDigests+r.WikiPersonStubsPurged == 0 {
 		return
 	}
 	feed := s.nativeWorkFeedStore()
@@ -34,6 +36,8 @@ func (s *Server) postDreamWorkfeedCard(r *autonomous.DreamReport) {
 	applied := r.WikiPagesCreated + r.WikiPagesUpdated
 	title := fmt.Sprintf("위키 드림: %d 생성 · %d 갱신", r.WikiPagesCreated, r.WikiPagesUpdated)
 	switch {
+	case applied == 0 && r.WikiProjectDigests == 0 && r.WikiPersonStubsPurged > 0:
+		title = fmt.Sprintf("위키 드림: 빈 인물 %d장 정리", r.WikiPersonStubsPurged)
 	case applied == 0:
 		title = fmt.Sprintf("위키 드림: 프로젝트 근황 %d건 갱신", r.WikiProjectDigests)
 	case r.WikiProjectDigests > 0:
@@ -57,6 +61,10 @@ func (s *Server) postDreamWorkfeedCard(r *autonomous.DreamReport) {
 	// the operator sees their earlier "틀린 기억" land, not vanish into the queue.
 	if r.CorrectionsConsidered > 0 {
 		summary += fmt.Sprintf(" · 정정 %d건 반영", r.CorrectionsConsidered)
+	}
+	// Deletions are the one mutation invisible from reading the wiki afterwards.
+	if r.WikiPersonStubsPurged > 0 {
+		summary += fmt.Sprintf(" · 빈 인물 %d장 정리", r.WikiPersonStubsPurged)
 	}
 	// W15-style 정비 signal: verify advisories the operator should see (first-time
 	// findings listed in the body, repeats only counted).

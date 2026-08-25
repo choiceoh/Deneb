@@ -218,3 +218,24 @@ func TestPostDreamWorkfeedCardOffersIdentityDecisionChips(t *testing.T) {
 		t.Errorf("no decision chip on the card: %+v", card.Actions)
 	}
 }
+
+// Deletion is the one page mutation nobody can notice by reading the wiki
+// afterwards, so a purge-only cycle must still post a card and say the number.
+func TestPostDreamWorkfeedCardReportsPurgeOnlyCycle(t *testing.T) {
+	dir := t.TempDir()
+	s := &Server{
+		logger: slog.Default(),
+		MemorySubsystem: &MemorySubsystem{
+			workFeedStore:   workfeed.NewStore(filepath.Join(dir, "feed.jsonl")),
+			nativeSyncStore: nativesync.NewStore(filepath.Join(dir, "sync.jsonl")),
+		},
+	}
+	s.postDreamWorkfeedCard(&autonomous.DreamReport{WikiPersonStubsPurged: 49})
+	items, _, err := s.workFeedStore.List(10, true)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("삭제만 한 사이클이 카드를 안 남김: %d (err=%v)", len(items), err)
+	}
+	if !strings.Contains(items[0].Title, "빈 인물 49장 정리") {
+		t.Errorf("title = %q", items[0].Title)
+	}
+}

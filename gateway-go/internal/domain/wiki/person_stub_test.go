@@ -95,3 +95,27 @@ _주소록에서 동기화됨_
 		t.Fatal("page with real prose misclassified as stub")
 	}
 }
+
+// A page the operator judged must survive the stub purge: the decision is
+// frontmatter (ack) or a blockquote callout, and the prose scan sees neither —
+// so a curated page read as "contentless" and the purge deleted the answer.
+func TestIsPersonStubPage_KeepsOperatorDecisions(t *testing.T) {
+	acked := &Page{Meta: Frontmatter{Title: "김용범", IdentityReviewed: []string{"posco.com", "topsolar.kr"}}}
+	acked.Body = "## 소속 · 직책\n- **소속**: 탑솔라(주)\n\n## 연락처\n- 이메일: ybby69@topsolar.kr\n\n_주소록에서 동기화됨_"
+	if isPersonStubPage("인물/김용범.md", acked) {
+		t.Error("확인 표시가 있는 페이지가 빈 껍데기로 판정됨")
+	}
+
+	noted := &Page{Meta: Frontmatter{Title: "김성환"}}
+	noted.Body = "## 소속 · 직책\n- **소속**: 탑솔라\n\n> ⚠️ **동명이인 주의**: BM에너지 김성환은 별개 인물이다\n\n_주소록에서 동기화됨_"
+	if isPersonStubPage("인물/김성환.md", noted) {
+		t.Error("동명이인 주의가 있는 페이지가 빈 껍데기로 판정됨")
+	}
+
+	// The purge itself stays intact for genuinely empty seeds.
+	bare := &Page{Meta: Frontmatter{Title: "홍길동"}}
+	bare.Body = "## 소속 · 직책\n- **소속**: —\n\n## 담당 · 관계\n\n_(미기재)_\n\n_주소록에서 동기화됨_"
+	if !isPersonStubPage("인물/홍길동.md", bare) {
+		t.Error("빈 씨앗 페이지가 퍼지 대상에서 빠짐")
+	}
+}

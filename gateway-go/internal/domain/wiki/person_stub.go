@@ -47,6 +47,16 @@ func isPersonStubPage(relPath string, page *Page) bool {
 	if strings.TrimSpace(page.Meta.PID) != "" {
 		return false
 	}
+	// An operator decision IS content, and the most expensive kind: it cost a
+	// human a judgment call. Purging it also un-answers the question — the next
+	// mention re-seeds the page without the decision, so the homonym scan asks
+	// again, forever. Two carriers, neither visible to the prose scan below:
+	// the ack lives in frontmatter, and a 동명이인 주의 callout is a blockquote,
+	// which personProse skips as scaffolding (2026-08-25: 김용범 was purged one
+	// hour after being curated).
+	if len(page.Meta.IdentityReviewed) > 0 || strings.Contains(page.Body, "동명이인 주의") {
+		return false
+	}
 	return utf8.RuneCountInString(personProse(page.Body)) < personStubProseRunes
 }
 

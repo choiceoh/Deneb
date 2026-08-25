@@ -47,6 +47,22 @@ actual fun sendHeartbeatNotification(title: String, body: String) {
     postNotification(title, body, EXTRA_OPEN_HEARTBEAT, HEARTBEAT_NOTIFICATION_ID)
 }
 
+/**
+ * The work-feed item currently occupying the proactive tray slot. The slot is a
+ * single fixed id, so remembering its occupant is what lets an in-app settle
+ * cancel the right notification and only that one.
+ */
+private val proactiveTrayItemId = java.util.concurrent.atomic.AtomicReference<String>("")
+
+actual fun cancelWorkFeedNotification(itemId: String) {
+    val target = itemId.trim()
+    if (target.isEmpty()) return
+    if (!proactiveTrayItemId.compareAndSet(target, "")) return
+    val context: Context by inject(Context::class.java)
+    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    manager.cancel(PROACTIVE_NOTIFICATION_ID)
+}
+
 actual fun sendProactiveReportNotification(
     title: String,
     body: String,
@@ -56,6 +72,7 @@ actual fun sendProactiveReportNotification(
     rejectActionId: String?,
 ) {
     val itemId = workFeedItemId(kind, ref)
+    proactiveTrayItemId.set(itemId?.trim().orEmpty())
     if (itemId != null) {
         postNotification(
             title = title,
