@@ -76,6 +76,13 @@ type toolCallPrep struct {
 	block  llm.ContentBlock
 	before []fileSnapshot
 	start  time.Time
+	// loopWarning is the detector's warning-level message, prepended to this
+	// call's result so the MODEL sees it. Warning level deliberately still
+	// executes the tool; without the prefix the only trace was a server log
+	// line, so the model kept polling until the critical threshold blocked it
+	// (verified in puppet mode 2026-08-26: counts 10/11/12 logged, tool results
+	// carried nothing).
+	loopWarning string
 	// meta is the per-call metadata collector, set by the dispatch site just
 	// before runToolCore (nil for prep-terminal calls, which never execute).
 	meta *toolmeta.Collector
@@ -105,6 +112,7 @@ func prepareToolCall(
 	start := time.Now()
 
 	// Tool loop detection: check for stuck patterns before executing.
+	var loopWarning string
 	if loopDetector != nil {
 		loopResult := loopDetector.RecordAndCheck(tc.Name, json.RawMessage(tc.Input.Bytes()))
 		if loopResult.Stuck {
@@ -123,9 +131,10 @@ func prepareToolCall(
 				logToolExecution(runLog, turn, tc, result, time.Since(start), nil, "loop", false)
 				return toolCallPrep{done: true, block: result, start: start}
 			}
-			// Warning level: inject the warning as a prefix but allow execution.
+			// Warning level: the tool still runs, but the model is told.
 			logger.Warn("tool loop warning",
 				"name", tc.Name, "detector", loopResult.Detector, "count", loopResult.Count)
+			loopWarning = loopResult.Message
 		}
 	}
 
@@ -148,8 +157,9 @@ func prepareToolCall(
 	}
 
 	return toolCallPrep{
-		before: captureToolFileSnapshots(toolProvenanceRoot(tools), tc.Name, json.RawMessage(tc.Input.Bytes())),
-		start:  start,
+		before:      captureToolFileSnapshots(toolProvenanceRoot(tools), tc.Name, json.RawMessage(tc.Input.Bytes())),
+		start:       start,
+		loopWarning: loopWarning,
 	}
 }
 
@@ -284,9 +294,15 @@ func finishToolCall(
 	block.Metadata = llm.FlexibleFromRaw(prep.meta.JSON())
 	fileEffects := buildToolFileEffects(prep.before, captureToolFileSnapshots(toolProvenanceRoot(tools), tc.Name, json.RawMessage(tc.Input.Bytes())))
 
-	// Record result hash for no-progress detection.
+	// Record result hash for no-progress detection BEFORE the warning prefix:
+	// the warning text carries a call count, so prefixing first would make every
+	// repeat look like fresh output and reset the very streak that escalates to
+	// the critical block.
 	if loopDetector != nil {
 		loopDetector.RecordResult(tc.Name, block.Content, block.IsError)
+	}
+	if prep.loopWarning != "" {
+		block.Content = prep.loopWarning + "\n\n" + block.Content
 	}
 
 	// Broadcast tool result to streaming clients.
