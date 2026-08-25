@@ -361,7 +361,23 @@ acceptance machinery stays forbidden at record time.
    the bridge guard hardcoded eight names with a "keep in sync" comment and had
    already missed `gmail` **on the day it was written** — the exact drift it
    existed to catch, committed by the guard itself.
-12. **Impact never rewrites delivery truth** — an ineffective or regressed
+12. **A lane that goes quiet must say so — silence is not evidence of health.**
+   Deneb is built to never break a user turn (~326 `silently`, ~295
+   `best-effort`, ~104 `advisory`, ~50 `fail-open` in the tree). That judgement
+   is right and it has one cost: a broken subsystem is indistinguishable from an
+   idle one — no error, `/health` green, nothing happens. Every finding in the
+   2026-08-26 runtime review was that cost coming due (map reader alive 10 days
+   after its client died · `kb-interview` tombstoned five weeks while the
+   operator typed its exact triggers · `evolved: 0` behind a disabled gate · a
+   proposal pending from 08-03 until it expired).
+   `runtime/lanewatch` asks each watched lane whether it produced work and
+   reports prolonged silence. The hard part is **not crying wolf**: a lane
+   declares its own silence budget AND whether a zero is expected right now
+   (`Reading.Idle`), because a watch that fires on healthy idleness gets muted
+   and is then worth nothing. Adding a lane is a name, a budget, and a read —
+   grow the set as more silent failures are found. New autonomous lanes should
+   register one when they land, not after their first outage.
+13. **Impact never rewrites delivery truth** — an ineffective or regressed
    result does not erase `watch_passed`/`applied`; it is independent evidence
    for prioritization and later policy, and can only be recorded for the same
    attempt after the safety watch passes.
