@@ -389,3 +389,98 @@ func TestToolSessionsStatsReturnsAggregatedRunData(t *testing.T) {
 		t.Errorf("nil agentlog: out=%q err=%v", out, err)
 	}
 }
+
+// --- sessions_spawn L₂ handoff (bounded memory contract) ---
+
+// A parent with typed board state must hand it to the child verbatim in the
+// task message — a fresh-prompt executor otherwise starts stateless and
+// re-derives what the parent already established.
+func TestSessionsSpawn_HandsBlackboardStateToChild(t *testing.T) {
+	sm := session.NewManager()
+	var sentTask string
+	deps := &tooldeps.SessionDeps{
+		Manager: sm,
+		SendFn:  func(_ string, task string) error { sentTask = task; return nil },
+	}
+	board := toolport.NewBlackboard()
+	if err := board.Put("target_pr", json.RawMessage(`"4699"`), "parent"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if err := board.Plan([]toolport.StepContract{{ID: "review", Goal: "리뷰 반영", Outputs: []string{"patch"}}}); err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	ctx := toolport.WithBlackboard(toolport.WithSessionKey(context.Background(), "client:main"), board)
+
+	if _, err := ToolSessionsSpawn(deps)(ctx, spawnInput(t, "PR 후속 작업", "worker")); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if !strings.Contains(sentTask, "PR 후속 작업") {
+		t.Fatalf("original task lost: %q", sentTask)
+	}
+	for _, want := range []string{"인계된 작업 상태", "target_pr", `"4699"`, "review", "리뷰 반영"} {
+		if !strings.Contains(sentTask, want) {
+			t.Errorf("handoff missing %q in task:\n%s", want, sentTask)
+		}
+	}
+}
+
+// No board, an empty board, or the layer kill switch must all leave the task
+// message byte-identical to what the model wrote.
+func TestSessionsSpawn_HandoffStaysOutWithoutStateOrWhenKilled(t *testing.T) {
+	sm := session.NewManager()
+	var sentTask string
+	deps := &tooldeps.SessionDeps{
+		Manager: sm,
+		SendFn:  func(_ string, task string) error { sentTask = task; return nil },
+	}
+
+	// No board in ctx.
+	ctx := toolport.WithSessionKey(context.Background(), "client:main")
+	if _, err := ToolSessionsSpawn(deps)(ctx, spawnInput(t, "작업 A", "w1")); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if sentTask != "작업 A" {
+		t.Errorf("no-board task mutated: %q", sentTask)
+	}
+
+	// Empty board.
+	ctx = toolport.WithBlackboard(ctx, toolport.NewBlackboard())
+	if _, err := ToolSessionsSpawn(deps)(ctx, spawnInput(t, "작업 B", "w2")); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if sentTask != "작업 B" {
+		t.Errorf("empty-board task mutated: %q", sentTask)
+	}
+
+	// Kill switch with a populated board.
+	t.Setenv("DENEB_SPAWN_L2", "0")
+	board := toolport.NewBlackboard()
+	if err := board.Put("k", json.RawMessage(`"v"`), "parent"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	ctx = toolport.WithBlackboard(toolport.WithSessionKey(context.Background(), "client:main"), board)
+	if _, err := ToolSessionsSpawn(deps)(ctx, spawnInput(t, "작업 C", "w3")); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if sentTask != "작업 C" {
+		t.Errorf("kill switch ignored: %q", sentTask)
+	}
+}
+
+// The handoff must stay bounded no matter how large the board grows.
+func TestSessionsSpawn_HandoffIsBounded(t *testing.T) {
+	board := toolport.NewBlackboard()
+	big := `"` + strings.Repeat("가", 3000) + `"`
+	for _, k := range []string{"a", "b", "c", "d", "e"} {
+		if err := board.Put(k, json.RawMessage(big), "parent"); err != nil {
+			t.Fatalf("put: %v", err)
+		}
+	}
+	out := board.RenderHandoff(4000)
+	if got := len([]rune(out)); got > 4000+40 {
+		t.Fatalf("handoff overflows budget: %d runes", got)
+	}
+	if !strings.Contains(out, "truncated") {
+		t.Error("oversized handoff must announce truncation")
+	}
+}
