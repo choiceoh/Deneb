@@ -96,6 +96,18 @@ func (s *Server) initWikiSubsystem(chatCfg *chat.HandlerConfig, reg *modelrole.R
 		return closeOnCutoverFailure(wrapped)
 	}
 	s.factCutover.recordSuccess()
+	// One-time identity repair for legacy sentence-keyed facts (fact_rekey.go).
+	// Runs after the cutover and BEFORE the fact-derived revision is approved,
+	// so prompt snapshots bind to the post-migration revision. Idempotent —
+	// already-migrated keys have no active claim and are skipped.
+	if moved, rerr := wikiStore.RekeyLegacyFacts(); rerr != nil {
+		// Non-fatal: a half-done rekey leaves both identities readable and the
+		// next startup resumes where it stopped. Crashing here would trade a
+		// cosmetic identity for availability (the 2026-08-23 lesson).
+		s.logger.Warn("wiki: legacy fact rekey incomplete", "moved", moved, "error", rerr)
+	} else if moved > 0 {
+		s.logger.Info("wiki: legacy facts re-keyed to axis identities", "moved", moved)
+	}
 	// Bind persisted prompt snapshots to the canonical journal revision
 	// before asynchronous session restore. This closes both first-cutover and
 	// commit-before-cache-clear crash windows: an older Tier1/MEMORY snapshot
