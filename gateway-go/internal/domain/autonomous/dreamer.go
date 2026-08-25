@@ -57,6 +57,11 @@ type DreamReport struct {
 	// apply counters, so digest-only cycles still register as page-changing.
 	WikiProjectDigests int    `json:"wikiProjectDigests,omitempty"`
 	WikiProposalPath   string `json:"wikiProposalPath,omitempty"`
+	// WikiPersonStubsPurged counts contentless 인물 stubs this cycle deleted
+	// (operator's standing order, 2026-08-24). It is reported because deletion
+	// is the one page mutation that cannot be noticed by reading the wiki: a
+	// cycle that removed 49 pages announced "0페이지 수정" until this existed.
+	WikiPersonStubsPurged int `json:"wikiPersonStubsPurged,omitempty"`
 	// VerifyFindings carries only FIRST-TIME advisory findings; ones already
 	// announced in an earlier cycle fold into VerifyFindingsRepeat (the verify
 	// ledger, wiki/verify_ledger.go, remembers what was shown).

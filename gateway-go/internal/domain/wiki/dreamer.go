@@ -511,7 +511,7 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	wd.applyDreamUpdates(ctx, cycle)
 	wd.closeDreamStaleDues(cycle)
 	wd.curateOversizedDreamPages()
-	wd.purgeDreamPersonStubs(time.Now())
+	cycle.report.WikiPersonStubsPurged = wd.purgeDreamPersonStubs(time.Now())
 	wd.captureDreamOpenLoops(ctx, cycle)
 	wd.captureDreamThemes(ctx, cycle)
 	wd.captureDreamSelfComparison(ctx, cycle)
@@ -1057,6 +1057,9 @@ func (wd *WikiDreamer) completeDreamCycle(ctx context.Context, cycle *dreamCycle
 	}
 
 	message := fmt.Sprintf("dream: +%d페이지 생성, %d페이지 수정", cycle.created, cycle.updated)
+	if purged := cycle.report.WikiPersonStubsPurged; purged > 0 {
+		message += fmt.Sprintf(", 빈 인물 %d장 삭제", purged)
+	}
 	if hash := wd.store.SnapshotGit(ctx, message); hash != "" {
 		cycle.report.GitCommit = hash
 		cycle.report.WikiChangeSummary = formatWikiChangeSummary(
