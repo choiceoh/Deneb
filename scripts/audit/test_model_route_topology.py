@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
-from model_route_topology import ConfigShapeError, check_topology, main
+from model_route_topology import (
+    BUILTIN_ANTHROPIC_PROVIDERS,
+    BUILTIN_PROVIDER_MODELS,
+    ConfigShapeError,
+    check_topology,
+    main,
+)
 
 
 def deneb_config(
@@ -294,6 +301,44 @@ class ModelRouteTopologyTests(unittest.TestCase):
         with self.assertRaises(ConfigShapeError):
             check_topology(deneb_config(model_ids=("k3",)), wormhole)
 
+
+
+class MirroredGoTableTests(unittest.TestCase):
+    """The checker mirrors two Go tables; drift makes it validate a fiction.
+
+    Both were copied by hand (a Python audit script cannot import Go), so the
+    only thing keeping them honest is a test that reads the Go source. Without
+    it, a provider added to the picker silently stops being checked — the same
+    "plausible config nobody reads" failure class this checker exists to catch.
+    """
+
+    REPO = Path(__file__).resolve().parents[2]
+
+    def go_source(self, rel: str) -> str:
+        return (self.REPO / rel).read_text(encoding="utf-8")
+
+    def test_builtin_provider_models_match_the_picker(self) -> None:
+        source = self.go_source("gateway-go/internal/runtime/modelpicker/miniapp_models_providers.go")
+        body = source.split("func builtinProviders()", 1)[1].split("\n}", 1)[0]
+        declared = {}
+        for name, models in re.findall(r'\{name:\s*"([^"]+)"(.*?)\}', body, re.S):
+            declared[name] = tuple(re.findall(r'"([^"]+)"', models))
+
+        self.assertTrue(declared, "no providerSpec entries parsed — did builtinProviders move?")
+        for name, models in declared.items():
+            if models:  # providers with no built-in catalog are not mirrored
+                self.assertEqual(
+                    models, BUILTIN_PROVIDER_MODELS.get(name), f"provider {name} drifted"
+                )
+        self.assertEqual(set(BUILTIN_PROVIDER_MODELS), {n for n, m in declared.items() if m})
+
+    def test_anthropic_providers_match_resolve_api_mode(self) -> None:
+        source = self.go_source("gateway-go/internal/ai/modelrole/registry.go")
+        body = source.split("func resolveAPIMode(", 1)[1].split("\n}", 1)[0]
+        declared = set(re.findall(r'"([a-z0-9-]+)"', body.split("case", 1)[1].split(":", 1)[0]))
+
+        self.assertTrue(declared, "no providers parsed — did resolveAPIMode move?")
+        self.assertEqual(declared, BUILTIN_ANTHROPIC_PROVIDERS)
 
 
 if __name__ == "__main__":
