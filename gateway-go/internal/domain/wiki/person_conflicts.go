@@ -75,45 +75,59 @@ func (s *Store) PersonMailConflicts(ctx context.Context, limit int) []PersonMail
 			return out
 		}
 		scanned++
-		page, err := s.ReadPage(path)
-		if err != nil || page == nil {
-			continue
-		}
-		title := strings.TrimSpace(page.Meta.Title)
-		emails := personConflictEmails(page)
-		if title == "" || len([]rune(title)) < personConflictTitleMin || len(emails) == 0 {
-			continue
-		}
-		report, err := s.SearchWithOptions(ctx, title, personConflictHitsMax, QueryOptions{ExcludeFactResults: true})
-		if err != nil {
-			continue
-		}
-		for _, hit := range report.Results {
-			if !IsMailAnalysisPath(hit.Path) {
-				continue
-			}
-			// The analysis must be about this person, not merely mention the name
-			// in passing next to someone else's address.
-			if !personConflictAbout(title, hit.Content) {
-				continue
-			}
-			from := personConflictFrom(hit.Content)
-			if from == "" {
-				continue
-			}
-			if personConflictMismatch(emails, from) {
-				out = append(out, PersonMailConflict{
-					PagePath:   path,
-					Title:      title,
-					WikiEmails: emails,
-					MailFrom:   from,
-					MailPath:   hit.Path,
-				})
-				break
-			}
+		if conflict, ok := s.PersonMailConflictFor(ctx, path); ok {
+			out = append(out, conflict)
 		}
 	}
 	return out
+}
+
+// PersonMailConflictFor evaluates ONE page. Split out of the scan so the card
+// lane can re-check the exact finding a posted card names — the scan is bounded
+// (personConflictScanMax/ListMax), so a page missing from its output is not
+// evidence that page is clean, and retiring a card on that basis would drop a
+// live finding.
+func (s *Store) PersonMailConflictFor(ctx context.Context, path string) (PersonMailConflict, bool) {
+	if s == nil {
+		return PersonMailConflict{}, false
+	}
+	page, err := s.ReadPage(path)
+	if err != nil || page == nil {
+		return PersonMailConflict{}, false
+	}
+	title := strings.TrimSpace(page.Meta.Title)
+	emails := personConflictEmails(page)
+	if title == "" || len([]rune(title)) < personConflictTitleMin || len(emails) == 0 {
+		return PersonMailConflict{}, false
+	}
+	report, err := s.SearchWithOptions(ctx, title, personConflictHitsMax, QueryOptions{ExcludeFactResults: true})
+	if err != nil {
+		return PersonMailConflict{}, false
+	}
+	for _, hit := range report.Results {
+		if !IsMailAnalysisPath(hit.Path) {
+			continue
+		}
+		// The analysis must be about this person, not merely mention the name
+		// in passing next to someone else's address.
+		if !personConflictAbout(title, hit.Content) {
+			continue
+		}
+		from := personConflictFrom(hit.Content)
+		if from == "" {
+			continue
+		}
+		if personConflictMismatch(emails, from) {
+			return PersonMailConflict{
+				PagePath:   path,
+				Title:      title,
+				WikiEmails: emails,
+				MailFrom:   from,
+				MailPath:   hit.Path,
+			}, true
+		}
+	}
+	return PersonMailConflict{}, false
 }
 
 // personConflictEmails collects the page's canonical emails: frontmatter ∪ body.

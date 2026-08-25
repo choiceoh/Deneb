@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	wikiMaintSource         = "wiki-maint"
+	wikiMaintSource         = workfeed.SourceWikiMaint
 	wikiMaintCheckInterval  = 12 * time.Hour
 	wikiMaintDecisionQuiet  = 30 * 24 * time.Hour
 	wikiMaintMaxConflictsOn = 5
@@ -47,6 +47,14 @@ func (t *WikiMaintTask) Run(ctx context.Context) error {
 	if s == nil || s.wikiStore == nil {
 		return nil
 	}
+	// Retire first: a card whose finding no longer reproduces must leave the
+	// inbox on its own. Without this, fixing the wiki did not clear the card —
+	// the operator still had to press 확인 on a question that was already
+	// answered, which is indistinguishable from the lane nagging about a
+	// resolved issue (2026-08-25: three homonym cards outlived their fix by
+	// twenty minutes and read as a re-ask).
+	s.retireResolvedWikiMaintCards(ctx)
+
 	conflicts := s.wikiStore.PersonMailConflicts(ctx, wikiMaintMaxConflictsOn)
 	homonyms := s.wikiStore.HomonymPersonPages(wikiMaintMaxHomonyms)
 	if len(conflicts) == 0 && len(homonyms) == 0 {
@@ -209,4 +217,58 @@ func recordWikiMaintDecision(refID string) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// wikiMaintRetireScan bounds the active-card sweep. The feed is small and only
+// wiki-maint rows are re-evaluated; the bound just keeps a runaway feed from
+// turning a 12h task into a long scan.
+const wikiMaintRetireScan = 200
+
+// retireResolvedWikiMaintCards settles every active wiki-maint card whose
+// finding no longer holds. Each card is re-checked BY ITS OWN REF (the
+// single-page store APIs), never by diffing against the capped scan output: the
+// scans stop early by design, so absence from their result is not evidence the
+// finding is gone.
+func (s *Server) retireResolvedWikiMaintCards(ctx context.Context) {
+	nf := s.nativeWorkFeedStore()
+	if nf == nil {
+		return
+	}
+	items, _, err := nf.List(wikiMaintRetireScan, false)
+	if err != nil {
+		s.logger.Warn("wiki-maint retire: 피드 조회 실패", "error", err)
+		return
+	}
+	for _, item := range items {
+		if item.Source != wikiMaintSource || item.Status == workfeed.StatusAcked {
+			continue
+		}
+		if s.wikiMaintFindingStillOpen(ctx, item) {
+			continue
+		}
+		if _, err := nf.Ack(item.ID); err != nil {
+			s.logger.Warn("wiki-maint retire: 카드 정리 실패", "id", item.ID, "error", err)
+			continue
+		}
+		s.logger.Info("wiki-maint: 해소된 카드 회수", "refType", item.RefType, "ref", item.RefID)
+	}
+}
+
+// wikiMaintFindingStillOpen re-evaluates one card's finding. Unknown ref shapes
+// stay open — retiring a card we cannot evaluate would silence it for good.
+func (s *Server) wikiMaintFindingStillOpen(ctx context.Context, item workfeed.Item) bool {
+	ref := strings.TrimSpace(item.RefID)
+	if ref == "" {
+		return true
+	}
+	switch item.RefType {
+	case "person-homonym":
+		_, open := s.wikiStore.HomonymPersonFor(strings.TrimPrefix(ref, "homonym:"))
+		return open
+	case "person-conflict":
+		_, open := s.wikiStore.PersonMailConflictFor(ctx, ref)
+		return open
+	default:
+		return true
+	}
 }

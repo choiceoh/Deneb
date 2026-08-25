@@ -20,6 +20,36 @@ type HomonymPerson struct {
 	Domains  []string `json:"domains"`
 }
 
+// HomonymPersonFor evaluates ONE page: the operator-facing card lane needs to
+// re-check the exact finding a posted card names, not diff against a capped
+// list (a finding outside the cap would read as resolved and retire a live
+// card). Reports false when the page is gone, archived, single-identity, or
+// already judged.
+func (s *Store) HomonymPersonFor(relPath string) (HomonymPerson, bool) {
+	if s == nil {
+		return HomonymPerson{}, false
+	}
+	relPath = filepath.ToSlash(strings.TrimSpace(relPath))
+	page, err := s.ReadPage(relPath)
+	if err != nil || page == nil || page.Meta.Archived {
+		return HomonymPerson{}, false
+	}
+	domains := companyEmailDomains(append(append([]string(nil), page.Meta.Emails...),
+		bodyEmailAddresses(page.Body)...))
+	if len(domains) < 2 {
+		return HomonymPerson{}, false
+	}
+	sort.Strings(domains)
+	if identityEvidenceReviewed(page.Meta, domains) {
+		return HomonymPerson{}, false
+	}
+	title := page.Meta.Title
+	if title == "" {
+		title = strings.TrimSuffix(filepath.Base(relPath), ".md")
+	}
+	return HomonymPerson{PagePath: relPath, Title: title, Domains: domains}, true
+}
+
 // HomonymPersonPages returns up to limit such pages, sorted by path so the
 // dream report and the operator card agree on what "the first five" means.
 func (s *Store) HomonymPersonPages(limit int) []HomonymPerson {
