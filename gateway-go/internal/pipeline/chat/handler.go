@@ -80,7 +80,7 @@ type Handler struct {
 	subagentCleanupUnsub func()
 	steer                *SteerQueue // mid-run /steer notes for the main agent
 	linkEnrichStart      LinkEnrichStart
-	normalizeCardReply   func(text, sessionKey string, logger *slog.Logger) string
+	normalizeCardReply   func(text, sessionKey string, logger *slog.Logger) (string, []string)
 	reportCardHealth     func(text, sessionKey string, logger *slog.Logger)
 
 	// checkpointRoot is the directory where per-session file-edit snapshots
@@ -247,7 +247,12 @@ type HandlerConfig struct {
 	LinkEnrichStart LinkEnrichStart
 	// NormalizeCardReply is the final deneb-ui validity boundary before the
 	// assistant reply is persisted or delivered. Optional; nil is a no-op.
-	NormalizeCardReply func(text, sessionKey string, logger *slog.Logger) string
+	// The second return carries one human-readable detail per rejected block;
+	// they are replayed to the model on its next turn
+	// (card_rejection_notice.go) so a dropped card gets corrected instead of
+	// repeated. Strings, not denebui types — this package deliberately does not
+	// import denebui (see run_card_health.go).
+	NormalizeCardReply func(text, sessionKey string, logger *slog.Logger) (string, []string)
 	ReportCardHealth   func(text, sessionKey string, logger *slog.Logger)
 	// AuditSystemPrompt receives the exact finalized system-prompt wire bytes.
 	// It is a trusted observability hook used by deterministic evaluation only.
