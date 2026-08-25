@@ -180,7 +180,11 @@ jobs:
             exit 0
           fi
           cd gateway-go
-          bad=$(gofmt -l "${files[@]}" || true)
+          # gofumpt, not gofmt: the local `make fmt` discipline is gofumpt
+          # (pinned v0.10.0), and two gofmt-clean/gofumpt-dirty files landed
+          # on main in one week through this gap (2026-08-24/25). Same pin as
+          # the Makefile so PR CI and `make check` agree byte-for-byte.
+          bad=$(go run mvdan.cc/gofumpt@v0.10.0 -l "${files[@]}" || true)
           if [ -n "$bad" ]; then
             echo "Go files need formatting:"
             echo "$bad"
