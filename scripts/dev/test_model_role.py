@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from model_role import role_model  # noqa: E402  (path set above)
+from model_role import ROLE_KEYS, role_model  # noqa: E402  (path set above)
 
 
 def write_config(payload: object) -> str:
@@ -64,6 +65,27 @@ class RoleModelTests(unittest.TestCase):
         path = self.config({"agents": {"tinyModel": "   "}})
 
         self.assertEqual(role_model("tiny", "fb", path), "fb")
+
+
+class RoleCoverageTests(unittest.TestCase):
+    """ROLE_KEYS must track the gateway's modelrole.Role constants.
+
+    A role the gateway grew but this table lacks sends callers back to pinning
+    model names; a role here that the gateway does not have is phantom config
+    (the 2026-08-25 class of bug: a plausible deneb.json key nothing reads).
+    """
+
+    def test_role_keys_match_the_registry_constants(self) -> None:
+        registry = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "gateway-go/internal/ai/modelrole/registry.go",
+        )
+        with open(registry, encoding="utf-8") as handle:
+            source = handle.read()
+        declared = set(re.findall(r'Role[A-Z][A-Za-z0-9]*\s+Role\s*=\s*"([a-z0-9]+)"', source))
+
+        self.assertTrue(declared, "no Role constants parsed — did registry.go move?")
+        self.assertEqual(declared, set(ROLE_KEYS))
 
 
 if __name__ == "__main__":

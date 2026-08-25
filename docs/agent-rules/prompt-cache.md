@@ -51,7 +51,7 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 
 ## 1.5. vLLM APC (로컬 dsv4 경로) — 꼬리 주입 원칙
 
-> ★ **역할 배치 갱신 (2026-07-04):** main 은 2026-06-28부터 **클라우드 glm-5.2** 라 이 절의 핫패스가 아니다. vLLM APC 가 실제로 작동하는 트래픽은 **dsv4 경로** — fallback(deepseek-v4-flash)·dsv4-nothink 헬퍼(lightweight/tiny/translation) — 로 축소됐다. 그래도 이 절의 원칙은 **그대로 준수**한다: dsv4 경로가 여전히 이 제약 위에 있고, main 의 로컬 복귀는 config 한 줄이라 언제든 되돌아온다. 현재 매핑은 `model-roles.md` 의 스냅샷 경고대로 deneb.json 실측이 기준.
+> ★ **역할 배치 갱신 (2026-08-25):** main 은 2026-06-28부터 **클라우드**라 이 절의 핫패스가 아니다. vLLM APC 가 실제로 작동하는 트래픽은 **자체 서빙 dsv4 를 가리키는 역할** — 지금은 lightweight·tiny — 로 축소됐다(어느 역할이 로컬인지는 고정이 아니다: `python3 scripts/dev/model_role.py <role>` 로 실측). 그래도 이 절의 원칙은 **그대로 준수**한다: dsv4 경로가 여전히 이 제약 위에 있고, main 의 로컬 복귀는 config 한 줄이라 언제든 되돌아온다. 현재 매핑은 `model-roles.md` 의 스냅샷 경고대로 deneb.json 실측이 기준.
 
 > 메인 챗 모델이 로컬 vLLM(DSV4-Flash)로 옮겨가 있던 시기에 **마커 기반 Anthropic 캐시와 전혀 다른 제약**이 1순위가 됐다. vLLM 의 Automatic Prefix Caching 은 렌더된 프롬프트 전체에 대한 **엄격한 byte-prefix 매칭**이고, DSV4 인코더의 렌더 순서는 `[system 내용][tools 스키마][대화 히스토리]` 다. 즉 **system 끝의 per-turn 바이트 1줄이 tools + 전체 히스토리(수만 토큰)의 KV 를 통째로 무효화**한다.
 
