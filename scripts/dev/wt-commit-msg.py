@@ -28,7 +28,38 @@ import urllib.request
 
 WORMHOLE_CFG = os.path.expanduser("~/.wormhole/config.json")
 WORMHOLE_URL = "http://127.0.0.1:18800/v1/chat/completions"
-DEFAULT_MODEL = "qwen3.6-35b-a3b"
+DENEB_CFG = os.path.expanduser("~/.deneb/deneb.json")
+# Fall back to the tiny ROLE, not a model name. This script was pinned to
+# qwen3.6-35b-a3b, whose local serving died 2026-08-06; wormhole then failed
+# every commit-message call over to a metered cloud endpoint without saying so.
+# A role follows deneb.json when the fleet moves; a literal name rots silently.
+FALLBACK_MODEL = "dsv4-nothink"
+
+
+def default_model() -> str:
+    """Resolve the tiny role from deneb.json (bare wormhole route name)."""
+    try:
+        with open(DENEB_CFG, encoding="utf-8") as f:
+            cfg = json.load(f)
+    except (OSError, ValueError):
+        return FALLBACK_MODEL
+
+    def find(node):
+        if isinstance(node, dict):
+            if isinstance(node.get("tinyModel"), str):
+                return node["tinyModel"]
+            for v in node.values():
+                hit = find(v)
+                if hit:
+                    return hit
+        elif isinstance(node, list):
+            for v in node:
+                hit = find(v)
+                if hit:
+                    return hit
+        return ""
+
+    return find(cfg).rsplit("/", 1)[-1] or FALLBACK_MODEL
 
 
 def main() -> int:
@@ -44,7 +75,7 @@ def main() -> int:
         return 1
     body = json.dumps(
         {
-            "model": os.environ.get("WT_COMMIT_MODEL", DEFAULT_MODEL),
+            "model": os.environ.get("WT_COMMIT_MODEL") or default_model(),
             "messages": [{"role": "user", "content": prompt}],
             # generous cap: reasoning models spend tokens thinking before the
             # final message, and a small cap yields an empty response
