@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
@@ -33,6 +35,11 @@ const (
 	// Individual and aggregate caps keep JIT context bounded. Oversized bodies
 	// fall back to the existing explicit read pointer instead of truncating an
 	// instruction contract mid-step.
+	// Markers around an auto-loaded body. skillBodiesInHistory parses them back
+	// out, so the two must stay in sync — they are written once, here.
+	skillBodyBeginPrefix = "--- "
+	skillBodyBeginSuffix = " instructions begin ---"
+
 	maxAutoLoadedSkillBodyBytes  = 15_000
 	maxAutoLoadedSkillTotalBytes = 20_000
 )
@@ -57,7 +64,12 @@ func cachedResolvedSkills() []skills.PromptSkill {
 //
 // sessionToolPreset is the run's effective preset. Keep the historical skills
 // tool gate so restricted side runs do not acquire new procedural context.
-func buildSkillHints(params RunParams, sessionToolPreset string, resolved []skills.PromptSkill) (string, []string, []string) {
+func buildSkillHints(
+	params RunParams,
+	sessionToolPreset string,
+	resolved []skills.PromptSkill,
+	alreadyInHistory map[string]bool,
+) (string, []string, []string) {
 	if params.EphemeralUser || params.SkipRecall {
 		return "", nil, nil
 	}
@@ -77,6 +89,12 @@ func buildSkillHints(params RunParams, sessionToolPreset string, resolved []skil
 	autoLoaded := make([]string, 0, len(hints))
 	loadedBytes := 0
 	for _, skill := range hints {
+		// Already on the wire from an earlier turn of this session (the tail
+		// register keeps historical copies attached). A second copy of the same
+		// static document adds bytes, not information.
+		if alreadyInHistory[skill.Name] {
+			continue
+		}
 		names = append(names, skill.Name)
 		body := strings.TrimSpace(skill.Body)
 		if body != "" && len(body) <= maxAutoLoadedSkillBodyBytes && loadedBytes+len(body) <= maxAutoLoadedSkillTotalBytes {
@@ -136,4 +154,35 @@ func skillHintSummary(desc string) string {
 		desc = string(runes[:90]) + "…"
 	}
 	return desc
+}
+
+// skillBodiesInHistory reports which skills already have an auto-loaded body in
+// the assembled messages, using the same markers buildSkillHints writes. Called
+// with the tail-attached history, so it sees the copies the model will actually
+// receive.
+func skillBodiesInHistory(messages []llm.Message) map[string]bool {
+	present := map[string]bool{}
+	for _, msg := range messages {
+		content := string(msg.Content.Bytes())
+		if !strings.Contains(content, skillBodyBeginPrefix) {
+			continue
+		}
+		rest := content
+		for {
+			i := strings.Index(rest, skillBodyBeginPrefix)
+			if i < 0 {
+				break
+			}
+			rest = rest[i+len(skillBodyBeginPrefix):]
+			j := strings.Index(rest, skillBodyBeginSuffix)
+			if j < 0 {
+				break
+			}
+			if name := strings.TrimSpace(rest[:j]); name != "" {
+				present[name] = true
+			}
+			rest = rest[j:]
+		}
+	}
+	return present
 }

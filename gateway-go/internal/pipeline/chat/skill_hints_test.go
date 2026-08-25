@@ -35,7 +35,7 @@ func hintSkills() []skills.PromptSkill {
 // TestBuildSkillHints_MatchAndFormat: a trigger hit injects the bounded body
 // directly, without relying on a model-initiated read hop.
 func TestBuildSkillHints_MatchAndFormat(t *testing.T) {
-	out, names, loaded := buildSkillHints(RunParams{SessionKey: "client:main", Message: "이 계약서 검토해줘"}, "", hintSkills())
+	out, names, loaded := buildSkillHints(RunParams{SessionKey: "client:main", Message: "이 계약서 검토해줘"}, "", hintSkills(), nil)
 	if out == "" {
 		t.Fatal("expected a hint for 계약서")
 	}
@@ -64,7 +64,7 @@ func TestBuildSkillHints_MatchAndFormat(t *testing.T) {
 // longest-trigger (most specific) ones.
 func TestBuildSkillHintsTruncatesAtCap(t *testing.T) {
 	msg := "회의록이랑 계약서, 그리고 팩트체크까지 — 독소조항 있는지 확실해?"
-	out, names, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: msg}, "", hintSkills())
+	out, names, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: msg}, "", hintSkills(), nil)
 	if out == "" || len(names) == 0 || len(names) > maxSkillHints {
 		t.Fatalf("expected capped hints, names=%v", names)
 	}
@@ -83,7 +83,7 @@ func TestBuildSkillHintsFallsBackForUnavailableBody(t *testing.T) {
 		Triggers:    []string{"큰절차"},
 		Body:        strings.Repeat("x", maxAutoLoadedSkillBodyBytes+1),
 	}}
-	out, names, loaded := buildSkillHints(RunParams{SessionKey: "client:main", Message: "큰절차 실행"}, "", resolved)
+	out, names, loaded := buildSkillHints(RunParams{SessionKey: "client:main", Message: "큰절차 실행"}, "", resolved, nil)
 	if len(names) != 1 || len(loaded) != 0 {
 		t.Fatalf("names=%v loaded=%v, want one match and no auto-load", names, loaded)
 	}
@@ -97,7 +97,7 @@ func TestBuildSkillHintsCapsAggregateBodyBytes(t *testing.T) {
 		{Name: "alpha", Description: "alpha", Triggers: []string{"알파절차"}, Body: strings.Repeat("a", 11_000)},
 		{Name: "beta", Description: "beta", Triggers: []string{"베타절차"}, Body: strings.Repeat("b", 11_000)},
 	}
-	out, names, loaded := buildSkillHints(RunParams{SessionKey: "client:main", Message: "알파절차 베타절차"}, "", resolved)
+	out, names, loaded := buildSkillHints(RunParams{SessionKey: "client:main", Message: "알파절차 베타절차"}, "", resolved, nil)
 	if len(names) != 2 || len(loaded) != 1 || loaded[0] != "alpha" {
 		t.Fatalf("names=%v loaded=%v, want two matches and one deterministic load", names, loaded)
 	}
@@ -126,16 +126,16 @@ func TestBuildSkillHintsReturnsEmptyWhenGated(t *testing.T) {
 		{"conversation preset (btw)", RunParams{SessionKey: "btw:abc123", Message: "계약서 검토"}, "conversation"},
 	}
 	for _, tc := range cases {
-		if out, names, loaded := buildSkillHints(tc.params, tc.preset, hintSkills()); out != "" || len(names) != 0 || len(loaded) != 0 {
+		if out, names, loaded := buildSkillHints(tc.params, tc.preset, hintSkills(), nil); out != "" || len(names) != 0 || len(loaded) != 0 {
 			t.Errorf("%s: expected no hint, got:\n%s", tc.name, out)
 		}
 	}
-	if out, _, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서"}, "", nil); out != "" {
+	if out, _, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서"}, "", nil, nil); out != "" {
 		t.Errorf("nil catalog: expected no hint, got:\n%s", out)
 	}
 	// The self-review preset DOES allow the skills tool — the preset gate must
 	// key on the allow-list, not blanket-suppress preset runs.
-	if out, _, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서 검토"}, "self-review", hintSkills()); out == "" {
+	if out, _, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서 검토"}, "self-review", hintSkills(), nil); out == "" {
 		t.Error("self-review preset allows the skills tool; hint should fire")
 	}
 }
