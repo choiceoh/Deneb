@@ -444,18 +444,20 @@ func TestRefreshAsyncReplaysLatestSupplierQueuedDuringFlight(t *testing.T) {
 
 func TestRefreshIfStaleBoundsReadPathScansAndReportsFreshness(t *testing.T) {
 	embedder := &recordingEmbedder{healthy: true, fingerprint: "model-a:3", dimensions: 3}
-	ix := New("stale", embedder, "", WithSyncRefresh())
+	ix := New("stale", embedder, "")
 	defer ix.Close()
-	supplierCalls := 0
+	supplierCalls := atomic.Int32{}
 	supplier := func() []Item {
-		supplierCalls++
+		supplierCalls.Add(1)
 		return []Item{{ID: "a", Hash: "a1", Text: "alpha stable corpus"}}
 	}
 
+	if err := ix.Warm(context.Background(), supplier); err != nil {
+		t.Fatalf("initial Warm: %v", err)
+	}
 	ix.RefreshIfStale(supplier, time.Hour)
-	ix.RefreshIfStale(supplier, time.Hour)
-	if supplierCalls != 1 {
-		t.Fatalf("fresh index supplier calls = %d, want 1", supplierCalls)
+	if got := supplierCalls.Load(); got != 1 {
+		t.Fatalf("fresh index supplier calls = %d, want 1", got)
 	}
 	status := ix.Status()
 	if !status.Enabled || status.Entries != 1 || status.RefreshCount != 1 || status.LastRefreshAtMs == 0 || status.Fingerprint != "model-a:3" {
@@ -463,8 +465,12 @@ func TestRefreshIfStaleBoundsReadPathScansAndReportsFreshness(t *testing.T) {
 	}
 
 	ix.RefreshIfStale(supplier, 0)
-	if supplierCalls != 2 {
-		t.Fatalf("forced refresh supplier calls = %d, want 2", supplierCalls)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && (supplierCalls.Load() < 2 || ix.Status().RefreshCount < 2) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := supplierCalls.Load(); got != 2 {
+		t.Fatalf("forced refresh supplier calls = %d, want 2", got)
 	}
 }
 
