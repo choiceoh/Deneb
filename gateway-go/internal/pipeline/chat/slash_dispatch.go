@@ -111,6 +111,7 @@ func (h *Handler) handleResetCommand(sessionKey string, respond func(text string
 	}
 	prompt.ClearSessionSnapshot(sessionKey)
 	chatrecall.ClearSession(sessionKey)
+	clearSessionBlackboard(sessionKey)
 	clearTier1Wiki(sessionKey)
 	toolport.ClearActiveNotebook(sessionKey) // unbind any active notebook-grounding session
 	clearNotebookGrounding(sessionKey)       // drop the frozen grounding snapshot too

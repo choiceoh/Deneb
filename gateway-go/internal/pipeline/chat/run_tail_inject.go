@@ -61,7 +61,7 @@ const autoDeliveryDirective = `[전달 정책 — 이번 턴]
 // skill context (orthogonal to reference material, so it rides
 // both branches; skill_hints.go) and the delivery directive (current-turn
 // policy). Empty strings are omitted.
-func buildTailAdditions(params RunParams, recallMemory, notebookGrounding, skillHints string) []string {
+func buildTailAdditions(params RunParams, recallMemory, notebookGrounding, skillHints, boardState string) []string {
 	var adds []string
 	if notebookGrounding != "" {
 		adds = append(adds, notebookGrounding)
@@ -78,6 +78,12 @@ func buildTailAdditions(params RunParams, recallMemory, notebookGrounding, skill
 	}
 	if skillHints != "" {
 		adds = append(adds, skillHints)
+	}
+	// Session L₂ state (session_blackboard.go): the board the model built in
+	// earlier turns re-enters the turn as reference material, same slot and
+	// discipline as recall evidence.
+	if boardState != "" {
+		adds = append(adds, boardState)
 	}
 	if params.AutoDeliveredOutput {
 		adds = append(adds, autoDeliveryDirective)

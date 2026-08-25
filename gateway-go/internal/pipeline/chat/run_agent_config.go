@@ -95,10 +95,10 @@ type agentRunState struct {
 	execStats          *toolport.ToolExecStats
 }
 
-func newAgentRunState(replayedDeferredTools []string) *agentRunState {
+func newAgentRunState(sessionKey string, replayedDeferredTools []string) *agentRunState {
 	state := &agentRunState{
 		runCache:           NewRunCache(),
-		blackboard:         toolport.NewBlackboard(),
+		blackboard:         sessionBlackboard(sessionKey, time.Now()),
 		skillConsults:      NewSkillConsultLog(),
 		fileCache:          agent.NewFileCache(agent.DefaultFileCacheMaxItems),
 		spawnFlag:          NewSpawnFlag(),
@@ -436,7 +436,7 @@ func buildAgentConfig(
 		sessionToolPreset,
 	)
 	tools := buildAgentTools(acd.Tools, sessionToolPreset, initialDeferredTools)
-	state := newAgentRunState(initialDeferredTools)
+	state := newAgentRunState(params.SessionKey, initialDeferredTools)
 	policy := resolveAgentExecutionPolicy(params, deps, cachedSession, acd.MaxTokens)
 	turnHooks := newAgentTurnHooks(params, deps, acd, sessionToolPreset)
 
