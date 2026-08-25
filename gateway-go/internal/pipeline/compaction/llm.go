@@ -346,7 +346,19 @@ func serializeMessages(messages []llm.Message) string {
 				case "text":
 					sb.WriteString(b.Text)
 				case "tool_use":
-					sb.WriteString(fmt.Sprintf("<tool: %s>", b.Name))
+					// Arguments, not just the name. The summarizer is told to
+					// preserve concrete facts (paths, commands, queries, ids),
+					// and for many tools the ARGUMENT is that fact while the
+					// result is terse — five `<tool: exec>` lines whose results
+					// all read "STUCK" leave no trace of what ran (observed
+					// 2026-08-26 in a live compaction input). Capped rune-aware
+					// like the result below, so a write's file body cannot flood
+					// the summarizer.
+					if args := compactToolArgs(b.Input.Bytes()); args != "" {
+						sb.WriteString(fmt.Sprintf("<tool: %s %s>", b.Name, args))
+					} else {
+						sb.WriteString(fmt.Sprintf("<tool: %s>", b.Name))
+					}
 				case "tool_result":
 					content := b.Content
 					// Rune-aware cap: slicing at byte 800 can split a multi-byte
@@ -430,3 +442,23 @@ const recompactionSystemPrompt = `아래 입력에는 "이전 요약"과 그 이
 - 빈 섹션도 생략하지 말고 "없음"이라고 적어라
 
 ` + compactionOutputFormat
+
+// maxToolArgRunes caps the serialized argument blob per tool call. Small on
+// purpose: the summary needs the identifying arguments (path, command, query),
+// not a file body.
+const maxToolArgRunes = 200
+
+// compactToolArgs renders a tool call's arguments for the summarizer input,
+// collapsing whitespace and truncating rune-aware. Empty for absent or empty
+// argument objects, so those calls keep the bare `<tool: name>` form.
+func compactToolArgs(raw []byte) string {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "{}" || trimmed == "null" {
+		return ""
+	}
+	trimmed = strings.Join(strings.Fields(trimmed), " ")
+	if r := []rune(trimmed); len(r) > maxToolArgRunes {
+		trimmed = string(r[:maxToolArgRunes]) + "..."
+	}
+	return trimmed
+}
