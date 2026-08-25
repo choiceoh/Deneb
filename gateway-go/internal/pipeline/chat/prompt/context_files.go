@@ -101,6 +101,7 @@ func LoadContextFiles(workspaceDir string, opts ...LoadContextOption) []ContextF
 		Cache.SetContextFiles(workspaceDir, files, resolved)
 	}
 	files = filterFactDerivedContextFiles(files, cfg.excludeFactDerived)
+	files = dropRedundantFactProjection(files)
 
 	// Freeze for this session.
 	if cfg.sessionKey != "" {
@@ -150,6 +151,44 @@ func filterFactDerivedContextFiles(files []ContextFile, exclude bool) []ContextF
 		}
 	}
 	return filtered
+}
+
+// factProjectionMarker is the header every generated fact projection carries
+// (domain/wiki.factGeneratedMarker — asserted identical in the package test).
+const factProjectionMarker = "<!-- deneb:generated-fact-projection"
+
+// dropRedundantFactProjection removes the generated USER.md when the generated
+// MEMORY.md is present: both are projections of the SAME self-subject claims
+// (wiki.Store.syncFactWorkspaceLocked renders each from activeFactsLocked
+// ("self")), MEMORY.md carries every claim while USER.md only regroups the
+// identity/preference subset. Measured 2026-08-25 in puppet mode: MEMORY.md
+// 46 claims / 6,090B, USER.md 35 claims / 4,872B, and the USER set was a strict
+// subset — the whole file was duplicate context.
+//
+// Hand-maintained USER.md files are untouched: without the generated marker the
+// file is somebody's prose, not a projection, and it stays in the prompt.
+func dropRedundantFactProjection(files []ContextFile) []ContextFile {
+	generated := func(name string) bool {
+		for _, f := range files {
+			if filepath.Base(filepath.Clean(f.Path)) == name &&
+				strings.Contains(f.Content, factProjectionMarker) {
+				return true
+			}
+		}
+		return false
+	}
+	if !generated("MEMORY.md") || !generated("USER.md") {
+		return files
+	}
+	kept := make([]ContextFile, 0, len(files))
+	for _, f := range files {
+		if filepath.Base(filepath.Clean(f.Path)) == "USER.md" &&
+			strings.Contains(f.Content, factProjectionMarker) {
+			continue
+		}
+		kept = append(kept, f)
+	}
+	return kept
 }
 
 // ClearSessionSnapshot removes the frozen context files for a session.
