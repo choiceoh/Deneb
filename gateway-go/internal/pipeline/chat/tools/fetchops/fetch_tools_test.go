@@ -498,6 +498,36 @@ func TestFetchTools_AlreadyActiveShortCircuit(t *testing.T) {
 	assertActivated(t, out, "cron")
 }
 
+// A caller with no DeferredActivation cannot receive the tool through the tools
+// array, so the result text stays the only channel and must keep the schema.
+func TestFetchTools_InlinesSchemaWhenActivationIsUnavailable(t *testing.T) {
+	reg := &fakeFetchRegistry{
+		defs: map[string]toolport.ToolDef{
+			"mail_archive": {
+				Name:        "mail_archive",
+				Description: "Read mail",
+				Deferred:    true,
+				InputSchema: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"query": map[string]any{"type": "string"},
+					},
+				},
+			},
+		},
+	}
+
+	out, err := ToolFetchTools(reg)(context.Background(), mustJSON(t, map[string]any{
+		"names": []string{"mail_archive"},
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "```json") || !strings.Contains(out, "\"query\"") {
+		t.Fatalf("schema must stay inline without activation, got:\n%s", out)
+	}
+}
+
 func TestFetchTools_MixedSelectionReportsSchemaActivationAndErrors(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolport.ToolDef{
@@ -539,24 +569,15 @@ func TestFetchTools_MixedSelectionReportsSchemaActivationAndErrors(t *testing.T)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	// No inline JSON schema: activation is live, so the tools array carries it.
+	// Inlining it too shipped every activated schema twice and left the copy in
+	// the transcript for the rest of the session.
 	want := "" +
 		"- cron: not available under the current tool preset\n" +
 		"- graphify: not found or not a deferred tool\n" +
 		"## mail_archive\n" +
 		"Read mail\n" +
-		"```json\n" +
-		"{\n" +
-		"  \"properties\": {\n" +
-		"    \"query\": {\n" +
-		"      \"type\": \"string\"\n" +
-		"    }\n" +
-		"  },\n" +
-		"  \"required\": [\n" +
-		"    \"query\"\n" +
-		"  ],\n" +
-		"  \"type\": \"object\"\n" +
-		"}\n" +
-		"```\n\n" +
+		"\n" +
 		"Already active (schema loaded, no re-fetch needed): contacts. Call them directly.\n" +
 		"Activated 1 tool(s): mail_archive. You can now call them directly."
 	if out != want {
