@@ -64,7 +64,7 @@ Max 30 lines.`
 
 // compressToolOutput shrinks a large tool output using the local AI model.
 // Returns the original output if compression is not needed or fails.
-func compressToolOutput(ctx context.Context, toolName, output string, logger *slog.Logger) string {
+func compressToolOutput(ctx context.Context, toolName, output, spillID string, logger *slog.Logger) string {
 	if len(output) < compressThreshold {
 		return output
 	}
@@ -106,5 +106,20 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 		"ratio", fmt.Sprintf("%.0f%%", float64(len(compressed))/float64(len(output))*100),
 	)
 
-	return fmt.Sprintf("[compressed by pilot — original %d chars]\n%s", len(output), compressed)
+	if spillID != "" {
+		return sprintfCompressed(output, spillID, compressed)
+	}
+	return sprintfCompressedPlain(output, compressed)
+}
+
+// sprintfCompressed renders the compressed result with the spill handle so the
+// model can recover the full output; sprintfCompressedPlain is the no-handle
+// form (nothing was stored).
+func sprintfCompressed(original, spillID, compressed string) string {
+	return fmt.Sprintf("[compressed by pilot — original %d chars; 원문: read_spillover(spill_id=%q)]\n%s",
+		len(original), spillID, compressed)
+}
+
+func sprintfCompressedPlain(original, compressed string) string {
+	return fmt.Sprintf("[compressed by pilot — original %d chars]\n%s", len(original), compressed)
 }
