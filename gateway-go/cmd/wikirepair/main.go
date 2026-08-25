@@ -204,7 +204,7 @@ var jamoRepairs = []struct {
 	{"해상풉력", "해상풍력", false},
 	{"소규modal", "소규모", false},
 	{"탑솔라(쭈)", "탑솔라(주)", true},
-	{"핫남군청", "하남군청", true},
+	{"핫남군청", "해남군청", true},
 	{"의신탕력", "의신풍력", true},
 	{"오리지인", "오리진", true},
 	{"주첳별", "주차별", false},
@@ -255,8 +255,18 @@ var derivedPages = map[string]bool{"index.md": true, "log.md": true}
 //
 //	curated            — the target is a name the wiki actually uses. Silent.
 //	body-only          — ★ the 보필매실 shape: common enough to look right, never
-//	                     used anywhere a person curated. Reported.
-//	absent entirely    — a one-off word (미봉책, 정적연소시험). Expected, noted.
+//	                     used anywhere a person curated.
+//	absent entirely    — nothing in the corpus vouches for this name at all.
+//
+// Both non-curated outcomes are findings, and the second one is why. This audit
+// first ran with "absent" as a quiet note — a one-off place name seemed benign —
+// and it printed 핫남군청 → 하남군청. The operator read that line and corrected it:
+// the corpus has 해남 404 times and 하남 zero, the project code is pl1-hnm-epc-001,
+// and the page is a 영암 ledger, where a Gyeonggi city cannot appear. 하남 and 해남
+// are BOTH real Korean place names, which is exactly why nothing but attestation
+// could separate them — and exactly why "absent" must not be filed as expected.
+// A name the corpus cannot vouch for is the unverifiable case, not the harmless
+// one. The tool surfaces it; a person decides.
 func auditJamoTable(store *wiki.Store, paths []string, rep *report) {
 	var curated, body strings.Builder
 	for _, rp := range paths {
@@ -289,7 +299,7 @@ func auditJamoTable(store *wiki.Store, paths []string, rep *report) {
 			rep.fail("jamo: %q → %q — 대상이 본문에만 있고 큐레이션된 곳엔 없음. 오타→오타일 수 있으니 대표/cues로 정본 확인", r.bad, r.good)
 			continue
 		}
-		rep.note("확인 요망(정본 미출현, 일회성 어휘면 정상): %q → %q", r.bad, r.good)
+		rep.fail("jamo: %q → %q — 코퍼스 어디에도 이 이름이 없음. 문맥으로 검증 불가하니 사람이 확인할 것", r.bad, r.good)
 	}
 }
 
