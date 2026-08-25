@@ -91,6 +91,7 @@ type SyncRequest struct {
 	Delivery             *DeliveryContext
 
 	EphemeralUser       bool
+	AllowRecall         bool
 	EphemeralAssistant  bool
 	AutoDeliveredOutput bool
 	SkipRecall          bool

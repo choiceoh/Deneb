@@ -143,7 +143,10 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, lo
 	// is the user's "focused chat / memory off" toggle: skip the whole
 	// preflight so a general question pays no search latency and pulls no
 	// unrelated work memories.
-	if params.EphemeralUser || params.SkipRecall {
+	// SkipRecall is the user's own "focused chat / memory off" toggle and always
+	// wins. EphemeralUser only suppresses recall for callers that have not said
+	// they have a subject — see RunParams.AllowRecall.
+	if (params.EphemeralUser && !params.AllowRecall) || params.SkipRecall {
 		return ""
 	}
 	// A notebook with real sources bound to this session is the explicit
@@ -185,6 +188,7 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, lo
 			SessionKey:    params.SessionKey,
 			Message:       params.Message,
 			EphemeralUser: params.EphemeralUser,
+			AllowRecall:   params.AllowRecall,
 			SkipRecall:    params.SkipRecall,
 		},
 		chatrecall.Deps{

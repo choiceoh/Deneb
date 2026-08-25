@@ -62,6 +62,11 @@ func (s *Server) makeMailQAAsk() func(context.Context, string, []handlermail.QAT
 			MaxTokens:          &maxTok,
 			EphemeralUser:      true,
 			EphemeralAssistant: true,
+			// The operator is asking about a specific mail, so this turn has a
+			// real subject even though nothing about it is persisted. Without
+			// this the question is answered from the mail body alone — "이 견적
+			// 기존 단가랑 비교하면?" would reach no wiki evidence at all.
+			AllowRecall: true,
 		})
 		if err != nil {
 			return "", err

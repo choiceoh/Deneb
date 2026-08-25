@@ -16,7 +16,23 @@ type Params struct {
 	SessionKey    string
 	Message       string
 	EphemeralUser bool
-	SkipRecall    bool
+	// AllowRecall lets an ephemeral turn through this gate — see
+	// runstate.RunParams.AllowRecall for why the two are separate.
+	AllowRecall bool
+	SkipRecall  bool
+}
+
+// recallSuppressed reports whether this turn must not run the preflight.
+//
+// The two inputs are independent and only one of them is the user's own choice.
+// SkipRecall is the native client's "focused chat / memory off" toggle, so it
+// wins unconditionally. EphemeralUser only says the inbound message is not
+// persisted; a caller that has a real subject anyway says so with AllowRecall.
+func (p Params) recallSuppressed() bool {
+	if p.SkipRecall {
+		return true
+	}
+	return p.EphemeralUser && !p.AllowRecall
 }
 
 // Deps contains the optional recall evidence sources. Nil fields disable their source.
