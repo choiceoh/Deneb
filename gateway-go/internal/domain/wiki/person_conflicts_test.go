@@ -105,3 +105,91 @@ func TestPersonMailConflictNegativeCases(t *testing.T) {
 		t.Fatalf("conflicts = %+v, want none", got)
 	}
 }
+
+// The scan used to read the SEARCH SNIPPET, so "the first address in it" was
+// routinely a recipient or a quoted address — and a body mention counted as
+// "about this person". Live 2026-08-25: 강동민 was filed against a 태한
+// RECIPIENT, 김건호 against a mail 박종원 sent.
+func TestPersonMailConflicts_IgnoresRecipientsAndBodyMentions(t *testing.T) {
+	s, _ := newVerifyStore(t)
+	ctx := context.Background()
+
+	writePersonPageT(t, s, "인물/강동민.md", "강동민", []string{"kangdm@topsolar.kr"}, "탑솔라 소속")
+	// A mail 고건 sent, whose RECIPIENT is an outside address and whose body
+	// merely mentions 강동민.
+	writePageT(t, s, "프로젝트/pl9-tst-001/메일분석/보증서-송부.md", "보증서 송부", "프로젝트",
+		"> From: \"고건\" <taygun152@topsolar.kr>\n\n| **수신** | gocharge89@taihan.com — 태한 담당자 |\n\n강동민 대리가 물량을 산출했습니다.")
+
+	if got := s.PersonMailConflicts(ctx, 10); len(got) != 0 {
+		t.Errorf("수신자·본문 언급으로 불일치가 잡힘: %+v", got)
+	}
+}
+
+// An archived person page must not produce operator cards.
+func TestPersonMailConflicts_SkipsArchivedPages(t *testing.T) {
+	s, _ := newVerifyStore(t)
+	ctx := context.Background()
+
+	page := NewPage("김건호", "인물", nil)
+	page.Meta.Emails = []string{"gunbbang70@topsolar.kr"}
+	page.Meta.Archived = true
+	page.Body = "탑솔라 소속"
+	if err := s.WritePage("인물/김건호.md", page); err != nil {
+		t.Fatal(err)
+	}
+	writePageT(t, s, "프로젝트/pl9-tst-001/메일분석/무림-검토.md", "무림 검토", "프로젝트",
+		"> From: 김건호 <tiger0927@moorim.co.kr>\n\n김건호 검토 의견입니다.")
+
+	if got := s.PersonMailConflicts(ctx, 10); len(got) != 0 {
+		t.Errorf("보관된 페이지로 카드가 만들어짐: %+v", got)
+	}
+}
+
+// A mail this person really sent from a new address is still a conflict — the
+// precision fix must not cost the signal.
+func TestPersonMailConflicts_KeepsRealSenderMismatch(t *testing.T) {
+	s, _ := newVerifyStore(t)
+	ctx := context.Background()
+
+	writePersonPageT(t, s, "인물/신정훈.md", "신정훈", []string{"jhshin@findgreen.net"}, "파인드그린 대표")
+	writePageT(t, s, "프로젝트/pl9-tst-001/메일분석/추가자료.md", "추가자료", "프로젝트",
+		"> From: 신정훈(J.H.SHIN) <cadwin2@naver.com>\n\n신정훈 대표의 회신입니다.")
+
+	got := s.PersonMailConflicts(ctx, 10)
+	if len(got) != 1 || got[0].MailFrom != "cadwin2@naver.com" {
+		t.Errorf("실제 발신 불일치를 놓침: %+v", got)
+	}
+}
+
+// A homonym sender recurred every 30 days forever: the lane's only stop was a
+// snooze. An operator answer must end it for good, and only for that address.
+func TestPersonMailConflicts_HonorsOperatorAnswerPerAddress(t *testing.T) {
+	s, _ := newVerifyStore(t)
+	ctx := context.Background()
+
+	writePersonPageT(t, s, "인물/박준영.md", "박준영", []string{"jypark@adfamc.com"}, "에이디에프자산운용")
+	writePageT(t, s, "프로젝트/pl9-tst-001/메일분석/입사지원.md", "입사지원", "프로젝트",
+		"> From: 박준영 <persie7@naver.com>\n\n박준영 지원자의 입사지원서입니다.")
+
+	if got := s.PersonMailConflicts(ctx, 10); len(got) != 1 {
+		t.Fatalf("불일치가 안 잡힘: %+v", got)
+	}
+	page, err := s.ReadPage("인물/박준영.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page.Meta.IdentityReviewed = []string{MailConflictAckToken("persie7@naver.com")}
+	if err := s.WritePage("인물/박준영.md", page); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.PersonMailConflicts(ctx, 10); len(got) != 0 {
+		t.Errorf("확인했는데 계속 물어봄: %+v", got)
+	}
+
+	// The answer covers that address only — a different unknown sender is new.
+	writePageT(t, s, "프로젝트/pl9-tst-001/메일분석/다른건.md", "다른건", "프로젝트",
+		"> From: 박준영 <other@somewhere.co.kr>\n\n박준영 님 회신입니다.")
+	if got := s.PersonMailConflicts(ctx, 10); len(got) != 1 {
+		t.Errorf("새 주소가 조용함: %+v", got)
+	}
+}

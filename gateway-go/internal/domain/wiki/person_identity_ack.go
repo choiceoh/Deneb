@@ -80,3 +80,14 @@ func (s *Store) PersonCompanyDomains(relPath string) []string {
 	sort.Strings(domains)
 	return domains
 }
+
+// mailConflictAckToken is the ack token for "this sending address is not this
+// person" — namespaced so it can never collide with a company domain or a
+// duplicate-page path in the same IdentityReviewed list.
+func mailConflictAckToken(address string) string {
+	return "mail:" + strings.ToLower(strings.TrimSpace(address))
+}
+
+// MailConflictAckToken exposes the token to the card lane, which records the
+// operator's answer on the page.
+func MailConflictAckToken(address string) string { return mailConflictAckToken(address) }
