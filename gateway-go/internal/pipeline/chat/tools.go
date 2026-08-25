@@ -186,14 +186,14 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input rawJSON) 
 		toolport.OriginSinkFromContext(ctx).Mark()
 	}
 
-	output = r.capToolOutput(ctx, def, name, output, nestedExternal)
+	output, spillID := r.capToolOutput(ctx, def, name, output, nestedExternal)
 
 	// Invalidate caches when this tool may have modified the file system.
 	// Must run after execution and before the cache Set in finalizeToolOutput,
 	// or a call could re-cache the result it just invalidated.
 	invalidateCachesAfterTool(ctx, name, input, rc)
 
-	return r.finalizeToolOutput(ctx, rc, name, cacheKey, output, input, cacheable, wantCompress), nil
+	return r.finalizeToolOutput(ctx, rc, name, cacheKey, output, input, spillID, cacheable, wantCompress), nil
 }
 
 // checkToolPresetAllowed enforces the tool preset: reject tools not in the
@@ -300,7 +300,7 @@ func cachedToolResult(ctx context.Context, rc *RunCache, cacheKey, name string, 
 	// never runs (see ToolExecStats).
 	toolport.ToolExecStatsFromContext(ctx).RecordCacheHit(name)
 	if wantCompress && cached != "" {
-		return compressToolOutput(ctx, name, cached, slog.Default()), true
+		return compressToolOutput(ctx, name, cached, "", slog.Default()), true
 	}
 	return cached, true
 }
@@ -309,13 +309,13 @@ func cachedToolResult(ctx context.Context, rc *RunCache, cacheKey, name string, 
 // comprehension. Build errors and test failures are typically at the end of
 // output, while context (paths, invocations) is at the start. Keep both
 // visible.
-func (r *ToolRegistry) capToolOutput(ctx context.Context, def ToolDef, name, output string, nestedExternal bool) string {
+func (r *ToolRegistry) capToolOutput(ctx context.Context, def ToolDef, name, output string, nestedExternal bool) (string, string) {
 	maxOutput := agent.DefaultMaxOutput
 	if def.MaxOutput > 0 {
 		maxOutput = def.MaxOutput
 	}
 	if len(output) <= maxOutput {
-		return output
+		return output, ""
 	}
 	toolport.ToolExecStatsFromContext(ctx).RecordTruncated(name)
 	var spillID string
@@ -341,13 +341,13 @@ func (r *ToolRegistry) capToolOutput(ctx context.Context, def ToolDef, name, out
 			r.spillStore.MarkExternalOrigin(spillID)
 		}
 	}
-	return agent.TruncateHeadTail(output, maxOutput, spillID)
+	return agent.TruncateHeadTail(output, maxOutput, spillID), spillID
 }
 
 // finalizeToolOutput applies the post-execution output pipeline in order:
 // post-processors, run-cache store (after post-processing, before
 // compression), and agent-requested compression.
-func (r *ToolRegistry) finalizeToolOutput(ctx context.Context, rc *RunCache, name, cacheKey, output string, input json.RawMessage, cacheable, wantCompress bool) string {
+func (r *ToolRegistry) finalizeToolOutput(ctx context.Context, rc *RunCache, name, cacheKey, output string, input json.RawMessage, spillID string, cacheable, wantCompress bool) string {
 	if r.postProcess != nil {
 		output = r.postProcess.Apply(ctx, name, output)
 	}
@@ -355,7 +355,15 @@ func (r *ToolRegistry) finalizeToolOutput(ctx context.Context, rc *RunCache, nam
 		rc.SetWithScope(cacheKey, output, extractPathScope(input))
 	}
 	if wantCompress && output != "" {
-		output = compressToolOutput(ctx, name, output, slog.Default())
+		// A compressed result is a ≤30-line summary that REPLACES the output, so
+		// without a handle the detail is gone for good — the same failure the
+		// truncation path spills to avoid, and worse here because a truncation
+		// marker that did carry a handle gets summarized away. Spill first when
+		// capToolOutput did not already, then name the handle in the marker.
+		if spillID == "" && r.spillStore != nil {
+			spillID, _ = r.spillStore.Store(toolport.SessionKeyFromContext(ctx), name, output)
+		}
+		output = compressToolOutput(ctx, name, output, spillID, slog.Default())
 	}
 	return output
 }
