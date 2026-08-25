@@ -46,7 +46,6 @@ type (
 	Tier1Result             = wiki.Tier1Result
 	IndexEntry              = wiki.IndexEntry
 	ProjectStatus           = wiki.ProjectStatus
-	SiteFields              = wiki.SiteFields
 	ContactEnrichResult     = wiki.ContactEnrichResult
 	DealRecord              = wiki.DealRecord
 	DealRecordFilter        = wiki.DealRecordFilter
@@ -113,11 +112,6 @@ const (
 	FactStatusSuperseded        = wiki.FactStatusSuperseded
 	FactStatusTombstoned        = wiki.FactStatusTombstoned
 )
-
-// NormalizeSiteStatus accepts 후보/계약/개설/준공 or "" (미분류).
-func NormalizeSiteStatus(status string) (string, error) {
-	return wiki.NormalizeSiteStatus(status)
-}
 
 // Tier1Store is the prompt-injection read surface for high-importance pages.
 type Tier1Store interface {

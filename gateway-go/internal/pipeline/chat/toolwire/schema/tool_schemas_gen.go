@@ -1076,16 +1076,8 @@ func WikiToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: search (ripgrep full-text search), read (wiki page(s) — one via query, several at once via paths), index (master/category index), write (create/update page), write-site (현장 페이지 생성/편집 — project=프로젝트 폴더명, title=현장명, address/status/capacity/kinds + 공정 일정 계약일·공사개시일 등을 프로젝트/<project>/현장/<title>.md 에 기록. 미지정 필드는 보존되므로 계약일만 먼저 쓰고 준공검사일은 나중에 채워도 됨), seed-sites (기존 프로젝트 대표페이지의 sites를 현장 페이지 스텁으로 일괄 부트스트랩 — project 미지정이면 활성 프로젝트 전체. 주소·거래처·특성만 채우고 상태·용량·공정 일정은 빈 채로 두니 이후 write-site로 채운다. 멱등), log (append diary entry), daily (recent diary; date=YYYY-MM-DD로 특정 날짜 일지 — read 출처 각주 검증용), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명), ingest (외부 자료 캡처: query=URL — 웹페이지/유튜브를 요약+발췌와 함께 자료 페이지로 영속화. 사용자가 '기억해둬/저장해둬'라며 링크를 주면 web 대신 이걸 쓴다. project=연결 프로젝트명(선택), content=메모(선택); 같은 URL은 멱등, 갱신은 force=true)",
-				"enum":        []string{"search", "read", "index", "write", "write-site", "seed-sites", "log", "daily", "status", "close", "reopen", "ingest"},
-			},
-			"address": map[string]any{
-				"type":        "string",
-				"description": "write-site 전용: 이 현장의 정식 주소. sites와 같은 표기 규칙 '광역약칭 시/군 읍/면/동 [리]' (예: '전북 군산시 옥구읍 수산리'). 지도 배치 키",
-			},
-			"capacity": map[string]any{
-				"type":        "number",
-				"description": "write-site 전용: 이 현장의 용량(MW). 지도 핀 크기. 0/미지정이면 미기재",
+				"description": "Action: search (ripgrep full-text search), read (wiki page(s) — one via query, several at once via paths), index (master/category index), write (create/update page), log (append diary entry), daily (recent diary; date=YYYY-MM-DD로 특정 날짜 일지 — read 출처 각주 검증용), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명), ingest (외부 자료 캡처: query=URL — 웹페이지/유튜브를 요약+발췌와 함께 자료 페이지로 영속화. 사용자가 '기억해둬/저장해둬'라며 링크를 주면 web 대신 이걸 쓴다. project=연결 프로젝트명(선택), content=메모(선택); 같은 URL은 멱등, 갱신은 force=true)",
+				"enum":        []string{"search", "read", "index", "write", "log", "daily", "status", "close", "reopen", "ingest"},
 			},
 			"category": map[string]any{
 				"type":        "string",
@@ -1096,26 +1088,14 @@ func WikiToolSchema() map[string]any {
 				"type":        "string",
 				"description": "프로젝트 거래처 (프로젝트 대표페이지 write 전용) — 프로젝트 위계의 최상단 그룹핑. 작성 규칙: 계열사 단위 정식명 1개 (기아·현대차·LG전자·금호타이어 — 그룹명 아님, ㈜ 등 법인 접미어 없음, 거래 원장 페이지 표기와 일치 지향). 발주처/계약 상대가 확인되면 기입; 자체 개발 등 거래처 없는 프로젝트는 생략(추측 금지). 진행상황 모아보기가 이 값으로 그룹핑되고 회상 앵커가 거래처 언급을 소속 프로젝트들로 해석한다",
 			},
-			"completion_inspection": map[string]any{
-				"type":        "string",
-				"description": "write-site 전용 공정 일정: 준공검사일 YYYY-MM-DD",
-			},
 			"confidence": map[string]any{
 				"type":        "string",
 				"description": "Confidence level (write action): high (verified), medium (reasonable inference), low (uncertain)",
 				"enum":        []string{"high", "medium", "low"},
 			},
-			"construction_start": map[string]any{
-				"type":        "string",
-				"description": "write-site 전용 공정 일정: 공사개시일 YYYY-MM-DD",
-			},
 			"content": map[string]any{
 				"type":        "string",
 				"description": "Page body markdown (write action) or diary entry body (log action). In write bodies, link related pages inline with [[path-or-title]] (e.g. [[프로젝트/dgx-spark]] or [[홍길동]]); these become knowledge-graph edges — prefer over plain mentions. 출처 규율: 특정 소스(메일·자료·문서)에서 온 주장은 그 [[페이지]]나 ref를 병기하고, 출처 없는 합성 추론은 '> 합성:' 인용으로 시작한다 — 부유 주장 금지. 프로젝트/<이름>/로그.md에 쓰면 content가 날짜 H2 섹션으로 기존 로그에 append된다 — 새 항목만 보낼 것(전체 본문 재전송 금지); 전체 재작성이 정말 필요하면 force=true. 로그 섹션 제목은 '## [YYYY-MM-DD] <op> | <주제>' 꼴 권장(op: ingest/결정/회의/이슈…) — grep 가능한 로그 문법.",
-			},
-			"contract_date": map[string]any{
-				"type":        "string",
-				"description": "write-site 전용 공정 일정: 계약일 YYYY-MM-DD",
 			},
 			"cues": map[string]any{
 				"type":        "array",
@@ -1163,7 +1143,7 @@ func WikiToolSchema() map[string]any {
 			},
 			"kinds": map[string]any{
 				"type":        "array",
-				"description": "프로젝트 특성 — 2단 고정 체계 '1차' 또는 '1차/2차' (프로젝트 대표페이지 write 전용, 복수 허용): 태양광(발전소 사업 — 시공·개발·인허가 포함; 2차=토지/루프탑/수상/ESS — ESS 사업도 태양광), 기자재(공급; 2차=모듈/인버터/케이블/기타), 풍력(2차=육상/해상), 기타(2차=용역/협력). 2차를 모르면 1차만 적고, 확인되면 세분화. 어휘 밖 값은 드롭됨. write-site에서도 이 현장의 특성으로 쓰인다",
+				"description": "프로젝트 특성 — 2단 고정 체계 '1차' 또는 '1차/2차' (프로젝트 대표페이지 write 전용, 복수 허용): 태양광(발전소 사업 — 시공·개발·인허가 포함; 2차=토지/루프탑/수상/ESS — ESS 사업도 태양광), 기자재(공급; 2차=모듈/인버터/케이블/기타), 풍력(2차=육상/해상), 기타(2차=용역/협력). 2차를 모르면 1차만 적고, 확인되면 세분화. 어휘 밖 값은 드롭됨",
 				"items": map[string]any{
 					"type": "string",
 					"enum": []string{"태양광", "태양광/토지", "태양광/루프탑", "태양광/수상", "태양광/ESS", "기자재", "기자재/모듈", "기자재/인버터", "기자재/케이블", "기자재/기타", "풍력", "풍력/육상", "풍력/해상", "기타", "기타/용역", "기타/협력"},
@@ -1181,10 +1161,6 @@ func WikiToolSchema() map[string]any {
 				"minimum":     1,
 				"maximum":     400,
 			},
-			"module_delivery": map[string]any{
-				"type":        "string",
-				"description": "write-site 전용 공정 일정: 모듈입고 — 날짜 또는 기간('2026-08-01~2026-08-15')",
-			},
 			"paths": map[string]any{
 				"type":        "array",
 				"description": "Read several wiki pages in ONE call (read action) — after a search, pass every relevant page path here instead of read-per-page. Same forms as query (path or w: ref); up to 8 pages per call.",
@@ -1195,10 +1171,6 @@ func WikiToolSchema() map[string]any {
 			"plan": map[string]any{
 				"type":        "string",
 				"description": "search 전용 타입 질의 계획. 줄마다 lex:, vec:, hyde:, intent:, scope: 연산자를 사용한다. 첫 검색절은 기본 2배 가중치이며 scope는 결과 제한 전에 경로 prefix를 필터링한다. 예: 'lex: 대한전선 계약 일정\\nvec: payment milestone\\nintent: 대한전선 계약\\nscope: 프로젝트/대한전선'",
-			},
-			"pre_use_inspection": map[string]any{
-				"type":        "string",
-				"description": "write-site 전용 공정 일정: 사용전검사일 YYYY-MM-DD",
 			},
 			"program": map[string]any{
 				"type":        "string",
@@ -1246,11 +1218,6 @@ func WikiToolSchema() map[string]any {
 				"type":        "string",
 				"description": "write 전용(프로젝트 대표페이지): 프로젝트 사업 단계. 제안→견적→입찰→개발→계약협의→시공/납품→운영 진행, 종결/유실은 말단. 개발=자체개발 인허가, 납품=기자재 건의 계약 이행(시공의 기자재 대응). 현장 상세 문서는 개발 또는 계약협의부터 — 영업 단계는 sites 메타데이터까지만. 어휘 밖 값은 버려진다",
 				"enum":        []string{"제안", "견적", "입찰", "개발", "계약협의", "시공", "납품", "운영", "종결", "유실"},
-			},
-			"status": map[string]any{
-				"type":        "string",
-				"description": "write-site 전용: 현장 생애주기 단계 (후보→계약→개설→준공). 지도는 기본적으로 계약·개설·준공만 표시하고 후보는 숨긴다",
-				"enum":        []string{"후보", "계약", "개설", "준공"},
 			},
 			"summary": map[string]any{
 				"type":        "string",

@@ -243,7 +243,7 @@ func toolInputField(input []byte, field string) string {
 
 func isMailAnalysisBlockedWikiAction(action string) bool {
 	switch strings.ToLower(strings.TrimSpace(action)) {
-	case "write", "write-site", "seed-sites", "log", "close", "reopen", "ingest":
+	case "write", "log", "close", "reopen", "ingest":
 		return true
 	default:
 		return false

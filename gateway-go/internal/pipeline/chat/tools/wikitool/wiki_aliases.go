@@ -15,10 +15,6 @@ func normalizeWikiAction(raw string) string {
 		return "index"
 	case "쓰기":
 		return "write"
-	case "write_site", "writesite", "현장쓰기":
-		return "write-site"
-	case "seed_sites", "seedsites", "현장시드":
-		return "seed-sites"
 	case "로그":
 		return "log"
 	case "일기", "다이어리":

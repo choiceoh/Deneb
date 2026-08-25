@@ -1219,8 +1219,6 @@
      "read",
      "index",
      "write",
-     "write-site",
-     "seed-sites",
      "log",
      "daily",
      "status",
@@ -1228,7 +1226,7 @@
      "reopen",
      "ingest"
     ],
-    "description": "Action: search (ripgrep full-text search), read (wiki page(s) — one via query, several at once via paths), index (master/category index), write (create/update page), write-site (현장 페이지 생성/편집 — project=프로젝트 폴더명, title=현장명, address/status/capacity/kinds + 공정 일정 계약일·공사개시일 등을 프로젝트/<project>/현장/<title>.md 에 기록. 미지정 필드는 보존되므로 계약일만 먼저 쓰고 준공검사일은 나중에 채워도 됨), seed-sites (기존 프로젝트 대표페이지의 sites를 현장 페이지 스텁으로 일괄 부트스트랩 — project 미지정이면 활성 프로젝트 전체. 주소·거래처·특성만 채우고 상태·용량·공정 일정은 빈 채로 두니 이후 write-site로 채운다. 멱등), log (append diary entry), daily (recent diary; date=YYYY-MM-DD로 특정 날짜 일지 — read 출처 각주 검증용), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명), ingest (외부 자료 캡처: query=URL — 웹페이지/유튜브를 요약+발췌와 함께 자료 페이지로 영속화. 사용자가 '기억해둬/저장해둬'라며 링크를 주면 web 대신 이걸 쓴다. project=연결 프로젝트명(선택), content=메모(선택); 같은 URL은 멱등, 갱신은 force=true)"
+    "description": "Action: search (ripgrep full-text search), read (wiki page(s) — one via query, several at once via paths), index (master/category index), write (create/update page), log (append diary entry), daily (recent diary; date=YYYY-MM-DD로 특정 날짜 일지 — read 출처 각주 검증용), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명), ingest (외부 자료 캡처: query=URL — 웹페이지/유튜브를 요약+발췌와 함께 자료 페이지로 영속화. 사용자가 '기억해둬/저장해둬'라며 링크를 주면 web 대신 이걸 쓴다. project=연결 프로젝트명(선택), content=메모(선택); 같은 URL은 멱등, 갱신은 force=true)"
    },
    "query": {
     "type": "string",
@@ -1367,45 +1365,7 @@
       "기타/협력"
      ]
     },
-    "description": "프로젝트 특성 — 2단 고정 체계 '1차' 또는 '1차/2차' (프로젝트 대표페이지 write 전용, 복수 허용): 태양광(발전소 사업 — 시공·개발·인허가 포함; 2차=토지/루프탑/수상/ESS — ESS 사업도 태양광), 기자재(공급; 2차=모듈/인버터/케이블/기타), 풍력(2차=육상/해상), 기타(2차=용역/협력). 2차를 모르면 1차만 적고, 확인되면 세분화. 어휘 밖 값은 드롭됨. write-site에서도 이 현장의 특성으로 쓰인다"
-   },
-   "address": {
-    "type": "string",
-    "description": "write-site 전용: 이 현장의 정식 주소. sites와 같은 표기 규칙 '광역약칭 시/군 읍/면/동 [리]' (예: '전북 군산시 옥구읍 수산리'). 지도 배치 키"
-   },
-   "status": {
-    "type": "string",
-    "enum": [
-     "후보",
-     "계약",
-     "개설",
-     "준공"
-    ],
-    "description": "write-site 전용: 현장 생애주기 단계 (후보→계약→개설→준공). 지도는 기본적으로 계약·개설·준공만 표시하고 후보는 숨긴다"
-   },
-   "capacity": {
-    "type": "number",
-    "description": "write-site 전용: 이 현장의 용량(MW). 지도 핀 크기. 0/미지정이면 미기재"
-   },
-   "contract_date": {
-    "type": "string",
-    "description": "write-site 전용 공정 일정: 계약일 YYYY-MM-DD"
-   },
-   "construction_start": {
-    "type": "string",
-    "description": "write-site 전용 공정 일정: 공사개시일 YYYY-MM-DD"
-   },
-   "module_delivery": {
-    "type": "string",
-    "description": "write-site 전용 공정 일정: 모듈입고 — 날짜 또는 기간('2026-08-01~2026-08-15')"
-   },
-   "pre_use_inspection": {
-    "type": "string",
-    "description": "write-site 전용 공정 일정: 사용전검사일 YYYY-MM-DD"
-   },
-   "completion_inspection": {
-    "type": "string",
-    "description": "write-site 전용 공정 일정: 준공검사일 YYYY-MM-DD"
+    "description": "프로젝트 특성 — 2단 고정 체계 '1차' 또는 '1차/2차' (프로젝트 대표페이지 write 전용, 복수 허용): 태양광(발전소 사업 — 시공·개발·인허가 포함; 2차=토지/루프탑/수상/ESS — ESS 사업도 태양광), 기자재(공급; 2차=모듈/인버터/케이블/기타), 풍력(2차=육상/해상), 기타(2차=용역/협력). 2차를 모르면 1차만 적고, 확인되면 세분화. 어휘 밖 값은 드롭됨"
    },
    "supersedes": {
     "type": "array",
