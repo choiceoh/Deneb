@@ -38,7 +38,6 @@ func TestRekeyLegacyFactsMovesClaimVerbatimAndTombstonesOldIdentity(t *testing.T
 
 	var got *FactClaim
 	for _, c := range store.ActiveFacts("") {
-		c := c
 		switch c.Key {
 		case newKey:
 			got = &c
