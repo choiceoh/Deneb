@@ -772,8 +772,8 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 		messages = attachPersistedTails(params.SessionKey, messages)
 	}
 	boardState := ""
-	if !deps.briefcaseMode {
-		boardState = sessionBoardTail(sessionBlackboard(params.SessionKey, deps.now()))
+	if !deps.briefcaseMode && !params.EphemeralUser {
+		boardState = sessionBoardTail(peekSessionBlackboard(params.SessionKey))
 	}
 	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding, skillHints, boardState)
 	messages, tailInjected, cleanTarget, tailTargetIdx := injectTailAdditionsTracked(messages, tailAdds)

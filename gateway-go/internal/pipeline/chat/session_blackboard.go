@@ -72,6 +72,21 @@ func sessionBlackboard(sessionKey string, now time.Time) *toolport.Blackboard {
 	return entry.board
 }
 
+// peekSessionBlackboard returns the session's existing board WITHOUT creating
+// one — the tail render path must never mint a throwaway board just to render
+// it empty (and must not bump lastUsed: rendering is not use).
+func peekSessionBlackboard(sessionKey string) *toolport.Blackboard {
+	if sessionKey == "" || !sessionBoardEnabled() {
+		return nil
+	}
+	sessionBoards.mu.Lock()
+	defer sessionBoards.mu.Unlock()
+	if entry := sessionBoards.store[sessionKey]; entry != nil {
+		return entry.board
+	}
+	return nil
+}
+
 // clearSessionBlackboard drops the session's board (/reset, clean slate).
 func clearSessionBlackboard(sessionKey string) {
 	sessionBoards.mu.Lock()
