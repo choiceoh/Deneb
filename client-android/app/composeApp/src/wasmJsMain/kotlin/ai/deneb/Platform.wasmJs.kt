@@ -97,3 +97,6 @@ actual fun sendProactiveReportNotification(
     approveActionId: String?,
     rejectActionId: String?,
 ) = Unit
+
+/** No tray slot to clear off Android. */
+actual fun cancelWorkFeedNotification(itemId: String) = Unit

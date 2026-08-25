@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.cancelWorkFeedNotification
 import ai.deneb.sensing.readCurrentLocation
 import ai.deneb.sensing.readWorkUsageDigest
 import ai.deneb.ui.chat.WorkFeedItem
@@ -390,6 +391,9 @@ suspend fun DenebGatewayClient.runWorkFeedAction(
             items.map { if (it.id == payload.item.id) payload.item else it }
         }
     }
+    // The question was answered here, so the phone must stop showing it: the
+    // tray path cancels its own notification, the in-app path never did.
+    cancelWorkFeedNotification(itemId)
     // The "open" caller routes to its own dedicated conversation, so it opts out
     // of adopting the item's home session here (client:main for proactive cards —
     // see openWorkFeedItem). Other actions still follow the server-returned key.
@@ -424,6 +428,7 @@ suspend fun DenebGatewayClient.runWorkFeedActionDurable(itemId: String, actionId
             items.map { if (it.id == payload.item.id) payload.item else it }
         }
     }
+    cancelWorkFeedNotification(itemId)
     return true
 }
 
@@ -510,12 +515,17 @@ suspend fun DenebGatewayClient.rewriteWorkFeedCard(itemId: String): String? {
  */
 suspend fun DenebGatewayClient.markWorkFeedRead(itemId: String): Boolean {
     if (itemId.isBlank()) return false
-    return callRpc<JsonObject>(
+    val ok = callRpc<JsonObject>(
         "miniapp.workfeed.read",
         buildJsonObject {
             put("itemId", itemId)
         },
     ) != null
+    if (ok) {
+        // 보관 = 읽음. The card is handled, so its tray notification must go too.
+        cancelWorkFeedNotification(itemId)
+    }
+    return ok
 }
 
 /**

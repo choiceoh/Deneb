@@ -121,6 +121,16 @@ expect fun sendProactiveReportNotification(
 )
 
 /**
+ * Cancels the tray notification posted for a work-feed card once the card is
+ * settled INSIDE the app. Acting from the tray already cancels it
+ * (WorkFeedActionReceiver), but 승인·보관 pressed in the feed left the delivered
+ * notification standing — the operator answered and the phone kept showing the
+ * question. Cancels only when the tray slot still holds THIS item, so settling
+ * one card never clears another card's notification. No-op off Android.
+ */
+expect fun cancelWorkFeedNotification(itemId: String)
+
+/**
  * Executes a phone Intent action the gateway's phone_write tool dispatched over
  * the events stream (kind=phone_action). [action] is one of open_url / open_app /
  * share / message / dial / photo / alarm / timer; [args] carries that action's
