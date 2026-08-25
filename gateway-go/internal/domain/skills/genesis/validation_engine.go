@@ -164,8 +164,13 @@ func (v *SkillValidationEngine) EvaluateBehavior(ctx context.Context, skillName,
 		trace, err := v.runReplayExecutorWith(ctx, executor, model, body, tc.Replay)
 		if err != nil {
 			if v.logger != nil {
-				v.logger.Warn("genesis: behavioral replay executor failed, skipping gate",
-					"skill", skillName, "role", who, "error", err)
+				// Name the CASE, not just the skill. The failure is almost always
+				// a property of one case (an input the skill cannot act on), and
+				// without an id nobody can find which one to repair — the 2026-08
+				// journal carried eight of these across five skills with no way to
+				// tell them apart.
+				v.logger.Warn("genesis: replay case not executable",
+					"skill", skillName, "case", replayCaseLabel(tc), "role", who, "error", err)
 			}
 			return validationCaseScore{}, false
 		}
@@ -175,23 +180,39 @@ func (v *SkillValidationEngine) EvaluateBehavior(ctx context.Context, skillName,
 	// The original is scored TWICE on the same body. The two runs differ only by
 	// executor nondeterminism, so their gap is this instrument's own precision —
 	// measured per evolve rather than assumed.
+	// A case that cannot be executed is dropped from ALL THREE runs and the rest
+	// of the set still scores.
+	//
+	// This used to abort the whole gate — one unusable case returned an empty,
+	// un-evaluated result for the skill. That is how a single ill-posed replay
+	// case silently disabled a skill's behavioral gate for good: the executor
+	// answered "실제 YouTube URL이나 영상 요청 없이 …" (the case input names no
+	// video), the plan parse failed, and youtube-summary-cards stopped being
+	// gate-checked entirely. Measured 2026-08-26 the lifecycle ledger read
+	// evolved=0 across every skill.
+	//
+	// Dropping per case, not per skill, keeps the comparison honest: original,
+	// original-repeat, and candidate must score the SAME case set or their
+	// delta means nothing, so a failure in any of the three drops that case from
+	// all of them. If every case drops, cand.Total stays 0 and the result is
+	// un-evaluated exactly as before — a gate with no cases still must not pass.
 	var origA, origB, cand validationCaseScore
+	var skipped int
 	for _, tc := range evaluable {
-		a, ok := runScored(originalBody, tc, "original")
-		if !ok {
-			return SkillBehaviorResult{}, nil
-		}
-		b, ok := runScored(originalBody, tc, "original-repeat")
-		if !ok {
-			return SkillBehaviorResult{}, nil
-		}
-		c, ok := runScored(candidateBody, tc, "candidate")
-		if !ok {
-			return SkillBehaviorResult{}, nil
+		a, aok := runScored(originalBody, tc, "original")
+		b, bok := runScored(originalBody, tc, "original-repeat")
+		c, cok := runScored(candidateBody, tc, "candidate")
+		if !aok || !bok || !cok {
+			skipped++
+			continue
 		}
 		origA.add(a)
 		origB.add(b)
 		cand.add(c)
+	}
+	if skipped > 0 && v.logger != nil {
+		v.logger.Warn("genesis: replay cases unusable, scored the remainder",
+			"skill", skillName, "skipped", skipped, "scored", len(evaluable)-skipped)
 	}
 
 	noise := origA.Passed - origB.Passed
@@ -508,4 +529,22 @@ func skillBodyOnly(content string) string {
 		return content[bodyOffset:]
 	}
 	return content
+}
+
+// replayCaseLabel identifies a validation case in a log line: its id when it
+// has one, else a bounded head of the replay input so the case is still
+// findable in the corpus.
+func replayCaseLabel(tc SkillValidationCaseRecord) string {
+	if id := strings.TrimSpace(tc.ID); id != "" {
+		return id
+	}
+	head := strings.TrimSpace(tc.Replay.Input)
+	r := []rune(strings.ReplaceAll(head, "\n", " "))
+	if len(r) > 60 {
+		return string(r[:60]) + "…"
+	}
+	if len(r) == 0 {
+		return "(빈 입력)"
+	}
+	return string(r)
 }
