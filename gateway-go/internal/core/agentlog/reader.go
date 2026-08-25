@@ -248,6 +248,7 @@ type ToolStat struct {
 	AvgMs   int64  `json:"avgMs"`
 
 	Repaired         int   `json:"repaired,omitempty"`
+	UnknownArgs      int   `json:"unknownArgs,omitempty"`
 	Unknown          int   `json:"unknown,omitempty"`
 	Blocked          int   `json:"blocked,omitempty"`
 	CacheHits        int   `json:"cacheHits,omitempty"`
@@ -368,6 +369,9 @@ func (a *aggregateAccumulator) foldRunEnd(raw json.RawMessage) {
 	}
 	for name, count := range data.RepairedToolCalls {
 		statFor(a.tools, name).Repaired += count
+	}
+	for name, count := range data.UnknownArgToolCalls {
+		statFor(a.tools, name).UnknownArgs += count
 	}
 	for name, count := range data.CacheHitToolCalls {
 		statFor(a.tools, name).CacheHits += count

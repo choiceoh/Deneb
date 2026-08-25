@@ -242,6 +242,11 @@ type RunEndData struct {
 	// rides run.end instead. tool_argrepair.go gates schema-aware repairs on
 	// measuring this rate first; Aggregate folds it into ToolStat.Repaired.
 	RepairedToolCalls map[string]int `json:"repairedToolCalls,omitempty"`
+	// UnknownArgToolCalls counts calls carrying schema-undeclared arguments
+	// per tool name (chat.unknownToolArgKeys fired). The harness drops those
+	// keys silently, so a hallucinated filter reads to the model as applied;
+	// this is the rate that decides whether to surface it in tool results.
+	UnknownArgToolCalls map[string]int `json:"unknownArgToolCalls,omitempty"`
 	// CacheHitToolCalls counts run-cache hits per tool name. A hit never
 	// reaches the tool fn, so turn.tool durations/output stats undercount
 	// real demand; this field closes the gap and measures whether the

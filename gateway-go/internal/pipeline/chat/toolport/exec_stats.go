@@ -26,6 +26,11 @@ type ToolExecStats struct {
 	// the post-truncation length — so the signal only exists here. Feeds
 	// per-tool MaxOutput budget tuning (tool_schemas.json max_output).
 	truncated map[string]int
+	// unknownArgs counts tool calls that carried a top-level argument the
+	// tool's schema does not declare. The harness drops those keys silently,
+	// so the model can believe it filtered when it did not; this counter is
+	// the measurement that gates surfacing it (chat/tool_argcheck.go).
+	unknownArgs map[string]int
 }
 
 // NewToolExecStats creates an empty collector.
@@ -69,6 +74,13 @@ func (s *ToolExecStats) RecordRepaired(tool string) {
 	}
 }
 
+// RecordUnknownArgs counts one call carrying schema-undeclared arguments.
+func (s *ToolExecStats) RecordUnknownArgs(tool string) {
+	if s != nil {
+		s.bump(&s.unknownArgs, tool)
+	}
+}
+
 // RecordCacheHit counts one run-cache hit for the named tool.
 func (s *ToolExecStats) RecordCacheHit(tool string) {
 	if s != nil {
@@ -89,6 +101,14 @@ func (s *ToolExecStats) RepairedCounts() map[string]int {
 		return nil
 	}
 	return s.snapshot(&s.repaired)
+}
+
+// UnknownArgCounts returns a copy of the per-tool unknown-argument counters.
+func (s *ToolExecStats) UnknownArgCounts() map[string]int {
+	if s == nil {
+		return nil
+	}
+	return s.snapshot(&s.unknownArgs)
 }
 
 // CacheHitCounts returns a copy of the per-tool cache-hit counters.

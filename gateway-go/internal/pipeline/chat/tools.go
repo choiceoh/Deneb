@@ -125,7 +125,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input rawJSON) 
 		return stub, nil
 	}
 
-	input, wantCompress, err := prepareToolInput(ctx, name, input, briefcasePreset)
+	input, wantCompress, err := prepareToolInput(ctx, name, def.InputSchema, input, briefcasePreset)
 	if err != nil {
 		return "", err
 	}
@@ -244,7 +244,7 @@ func dryRunShortCircuit(ctx context.Context, name string, input json.RawMessage)
 // prepareToolInput runs the pre-execution input pipeline in order: argument
 // repair, briefcase metadata rejection, compress-flag extraction, and $ref
 // resolution (wait for the referenced tool result and inject it).
-func prepareToolInput(ctx context.Context, name string, input json.RawMessage, briefcasePreset bool) (json.RawMessage, bool, error) {
+func prepareToolInput(ctx context.Context, name string, schema map[string]any, input json.RawMessage, briefcasePreset bool) (json.RawMessage, bool, error) {
 	// Repair common malformed-JSON argument patterns from open-weight models
 	// (markdown fences, Python literals, trailing commas) before any input
 	// parsing. Only invalid JSON is touched, and only when the repair makes it
@@ -258,6 +258,15 @@ func prepareToolInput(ctx context.Context, name string, input json.RawMessage, b
 			toolport.ToolExecStatsFromContext(ctx).RecordRepaired(name)
 			input = repaired
 		}
+	}
+	// Measure schema-undeclared arguments (tool_argcheck.go). The keys are
+	// dropped either way — this only makes the silent drop countable, so the
+	// decision to tell the model rests on a rate rather than one anecdote.
+	// Values are never logged; argument content may be the user's.
+	if unknown := unknownToolArgKeys(schema, input); len(unknown) > 0 {
+		slog.Warn("tool call carried arguments the schema does not declare",
+			"tool", name, "keys", strings.Join(unknown, ","))
+		toolport.ToolExecStatsFromContext(ctx).RecordUnknownArgs(name)
 	}
 	if briefcasePreset && (hasTopLevelJSONKey(input, "compress") || hasTopLevelJSONKey(input, "$ref") || bytes.Contains(input, []byte(`"$board.`))) {
 		return input, false, fmt.Errorf("tool %q uses metadata forbidden by the briefcase preset", name)
