@@ -386,7 +386,8 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		EnqueuePend: func(sessionKey string, params RunParams) {
 			h.startOrQueueRun("subnotify-"+params.ClientRunID, params, false)
 		},
-		Sessions: func() *session.Manager { return h.sessions },
+		Sessions:          func() *session.Manager { return h.sessions },
+		LastAssistantText: h.lastAssistantTextFromTranscript,
 	})
 	// Cascade cleanup: when a parent session is killed or deleted, interrupt and
 	// kill its running children. Subscribed for the handler's lifetime (same as

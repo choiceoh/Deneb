@@ -99,6 +99,7 @@ type SubagentNotifier struct {
 	startRun               func(reqID string, params RunParams, isSteer bool)
 	enqueuePend            func(sessionKey string, params RunParams)
 	getSessions            func() *session.Manager
+	lastAssistantText      func(sessionKey string) string
 	delivery               func(string) *toolport.DeliveryContext
 	parentTerminatedReason string
 	unsubscribe            func()
@@ -106,11 +107,16 @@ type SubagentNotifier struct {
 
 // SubagentNotifierDeps holds the dependencies for SubagentNotifier.
 type SubagentNotifierDeps struct {
-	Logger                 *slog.Logger
-	HasActiveRun           func(sessionKey string) bool
-	StartRun               func(reqID string, params RunParams, isSteer bool)
-	EnqueuePend            func(sessionKey string, params RunParams)
-	Sessions               func() *session.Manager
+	Logger       *slog.Logger
+	HasActiveRun func(sessionKey string) bool
+	StartRun     func(reqID string, params RunParams, isSteer bool)
+	EnqueuePend  func(sessionKey string, params RunParams)
+	Sessions     func() *session.Manager
+	// LastAssistantText reads a child's final assistant text from the
+	// transcript. session.LastOutput can still be empty when the completion
+	// notification is built, and the subagents tool has carried this exact
+	// fallback for the same reason — the notifier now shares it.
+	LastAssistantText      func(sessionKey string) string
 	Delivery               func(string) *toolport.DeliveryContext
 	ParentTerminatedReason string
 }
@@ -125,6 +131,7 @@ func NewSubagentNotifier(deps SubagentNotifierDeps) *SubagentNotifier {
 		startRun:               deps.StartRun,
 		enqueuePend:            deps.EnqueuePend,
 		getSessions:            deps.Sessions,
+		lastAssistantText:      deps.LastAssistantText,
 		delivery:               deps.Delivery,
 		parentTerminatedReason: deps.ParentTerminatedReason,
 	}
@@ -231,7 +238,7 @@ func (sn *SubagentNotifier) getOrCreateQueue(parentKey string) *notifyQueue {
 	q := &notifyQueue{
 		capacity: notifyQueueCap,
 		flushFn: func(items []notifyItem) {
-			notification := formatBatchNotification(items)
+			notification := formatBatchNotification(sn.refreshOutputs(items))
 
 			if sn.hasActiveRun(parentKey) {
 				sn.pushNotification(parentKey, notification)
@@ -459,4 +466,34 @@ func abbreviateSessionKey(key string) string {
 		return "cl:" + key[len(clientPrefix):]
 	}
 	return key
+}
+
+// refreshOutputs re-reads each child's final text at FLUSH time. The queue is
+// filled from the terminal status event, which fires before handleRunSuccess
+// stores session.LastOutput — so an item enqueued at that instant carries an
+// empty output and the parent gets "Synthesize the result below" with nothing
+// below it (observed 2026-08-26: the child's report was retrievable through the
+// subagents tool the whole time, just absent from the notification the parent
+// was told to synthesize). Reading again a moment later closes that window
+// without moving the event.
+func (sn *SubagentNotifier) refreshOutputs(items []notifyItem) []notifyItem {
+	sm := sn.getSessions()
+	if sm == nil {
+		return items
+	}
+	for i := range items {
+		if items[i].lastOutput != "" || items[i].childKey == "" {
+			continue
+		}
+		if child := sm.Get(items[i].childKey); child != nil {
+			items[i].lastOutput = child.LastOutput
+			if items[i].status == "" {
+				items[i].status = child.Status
+			}
+		}
+		if items[i].lastOutput == "" && sn.lastAssistantText != nil {
+			items[i].lastOutput = sn.lastAssistantText(items[i].childKey)
+		}
+	}
+	return items
 }
