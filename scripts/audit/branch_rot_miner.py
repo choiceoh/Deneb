@@ -79,9 +79,8 @@ EXCLUDED_BRANCHES = ("main", "master")
 # 2026-08-02). Describe the flow generically; the dispatch session prompt
 # already names the concrete landing procedure.
 _RISK_NOTE = (
-    "Branch recovery touches only the stale branch and its worktree; main moves "
-    "exclusively through a green-gated PR landed via the repository's standard "
-    "landing flow."
+    "브랜치 회수는 해당 낡은 브랜치와 그 워크트리만 건드립니다. main은 오직 "
+    "게이트가 그린인 PR을 레포 표준 랜딩 절차로 반영할 때만 움직입니다."
 )
 
 
@@ -282,38 +281,34 @@ def rot_candidates(
             facts += f" | summary: {summary}"
         if squash_commit and squash_commit != branch:
             proposed = (
-                f"This branch's aggregate diff already landed on origin/main as "
-                f"{squash_commit[:12]} (identical patch-id; squash merge). Verify with "
-                f"`git -C {checkout} diff origin/main...{branch}` context if desired, "
-                f"then remove the worktree and delete the branch — there is no source "
-                f"change left to recover."
+                f"이 브랜치의 전체 diff는 이미 {squash_commit[:12]} 로 origin/main 에 "
+                f"반영됐습니다(patch-id 동일 · 스쿼시 머지). 필요하면 "
+                f"`git -C {checkout} diff origin/main...{branch}` 로 확인한 뒤 워크트리를 "
+                f"제거하고 브랜치를 삭제한다 — 회수할 소스 변경이 남아 있지 않다."
             )
         elif integrated:
             proposed = (
-                f"wt reports this branch's tree content already integrated into "
-                f"origin/main (trees_match). Verify with `git -C {checkout} diff "
-                f"origin/main...{branch}` — if empty, remove the worktree and "
-                f"delete the branch; if NOT empty, treat it as a recovery "
-                f"candidate instead."
+                f"wt는 이 브랜치의 트리 내용이 이미 origin/main 에 통합됐다고 봅니다"
+                f"(trees_match). `git -C {checkout} diff origin/main...{branch}` 로 "
+                f"확인해 비어 있으면 워크트리를 제거하고 브랜치를 삭제하고, 비어 있지 "
+                f"않으면 회수 대상으로 다룬다."
             )
         else:
             proposed = (
-                f"Decide this branch's fate: (1) rebase {branch} onto "
-                f"origin/main in its worktree; (2) still coherent and wanted → "
-                f"run the scoped gates and land through a PR via the standard "
-                f"landing flow; (3) superseded or obsolete → delete the worktree and "
-                f"branch, recording why; (4) partially valuable → cherry-pick "
-                f"the valuable slice onto a fresh branch and retire the rest. "
-                f"Do not leave the branch in a third limbo state."
+                f"이 브랜치의 거취를 정한다: (1) 워크트리에서 {branch} 를 origin/main "
+                f"위로 리베이스한다. (2) 아직 쓸모 있고 일관되면 → 해당 레인 게이트를 "
+                f"돌리고 표준 랜딩 절차로 PR을 통해 반영한다. (3) 대체됐거나 폐기 대상이면 "
+                f"→ 워크트리와 브랜치를 삭제하고 이유를 남긴다. (4) 일부만 가치 있으면 "
+                f"→ 그 부분만 새 브랜치로 체리픽하고 나머지는 정리한다. "
+                f"어중간한 상태로 남겨 두지 않는다."
             )
         candidate = {
             "scope": "code",
             "skillName": "branch-rot",
-            "title": f"stale branch {flavor}: {branch} (+{ahead}, {age:.0f}d)",
+            "title": f"방치된 브랜치 {flavor}: {branch} (+{ahead}, {age:.0f}일)",
             "candidate": (
-                f"Branch '{branch}' has been {ahead} commit(s) ahead of main for "
-                f"{age:.0f} days with no open PR — parked work decaying in "
-                f"{checkout}."
+                f"브랜치 '{branch}' 가 열린 PR 없이 {age:.0f}일 동안 main보다 "
+                f"{ahead}커밋 앞서 있습니다 — {checkout} 에서 삭고 있는 작업입니다."
             ),
             "evidence": facts,
             "reason": (

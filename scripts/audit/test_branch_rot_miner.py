@@ -111,7 +111,7 @@ class RotCandidateTests(unittest.TestCase):
         self.assertIn("retire", retire["title"])
         self.assertIn("trees_match", retire["proposedChange"])
         self.assertIn("recover", recover["title"])
-        self.assertIn("standard landing flow", recover["proposedChange"])
+        self.assertIn("표준 랜딩 절차", recover["proposedChange"])
         for cand in got:
             self.assertEqual(cand["scope"], "code")
             self.assertEqual(cand["targetFiles"], [])

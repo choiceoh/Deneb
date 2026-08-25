@@ -148,7 +148,7 @@ class MineTest(unittest.TestCase):
         self.assertTrue(top["source"].startswith("sop-mining:"))
         self.assertIn("successful action-normalized flows", top["evidence"])
         self.assertIn("at least 15 tool calls", top["evidence"])
-        self.assertIn("prompt/completion tokens", top["proposedChange"])
+        self.assertIn("프롬프트/컴플리션 토큰", top["proposedChange"])
         self.assertTrue(top["targetFiles"][0].endswith(".go"))
         self.assertEqual(top["source"], mine_sops(seqs)[0]["source"])
 
@@ -189,7 +189,7 @@ class MineTest(unittest.TestCase):
         mined = mine_sops(self._sequences(SOP_MIN_SESSIONS + 1, 4))
         flows = [c["title"] for c in mined]
         for title in flows:
-            body = title.removeprefix("SOP candidate: ")
+            body = title.removeprefix("절차 후보(SOP): ")
             self.assertFalse(any(
                 body in other and title != other for other in flows
             ), f"subsumed gram leaked: {flows}")

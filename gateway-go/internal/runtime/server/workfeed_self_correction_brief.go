@@ -1,19 +1,22 @@
 package server
 
-// Korean decision brief for a self-correction card.
+// Korean decision brief for a self-correction card — the FALLBACK half of the
+// "operator must be able to read what they approve" contract.
 //
-// The card frame was always Korean, but the substance was not: the producers
-// (health/deadcode/branch-rot miners, evolver drafts, runtime-error mining)
-// write their Title/Candidate/ProposedChange/Risk in English, so a card read
-// "Process termination or panic in library code bypasses recovery…" under a
-// 승인/거절 pair. The operator cannot decide what they cannot read, and an
-// undecidable card is worse than none — it accumulates.
+// The primary fix is upstream: every deterministic producer (health/deadcode/
+// branch-rot/tool-quality/sop miners, the evolver and runtime-error drafts)
+// now authors its Title/Candidate/ProposedChange/Risk in Korean, and the
+// skill-lifecycle tool schema asks the model for Korean. What remains English
+// is what Deneb does not author: the codebase-health bench observation copied
+// verbatim into a health-finding candidate, and prose from a model that
+// ignored the schema. Those records still arrive undecidable, so this renders
+// a three-line Korean brief (무엇/이유/승인하면) above the record.
 //
-// So the card leads with a Korean brief: what is being proposed, why it came
-// up, and what 승인 actually causes. The English original stays verbatim below
-// it — the evidence lines are file paths and identifiers, and a translated
-// path is a broken one. Best-effort by construction: no model, a timeout, or
-// an empty answer simply yields the previous body, never a blocked card.
+// The English original stays verbatim below it — evidence lines are file paths
+// and identifiers, and a translated path is a broken one. Best-effort by
+// construction: an already-Korean record skips the call entirely, and no model,
+// a timeout, or a malformed answer simply yields the previous body, never a
+// blocked card.
 
 import (
 	"context"
@@ -64,7 +67,7 @@ func (s *Server) selfCorrectionBrief(record genesis.SelfCorrectionCandidateRecor
 		return ""
 	}
 	source := selfCorrectionBriefSource(record)
-	if source == "" {
+	if source == "" || selfCorrectionAlreadyKorean(record) {
 		return ""
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), selfCorrectionBriefTimeout)
@@ -124,4 +127,26 @@ func sanitizeSelfCorrectionBrief(out string) string {
 		return ""
 	}
 	return strings.Join(kept[:3], "\n")
+}
+
+// selfCorrectionAlreadyKorean reports whether the record's decision-bearing
+// fields are already Korean, in which case a brief would restate what the card
+// says. Title alone is not enough — a Korean title over an English body is
+// exactly the half-translated card the operator could not act on.
+func selfCorrectionAlreadyKorean(record genesis.SelfCorrectionCandidateRecord) bool {
+	for _, field := range []string{record.Title, record.Candidate, record.ProposedChange} {
+		if strings.TrimSpace(field) != "" && !containsHangul(field) {
+			return false
+		}
+	}
+	return containsHangul(record.Title) || containsHangul(record.Candidate)
+}
+
+func containsHangul(s string) bool {
+	for _, r := range s {
+		if r >= 0xAC00 && r <= 0xD7A3 {
+			return true
+		}
+	}
+	return false
 }

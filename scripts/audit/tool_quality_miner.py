@@ -113,10 +113,9 @@ EXPECTED_MS = {
 TOOLREG_HUB = "gateway-go/internal/pipeline/chat/toolreg/core.go"
 
 _RISK_NOTE = (
-    "propose-only; tighten the tool's DESCRIPTION (and input schema only if a "
-    "field is genuinely wrong) to reduce the observed rate — never remove the "
-    "tool or widen its permission surface. Re-run observe.behavior after the "
-    "change and confirm the rate drops before landing."
+    "제안 전용입니다. 관측된 비율을 낮추도록 그 도구의 설명(정말 잘못된 필드가 있을 "
+    "때만 입력 스키마까지)을 다듬습니다 — 도구를 없애거나 권한 표면을 넓히면 안 됩니다. "
+    "변경 후 observe.behavior 를 다시 돌려 비율이 내려간 것을 확인하고 반영합니다."
 )
 
 
@@ -159,11 +158,11 @@ def tool_quality_candidates(tools: list[dict[str, Any]]) -> list[dict[str, Any]]
         scored.append((impact, {
             "scope": "code",
             "skillName": "tool-quality",
-            "title": f"tool description/schema quality: {name} ({head})",
+            "title": f"도구 설명·스키마 품질: {name} ({head})",
             "candidate": (
-                f"The '{name}' tool shows {head} over {calls} calls — the model is "
-                f"repeatedly misusing it, which points at a misleading description or "
-                f"input schema rather than a runtime fault."
+                f"'{name}' 도구가 {calls}회 호출에서 {head} 를 보입니다 — 모델이 반복해서 "
+                f"잘못 쓰고 있으며, 이는 런타임 결함이라기보다 설명이나 입력 스키마가 "
+                f"오해를 부른다는 신호입니다."
             ),
             "evidence": (
                 f"observe.behavior {WINDOW_DAYS}d: {name} calls={calls} errors={errors} "
@@ -175,10 +174,10 @@ def tool_quality_candidates(tools: list[dict[str, Any]]) -> list[dict[str, Any]]
                       "tool-description propose-only surface)",
             "targetFiles": [TOOLREG_HUB],
             "proposedChange": (
-                f"Locate the ToolDef.Description (and input schema) for '{name}' — start at "
-                f"{TOOLREG_HUB}, or grep the tool name across internal/pipeline/chat — and "
-                f"tighten it to reduce the observed {head}: clarify required arguments, value "
-                f"formats, and when-to-use so the model stops misusing it."
+                f"'{name}' 의 ToolDef.Description(과 입력 스키마)을 찾아 — {TOOLREG_HUB} 에서 "
+                f"시작하거나 internal/pipeline/chat 전반에서 도구 이름을 검색 — 관측된 "
+                f"{head} 를 줄이도록 다듬는다: 필수 인자·값 형식·언제 쓰는지를 분명히 해 "
+                f"모델이 오용을 멈추게 한다."
             ),
             "risk": _RISK_NOTE,
             # :desc suffix so a description candidate and a :latency candidate for
@@ -206,10 +205,9 @@ def tool_quality_candidates(tools: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 _PERF_RISK_NOTE = (
-    "propose-only; investigate the tool's implementation for the latency source "
-    "(unbounded work, missing cache, serial where parallel is safe) — never widen "
-    "its permission surface or weaken its result. Re-run observe.behavior after the "
-    "change and confirm the latency recovers before landing."
+    "제안 전용입니다. 지연의 원인(경계 없는 작업·캐시 부재·병렬로 안전한데 직렬)을 "
+    "구현에서 찾습니다 — 권한 표면을 넓히거나 결과를 약화시키면 안 됩니다. 변경 후 "
+    "observe.behavior 를 다시 돌려 지연이 회복된 것을 확인하고 반영합니다."
 )
 
 
@@ -245,11 +243,10 @@ def latency_candidates(recent: list[dict[str, Any]],
         scored.append((impact, {
             "scope": "code",
             "skillName": "tool-quality",
-            "title": f"tool latency: {name} slow ({head})",
+            "title": f"도구 지연: {name} 느림 ({head})",
             "candidate": (
-                f"The '{name}' tool is too slow over {calls} calls — {head}. Latency this "
-                f"far above the tool's expectation (or a clear regression) is a performance "
-                f"defect in the tool's implementation, not a description problem."
+                f"'{name}' 도구가 {calls}회 호출에서 너무 느립니다 — {head}. 기대치를 이만큼 "
+                f"넘는 지연(또는 분명한 회귀)은 설명 문제가 아니라 구현의 성능 결함입니다."
             ),
             "evidence": (
                 f"observe.behavior {RECENT_DAYS}d vs {WINDOW_DAYS}d baseline: {name} "
@@ -259,10 +256,10 @@ def latency_candidates(recent: list[dict[str, Any]],
                       "or regressed vs its baseline (RSI surface expansion — tool perf)",
             "targetFiles": [],  # impl file varies per tool; the proposedChange points the way
             "proposedChange": (
-                f"Find the '{name}' tool implementation (grep the tool name in "
-                f"internal/pipeline/chat/tools) and reduce its latency: bound the work, add "
-                f"or fix caching, or parallelize safe steps. Confirm avgMs recovers below "
-                f"{ceiling}ms via observe.behavior after the change."
+                f"'{name}' 도구 구현을 찾아(internal/pipeline/chat/tools 에서 도구 이름 검색) "
+                f"지연을 줄인다: 작업에 경계를 두거나, 캐시를 넣거나 고치거나, 안전한 단계를 "
+                f"병렬화한다. 변경 후 observe.behavior 로 avgMs 가 {ceiling}ms 아래로 "
+                f"회복되는지 확인한다."
             ),
             "risk": _PERF_RISK_NOTE,
             "source": f"{SOURCE_PREFIX}:{name}:latency",

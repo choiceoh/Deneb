@@ -175,3 +175,25 @@ func TestSelfCorrectionCardBodyLeadsWithKoreanBriefAndKeepsOriginal(t *testing.T
 		t.Errorf("요약 없을 때 빈 섹션이 남음: %q", plain)
 	}
 }
+
+// Producers now author Korean, so the brief must stay out of the way — and a
+// half-translated record (Korean title, English body) is exactly the card the
+// operator could not act on, so that one still gets a brief.
+func TestSelfCorrectionAlreadyKorean(t *testing.T) {
+	korean := genesis.SelfCorrectionCandidateRecord{
+		Title:          "죽은 코드: chunkText",
+		Candidate:      "internal/domain/filestore/semindex.go 의 'chunkText' 가 도달 불가입니다.",
+		ProposedChange: "'chunkText' 를 삭제하고 감사를 다시 돌린다.",
+	}
+	if !selfCorrectionAlreadyKorean(korean) {
+		t.Error("한국어 기록에 요약을 또 붙임")
+	}
+	halfway := korean
+	halfway.Candidate = "'chunkText' in semindex.go is unreachable from every gateway binary."
+	if selfCorrectionAlreadyKorean(halfway) {
+		t.Error("영어 본문이 남은 기록을 한국어로 판정함")
+	}
+	if selfCorrectionAlreadyKorean(genesis.SelfCorrectionCandidateRecord{Title: "dead code: chunkText"}) {
+		t.Error("영어 기록을 한국어로 판정함")
+	}
+}

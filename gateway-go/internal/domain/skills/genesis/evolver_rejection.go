@@ -69,8 +69,8 @@ func (e *Evolver) queueRejectedEvolveValidationDraft(skillName, reason, source s
 	if _, err := e.tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		Scope:     "test",
 		SkillName: strings.TrimSpace(skillName),
-		Title:     "Promote rejected evolve into held-out validation",
-		Candidate: "Rejected evolve should become a validation case for " + target,
+		Title:     "기각된 진화를 held-out 검증 케이스로 승격",
+		Candidate: "기각된 진화를 " + target + " 에 대한 검증 케이스로 만들어야 합니다.",
 		Evidence:  evidence,
 		Reason:    reason,
 		// The edit surface is the validation-case DATA, not the replay engine:
@@ -80,8 +80,8 @@ func (e *Evolver) queueRejectedEvolveValidationDraft(skillName, reason, source s
 		TargetFiles: []string{
 			"~/.deneb/data/skill_validation_cases.jsonl",
 		},
-		ProposedChange: "Review the rejected candidate and add a held-out SkillValidationCaseRecord (validation_replay.go contract) that fails the weak rewrite before any similar evolve is allowed.",
-		Risk:           "Do not auto-apply the rejected body; only convert stable observed behavior into a test/replay assertion.",
+		ProposedChange: "기각된 후보를 살펴, 그 약한 재작성이 실패하도록 하는 held-out SkillValidationCaseRecord(validation_replay.go 계약)를 추가한다 — 비슷한 진화가 다시 통과하지 못하게.",
+		Risk:           "기각된 본문 자체를 적용하면 안 됩니다. 안정적으로 관측된 동작만 테스트/리플레이 단언으로 옮깁니다.",
 		Source:         rejectedEvolveDraftSource + ":" + strings.TrimSpace(source),
 	}); err != nil && e.logger != nil {
 		e.logger.Warn("evolver: rejected evolve validation draft failed",
@@ -217,14 +217,14 @@ func (e *Evolver) queueRepeatedPatchFirstReviewDraft(skillName, reason, source s
 	if _, err := e.tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		Scope:     "prompt",
 		SkillName: skillName,
-		Title:     "Evolve repeatedly rejected by patch-first gate",
-		Candidate: fmt.Sprintf("Evolve for %s repeatedly generated rewrites broader than the Hermes patch-first budget. Review splitting the skill body into smaller sections and/or strengthening the evolve prompt's section-cap guidance so candidates stay within %d changed sections.",
+		Title:     "patch-first 게이트가 진화를 반복 기각함",
+		Candidate: fmt.Sprintf("%s 의 진화가 Hermes patch-first 예산보다 넓은 재작성을 계속 만들어냅니다. 스킬 본문을 더 작은 섹션으로 쪼개거나 진화 프롬프트의 섹션 상한 안내를 강화해, 후보가 변경 섹션 %d개 안에 머물게 해야 합니다.",
 			skillName, guardrails.MaxChangedSections),
 		Evidence:       strings.Join(evidence, "\n"),
 		Reason:         reason,
 		TargetFiles:    targets,
-		ProposedChange: "Review the skill's section layout (split broad sections so a targeted patch stays under the changed-section cap) or add explicit section-cap guidance to the evolve prompt for this skill. Do not relax the patch-first gate and do not apply any of the rejected bodies.",
-		Risk:           "Review-only structural observation; the gate itself is working as designed. Widening skillHermesMaxChangedSections instead of fixing structure would reopen broad-rewrite risk.",
+		ProposedChange: "스킬의 섹션 구성을 손본다(넓은 섹션을 쪼개 좁은 패치가 변경 섹션 상한 아래로 떨어지게) 또는 이 스킬용 진화 프롬프트에 섹션 상한 안내를 명시한다. patch-first 게이트를 완화하거나 기각된 본문을 적용하면 안 된다.",
+		Risk:           "구조에 대한 관찰일 뿐이며 게이트 자체는 설계대로 동작 중입니다. 구조를 고치는 대신 skillHermesMaxChangedSections를 넓히면 광범위 재작성 위험이 되살아납니다.",
 		Source:         skillPatchFirstRepeatSource + ":" + strings.TrimSpace(source),
 	}); err != nil && e.logger != nil {
 		e.logger.Warn("evolver: patch-first repeat draft failed",

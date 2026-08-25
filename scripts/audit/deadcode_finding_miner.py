@@ -73,10 +73,10 @@ MAX_PER_RUN = 3
 _NEW_LINE = re.compile(r"^\s*\+\s+(?P<file>\S+)\s+::\s+(?P<symbol>.+?)\s*$")
 
 _RISK_NOTE = (
-    "Deadcode ignores _test.go, so confirm the symbol is truly unreachable at HEAD "
-    "(not test-only or a documented extension point) before deleting. Preferred fix is "
-    "deletion; if it is a genuine keep, baseline it with operator approval per "
-    "docs/agent-rules/testing.md — do NOT edit the baseline to silence review."
+    "deadcode 도구는 _test.go를 보지 않으므로, 지우기 전에 HEAD에서 정말 도달 불가인지 "
+    "(테스트 전용이거나 문서화된 확장 지점이 아닌지) 확인해야 합니다. 기본 처방은 삭제이며, "
+    "정말 남겨야 하는 심볼이면 docs/agent-rules/testing.md 절차대로 운영자 승인을 받아 "
+    "baseline에 올립니다 — 리뷰를 잠재우려고 baseline을 편집하면 안 됩니다."
 )
 
 
@@ -217,10 +217,10 @@ def deadcode_candidates(findings: list[tuple[str, str]],
         out.append({
             "scope": "code",
             "skillName": "deadcode-audit",
-            "title": f"dead code: {symbol}",
+            "title": f"죽은 코드: {symbol}",
             "candidate": (
-                f"'{symbol}' in {file} is unreachable from every gateway binary "
-                f"(deadcode-audit NEW finding, not in the checked-in baseline)."
+                f"{file} 의 '{symbol}' 이 모든 게이트웨이 바이너리에서 도달 불가입니다 "
+                f"(deadcode-audit 새 발견 — 체크인된 baseline에 없음)."
             ),
             "evidence": (
                 f"{finding} — x/tools deadcode over ./cmd/... reports this symbol "
@@ -230,10 +230,10 @@ def deadcode_candidates(findings: list[tuple[str, str]],
             "reason": "deadcode-audit delta — proactive L4 supply (RSI P5 ws3)",
             "targetFiles": [target],
             "proposedChange": (
-                f"Delete '{symbol}' and any now-orphaned helpers it solely referenced, "
-                f"then re-run scripts/audit/deadcode-audit.sh and confirm the finding "
-                f"clears with no new deltas. If it is genuinely test-reachable or a "
-                f"documented extension point, baseline it instead (operator approval)."
+                f"'{symbol}' 과 그것만 참조하던 고아 헬퍼를 함께 삭제한 뒤, "
+                f"scripts/audit/deadcode-audit.sh 를 다시 돌려 새 델타 없이 발견이 "
+                f"사라지는지 확인한다. 테스트에서만 도달하거나 문서화된 확장 지점이라면 "
+                f"삭제 대신 baseline 등록(운영자 승인)으로 처리한다."
             ),
             "risk": _RISK_NOTE,
             "source": f"{SOURCE_PREFIX}:{fid}",
