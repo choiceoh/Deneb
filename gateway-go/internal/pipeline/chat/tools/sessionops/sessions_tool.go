@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 	"unicode"
@@ -485,6 +486,9 @@ const (
 	maxSubagentSpawnDepth = 3
 	// maxConcurrentSubagents caps non-terminal children per parent session.
 	maxConcurrentSubagents = 5
+	// spawnHandoffMaxRunes bounds the rendered L₂ handoff appended to a
+	// child's task message.
+	spawnHandoffMaxRunes = 4000
 )
 
 // ToolSessionsSpawn returns a tool function that spawns a sub-agent session.
@@ -587,8 +591,23 @@ func ToolSessionsSpawn(d *tooldeps.SessionDeps) toolport.ToolFunc {
 			return fmt.Sprintf("Sub-agent session %q created but failed to store its settings: %s", childKey, err.Error()), nil
 		}
 
+		// L₂ state handoff (bounded memory contract): a spawned child is a
+		// fresh-prompt executor — without this it starts with none of the
+		// parent's typed task state and re-derives it from prose. Bounded,
+		// deterministic, and read-only for the child (its own board starts
+		// empty); DENEB_SPAWN_L2=0 is the per-layer kill switch the contract
+		// doc requires so the layer's benefit stays attributable.
+		task := p.Task
+		if os.Getenv("DENEB_SPAWN_L2") != "0" {
+			if board := toolport.BlackboardFromContext(ctx); board != nil {
+				if handoff := board.RenderHandoff(spawnHandoffMaxRunes); handoff != "" {
+					task += "\n\n## 인계된 작업 상태 (부모 blackboard, 읽기 전용 참고)\n" + handoff
+				}
+			}
+		}
+
 		// Send the task message to the child session.
-		if err := d.SendFn(childKey, p.Task); err != nil {
+		if err := d.SendFn(childKey, task); err != nil {
 			return fmt.Sprintf("Sub-agent session %q created but failed to send task: %s", childKey, err.Error()), nil
 		}
 

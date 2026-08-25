@@ -395,3 +395,70 @@ func normalizeBoardValue(value json.RawMessage) (json.RawMessage, error) {
 	}
 	return raw, nil
 }
+
+// Handoff rendering — the L₂ state-transfer half of the bounded memory
+// contract (docs/research/bounded-memory-contract.md). A spawned sub-agent is
+// a fresh-prompt executor: it starts with protocol, knowledge, and skills but
+// NONE of the parent's typed task state, so the parent had to retell state as
+// prose and the child re-derived the rest. RenderHandoff serializes the board
+// deterministically so the spawn path can hand the child the same typed state
+// the parent's tools were working from.
+
+// handoffValueMaxRunes bounds each rendered value so one large artifact cannot
+// eat the whole handoff budget.
+const handoffValueMaxRunes = 400
+
+// RenderHandoff renders the board as a bounded, deterministic markdown block
+// for a child task message: step contracts first (the plan is state too), then
+// keys in sorted order with truncated values. Returns "" when the board is
+// empty or the budget is too small for even one entry — callers append nothing.
+func (b *Blackboard) RenderHandoff(maxRunes int) string {
+	if b == nil || maxRunes <= 0 {
+		return ""
+	}
+	b.mu.Lock()
+	values := make([]BoardValue, 0, len(b.values))
+	for _, v := range b.values {
+		values = append(values, v)
+	}
+	steps := append([]StepContract(nil), b.steps...)
+	active := b.active
+	b.mu.Unlock()
+	if len(values) == 0 && len(steps) == 0 {
+		return ""
+	}
+	sort.Slice(values, func(i, j int) bool { return values[i].Key < values[j].Key })
+
+	var sb strings.Builder
+	if len(steps) > 0 {
+		sb.WriteString("### 계획 (step contracts)\n")
+		for _, s := range steps {
+			marker := "-"
+			if s.ID == active {
+				marker = "▶"
+			}
+			fmt.Fprintf(&sb, "%s %s: %s", marker, s.ID, s.Goal)
+			if len(s.Inputs) > 0 || len(s.Outputs) > 0 {
+				fmt.Fprintf(&sb, " (in: %s → out: %s)", strings.Join(s.Inputs, ","), strings.Join(s.Outputs, ","))
+			}
+			sb.WriteString("\n")
+		}
+	}
+	if len(values) > 0 {
+		sb.WriteString("### 상태 키\n")
+		for _, v := range values {
+			val := string(v.Value)
+			if runes := []rune(val); len(runes) > handoffValueMaxRunes {
+				val = string(runes[:handoffValueMaxRunes]) + "…(truncated)"
+			}
+			fmt.Fprintf(&sb, "- %s = %s\n", v.Key, val)
+		}
+	}
+	out := sb.String()
+	if runes := []rune(out); len(runes) > maxRunes {
+		// Whole-entry integrity is not worth a second pass here: the child
+		// treats this as reference prose, and the budget cut is announced.
+		out = string(runes[:maxRunes]) + "\n…(handoff truncated)"
+	}
+	return out
+}
