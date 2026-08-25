@@ -93,16 +93,39 @@ type directGrammar struct {
 
 const directGrammarSchemaVersion = 1
 
-var factAxes = mustLoadDirectGrammar(directGrammarJSON)
+var factAxes, directGrammarCatalogErr = loadDirectGrammarCatalog(directGrammarJSON)
 
-func mustLoadDirectGrammar(raw []byte) []*factAxis {
+// DirectGrammarCatalogError reports a malformed embedded direct grammar catalog.
+type DirectGrammarCatalogError struct {
+	Cause error
+}
+
+func (e *DirectGrammarCatalogError) Error() string {
+	if e == nil || e.Cause == nil {
+		return "memory: direct grammar catalog"
+	}
+	return "memory: direct grammar catalog: " + e.Cause.Error()
+}
+
+func (e *DirectGrammarCatalogError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
+// ValidateDirectGrammarCatalog returns the startup validation result for the
+// embedded direct grammar catalog.
+func ValidateDirectGrammarCatalog() error {
+	return directGrammarCatalogErr
+}
+
+func loadDirectGrammarCatalog(raw []byte) ([]*factAxis, error) {
 	axes, err := loadDirectGrammar(raw)
 	if err != nil {
-		// The catalog is compiled in, so a failure here is a build-time defect
-		// that would otherwise silently disable canonical memory writes.
-		panic("memory: direct grammar catalog: " + err.Error())
+		return nil, &DirectGrammarCatalogError{Cause: err}
 	}
-	return axes
+	return axes, nil
 }
 
 func loadDirectGrammar(raw []byte) ([]*factAxis, error) {
