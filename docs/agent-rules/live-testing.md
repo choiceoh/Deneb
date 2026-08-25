@@ -308,6 +308,7 @@ scripts/dev/live-test.sh tool-check wiki "위키에서 백업 정책 찾아줘"
 ```bash
 export DENEB_INSTANCE="$(basename "$PWD")"   # worktree 격리 (live-test와 동일)
 scripts/dev/puppet.sh start                  # 빌드 + 브로커 + 게이트웨이 (전 role 빙의)
+                                             # restart 도 매번 재빌드 (--no-rebuild 로 생략)
 scripts/dev/puppet.sh send "안녕"             # 유저 메시지 주입 (비동기, 세션 client:puppet-<인스턴스>)
 scripts/dev/puppet.sh pending --wait 60      # LLM 요청 도착 대기 → "r1 ... main-seat ..."
 scripts/dev/puppet.sh show r1                # 메시지 확인 (시스템 프롬프트는 해시+크기로 축약)

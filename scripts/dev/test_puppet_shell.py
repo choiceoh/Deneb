@@ -213,6 +213,21 @@ JSON
         self.assertEqual(custom.returncode, 0, custom.stdout + custom.stderr)
         self.assertIn(f"source={self.root / 'custom.json'}", "\n".join(self.call_lines()))
 
+    def test_start_rebuilds_by_default_and_no_rebuild_reuses_the_binary(self) -> None:
+        """A stale binary silently tests old code — the default must rebuild."""
+        binary = Path(f"{self.prefix}-gateway-live")
+        write_executable(binary, "#!/usr/bin/env bash\nexit 0\n")
+
+        default = self.invoke("start", env=self.env())
+        self.assertEqual(default.returncode, 0, default.stdout + default.stderr)
+        self.assertTrue(any(line.startswith("build ") for line in self.call_lines()))
+
+        self.calls.unlink(missing_ok=True)
+        skipped = self.invoke("start", "--no-rebuild", env=self.env())
+        self.assertEqual(skipped.returncode, 0, skipped.stdout + skipped.stderr)
+        self.assertFalse(any(line.startswith("build ") for line in self.call_lines()))
+        self.assertIn("Reusing existing binary", skipped.stdout)
+
     def test_existing_gateway_is_stopped_and_rebuild_flag_forces_build(self) -> None:
         binary = Path(f"{self.prefix}-gateway-live")
         write_executable(binary, "#!/usr/bin/env bash\nexit 0\n")
