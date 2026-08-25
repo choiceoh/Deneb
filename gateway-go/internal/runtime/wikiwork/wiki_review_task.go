@@ -264,6 +264,19 @@ func (t *wikiReviewTask) Run(ctx context.Context) error {
 			t.logger.Warn("wiki-review: failed to persist dead-link ledger", "error", err)
 		}
 	}
+	// Amount-notation policy (advisory, no edits): VAT-inclusive-only amounts
+	// on wiki-authored surfaces violate the operator's supply-price rule
+	// (wiki.amount_vat_policy) and are surfaced here for a hand fix against the
+	// source deal.
+	if hits := t.wikiStore.ScanAmountPolicyViolations(5); len(hits) > 0 {
+		examples := make([]string, 0, len(hits))
+		for _, h := range hits {
+			examples = append(examples, h.Path+" ("+h.Snippet+")")
+		}
+		t.logger.Info("wiki-review: VAT-inclusive-only amounts found (advisory)",
+			"count", len(hits), "examples", strings.Join(examples, "; "))
+	}
+
 	// Retroactive mail filing: unlinked analyses whose project has since become
 	// known move into that project's 메일분석 slot (deterministic signals only).
 	// Domain-signal proposals (observe mode, until DENEB_MAIL_RECLASS_DOMAIN=1)
