@@ -21,48 +21,39 @@ import (
 func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			Action   string   `json:"action"`
-			Query    string   `json:"query"`
-			Plan     string   `json:"plan"`
-			Paths    []string `json:"paths"`
-			Scopes   []string `json:"scopes"`
-			Intent   string   `json:"intent"`
-			Title    string   `json:"title"`
-			ID       string   `json:"id"`
-			Summary  string   `json:"summary"`
-			Category string   `json:"category"`
-			Content  string   `json:"content"`
-			Tags     []string `json:"tags"`
-			Related  []string `json:"related"`
-			Cues     []string `json:"cues"`
-			Client   string   `json:"client"`
-			Sites    []string `json:"sites"`
-			Stage    string   `json:"stage"`
-			Program  string   `json:"program"`
-			// 현장(site) authoring fields — used by action="write-site".
-			Address              string   `json:"address"`
-			Status               string   `json:"status"`
-			Capacity             float64  `json:"capacity"`
-			ContractDate         string   `json:"contract_date"`
-			ConstructionStart    string   `json:"construction_start"`
-			ModuleDelivery       string   `json:"module_delivery"`
-			PreUseInspection     string   `json:"pre_use_inspection"`
-			CompletionInspection string   `json:"completion_inspection"`
-			Kinds                []string `json:"kinds"`
-			Supersedes           []string `json:"supersedes"`
-			Importance           float64  `json:"importance"`
-			Type                 string   `json:"type"`
-			Confidence           string   `json:"confidence"`
-			Due                  string   `json:"due"`
-			Section              string   `json:"section"`
-			FromLine             int      `json:"from_line"`
-			MaxLines             int      `json:"max_lines"`
-			Limit                int      `json:"limit"`
-			Date                 string   `json:"date"`
-			Force                bool     `json:"force"`
-			Explain              bool     `json:"explain"`
-			Rerank               bool     `json:"rerank"`
-			Project              string   `json:"project"`
+			Action     string   `json:"action"`
+			Query      string   `json:"query"`
+			Plan       string   `json:"plan"`
+			Paths      []string `json:"paths"`
+			Scopes     []string `json:"scopes"`
+			Intent     string   `json:"intent"`
+			Title      string   `json:"title"`
+			ID         string   `json:"id"`
+			Summary    string   `json:"summary"`
+			Category   string   `json:"category"`
+			Content    string   `json:"content"`
+			Tags       []string `json:"tags"`
+			Related    []string `json:"related"`
+			Cues       []string `json:"cues"`
+			Client     string   `json:"client"`
+			Sites      []string `json:"sites"`
+			Stage      string   `json:"stage"`
+			Program    string   `json:"program"`
+			Kinds      []string `json:"kinds"`
+			Supersedes []string `json:"supersedes"`
+			Importance float64  `json:"importance"`
+			Type       string   `json:"type"`
+			Confidence string   `json:"confidence"`
+			Due        string   `json:"due"`
+			Section    string   `json:"section"`
+			FromLine   int      `json:"from_line"`
+			MaxLines   int      `json:"max_lines"`
+			Limit      int      `json:"limit"`
+			Date       string   `json:"date"`
+			Force      bool     `json:"force"`
+			Explain    bool     `json:"explain"`
+			Rerank     bool     `json:"rerank"`
+			Project    string   `json:"project"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("parse input: %w", err)
@@ -85,20 +76,6 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 			return wikiIndex(d.Store, p.Category)
 		case "write":
 			return wikiWrite(ctx, d.Store, d.Contacts, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Cues, p.Client, p.Sites, p.Stage, p.Program, p.Kinds, p.Supersedes, p.Importance, p.Type, p.Confidence, p.Due, p.Force)
-		case "write-site":
-			return wikiWriteSite(d.Store, p.Project, p.Title, wiki.SiteFields{
-				Client: p.Client, Address: p.Address, Status: p.Status, Capacity: p.Capacity,
-				Kinds:                p.Kinds,
-				ContractDate:         p.ContractDate,
-				ConstructionStart:    p.ConstructionStart,
-				ModuleDelivery:       p.ModuleDelivery,
-				PreUseInspection:     p.PreUseInspection,
-				CompletionInspection: p.CompletionInspection,
-				Summary:              p.Summary,
-				Note:                 p.Content,
-			})
-		case "seed-sites":
-			return wikiSeedSites(d.Store, p.Project)
 		case "log":
 			return wikiLog(workspaceDir, d.Store, p.Content)
 		case "daily":
@@ -115,30 +92,9 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 		case "ingest":
 			return wikiIngest(ctx, d.Store, p.Query, p.Project, p.Title, p.Content, p.Force)
 		default:
-			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: search, read, index, write, write-site, seed-sites, log, daily, status, close, reopen, ingest", p.Action), nil
+			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: search, read, index, write, log, daily, status, close, reopen, ingest", p.Action), nil
 		}
 	}
-}
-
-// wikiWriteSite creates or edits a 현장 page in the 현장 공통 포맷
-// (프로젝트/<project>/현장/<name>.md). Partial edits preserve unset fields, so the
-// agent can advance a site's 상태 + fill a milestone (계약일→준공검사일) over time.
-func wikiWriteSite(store *wiki.Store, project, name string, f wiki.SiteFields) (string, error) {
-	if store == nil {
-		return "위키가 비활성 상태입니다.", nil
-	}
-	if strings.TrimSpace(project) == "" || strings.TrimSpace(name) == "" {
-		return "write-site 에는 project(프로젝트 폴더명)와 title(현장명)이 필요합니다.", nil
-	}
-	path, err := store.UpsertSitePage(project, name, f)
-	if err != nil {
-		return "", fmt.Errorf("현장 페이지 저장 실패: %w", err)
-	}
-	msg := fmt.Sprintf("현장 페이지 저장됨: %s (상태 %s)", path, orDash(f.Status))
-	if notes := wiki.DroppedEnumNotes("", f.Kinds); len(notes) > 0 {
-		msg += "\n⚠️ " + strings.Join(notes, "\n⚠️ ")
-	}
-	return msg, nil
 }
 
 func orDash(s string) string {
@@ -146,27 +102,6 @@ func orDash(s string) string {
 		return "미분류"
 	}
 	return s
-}
-
-// wikiSeedSites bootstraps 현장 page stubs from projects' 대표페이지 Meta.Sites so
-// existing projects enter the 현장 공통 포맷 in one shot. project 미지정이면 전체.
-func wikiSeedSites(store *wiki.Store, project string) (string, error) {
-	if store == nil {
-		return "위키가 비활성 상태입니다.", nil
-	}
-	created, err := store.SeedSitePages(strings.TrimSpace(project))
-	if err != nil {
-		return "", fmt.Errorf("현장 시드 실패: %w", err)
-	}
-	if len(created) == 0 {
-		return "새로 만든 현장 페이지 없음 — 이미 모두 있거나 대표페이지 sites가 없습니다.", nil
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "현장 페이지 %d개 생성 (상태·용량·공정 일정은 비어 있으니 write-site로 채우세요):\n", len(created))
-	for _, p := range created {
-		b.WriteString("- " + p + "\n")
-	}
-	return b.String(), nil
 }
 
 func wikiSearch(ctx context.Context, store *wiki.Store, query string, limit int) (string, error) {

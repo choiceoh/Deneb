@@ -12,8 +12,6 @@ func TestMailAnalysisAgentToolGateBlocksPersistentWrites(t *testing.T) {
 		input string
 	}{
 		{name: "wiki write", tool: "wiki", input: `{"action":"write"}`},
-		{name: "wiki write-site", tool: "wiki", input: `{"action":"write-site"}`},
-		{name: "wiki seed-sites", tool: "wiki", input: `{"action":"seed-sites"}`},
 		{name: "wiki log", tool: "wiki", input: `{"action":" log "}`},
 		{name: "wiki close", tool: "wiki", input: `{"action":"close"}`},
 		{name: "wiki reopen", tool: "wiki", input: `{"action":"reopen"}`},

@@ -97,21 +97,6 @@ func LogPagePath(project string) string {
 	return projectCategoryPrefix + "/" + project + "/" + LogPageFile
 }
 
-// SitePagePath returns a 현장 page path for a project + site name:
-// "프로젝트/<project>/현장/<site>.md". The site name is the page's identity (a
-// human-readable 현장명 like "수산리" or the address tail), NOT the full address —
-// the canonical address lives in the page's frontmatter.
-func SitePagePath(project, site string) string {
-	return projectCategoryPrefix + "/" + project + "/" + siteDir + "/" + site + ".md"
-}
-
-// IsProjectSitePage reports whether relPath is a per-project 현장 page
-// (프로젝트/<name>/현장/<site>.md). Path-shape only — no page read.
-func IsProjectSitePage(relPath string) bool {
-	seg := splitProjectPath(relPath)
-	return len(seg) == 3 && !isReservedProjectDir(seg[0]) && seg[1] == siteDir && strings.HasSuffix(seg[2], ".md")
-}
-
 // MailAnalysisPagePath maps a Gmail message ID to its wiki page path: under the
 // project's 메일분석/ folder when the analyzer linked one, else the category-level
 // unlinked bucket 프로젝트/메일분석/.
