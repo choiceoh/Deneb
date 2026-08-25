@@ -15,6 +15,16 @@ type Dreamer interface {
 }
 
 // DreamReport summarizes the results of a dreaming cycle.
+// VerifyPendingItem is one operator-answerable identity question: what was
+// detected (Detail), a short name for the chip (Label), and the 인물 pages the
+// decision stamps (Pages).
+type VerifyPendingItem struct {
+	Kind   string   `json:"kind"` // "homonym" | "person-duplicate"
+	Label  string   `json:"label"`
+	Detail string   `json:"detail"`
+	Pages  []string `json:"pages"`
+}
+
 type DreamReport struct {
 	// FactsVerified/FactsPruned are legacy names from the pre-WikiDreamer SQL
 	// dreamer: WikiDreamer never set them and they stay 0 (wire compatibility
@@ -52,9 +62,17 @@ type DreamReport struct {
 	// ledger, wiki/verify_ledger.go, remembers what was shown).
 	VerifyFindings       []string `json:"verifyFindings,omitempty"`
 	VerifyFindingsRepeat int      `json:"verifyFindingsRepeat,omitempty"`
-	WikiGraphNodes       int      `json:"wikiGraphNodes,omitempty"`
-	WikiGraphEdges       int      `json:"wikiGraphEdges,omitempty"`
-	WikiGraphClustered   bool     `json:"wikiGraphClustered,omitempty"`
+	// VerifyPending carries the advisory findings the operator can CLOSE —
+	// person-identity questions (동명이인 의심, 같은 이름 여러 장) that no
+	// automation may resolve. They deliberately escape the first-time/repeat
+	// split above: folding them into a count is what left the same five people
+	// permanently detected, permanently unshown, and permanently unanswerable.
+	// Each carries its pages so the card can offer "확인했음" and the scan can
+	// stop asking (wiki/person_identity_ack.go).
+	VerifyPending      []VerifyPendingItem `json:"verifyPending,omitempty"`
+	WikiGraphNodes     int                 `json:"wikiGraphNodes,omitempty"`
+	WikiGraphEdges     int                 `json:"wikiGraphEdges,omitempty"`
+	WikiGraphClustered bool                `json:"wikiGraphClustered,omitempty"`
 	// GitCommit is the wiki git snapshot hash capturing this cycle's result —
 	// the key for whole-cycle and selective revert (5.8). Empty when nothing
 	// changed or git is unavailable.

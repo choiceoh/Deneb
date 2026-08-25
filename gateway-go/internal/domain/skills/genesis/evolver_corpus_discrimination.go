@@ -150,13 +150,13 @@ func (e *Evolver) queueHeldOutTieCorpusDraft(skillName, reason, source string) {
 	if _, err := e.tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		Scope:     "test",
 		SkillName: skillName,
-		Title:     "Held-out corpus cannot discriminate — mine separating cases",
-		Candidate: fmt.Sprintf("Every recent evolve for %s ties the original on held-out validation, so no improvement can ever land (gate saturation, not candidate quality). Mine new validation cases from this skill's recent REAL failures — cases the current body demonstrably fails — so a genuine fix can score above the original.",
+		Title:     "held-out 코퍼스가 변별하지 못함 — 가르는 케이스를 채굴할 것",
+		Candidate: fmt.Sprintf("%s 의 최근 진화가 held-out 검증에서 전부 원본과 동점입니다. 그래서 어떤 개선도 반영될 수 없습니다(후보 품질이 아니라 게이트 포화). 이 스킬의 최근 실제 실패에서 새 검증 케이스를 채굴해야 합니다 — 지금 본문이 실제로 실패하는 케이스여야 진짜 수정이 원본보다 높은 점수를 받을 수 있습니다.",
 			skillName),
 		Evidence:       strings.Join(evidence, "\n"),
 		Reason:         reason,
-		ProposedChange: "Add held-out validation cases that the CURRENT skill body fails (from real failure traces), giving the strict-improvement margin something to measure. Do not relax skillHeldOutMinScoreDelta and do not accept any tied candidate.",
-		Risk:           "Case-mining only; acceptance gates unchanged. A mined case must reflect a real observed failure, not a synthetic assertion tuned to pass a pending candidate.",
+		ProposedChange: "지금 스킬 본문이 실패하는 held-out 검증 케이스를 실제 실패 트레이스에서 뽑아 추가한다 — 엄격 개선 마진이 잴 것이 생기도록. skillHeldOutMinScoreDelta를 완화하거나 동점 후보를 수용하면 안 된다.",
+		Risk:           "케이스 채굴만 하며 수용 게이트는 그대로입니다. 채굴한 케이스는 실제로 관측된 실패여야 하고, 대기 중인 후보를 통과시키려고 맞춘 합성 단언이면 안 됩니다.",
 		Source:         heldOutTieDraftSource + ":" + strings.TrimSpace(source),
 	}); err != nil && e.logger != nil {
 		e.logger.Warn("evolver: held-out tie draft failed", "skill", skillName, "error", err)

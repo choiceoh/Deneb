@@ -399,7 +399,7 @@ func SkillLifecycleToolSchema() map[string]any {
 			},
 			"candidate": map[string]any{
 				"type":        "string",
-				"description": "For propose: reusable workflow pattern; required for route=genesis/create/evolve and optional for route=no-op. For self_correction: optional candidate summary. For heartbeat_shadow_replay: required candidate HEARTBEAT.md body.",
+				"description": "For propose: reusable workflow pattern; required for route=genesis/create/evolve and optional for route=no-op. For self_correction: optional candidate summary, WRITTEN IN KOREAN (paths and symbols verbatim). For heartbeat_shadow_replay: required candidate HEARTBEAT.md body.",
 			},
 			"dreamSummary": map[string]any{
 				"type":        "string",
@@ -451,7 +451,7 @@ func SkillLifecycleToolSchema() map[string]any {
 			},
 			"title": map[string]any{
 				"type":        "string",
-				"description": "For self_correction: short human-readable title. At least one of title, candidate, or proposedChange is required.",
+				"description": "For self_correction: short human-readable title, WRITTEN IN KOREAN — the operator approves or rejects this candidate from a Korean card. At least one of title, candidate, or proposedChange is required.",
 			},
 			"targetFiles": map[string]any{
 				"type":        "array",
@@ -460,11 +460,11 @@ func SkillLifecycleToolSchema() map[string]any {
 			},
 			"proposedChange": map[string]any{
 				"type":        "string",
-				"description": "For self_correction: concrete change idea. At least one of title, candidate, or proposedChange is required. Do not apply it in this action.",
+				"description": "For self_correction: concrete change idea, WRITTEN IN KOREAN (keep file paths, symbols, and identifiers verbatim). At least one of title, candidate, or proposedChange is required. Do not apply it in this action.",
 			},
 			"risk": map[string]any{
 				"type":        "string",
-				"description": "For self_correction: risk, validation need, or rollback concern for the future reviewer.",
+				"description": "For self_correction: risk, validation need, or rollback concern for the future reviewer, WRITTEN IN KOREAN (paths and symbols verbatim).",
 			},
 			"status": map[string]any{
 				"type":        "string",

@@ -418,10 +418,11 @@ func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities 
 		// <denebDir>/browser-rules.json) so site fixes ship without an app release.
 		handlerminiapp.BrowserConfigMethods(handlerminiapp.BrowserConfigDeps{DenebDir: s.denebDir}),
 		handlerminiapp.WorkFeedMethods(handlerminiapp.WorkFeedDeps{
-			Store:          capabilities.nativeWorkFeed,
-			OnAnswer:       s.recordDealQuestionAnswer,
-			OnMetaProposal: s.handleMetaProposalAction,
-			OnDeadlineDone: s.markDeadlineDone,
+			Store:              capabilities.nativeWorkFeed,
+			OnAnswer:           s.recordDealQuestionAnswer,
+			OnMetaProposal:     s.handleMetaProposalAction,
+			OnDeadlineDone:     s.markDeadlineDone,
+			OnIdentityReviewed: s.markIdentityReviewed,
 		}),
 		handlerminiapp.UsageMethods(handlerminiapp.UsageDeps{
 			// Lazy: the agent-log writer and model registry are built in the

@@ -108,3 +108,20 @@ func reconcileVerifyFindings(led verifyLedger, findings []verifyFinding, now tim
 	}
 	return next, fresh, repeats
 }
+
+// splitAnswerableFindings separates the advisory findings the OPERATOR can
+// close (AckPages set — the two person-identity scans) from the ones the
+// ledger's first-time/repeat fold governs. The fold exists so the dream card
+// announces news; an unfixable question that never changes is never news under
+// that rule, which is how the same five people ended up asked forever and
+// answerable never.
+func splitAnswerableFindings(findings []verifyFinding) (rest, answerable []verifyFinding) {
+	for _, f := range findings {
+		if f.Fix == nil && len(f.AckPages) > 0 {
+			answerable = append(answerable, f)
+			continue
+		}
+		rest = append(rest, f)
+	}
+	return rest, answerable
+}

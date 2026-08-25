@@ -556,6 +556,12 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 		if len(report.RecallDemandTerms) > 0 {
 			msg += "\n❓ 답 못한 질문 주제: " + strings.Join(report.RecallDemandTerms, ", ")
 		}
+		if len(report.VerifyPending) > 0 {
+			msg += fmt.Sprintf("\n🙋 확인 부탁 %d건 (자동으로 못 고칩니다 — 작업 피드에서 \"확인했음\"):", len(report.VerifyPending))
+			for _, p := range report.VerifyPending {
+				msg += "\n  - " + truncateOutput(p.Detail, 80)
+			}
+		}
 		if report.VerifyFindingsRepeat > 0 {
 			msg += fmt.Sprintf("\n🔍 기존 발견 %d건 유지 (미해결)", report.VerifyFindingsRepeat)
 		}

@@ -47,6 +47,11 @@ func (s *Store) HomonymPersonPages(limit int) []HomonymPerson {
 			continue
 		}
 		sort.Strings(domains)
+		// Already judged: the operator looked at exactly these domains and
+		// decided. Re-asking is what made this scan feel like nagging.
+		if identityEvidenceReviewed(page.Meta, domains) {
+			continue
+		}
 		title := page.Meta.Title
 		if title == "" {
 			title = strings.TrimSuffix(filepath.Base(rp), ".md")

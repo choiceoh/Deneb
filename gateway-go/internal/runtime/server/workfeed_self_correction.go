@@ -49,7 +49,9 @@ func (s *Server) postSelfCorrectionCard(record genesis.SelfCorrectionCandidateRe
 			{ID: workfeedApproveAction, Kind: workfeed.ActionAck, Label: "승인"},
 			{ID: workfeedRejectAction, Kind: workfeed.ActionAck, Label: "거절"},
 		},
-		Body: selfCorrectionCardBody(record),
+		// Korean decision brief first, English record verbatim below — the
+		// operator has to be able to READ the thing they are approving.
+		Body: selfCorrectionCardBody(record, s.selfCorrectionBrief(record)),
 	}
 	if _, err := nf.Append(item); err != nil {
 		s.logger.Warn("self-correction card post failed", "id", record.ID, "error", err)
@@ -76,9 +78,14 @@ func selfCorrectionCardSummary(record genesis.SelfCorrectionCandidateRecord) str
 	return summary
 }
 
-func selfCorrectionCardBody(record genesis.SelfCorrectionCandidateRecord) string {
+func selfCorrectionCardBody(record genesis.SelfCorrectionCandidateRecord, brief string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "자율 개선 루프가 자기교정 후보를 기록했습니다 (후보 ID %s).\n\n", record.ID)
+	if brief != "" {
+		b.WriteString("## 요약 (판단용)\n")
+		b.WriteString(brief)
+		b.WriteString("\n\n")
+	}
 	if record.SkillName != "" {
 		fmt.Fprintf(&b, "- 스킬: %s\n", record.SkillName)
 	}
@@ -95,6 +102,9 @@ func selfCorrectionCardBody(record genesis.SelfCorrectionCandidateRecord) string
 		fmt.Fprintf(&b, "- 대상 파일: %s\n", strings.Join(record.TargetFiles, ", "))
 	}
 	b.WriteString("\n")
+	if record.Candidate != "" || record.Evidence != "" {
+		b.WriteString("### 원문 (기록 그대로)\n")
+	}
 	if record.Candidate != "" {
 		fmt.Fprintf(&b, "**후보**\n%s\n\n", record.Candidate)
 	}

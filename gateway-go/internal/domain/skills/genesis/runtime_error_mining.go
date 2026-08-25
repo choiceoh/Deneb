@@ -437,15 +437,14 @@ func (t *RuntimeErrorMiningTask) Run(ctx context.Context) error {
 		if _, rerr := t.Tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 			Scope:     "code",
 			SkillName: runtimeErrorMiningSkill,
-			Title:     "recurring runtime error: " + common.TruncateRunes(a.sig, 80),
+			Title:     "반복되는 런타임 에러: " + common.TruncateRunes(a.sig, 80),
 			Candidate: a.sig,
 			Evidence:  evidence,
 			Reason:    "recurring gateway error signature (grounded, non-external)",
-			ProposedChange: "Locate the source path emitting this error and fix the root cause. " +
-				"If the condition is expected, external, or transient rather than a defect in our source, " +
-				"land nothing and record why — do not downgrade the log just to silence the miner.",
-			Risk: "Diagnose from the evidence before editing. If the root cause is not clearly in our source " +
-				"(external dependency, user input, transient), land nothing and record why.",
+			ProposedChange: "이 에러를 내보내는 소스 경로를 찾아 근본 원인을 고친다. 우리 소스의 결함이 아니라 예상된 조건·외부 요인·일시적 현상이라면 " +
+				"아무것도 반영하지 말고 그 이유를 기록한다 — 마이너를 잠재우려고 로그 레벨을 낮추는 것은 금지.",
+			Risk: "편집 전에 증거로 진단부터 합니다. 근본 원인이 우리 소스에 있다고 분명하지 않으면(외부 의존성·사용자 입력·일시적 현상) " +
+				"아무것도 반영하지 말고 이유를 기록합니다.",
 			Source: source,
 			// The usefulness contract this miner can measure itself: the
 			// signature staying quiet after the fix. measurePendingImpacts

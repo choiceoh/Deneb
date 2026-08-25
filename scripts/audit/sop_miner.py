@@ -67,8 +67,8 @@ COMMAND_ACTION_TOOLS = frozenset({"office"})
 ACTION_VALUE_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,39}$")
 
 _RISK_NOTE = (
-    "propose-only; composite tool must fall back to the individual calls on "
-    "error and never widen any tool's permission surface"
+    "제안 전용입니다. 합성 도구는 오류가 나면 개별 호출로 되돌아가야 하며, 어떤 "
+    "도구의 권한 표면도 넓히면 안 됩니다."
 )
 
 
@@ -308,7 +308,7 @@ def mine_sops(sequences: dict[str, list[str]]) -> list[dict[str, Any]]:
         out.append({
             "scope": "code",
             "skillName": "sop-mining",
-            "title": f"SOP candidate: {flow}",
+            "title": f"절차 후보(SOP): {flow}",
             "candidate": (
                 f"반복 도구 시퀀스 [{flow}]를 하나의 합성 도구로 승격 — 다단계 "
                 "로직을 재사용해 턴 왕복과 실패율을 줄인다 (EvoSOP/Tool-Making 패턴)."
@@ -323,11 +323,11 @@ def mine_sops(sequences: dict[str, list[str]]) -> list[dict[str, Any]]:
                       "gate — proactive L4 supply (RSI 2026H2 second pass #3)",
             "targetFiles": [f"gateway-go/internal/pipeline/chat/tools/{slug}.go"],
             "proposedChange": (
-                "Add a composite tool wrapping the sequence per gateway-go/CLAUDE.md "
-                "'Adding a New Agent Tool' (schema + handler + toolreg registration), "
-                "plus a replay fixture for this exact action flow. Measure prompt/"
-                "completion tokens, tool calls, latency, and errors before promotion; "
-                "fall back to the individual calls on any step error."
+                "gateway-go/CLAUDE.md 의 'Adding a New Agent Tool' 절차대로 이 시퀀스를 "
+                "감싸는 합성 도구를 추가하고(스키마 + 핸들러 + toolreg 등록), 이 액션 "
+                "흐름 그대로의 리플레이 픽스처도 함께 만든다. 승격 전에 프롬프트/컴플리션 "
+                "토큰·도구 호출 수·지연·오류를 측정한다. 어느 단계든 오류가 나면 개별 "
+                "호출로 되돌아가야 한다."
             ),
             "risk": _RISK_NOTE,
             "source": f"{SOURCE_PREFIX}:{digest}",

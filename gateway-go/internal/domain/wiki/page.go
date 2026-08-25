@@ -89,6 +89,16 @@ type Frontmatter struct {
 	// address. Populated from the address book (which stores homonyms as distinct
 	// entries); empty on non-person pages and on people not yet in the address book.
 	Emails []string
+	// IdentityReviewed records the identity signals the operator has already
+	// JUDGED on this 인물 page, so the homonym and duplicate-person scans stop
+	// re-asking. Same contract as DueDone: it stores the evidence that was
+	// reviewed (company domains for the homonym scan, peer page paths for the
+	// duplicate scan), not a bare "reviewed" flag — so a NEW domain or a NEW
+	// same-name page is not covered by the old decision and resurfaces once.
+	// Neither scan may auto-fix (2026-07-28 over-merge), which is exactly why
+	// they need an operator-owned way to terminate; without one the same five
+	// people are re-asked forever.
+	IdentityReviewed []string
 	// Cues are recall entry points (Memora-style cue anchors): alternate Korean
 	// phrasings a future query might use for this page — synonyms, aliases,
 	// question forms — deliberately words NOT already in the title/summary/body.
@@ -259,6 +269,9 @@ func (p *Page) Render() []byte {
 	}
 	if len(p.Meta.Emails) > 0 {
 		buf.WriteString("emails: [" + strings.Join(sanitizeFlowItems(p.Meta.Emails), ", ") + "]\n")
+	}
+	if len(p.Meta.IdentityReviewed) > 0 {
+		buf.WriteString("identity_reviewed: [" + strings.Join(sanitizeFlowItems(p.Meta.IdentityReviewed), ", ") + "]\n")
 	}
 	if len(p.Meta.Cues) > 0 {
 		buf.WriteString("cues: [" + strings.Join(sanitizeFlowItems(p.Meta.Cues), ", ") + "]\n")
@@ -747,6 +760,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Emails = listVal()
 		case "cues":
 			fm.Cues = listVal()
+		case "identity_reviewed":
+			fm.IdentityReviewed = listVal()
 		case "resource":
 			fm.Resource = val
 		case "client":

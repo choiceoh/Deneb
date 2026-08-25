@@ -131,3 +131,69 @@ func TestSelfCorrectionCardMissingCandidateKeepsCardUnsettled(t *testing.T) {
 		t.Fatal("card must stay unsettled")
 	}
 }
+
+// The brief exists to make an English record decidable, so a malformed answer
+// must yield nothing rather than half a summary above the original.
+func TestSanitizeSelfCorrectionBrief(t *testing.T) {
+	good := "무엇: WithSyncRefresh를 제거하자는 제안\n이유: 호출자가 없다고 관측됨\n승인하면: 코딩 레인이 삭제 패치를 만든다"
+	if got := sanitizeSelfCorrectionBrief(good); got == "" || !strings.Contains(got, "- 무엇:") {
+		t.Errorf("정상 3줄이 버려짐: %q", got)
+	}
+	if got := sanitizeSelfCorrectionBrief("- 무엇: x\n- 이유: y\n- 승인하면: z\n잡담"); got == "" {
+		t.Errorf("불릿 접두어가 붙은 정상 답이 버려짐")
+	}
+	for _, bad := range []string{
+		"",
+		"Sure! Here is the summary in Korean:",
+		"무엇: x\n이유: y", // 승인하면 없음 — 판단의 핵심이 빠졌다
+	} {
+		if got := sanitizeSelfCorrectionBrief(bad); got != "" {
+			t.Errorf("형식 미준수 응답이 통과함 %q → %q", bad, got)
+		}
+	}
+}
+
+func TestSelfCorrectionCardBodyLeadsWithKoreanBriefAndKeepsOriginal(t *testing.T) {
+	record := genesis.SelfCorrectionCandidateRecord{
+		ID:        "sc-1",
+		Scope:     "code",
+		Candidate: "'WithSyncRefresh' in internal/domain/embedindex/index.go is unreachable.",
+		Evidence:  "structure:deadcode:internal/domain/embedindex/index.go",
+	}
+	brief := "- 무엇: 안 쓰이는 함수 제거 제안\n- 이유: 호출자가 없음\n- 승인하면: 코딩 레인이 삭제 패치를 만듭니다"
+	body := selfCorrectionCardBody(record, brief)
+	if !strings.HasPrefix(strings.SplitN(body, "## 요약 (판단용)", 2)[1], "\n- 무엇:") {
+		t.Errorf("한국어 요약이 맨 앞에 오지 않음: %q", body)
+	}
+	if !strings.Contains(body, "### 원문 (기록 그대로)") ||
+		!strings.Contains(body, "WithSyncRefresh") ||
+		!strings.Contains(body, "structure:deadcode:internal/domain/embedindex/index.go") {
+		t.Errorf("원문·근거가 그대로 남아 있어야 함: %q", body)
+	}
+	// No brief (no model, timeout, malformed answer) = exactly the old card.
+	if plain := selfCorrectionCardBody(record, ""); strings.Contains(plain, "요약 (판단용)") {
+		t.Errorf("요약 없을 때 빈 섹션이 남음: %q", plain)
+	}
+}
+
+// Producers now author Korean, so the brief must stay out of the way — and a
+// half-translated record (Korean title, English body) is exactly the card the
+// operator could not act on, so that one still gets a brief.
+func TestSelfCorrectionAlreadyKorean(t *testing.T) {
+	korean := genesis.SelfCorrectionCandidateRecord{
+		Title:          "죽은 코드: chunkText",
+		Candidate:      "internal/domain/filestore/semindex.go 의 'chunkText' 가 도달 불가입니다.",
+		ProposedChange: "'chunkText' 를 삭제하고 감사를 다시 돌린다.",
+	}
+	if !selfCorrectionAlreadyKorean(korean) {
+		t.Error("한국어 기록에 요약을 또 붙임")
+	}
+	halfway := korean
+	halfway.Candidate = "'chunkText' in semindex.go is unreachable from every gateway binary."
+	if selfCorrectionAlreadyKorean(halfway) {
+		t.Error("영어 본문이 남은 기록을 한국어로 판정함")
+	}
+	if selfCorrectionAlreadyKorean(genesis.SelfCorrectionCandidateRecord{Title: "dead code: chunkText"}) {
+		t.Error("영어 기록을 한국어로 판정함")
+	}
+}

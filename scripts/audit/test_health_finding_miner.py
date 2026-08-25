@@ -125,7 +125,7 @@ class StructuralCandidatesTest(unittest.TestCase):
         self.assertIn("revision-tes", cand["evidence"])  # bench revision pinned
         self.assertEqual(cand["scope"], "code")
         self.assertEqual(cand["targetFiles"], ["gateway-go/internal/domain/wiki"])
-        self.assertIn("Verify:", cand["proposedChange"])
+        self.assertIn("확인 방법:", cand["proposedChange"])
         self.assertEqual(
             cand["impactContract"],
             {
@@ -522,8 +522,8 @@ class IncrementalContractTests(unittest.TestCase):
         c = fan[0]
         # The disappearance ask is replaced by the bounded-step contract.
         self.assertNotIn("confirm this finding disappears", c["proposedChange"])
-        self.assertIn("CANNOT disappear in one session", c["proposedChange"])
-        self.assertIn("ONE bounded structural step", c["proposedChange"])
+        self.assertIn("한 세션에 사라질 수 없습니다", c["proposedChange"])
+        self.assertIn("경계가 분명한 구조 한 걸음", c["proposedChange"])
         # No finding-present impact contract for the incremental family.
         self.assertNotIn("impactContract", c)
 
@@ -531,7 +531,7 @@ class IncrementalContractTests(unittest.TestCase):
         cands = structural_candidates(structural_report())
         hub = [c for c in cands if c["source"].startswith("health-finding:volatile-hub:")]
         self.assertEqual(len(hub), 1)
-        self.assertIn("Verify:", hub[0]["proposedChange"])
+        self.assertIn("확인 방법:", hub[0]["proposedChange"])
         self.assertIn("impactContract", hub[0])
         self.assertEqual(hub[0]["impactContract"]["target"], 0)
 
@@ -556,7 +556,7 @@ class IncrementalContractTests(unittest.TestCase):
         cands = structural_candidates(report)
         diff = [c for c in cands if "cafe00112233" in c["source"]]
         self.assertEqual(len(diff), 1)
-        self.assertIn("CANNOT disappear in one session", diff[0]["proposedChange"])
+        self.assertIn("한 세션에 사라질 수 없습니다", diff[0]["proposedChange"])
         self.assertNotIn("impactContract", diff[0])
 
 

@@ -91,10 +91,12 @@ func TestHeldOutTieCorpusDraftMintsOnThreshold(t *testing.T) {
 	for _, d := range drafts {
 		if strings.HasPrefix(d.Source, heldOutTieDraftSource) {
 			minted++
-			if !strings.Contains(d.Candidate, "REAL failures") && !strings.Contains(d.ProposedChange, "real failure") {
+			// Operator-facing text is Korean (the card is a Korean approval
+			// surface); the demand it must carry is unchanged.
+			if !strings.Contains(d.Candidate, "실제 실패") && !strings.Contains(d.ProposedChange, "실제 실패") {
 				t.Errorf("draft must demand real-failure case mining: %+v", d)
 			}
-			if !strings.Contains(d.ProposedChange, "Do not relax") {
+			if !strings.Contains(d.ProposedChange, "완화하거나 동점 후보를 수용하면 안 된다") {
 				t.Errorf("draft must forbid margin relaxation: %q", d.ProposedChange)
 			}
 		}

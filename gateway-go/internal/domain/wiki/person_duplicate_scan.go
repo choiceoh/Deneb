@@ -53,6 +53,7 @@ func (s *Store) DuplicatePersonGroups(limit int) []DuplicatePersonGroup {
 		return nil
 	}
 	byName := map[string][]DuplicatePersonPage{}
+	reviewedMeta := map[string]Frontmatter{}
 	for _, rp := range relPaths {
 		rp = filepath.ToSlash(rp)
 		page, rerr := s.ReadPage(rp)
@@ -73,6 +74,7 @@ func (s *Store) DuplicatePersonGroups(limit int) []DuplicatePersonGroup {
 		byName[base] = append(byName[base], DuplicatePersonPage{
 			PagePath: rp, Title: title, Domains: domains,
 		})
+		reviewedMeta[rp] = page.Meta
 	}
 
 	var out []DuplicatePersonGroup
@@ -81,6 +83,20 @@ func (s *Store) DuplicatePersonGroups(limit int) []DuplicatePersonGroup {
 			continue
 		}
 		sort.Slice(pages, func(i, j int) bool { return pages[i].PagePath < pages[j].PagePath })
+		// A group is settled once EVERY page in it has the others recorded as
+		// judged. One page acked out of three still leaves a live question, so
+		// the group stays until the operator has closed all of them.
+		settled := true
+		for _, page := range pages {
+			meta, ok := reviewedMeta[page.PagePath]
+			if !ok || !identityEvidenceReviewed(meta, duplicatePeerEvidence(page.PagePath, pages)) {
+				settled = false
+				break
+			}
+		}
+		if settled {
+			continue
+		}
 		out = append(out, DuplicatePersonGroup{Name: name, Pages: pages})
 	}
 	// Biggest groups first, then by name so the list is stable across cycles.

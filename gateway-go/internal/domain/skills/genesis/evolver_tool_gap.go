@@ -88,7 +88,7 @@ func (e *Evolver) maybePairToolGap(skillName string, resp evolveResp, stats *Usa
 
 	// One open pairing per (skill, tool): a prior proposed/accepted candidate
 	// for the same tool means the queue already knows.
-	title := fmt.Sprintf("tool gap: %s — %s", tool, skillName)
+	title := fmt.Sprintf("도구 공백: %s — %s", tool, skillName)
 	if existing, err := e.tracker.RecentSelfCorrectionCandidates(skillName, "", 20); err == nil {
 		for _, c := range existing {
 			if c.Title == title && (c.Status == SelfCorrectionStatusProposed || c.Status == SelfCorrectionStatusAccepted) {

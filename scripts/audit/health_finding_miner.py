@@ -96,10 +96,10 @@ LIST_LIMIT = 500
 DEFAULT_GATEWAY_URL = "http://127.0.0.1:18789"
 
 _RISK_NOTE = (
-    "Deterministic bench mining: confirm the finding still reproduces at HEAD before "
-    "editing. Structural work must keep behavior identical and pass the full lane gates. "
-    "If the remediation would touch acceptance machinery or security CODEOWNERS paths, "
-    "land nothing and record why."
+    "벤치에서 결정적으로 올라온 지적입니다. 편집 전에 HEAD에서 여전히 재현되는지 "
+    "확인해야 합니다. 구조 작업은 동작을 그대로 유지하면서 해당 레인 게이트를 전부 "
+    "통과해야 합니다. 처방이 수용 기계(acceptance machinery)나 보안 CODEOWNERS 경로를 "
+    "건드려야 한다면 아무것도 반영하지 말고 이유를 기록합니다."
 )
 
 # The responsibility/fan-out family scores a large public surface and/or a
@@ -123,14 +123,13 @@ INCREMENTAL_KINDS = frozenset({
 })
 
 INCREMENTAL_VERIFY = (
-    "Contract: this finding scores a large surface and/or a git-history window "
-    "and CANNOT disappear in one session — do not aim for that. Land ONE bounded "
-    "structural step instead: move the top 1-2 consumers behind a narrow port, "
-    "or shrink the exported surface for one capability. If no such step is "
-    "cleanly separable, land nothing and record why. Done = the bounded step "
-    "compiles, passes the lane gates, and plausibly reduces the finding's "
-    "structural driver (exports / fan-in / fan-out); the score itself moves "
-    "over multiple steps and window slides."
+    "계약: 이 지적은 넓은 표면이나 git 히스토리 창을 대상으로 채점하므로 한 세션에 "
+    "사라질 수 없습니다 — 그것을 목표로 삼지 마십시오. 대신 경계가 분명한 구조 "
+    "한 걸음만 반영합니다: 상위 소비자 1~2개를 좁은 포트 뒤로 옮기거나, 한 기능의 "
+    "공개 표면을 줄입니다. 그렇게 깔끔히 떼어낼 걸음이 없으면 아무것도 반영하지 말고 "
+    "이유를 기록합니다. 완료 기준 = 그 한 걸음이 빌드되고 레인 게이트를 통과하며 "
+    "지적의 구조적 동인(export/fan-in/fan-out)을 실제로 줄인다. 점수 자체는 여러 "
+    "걸음과 창 이동을 거쳐 움직입니다."
 )
 
 
@@ -223,11 +222,11 @@ def structural_candidates(report: dict[str, Any]) -> list[dict[str, Any]]:
             # verify ask with an honest bounded step.
             proposed = f"{proposed} {INCREMENTAL_VERIFY}".strip()
         elif verify:
-            proposed = f"{proposed} Verify: {verify}".strip()
+            proposed = f"{proposed} 확인 방법: {verify}".strip()
         candidate = {
             "scope": "code",
             "skillName": "codebase-health",
-            "title": f"structural finding: {kind} @ {f['path']}",
+            "title": f"구조 지적: {kind} @ {f['path']}",
             "candidate": str(f.get("why") or "").strip(),
             "evidence": (
                 f"{fid} [{f.get('pillar')}/{f.get('severity')} "
@@ -296,11 +295,11 @@ def runtime_candidates(runtime: dict[str, Any] | None) -> list[dict[str, Any]]:
         out.append({
             "scope": "code",
             "skillName": "runtime-health",
-            "title": f"runtime standing weakness: {name} {score:.1f}/100",
+            "title": f"런타임 상시 취약 지점: {name} {score:.1f}/100",
             "candidate": (
-                f"runtime-health dimension '{name}' is a standing weakness: {score:.1f}/100 "
-                f"over the last {meta.get('days', '?')}d window "
-                f"(composite {runtime.get('composite', '?')})."
+                f"runtime-health 차원 '{name}' 이 상시 취약 지점입니다: 최근 "
+                f"{meta.get('days', '?')}일 창에서 {score:.1f}/100 "
+                f"(종합 {runtime.get('composite', '?')})."
             ),
             "evidence": (
                 f"runtime-{name} [runtime-health/weak-dimension score={score:.1f}] "
@@ -309,10 +308,10 @@ def runtime_candidates(runtime: dict[str, Any] | None) -> list[dict[str, Any]]:
             "reason": "runtime-health standing weakness — proactive L4 supply (RSI P5 ws3)",
             "targetFiles": [],
             "proposedChange": (
-                f"Identify the dominant contributor to the '{name}' dimension in the gateway "
-                f"and land a targeted improvement, then re-run scripts/audit/runtime-health.py "
-                f"and confirm the {name} score recovers. Do not relabel or suppress the "
-                f"signal — runtime-health's honest fault accounting is the contract."
+                f"게이트웨이에서 '{name}' 차원을 끌어내리는 주된 원인을 찾아 겨냥한 개선을 "
+                f"반영한 뒤, scripts/audit/runtime-health.py 를 다시 돌려 {name} 점수가 "
+                f"회복되는지 확인한다. 신호에 다른 이름을 붙이거나 억제하면 안 된다 — "
+                f"runtime-health의 정직한 결함 회계가 계약이다."
             ),
             "risk": _RISK_NOTE,
             "source": f"{SOURCE_PREFIX}:runtime-{name}",

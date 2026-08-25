@@ -45,6 +45,9 @@ type WorkFeedDeps struct {
 	// long-presses a morning-card deadline row (actionID "deadline_done:<path>").
 	// Non-settling (ActionMark): the card stays for its other deadlines.
 	OnDeadlineDone func(item workfeed.Item, actionID string)
+	// OnIdentityReviewed, if set, records the operator's answer to a wiki
+	// person-identity question (동명이인·중복 인물) so the scan stops asking.
+	OnIdentityReviewed func(item workfeed.Item, actionID string)
 }
 
 const (
@@ -243,6 +246,9 @@ func workFeedActionRun(deps WorkFeedDeps) rpcutil.HandlerFunc {
 		}
 		if deps.OnDeadlineDone != nil && strings.HasPrefix(actionID, "deadline_done:") {
 			deps.OnDeadlineDone(result.Item, actionID)
+		}
+		if deps.OnIdentityReviewed != nil && strings.HasPrefix(actionID, "identity_reviewed:") {
+			deps.OnIdentityReviewed(result.Item, actionID)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":             true,

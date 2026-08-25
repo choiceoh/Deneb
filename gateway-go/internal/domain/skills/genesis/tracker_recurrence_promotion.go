@@ -137,15 +137,15 @@ func (t *Tracker) PromoteTargetRecurrenceCandidates() (int, error) {
 		if _, err := t.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 			Scope:     "skill",
 			SkillName: rec.skill,
-			Title:     "Accepted evolve target keeps recurring: " + rec.skill,
+			Title:     "수용된 진화 대상이 계속 재발함: " + rec.skill,
 			Candidate: fmt.Sprintf(
-				"The last accepted evolve for %s targeted failure signature %q, but the signature recurred %d times in real usage after the evolve — the fix did not stick.",
+				"%s 의 마지막 수용 진화는 실패 시그니처 %q 를 겨냥했지만, 진화 이후 실사용에서 같은 시그니처가 %d회 다시 났습니다 — 고쳐지지 않았습니다.",
 				rec.skill, rec.signature, rec.recurrences,
 			),
 			Evidence:       evidence,
 			TargetFiles:    targets,
-			ProposedChange: "Re-evolve the skill against this recurrence evidence, or pin the signature as a held-out validation case so the next evolve cannot be accepted without actually fixing it.",
-			Risk:           "Deterministic promotion from usage traces; signature matching is fuzzy substring — confirm the recurrences share the root cause before re-evolving.",
+			ProposedChange: "이 재발 증거를 근거로 스킬을 다시 진화시키거나, 그 시그니처를 held-out 검증 케이스로 고정해 실제로 고치지 않은 진화는 수용될 수 없게 만든다.",
+			Risk:           "사용 트레이스에서 결정적으로 올라온 후보입니다. 시그니처 매칭이 느슨한 부분문자열이니 다시 진화시키기 전에 재발들이 같은 원인인지 확인해야 합니다.",
 			Source:         source,
 		}); err != nil {
 			return promoted, fmt.Errorf("genesis-tracker: record recurrence candidate: %w", err)
@@ -271,11 +271,11 @@ func (t *Tracker) PromoteFailureClusterCandidates() (int, error) {
 		skill := strings.TrimSpace(c.Skill)
 		scope := "test"
 		targets := []string{"~/.deneb/data/skill_validation_cases.jsonl"}
-		title := "Recurring failure cluster: " + signature
+		title := "반복 실패 클러스터: " + signature
 		skillFileNote := ""
 		if skill != "" {
 			scope = "skill"
-			title = "Recurring failure in " + skill + ": " + signature
+			title = skill + " 스킬에서 반복되는 실패: " + signature
 			if p, ok := t.resolveSkillTarget(skill); ok {
 				targets = append([]string{p}, targets...)
 			} else {
@@ -294,13 +294,13 @@ func (t *Tracker) PromoteFailureClusterCandidates() (int, error) {
 			SkillName: skill,
 			Title:     title,
 			Candidate: fmt.Sprintf(
-				"Failure signature %q recurred %d times in the health window (kind=%s). Find the root cause and either evolve the owning skill or pin a held-out validation case so the pattern is caught next time.",
+				"실패 시그니처 %q 가 건강 관측 창에서 %d회 반복됐습니다 (kind=%s). 근본 원인을 찾아 해당 스킬을 진화시키거나, 같은 패턴이 다음에 잡히도록 held-out 검증 케이스로 고정해야 합니다.",
 				signature, c.Support, c.Kind,
 			),
 			Evidence:       evidence,
 			TargetFiles:    targets,
-			ProposedChange: "Review the clustered failures, fix the root cause (skill body or handling), and add a held-out validation case reproducing the signature.",
-			Risk:           "Deterministic promotion from clustered failure traces; signature matching is fuzzy substring and the shadow route is advisory — confirm the members share a root cause and the intervention surface before acting.",
+			ProposedChange: "묶인 실패들을 살펴 근본 원인(스킬 본문 또는 처리 로직)을 고치고, 그 시그니처를 재현하는 held-out 검증 케이스를 추가한다.",
+			Risk:           "클러스터 실패 트레이스에서 결정적으로 올라온 후보입니다. 시그니처 매칭은 느슨한 부분문자열이고 shadow route는 자문일 뿐이니, 손대기 전에 묶인 실패들이 정말 같은 원인인지와 개입 지점이 맞는지 확인해야 합니다.",
 			Source:         source,
 		}); err != nil {
 			// A forbidden-surface target or weak-record rejection kills THIS

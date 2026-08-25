@@ -27,6 +27,14 @@ type verifyFinding struct {
 	// (Phase 5): an exact-duplicate merge or an LLM-high-confidence category move.
 	// Nil means advisory-only — surfaced in the report, never auto-touched.
 	Fix *verifyFix `json:"fix,omitempty"`
+	// AckPages marks a finding as OPERATOR-ANSWERABLE and lists the 인물 pages
+	// a "확인했음" decision stamps (person_identity_ack.go). Set only by the two
+	// identity scans, which may never auto-fix and therefore need a way to end;
+	// nil on every other finding, which keeps the ordinary first-time/repeat
+	// reporting path unchanged.
+	AckPages []string `json:"ackPages,omitempty"`
+	// AckLabel is the short operator-facing name for the decision chip.
+	AckLabel string `json:"ackLabel,omitempty"`
 }
 
 // wikiVerifyMisclassMaxTokens budgets the category-verdict JSON array. 2048
@@ -797,7 +805,9 @@ func (wd *WikiDreamer) detectHomonymPersonPages() []verifyFinding {
 			Type: "homonym",
 			Detail: fmt.Sprintf("%q 한 페이지에 회사 도메인 %s — 동명이인 병합 의심 (분리는 운영자 판단)",
 				h.Title, strings.Join(h.Domains, ", ")),
-			PageA: h.PagePath,
+			PageA:    h.PagePath,
+			AckPages: []string{h.PagePath},
+			AckLabel: h.Title,
 		})
 	}
 	return findings
@@ -829,8 +839,10 @@ func (wd *WikiDreamer) detectDuplicatePersonPages() []verifyFinding {
 			Type: "person-duplicate",
 			Detail: fmt.Sprintf("%q 이름으로 인물 페이지 %d장 — %s (병합은 운영자 판단)",
 				g.Name, len(g.Pages), strings.Join(parts, " · ")),
-			PageA: g.Pages[0].PagePath,
-			PageB: g.Pages[1].PagePath,
+			PageA:    g.Pages[0].PagePath,
+			PageB:    g.Pages[1].PagePath,
+			AckPages: groupPagePaths(g.Pages),
+			AckLabel: g.Name,
 		})
 	}
 	return findings
@@ -865,4 +877,13 @@ var bodyEmailAddressRe = regexp.MustCompile(`[\w.+-]+@[\w-]+\.[\w.-]+`)
 // bodyEmailAddresses returns the addresses written in a page body.
 func bodyEmailAddresses(body string) []string {
 	return bodyEmailAddressRe.FindAllString(strings.ToLower(body), -1)
+}
+
+// groupPagePaths lists a duplicate-name group's pages in scan order.
+func groupPagePaths(pages []DuplicatePersonPage) []string {
+	out := make([]string, 0, len(pages))
+	for _, p := range pages {
+		out = append(out, p.PagePath)
+	}
+	return out
 }
