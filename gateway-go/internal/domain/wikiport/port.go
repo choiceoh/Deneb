@@ -46,7 +46,6 @@ type (
 	Tier1Result             = wiki.Tier1Result
 	IndexEntry              = wiki.IndexEntry
 	ProjectStatus           = wiki.ProjectStatus
-	ProjectSite             = wiki.ProjectSite
 	SiteFields              = wiki.SiteFields
 	ContactEnrichResult     = wiki.ContactEnrichResult
 	DealRecord              = wiki.DealRecord
