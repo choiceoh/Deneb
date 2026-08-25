@@ -156,11 +156,11 @@ func TestSkillHintSummaryTruncatesAtSeparatorAndCap(t *testing.T) {
 // (skill context is orthogonal to reference material, so unlike
 // recall/feed it is NOT suppressed by notebook grounding).
 func TestBuildTailAdditionsPreservesHintPosition(t *testing.T) {
-	adds := buildTailAdditions(RunParams{AutoDeliveredOutput: true}, "recall", "", "힌트")
+	adds := buildTailAdditions(RunParams{AutoDeliveredOutput: true}, "recall", "", "힌트", "")
 	if len(adds) != 3 || adds[0] != "recall" || adds[1] != "힌트" {
 		t.Fatalf("recall branch adds = %#v", adds)
 	}
-	adds = buildTailAdditions(RunParams{}, "", "노트북", "힌트")
+	adds = buildTailAdditions(RunParams{}, "", "노트북", "힌트", "")
 	if len(adds) != 2 || adds[0] != "노트북" || adds[1] != "힌트" {
 		t.Fatalf("notebook branch adds = %#v", adds)
 	}

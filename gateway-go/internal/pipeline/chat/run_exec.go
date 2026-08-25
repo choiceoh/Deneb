@@ -771,7 +771,11 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 	if !deps.briefcaseMode {
 		messages = attachPersistedTails(params.SessionKey, messages)
 	}
-	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding, skillHints)
+	boardState := ""
+	if !deps.briefcaseMode {
+		boardState = sessionBoardTail(sessionBlackboard(params.SessionKey, deps.now()))
+	}
+	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding, skillHints, boardState)
 	messages, tailInjected, cleanTarget, tailTargetIdx := injectTailAdditionsTracked(messages, tailAdds)
 	if tailInjected && shouldRecordTail(params, deps) {
 		// Ordinal must be computed from clean transcript bytes — attachPersistedTails
