@@ -22,6 +22,8 @@
 //	noisemail   — delete machine-sender analyses misfiled INTO project folders,
 //	              where they escape the staging demotion and vouch for their
 //	              own sender domain.
+//	spammail    — delete analyses whose own opening line classifies the mail as
+//	              an ad / newsletter / marketing blast (operator-directed).
 //
 // Deliberately NOT here: relocating non-business mail out of 프로젝트/. A
 // 메일분석 page's path is derived from its message ID, so a later re-analysis
@@ -43,8 +45,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/mailpriority"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -90,6 +94,7 @@ func run() error {
 		{"themes", repairThemeHistory},
 		{"stubedges", stripStubRelatedEdges},
 		{"noisemail", deleteProjectFiledNoiseMail},
+		{"spammail", deleteSelfDeclaredSpamMail},
 	}
 	for _, p := range passes {
 		if *only != "" && *only != p.name {
@@ -755,4 +760,135 @@ func provenanceFrom(body string) string {
 		}
 	}
 	return ""
+}
+
+// --- pass: spammail ---------------------------------------------------------
+
+// Self-classification tokens: what an analysis calls a mail when the mail is
+// bulk. Drawn from the live corpus, not invented — every one of these appears
+// verbatim in an opening line (see spamClassifyWindow).
+var spamClassifyRe = regexp.MustCompile(
+	`업무 *메일이 아|업무와 *무관|업무와는 *무관|업무 *무관|광고|뉴스레터|마케팅|프로모션|스팸|` +
+		`자동 *발신|구독 *(안내|갱신|결제)|결제 *(실패|오류)|수신 *거부|홍보 *(메일|뉴스)`,
+)
+
+// An analysis of a REAL mail often mentions the day's junk in passing — the
+// corpus case is "오늘 메일 24건 중 광고·테스트성(…)을 제외하고, 이 건은 진코솔라 본사
+// GM급이 …", a GM-level price escalation that a naive keyword match would have
+// deleted. These markers say the classification is being applied to OTHER mail,
+// so the line is a contrast, not a verdict on this one.
+var spamContrastRe = regexp.MustCompile(`제외|와 달리|과 달리|이 건은|이번 건은|이 메일은 다|반면`)
+
+// spamClassifyWindow bounds how far into the opening line the verdict may sit.
+// A real classification leads ("TLDR 테크 뉴스레터 — 업무와 무관한…", "광고 메일 —
+// DeepL…"); a passing mention sits deeper in a sentence that is about something
+// else. Runes, so Korean counts by character.
+const spamClassifyWindow = 60
+
+// deleteSelfDeclaredSpamMail removes 메일분석 pages whose own opening line
+// classifies the mail as bulk — advertising, a newsletter, a marketing blast, a
+// subscription/billing notice.
+//
+// This pass trusts the analysis body's conclusion, which the other passes
+// deliberately do not: noisemail keys on the sender address precisely because
+// trusting model output as evidence is the failure mode this whole campaign has
+// been closing. It is used here because the operator directed it ("스팸 메일성
+// 메일분석 페이지는 다 지워버려"), and because the judgement is cheap to check —
+// the verdict sits in the first line, in the analyst's own words, and a human
+// reading the list can see whether each one is right.
+//
+// Two guards keep it from over-reaching: the verdict must LEAD the line (a
+// passing mention of the day's junk does not count) and the line must not be
+// drawing a contrast with other mail.
+func deleteSelfDeclaredSpamMail(store *wiki.Store, apply bool, rep *report) error {
+	paths, err := store.ListPages("프로젝트")
+	if err != nil {
+		return err
+	}
+	bySender := map[string]int{}
+	for _, rp := range paths {
+		if !strings.Contains(filepath.ToSlash(rp), "/메일분석/") {
+			continue
+		}
+		page, err := store.ReadPage(rp)
+		if err != nil || page == nil {
+			continue
+		}
+		line := firstProseLine(page.Body)
+		if line == "" || !spamVerdict(line) {
+			continue
+		}
+		from := provenanceFrom(page.Body)
+		if !apply {
+			rep.add("would delete %s — %s", rp, truncRunes(line, 70))
+			bySender[senderAddr(from)]++
+			continue
+		}
+		if err := store.DeletePage(rp); err != nil {
+			rep.fail("spammail %s: %v", rp, err)
+			continue
+		}
+		bySender[senderAddr(from)]++
+		rep.add("deleted %s — %s", rp, truncRunes(line, 70))
+	}
+	senders := make([]string, 0, len(bySender))
+	for k := range bySender {
+		senders = append(senders, k)
+	}
+	sort.Slice(senders, func(a, b int) bool {
+		if bySender[senders[a]] != bySender[senders[b]] {
+			return bySender[senders[a]] > bySender[senders[b]]
+		}
+		return senders[a] < senders[b]
+	})
+	for _, sdr := range senders {
+		rep.add("  발신자별: %-46s %d장", sdr, bySender[sdr])
+	}
+	return nil
+}
+
+// spamVerdict reports whether the opening line is this analysis calling THIS
+// mail bulk, rather than mentioning bulk mail while discussing something else.
+func spamVerdict(line string) bool {
+	if spamContrastRe.MatchString(line) {
+		return false
+	}
+	loc := spamClassifyRe.FindStringIndex(line)
+	if loc == nil {
+		return false
+	}
+	return utf8.RuneCountInString(line[:loc[0]]) <= spamClassifyWindow
+}
+
+// firstProseLine returns the first line of actual analysis — past the
+// frontmatter, the provenance blockquote, and any heading.
+func firstProseLine(body string) string {
+	for _, ln := range strings.Split(body, "\n") {
+		t := strings.TrimSpace(ln)
+		if t == "" || strings.HasPrefix(t, ">") || strings.HasPrefix(t, "#") || strings.HasPrefix(t, "---") {
+			continue
+		}
+		return t
+	}
+	return ""
+}
+
+func senderAddr(from string) string {
+	if i := strings.IndexByte(from, '<'); i >= 0 {
+		if j := strings.IndexByte(from[i:], '>'); j > 0 {
+			return strings.ToLower(from[i+1 : i+j])
+		}
+	}
+	if from == "" {
+		return "(unknown)"
+	}
+	return strings.ToLower(from)
+}
+
+func truncRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
 }
