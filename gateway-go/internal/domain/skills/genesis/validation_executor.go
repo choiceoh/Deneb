@@ -156,6 +156,18 @@ func parseEmittedToolCalls(raw string) ([]emittedToolCall, error) {
 	if aerr == nil {
 		return arr, nil
 	}
+	// Envelope drift: the executor model answers with the RIGHT plan wrapped in
+	// a single string field — {"answer":"{\"tool_calls\":[…]}"}. The escaped
+	// inner quotes defeat both the direct unmarshal and recoverReplayPlanObject
+	// (which scans for a literal "tool_calls"), so a fully compliant plan was
+	// read as unparseable and the behavioral gate failed OPEN. Measured on the
+	// production journal 2026-08-25: of 5 distinct failure bodies, 2 carried a
+	// complete plan inside an "answer" envelope.
+	if inner, ok := unwrapReplayEnvelope(raw); ok {
+		if calls, ierr := parseEmittedToolCalls(inner); ierr == nil {
+			return calls, nil
+		}
+	}
 	if err == nil {
 		err = fmt.Errorf("missing tool_calls field")
 	}
@@ -179,6 +191,33 @@ func replayBodyHead(raw string) string {
 		head = head[:limit] + "…"
 	}
 	return head
+}
+
+// unwrapReplayEnvelope decodes a single-level JSON envelope whose value is a
+// STRING carrying the real payload, e.g. {"answer":"{\"tool_calls\":[…]}"}.
+// Returns the decoded inner text when exactly one string field looks like a
+// plan (contains tool_calls, or opens a JSON object/array); prose answers —
+// the model declining because the replay case has no concrete input — do not
+// match and stay errors, which the caller treats as fail-open.
+func unwrapReplayEnvelope(raw string) (string, bool) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &fields); err != nil {
+		return "", false
+	}
+	for _, value := range fields {
+		var inner string
+		if err := json.Unmarshal(value, &inner); err != nil {
+			continue
+		}
+		trimmed := strings.TrimSpace(inner)
+		if trimmed == "" {
+			continue
+		}
+		if strings.Contains(trimmed, "tool_calls") || strings.HasPrefix(trimmed, "[") {
+			return trimmed, true
+		}
+	}
+	return "", false
 }
 
 func recoverReplayPlanObject(raw string) (string, bool) {
