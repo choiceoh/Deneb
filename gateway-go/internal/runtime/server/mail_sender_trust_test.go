@@ -118,3 +118,74 @@ func TestMailSenderTrustHelpers(t *testing.T) {
 		t.Fatal("empty helper contract")
 	}
 }
+
+// A domain earns "active counterparty" status from the sender-domain tags of
+// project-linked mail analyses — which analyzing a newsletter creates. Before
+// the ordering fix that made the loop closed: the first analysis vouched for the
+// domain, the vouch outranked the machine-sender test, and the newsletter kept
+// being analyzed. Measured in the live corpus at 45 pages for one sender.
+func TestMailSenderTrustDecisionDomainVouchDoesNotRescueMachineSender(t *testing.T) {
+	t.Setenv("DENEB_MAIL_OUR_DOMAINS", "ours.test")
+	t.Setenv(trustedSendersEnv, "")
+	t.Setenv(trustedDomainsEnv, "")
+
+	store, err := contacts.NewStore(filepath.Join(t.TempDir(), "contacts.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The domain is on file, the machine address itself is not — exactly the
+	// law-firm-newsletter shape (newsletteradmin@ at a firm we work with).
+	if _, err := store.ReplaceAll([]contacts.Contact{{
+		Name:   "Counsel",
+		Emails: []string{"lawyer@firm.test"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{MemorySubsystem: &MemorySubsystem{contactsStore: store}}
+
+	got := server.mailSenderTrustDecision(&gmail.MessageDetail{
+		From: "Firm <newsletteradmin@firm.test>", Subject: "8월 뉴스레터",
+	})
+	if got.Disposition != mailanalysis.SenderReview {
+		t.Fatalf("machine sender at a known domain must still go to review = %+v", got)
+	}
+
+	// The same domain's real person is unaffected — this is the whole reason
+	// domain inference exists, so the fix must not cost it.
+	person := server.mailSenderTrustDecision(&gmail.MessageDetail{
+		From: "Counsel <lawyer@firm.test>", Subject: "계약서 검토 회신",
+	})
+	if person.Disposition != mailanalysis.SenderTrusted {
+		t.Fatalf("known counterparty person = %+v", person)
+	}
+}
+
+// A Gmail SPAM/PROMOTIONS label is a third party's guess and lands on real
+// counterparty mail, so a standing relationship with the domain still outranks
+// it — only the address-level signals are absolute.
+func TestMailSenderTrustDecisionDomainVouchStillBeatsPromoLabel(t *testing.T) {
+	t.Setenv("DENEB_MAIL_OUR_DOMAINS", "ours.test")
+	t.Setenv(trustedSendersEnv, "")
+	t.Setenv(trustedDomainsEnv, "")
+
+	store, err := contacts.NewStore(filepath.Join(t.TempDir(), "contacts.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReplaceAll([]contacts.Contact{{
+		Name:   "Buyer",
+		Emails: []string{"buyer@client.test"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{MemorySubsystem: &MemorySubsystem{contactsStore: store}}
+
+	got := server.mailSenderTrustDecision(&gmail.MessageDetail{
+		From:    "Sales <sales@client.test>",
+		Subject: "9월 발주 예정 물량",
+		Labels:  []string{"CATEGORY_PROMOTIONS"},
+	})
+	if got.Disposition != mailanalysis.SenderTrusted {
+		t.Fatalf("mislabelled counterparty mail must still analyze = %+v", got)
+	}
+}

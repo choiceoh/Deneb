@@ -775,3 +775,35 @@ func BenchmarkScoreBoundaryMix(b *testing.B) {
 		}
 	}
 }
+
+// A newsletter that puts a person's name in the local part and the marker in
+// the domain (dan@tldrnewsletter.com — 5 pages in the live corpus) read as an
+// ordinary business sender to the local-part-only rule.
+func TestIsBulkNoiseMatchesMarkerInDomain(t *testing.T) {
+	noise := []string{
+		"TLDR <dan@tldrnewsletter.com>",
+		"Weekly <editor@company-newsletters.com>",
+		"Sender <hello@noreply.vendor.test>",
+		"Daemon <x@mailer-daemon.test>",
+	}
+	for _, from := range noise {
+		if ok, _ := IsBulkNoise(from, "이번 주 소식"); !ok {
+			t.Errorf("IsBulkNoise(%q) = false, want true", from)
+		}
+	}
+
+	// The domain list is deliberately shorter than the local-part one: these
+	// words appear inside real company domains, and the sender is a person.
+	business := []string{
+		"Judah Levine <judah@freightos.com>",
+		"Kim <kim@newscorp-korea.test>",
+		"Sales <sales@promotex.test>",
+		"Engineer <eng@alertlogic.test>",
+		"삼일PwC <kr_samil_pwc_deal_access@pwc.com>",
+	}
+	for _, from := range business {
+		if ok, reason := IsBulkNoise(from, "견적 회신 요청"); ok {
+			t.Errorf("IsBulkNoise(%q) = true (%s), want false", from, reason)
+		}
+	}
+}

@@ -70,6 +70,16 @@ var (
 	// mail as routine (password links, newsletters, system notifications).
 	machineSenderRe = regexp.MustCompile(`(?i)\b(no-?reply|noreply|donotreply|do-not-reply|newsletters?|notifications?|alerts?|mailer-daemon|bounce[s]?|marketing|promo)[^@]*@`)
 
+	// The same markers on the DOMAIN side: a real person's name in the local
+	// part does not make dan@tldrnewsletter.com anything but a newsletter.
+	// Deliberately a shorter list than the local-part one, and matched as a bare
+	// substring because a domain is a machine identifier with no word breaks
+	// ("tldrnewsletter.com"). alerts/news/promo are left out precisely because
+	// they DO turn up inside real company domains (alertlogic, newscorp). All
+	// 104 sender addresses in the live corpus were checked against it: it
+	// matches the newsletter and nothing a person sent.
+	machineSenderDomainRe = regexp.MustCompile(`(?i)@[^@]*(newsletters?|no-?reply|donotreply|mailer-daemon)`)
+
 	// Noise / security-link markers: advertising tags and login/verification
 	// mail. These demote to TierNone outright — a "[광고]" subject with an
 	// amount in it is still an ad.
@@ -100,7 +110,7 @@ var (
 // mail sender-trust so autonomous intake only gates those, not unknown
 // business counterparties. reason is a short Korean label when true.
 func IsBulkNoise(from, subject string) (bool, string) {
-	if machineSenderRe.MatchString(from) {
+	if machineSenderRe.MatchString(from) || machineSenderDomainRe.MatchString(from) {
 		return true, "자동발신/뉴스레터 주소"
 	}
 	if noiseRe.MatchString(subject) {

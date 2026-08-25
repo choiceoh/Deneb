@@ -29,57 +29,92 @@ func (s *Server) mailSenderTrustDecision(msg *gmail.MessageDetail) mailanalysis.
 		subject = msg.Subject
 	}
 
-	if s.senderExplicitlyTrusted(email, domain) {
+	// Order matters, and the axis is how DIRECTLY the sender was vouched for.
+	// Two kinds of evidence name this exact address — what the operator
+	// configured, and a record somebody saved of the address itself — and both
+	// outrank the noise test. Domain-level inference does not, because a
+	// newsletter address stays a newsletter address no matter what else that
+	// domain sends.
+	//
+	// Ranking domain inference above the noise test made the gate unreachable
+	// for exactly the senders that needed it, and did so through a loop that
+	// sustained itself: ActiveCounterpartyDomains is built from the sender-domain
+	// tags of project-linked mail analyses, so analyzing a newsletter once wrote
+	// its own domain into the counterparty set, which granted the sender trust,
+	// which kept it being analyzed. Measured 2026-08-25 in the live corpus:
+	// no-reply@plaud.ai (45 pages, trusted purely by that loop) and
+	// newsletteradmin@yulchon.com (8 pages, trusted because the firm's domain is
+	// in contacts) both matched machineSenderRe and were analyzed anyway. Neither
+	// address is itself recorded anywhere.
+	if s.senderOperatorTrusted(email, domain) || s.senderAddressRecorded(email) {
 		return trustedSender()
 	}
-	if reason := bulkNoiseReason(from, subject, msg); reason != "" {
+	// The sender's own address, and an ad tag in the subject, are properties of
+	// the mail itself — no inference about the domain overrides them.
+	if reason := selfDeclaredNoiseReason(from, subject); reason != "" {
 		return reviewSender(reason)
+	}
+	// A Gmail SPAM/PROMOTIONS label is a third party's guess, and it lands on
+	// real counterparty mail often enough that any sign we know this domain
+	// should outrank it.
+	if label := promoOrSpamLabel(msg); label != "" && !s.senderDomainInferred(domain) {
+		return reviewSender("스팸/프로모션 라벨: " + label)
 	}
 	return trustedSender()
 }
 
-func (s *Server) senderExplicitlyTrusted(email, domain string) bool {
+// senderOperatorTrusted reports the trust the operator stated directly: our own
+// mail domains and the trusted-sender/domain env lists.
+func (s *Server) senderOperatorTrusted(email, domain string) bool {
 	if email == "" {
 		return false
 	}
 	if stringSetContains(mailanalysis.OurMailDomains(), domain) {
 		return true
 	}
-	if stringSetContains(splitEnvSet(os.Getenv(trustedSendersEnv)), email) ||
-		stringSetContains(splitEnvSet(os.Getenv(trustedDomainsEnv)), domain) {
-		return true
-	}
-	if s == nil {
+	return stringSetContains(splitEnvSet(os.Getenv(trustedSendersEnv)), email) ||
+		stringSetContains(splitEnvSet(os.Getenv(trustedDomainsEnv)), domain)
+}
+
+// senderAddressRecorded reports whether this exact address is on file — a wiki
+// person page or a contact entry that lists it. Somebody deliberately saved the
+// address, so it beats the noise test even when it reads like a machine sender
+// (a vendor's no-reply order-confirmation address is the real case).
+func (s *Server) senderAddressRecorded(email string) bool {
+	if s == nil || email == "" {
 		return false
 	}
 	if s.wikiStore != nil && s.wikiStore.ResolvePersonByEmail(email) != "" {
 		return true
 	}
-	if s.contactsStore != nil {
-		if s.contactsStore.HasEmail(email) {
-			return true
-		}
-		if domain != "" && !wiki.IsFreemailDomain(domain) && s.contactsStore.HasDomain(domain) {
-			return true
-		}
-	}
-	if domain != "" && len(s.cpProjects.Lookup(s.wikiStore, domain)) > 0 {
-		return true
-	}
-	return false
+	return s.contactsStore != nil && s.contactsStore.HasEmail(email)
 }
 
-func bulkNoiseReason(from, subject string, msg *gmail.MessageDetail) string {
-	if label := promoOrSpamLabel(msg); label != "" {
-		return "스팸/프로모션 라벨: " + label
+// senderDomainInferred reports whether we have a standing relationship with the
+// sender's DOMAIN: a contact there, or recent project mail with it. This is what
+// keeps unknown business counterparties auto-analyzing. Nothing here names the
+// sender, so it outranks only a third-party spam label, never the address itself.
+func (s *Server) senderDomainInferred(domain string) bool {
+	if s == nil || domain == "" {
+		return false
 	}
-	if ok, reason := mailpriority.IsBulkNoise(from, subject); ok {
-		if email := strings.ToLower(senderEmailFromHeader(from)); email != "" {
-			return reason + ": " + email
-		}
-		return reason
+	if s.contactsStore != nil && !wiki.IsFreemailDomain(domain) && s.contactsStore.HasDomain(domain) {
+		return true
 	}
-	return ""
+	return len(s.cpProjects.Lookup(s.wikiStore, domain)) > 0
+}
+
+// selfDeclaredNoiseReason names the noise the mail declares about itself — a
+// machine-sender address, or an ad tag / unsubscribe line in the subject.
+func selfDeclaredNoiseReason(from, subject string) string {
+	ok, reason := mailpriority.IsBulkNoise(from, subject)
+	if !ok {
+		return ""
+	}
+	if email := strings.ToLower(senderEmailFromHeader(from)); email != "" {
+		return reason + ": " + email
+	}
+	return reason
 }
 
 func promoOrSpamLabel(msg *gmail.MessageDetail) string {
