@@ -57,9 +57,14 @@ type Evolver struct {
 	catalog          *skills.Catalog
 	tracker          *Tracker
 	validationEngine *SkillValidationEngine
-	model            string
-	logger           *slog.Logger
-	configMu         sync.RWMutex
+	// knownTools returns the registered gateway tool names. The judge needs a
+	// referent for "존재하지 않는 도구"; without one it falls back to the incumbent
+	// SKILL.md and rejects every repair of a stale skill as fabrication.
+	// Injected because the tool registry lives in the chat pipeline.
+	knownTools func() []string
+	model      string
+	logger     *slog.Logger
+	configMu   sync.RWMutex
 
 	// selfTest gates the verification loop: when true, a rewritten skill is
 	// judged before being committed (a bad "improvement" is worse than none).
@@ -946,4 +951,16 @@ func (t *EvolutionTask) Run(ctx context.Context) error {
 			"evolved", evolved, "total", len(results))
 	}
 	return nil
+}
+
+// SetKnownTools wires the registered gateway tool names. Optional — with no
+// registry the judge payload simply omits the authoritative list and behavior
+// is unchanged from before, rather than asserting an empty toolset.
+func (e *Evolver) SetKnownTools(fn func() []string) {
+	if e == nil {
+		return
+	}
+	e.configMu.Lock()
+	e.knownTools = fn
+	e.configMu.Unlock()
 }
