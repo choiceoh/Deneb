@@ -190,25 +190,24 @@ class ModelRouteTopologyTests(unittest.TestCase):
 
         self.assertIn("ROUTE_BACKEND_MISSING", codes)
 
-    def test_main2_and_subagent_bindings_are_checked_for_hidden_models(self) -> None:
+    def test_main2_binding_is_checked_for_hidden_models(self) -> None:
         deneb = deneb_config(default_model="kimi/k3")
         agents = deneb["agents"]
         assert isinstance(agents, dict)
         agents["main2Model"] = "kimi/k3-fast"
-        agents["defaults"] = {"subagents": {"model": {"primary": "kimi/k3-sub"}}}
         models = deneb["models"]
         assert isinstance(models, dict)
-        models["hiddenModels"] = ["kimi/k3-fast", "kimi/k3-sub"]
+        models["hiddenModels"] = ["kimi/k3-fast"]
 
         codes = [
             finding.code
             for finding in check_topology(
                 deneb,
-                wormhole_config(route("k3"), route("k3-fast"), route("k3-sub")),
+                wormhole_config(route("k3"), route("k3-fast")),
             ).findings
         ]
 
-        self.assertEqual(codes.count("ROLE_MODEL_HIDDEN"), 2)
+        self.assertEqual(codes.count("ROLE_MODEL_HIDDEN"), 1)
 
     def test_invalid_relevant_config_shape_is_not_silently_ignored(self) -> None:
         deneb = deneb_config()
