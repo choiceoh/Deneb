@@ -266,8 +266,20 @@ func (v *SkillValidationEngine) EvaluateBehavior(ctx context.Context, skillName,
 
 // replayBehaviorEvaluable reports whether a replay case can be executed: it needs
 // a user task to simulate and at least one assertion to score the resulting plan.
+// legacyCoverageInputPrefix marks replay inputs the adversarial-coverage
+// generator minted before it stopped setting one. They are not user tasks, so a
+// model cannot plan for them; 42 of these sit in the live corpus across 18
+// skills and cannot be regenerated (the store is append-only). The records stay
+// — their RequiredTools assertion is real and the deterministic gate scores it
+// from the skill body — but they must never reach the behavioral executor.
+const legacyCoverageInputPrefix = "exercise the skill's use of tool "
+
 func replayBehaviorEvaluable(r SkillReplayCaseRecord) bool {
-	return strings.TrimSpace(r.Input) != "" && r.hasAssertions()
+	input := strings.TrimSpace(r.Input)
+	if input == "" || strings.HasPrefix(input, legacyCoverageInputPrefix) {
+		return false
+	}
+	return r.hasAssertions()
 }
 
 func replayBehaviorCases(cases []SkillValidationCaseRecord, limit int) []SkillValidationCaseRecord {

@@ -305,6 +305,19 @@ acceptance machinery stays forbidden at record time.
    every skill. Every executor failure now logs the **case** id, not just the
    skill — the failure is nearly always a property of one case, and without an
    id nobody can find which one to repair.
+
+   The case that caused it was itself a **generator** defect: adversarial
+   tool-coverage cases synthesized their replay input as `exercise the skill's
+   use of tool <X>` — a meta-instruction, not a user task, so the executor
+   refuses and the plan parse fails. The generator now **borrows a real task**
+   from one of the skill's existing cases, and leaves `Input` empty when none
+   exists: an empty input keeps the case deterministic-only (`RequiredTools` is
+   still scored against the body) instead of pretending to be executable. 42
+   legacy records across 18 skills carry the old placeholder and are filtered
+   out of the behavioral set by prefix — the store is append-only so they stay,
+   and they still serve the deterministic gate. Note the generator also treats
+   parameter names (`max_results`, `no_reply`, `db_path`) as "tools"; that is a
+   separate, still-open extraction defect.
 9. **A bundled-skill deletion is a tombstone, and a tombstone hides itself.**
    The repo tree is a production checkout so the files cannot be removed;
    `miniapp.skills.delete` records the name in `~/.deneb/data/deleted_skills.json`
