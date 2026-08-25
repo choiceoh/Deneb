@@ -174,54 +174,62 @@ func (r *report) print() {
 //
 // Ordering matters: longer keys first so 핵말고흥 is repaired before a shorter
 // key could bite into it.
-var jamoRepairs = []struct{ bad, good string }{
-	{"핵말고흥", "해밀고흥"},
-	{"설치조걘부", "설치조건부"},
-	{"정적화엽시험", "정적연소시험"},
-	{"남도에코에코", "남도에코"},
-	{"요청핵둔", "요청해둔"},
-	{"이경개시졌", "개시됐"},
-	{"손핵배상", "손해배상"},
-	{"손핼배상", "손해배상"},
+// name marks a proper noun — a company, place, or project. Only those get the
+// curated-attestation audit: a wrong NAME is unverifiable from context and gets
+// written into ledgers, while a wrong ordinary word (휴대폰, 직무대행) is obvious
+// on sight and never appears in curated metadata anyway. Encoding the
+// distinction here is what keeps the audit's findings worth reading.
+var jamoRepairs = []struct {
+	bad, good string
+	name      bool
+}{
+	{"핵말고흥", "해밀고흥", true},
+	{"설치조걘부", "설치조건부", false},
+	{"정적화엽시험", "정적연소시험", false},
+	{"남도에코에코", "남도에코", true},
+	{"요청핵둔", "요청해둔", false},
+	{"이경개시졌", "개시됐", false},
+	{"손핵배상", "손해배상", false},
+	{"손핼배상", "손해배상", false},
 	// Both spellings in 로그.md are corruptions of the same farm — the curated
 	// 대표.md (and its cues) spell it 보해매실농원, and 핵→해 is the corruption this
 	// table repairs everywhere else (핵봄/핵밀/핵바람/손핵배상). Mapping 보핵매실 to
 	// 보필매실 would have swapped one corruption for another and written a wrong
 	// counterparty name into a financial ledger.
-	{"보핵매실", "보해매실"},
-	{"보필매실", "보해매실"},
-	{"직묵대행", "직무대행"},
-	{"업묵보고", "업무보고"},
-	{"나엘되지", "나열되지"},
-	{"해상풉력", "해상풍력"},
-	{"소규modal", "소규모"},
-	{"탑솔라(쭈)", "탑솔라(주)"},
-	{"핫남군청", "하남군청"},
-	{"의신탕력", "의신풍력"},
-	{"오리지인", "오리진"},
-	{"주첳별", "주차별"},
-	{"핵바람", "해바람"},
-	{"뉴그렌", "뉴글렌"},
-	{"파트ner", "파트너"},
-	{"미엔랑", "미얀마"},
-	{"통볐다", "통했다"},
-	{"측멸도", "측정도"},
-	{"지철된", "지체된"},
-	{"휴드폰", "휴대폰"},
-	{"남려와", "남겨와"},
-	{"근종할", "추종할"},
-	{"미봉채", "미봉책"},
-	{"태양꿕", "태양광"},
-	{"조걸부", "조건부"},
-	{"핵봄", "해봄"},
-	{"걸물", "건물"},
-	{"낶부", "내부"},
-	{"핵밀", "해밀"},
-	{"법묵", "법무"},
-	{"법묲", "법무"},
-	{"유옄", "유예"},
-	{"즉닉", "즉시"},
-	{"면살", "명분"},
+	{"보핵매실", "보해매실", true},
+	{"보필매실", "보해매실", true},
+	{"직묵대행", "직무대행", false},
+	{"업묵보고", "업무보고", false},
+	{"나엘되지", "나열되지", false},
+	{"해상풉력", "해상풍력", false},
+	{"소규modal", "소규모", false},
+	{"탑솔라(쭈)", "탑솔라(주)", true},
+	{"핫남군청", "하남군청", true},
+	{"의신탕력", "의신풍력", true},
+	{"오리지인", "오리진", true},
+	{"주첳별", "주차별", false},
+	{"핵바람", "해바람", true},
+	{"뉴그렌", "뉴글렌", true},
+	{"파트ner", "파트너", false},
+	{"미엔랑", "미얀마", true},
+	{"통볐다", "통했다", false},
+	{"측멸도", "측정도", false},
+	{"지철된", "지체된", false},
+	{"휴드폰", "휴대폰", false},
+	{"남려와", "남겨와", false},
+	{"근종할", "추종할", false},
+	{"미봉채", "미봉책", false},
+	{"태양꿕", "태양광", false},
+	{"조걸부", "조건부", false},
+	{"핵봄", "해봄", true},
+	{"걸물", "건물", false},
+	{"낶부", "내부", false},
+	{"핵밀", "해밀", true},
+	{"법묵", "법무", false},
+	{"법묲", "법무", false},
+	{"유옄", "유예", false},
+	{"즉닉", "즉시", false},
+	{"면살", "명분", false},
 }
 
 // derivedPages are regenerated from the pages they summarize, so repairing them
@@ -229,11 +237,68 @@ var jamoRepairs = []struct{ bad, good string }{
 // what actually fixes them.
 var derivedPages = map[string]bool{"index.md": true, "log.md": true}
 
+// auditJamoTable checks each substitution's TARGET against the corpus before any
+// of them run, and reports the ones a human still has to look at.
+//
+// This exists because of a bug this tool shipped with: {"보핵매실", "보필매실"} — a
+// mapping from one corruption to ANOTHER, which would have written a wrong
+// counterparty name into a financial ledger. The check that missed it was
+// frequency: 보필매실 occurred 5 times, so it looked attested. It was not
+// canonical, it was just the more common typo.
+//
+// What separates them is WHERE the form lives. The real name is in curated
+// metadata — 대표.md's body, and its cues/title/summary, which a person wrote and
+// maintains. The typo lived only in 로그.md body text, which is appended
+// mechanically. So attestation means "appears somewhere curated", not "appears".
+//
+// Three outcomes, and only the middle one is a finding:
+//
+//	curated            — the target is a name the wiki actually uses. Silent.
+//	body-only          — ★ the 보필매실 shape: common enough to look right, never
+//	                     used anywhere a person curated. Reported.
+//	absent entirely    — a one-off word (미봉책, 정적연소시험). Expected, noted.
+func auditJamoTable(store *wiki.Store, paths []string, rep *report) {
+	var curated, body strings.Builder
+	for _, rp := range paths {
+		page, err := store.ReadPage(rp)
+		if err != nil || page == nil {
+			continue
+		}
+		curated.WriteString(page.Meta.Title + "\n" + page.Meta.Summary + "\n")
+		curated.WriteString(strings.Join(page.Meta.Cues, "\n") + "\n")
+		curated.WriteString(strings.Join(page.Meta.Tags, "\n") + "\n")
+		// A 대표 page IS the curated statement of what a thing is called.
+		if strings.HasSuffix(filepath.ToSlash(rp), "/대표.md") {
+			curated.WriteString(page.Body + "\n")
+			continue
+		}
+		body.WriteString(page.Body + "\n")
+	}
+	curatedText, bodyText := curated.String(), body.String()
+	for _, r := range jamoRepairs {
+		if !r.name {
+			continue
+		}
+		if !strings.Contains(curatedText, r.bad) && !strings.Contains(bodyText, r.bad) {
+			continue // rule does not fire on this corpus; nothing to vouch for
+		}
+		if strings.Contains(curatedText, r.good) {
+			continue
+		}
+		if strings.Contains(bodyText, r.good) {
+			rep.fail("jamo: %q → %q — 대상이 본문에만 있고 큐레이션된 곳엔 없음. 오타→오타일 수 있으니 대표/cues로 정본 확인", r.bad, r.good)
+			continue
+		}
+		rep.note("확인 요망(정본 미출현, 일회성 어휘면 정상): %q → %q", r.bad, r.good)
+	}
+}
+
 func repairJamo(store *wiki.Store, apply bool, rep *report) error {
 	paths, err := store.ListPages("")
 	if err != nil {
 		return err
 	}
+	auditJamoTable(store, paths, rep)
 	for _, rp := range paths {
 		if derivedPages[filepath.ToSlash(rp)] {
 			continue
