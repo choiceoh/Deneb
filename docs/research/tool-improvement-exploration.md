@@ -45,7 +45,7 @@ sidebarTitle: "도구 개선 탐구"
 - **도구 스키마 ~50개** (`toolwire/schema/tool_schemas.json` — 파라미터·max_output만 보유, 설명은 등록 코드에; `toolwire/toolreg_boundary_test.go` `allSchemaCases`), 등록은 toolwire + chat 측 별도(fetch_tools, code_action). 그중 **deferred ~23+** (`Deferred: true`, `toolwire/core/register.go`).
 - **deferred 메커니즘**: 초기 Tools 배열에서 스키마 제외, 시스템 프롬프트에는 이름 + 80 rune 절단 설명만 노출(`prompt/system_prompt.go`). 모델이 `fetch_tools`(exact names 또는 BM25 질의, `tools/fetchops/fetch_tools.go`)로 활성화하면 다음 턴부터 `DynamicToolsProvider`가 스키마 주입.
 - **프리셋 8종** (`toolpreset/preset.go`): conversation/boot/self-review/researcher/implementer/verifier/wiki-research/coding. 노출·활성화·실행 4지점에서 게이트.
-- **실행 경로 안전장치** (`chat/tools.go:97` `ToolRegistry.Execute`, 단일 평면 레지스트리): malformed JSON 복구(`tool_argrepair.go`) → 프리셋 방어 → `$ref` 해석 → RunCache(grep만 캐시) → 실행 → 24K head/tail 절단 + 스필오버 → 캐시 무효화 → 사후처리 → 선택적 LLM 압축(`compress:true`, 16000자 이상만 — `localai_hooks.go:44`).
+- **실행 경로 안전장치** (`chat/tools.go:97` `ToolRegistry.Execute`, 단일 평면 레지스트리): malformed JSON 복구(`tool_argrepair.go`) → 프리셋 방어 → RunCache(grep만 캐시) → 실행 → 24K head/tail 절단 + 스필오버 → 캐시 무효화 → 사후처리 → 선택적 LLM 압축(`compress:true`, 16000자 이상만 — `localai_hooks.go:44`).
 - **루프 감지** (`ai/agent/tool_loop.go:40-42`): warn 10 / critical 20 / breaker 30, 같은 경로 편집 6회 넛지.
 - **미지 도구**: Levenshtein "Did you mean" 제안(`chat/tool_suggest.go`).
 - **병렬 실행은 제거됨** — 도구는 항상 모델 방출 순서대로 순차 실행.
