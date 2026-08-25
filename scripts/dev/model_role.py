@@ -35,13 +35,15 @@ DENEB_CONFIG = os.path.expanduser("~/.deneb/deneb.json")
 # role name -> deneb.json key. The keys live under agents/agents.defaults, but
 # their exact nesting has moved between versions, so lookup is by key name
 # anywhere in the tree (see _find) rather than by a fixed path.
-# Only roles the gateway itself reads are listed. "analysis" is deliberately
-# absent: the role was retired on 2026-07-07 (model-roles.md dogma #5) and the
-# leftover deneb.json key is dead config — resolving it would quietly hand
-# callers a value nothing else in the system honors.
+# The keys mirror modelrole.Role exactly (registry.go) — test_model_role.py
+# fails if the two drift. Roles that are NOT registry constants stay out even
+# when deneb.json carries a plausible key: "analysis" was retired 2026-07-07
+# (model-roles.md dogma #5) and "evolverModel" only ever existed as a LOG field
+# in init_genesis.go. Resolving either would hand callers a value nothing in the
+# system honors — the same phantom-config trap that made a dead subagents pin
+# look load-bearing.
 ROLE_KEYS = {
     "coding": "codingModel",
-    "evolver": "evolverModel",
     "fallback": "fallbackModel",
     "lightweight": "lightweightModel",
     "main": "defaultModel",

@@ -7,26 +7,35 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 > 어떤 임무가 어떤 모델 역할을 쓰는지의 **단일 진실원**. 실제 모델 이름은 코드에 하드코딩하지 않는다 — 코드는 **역할만 고르고**, 역할→모델은 `~/.deneb/deneb.json` 의 `agents.*Model` + wormhole 라우터가 결정한다. 새 LLM 호출을 추가하거나 역할을 바꿀 때 아래 "임무→역할 표"에 행을 추가하고 근거를 적는다.
 
-## 역할 6종 + 의도
+## 역할 8종 + 의도
 
-상수: `gateway-go/internal/ai/modelrole/registry.go`. 모델 매핑: `~/.deneb/deneb.json` `agents.*Model` (예시는 *현재값*일 뿐 — 코드 판단 기준이 아니다).
+상수: `gateway-go/internal/ai/modelrole/registry.go` (main·main2·submain·coding·lightweight·tiny·fallback·vision). 모델 매핑: `~/.deneb/deneb.json` `agents.*Model`.
 
-> ★ **현재값 칼럼은 스냅샷(2026-07-07 갱신)이다.** 오퍼레이터가 네이티브 모델 픽커로 수시로 바꾸므로 문서를 믿지 말고 **판단 전에 실측**하라: 프로덕션 호스트에서 `~/.deneb/deneb.json` 의 `agents.*Model` 키를 직접 읽는다. 이 문서가 과거에 "main=로컬 dsv4"를 서술하는 동안 실제 main 은 2026-06-28부터 클라우드 glm-5.2 였다 — 그 드리프트가 이 경고의 근거다.
+> ★ **이 문서는 역할→모델 현재값을 적지 않는다** (2026-08-25 정정). 오퍼레이터가 네이티브 픽커로 수시로 바꾸므로 어떤 스냅샷이든 며칠이면 거짓이 되고, 실제로 2026-07-17 스냅샷은 8개 역할 중 6개가 틀린 채 남아 있었다. **판단 전에 실측하라**:
 >
-> 2026-07-17 가용성 사실: dsv4 는 **srv2 단일노드 `vllm-dsv4`**(sparkfleet launch 가 복구 경로), wormhole 의 dsv4 별칭 2종에 **엔트리별 fallback→qwen3.6**(srv1 로컬 `:8000`)이 걸려 있어 dsv4 다운에도 lightweight/tiny 는 생존한다. **adaptive effort router 는 전 wormhole 모델 개통**(deneb.json `providers.wormhole.routing.enabled` + `DENEB_ADAPTIVE_EFFORT=1`) — 단순 대화 턴은 glm 도 thinking-off 로 ~5s. kimi 프로바이더는 402(멤버십 만료, 운영자 갱신 대기).
+> ```bash
+> for r in main main2 submain coding lightweight tiny fallback vision; do \
+>   printf '%-12s %s\n' "$r" "$(python3 scripts/dev/model_role.py $r --fallback '(미설정)')"; done
+> ```
+>
+> (같은 조회를 스크립트에서 쓰려면 `role_model("tiny", fallback)` — 도그마 #6.)
+
+> 드리프트 전례: 이 문서가 "main=로컬 dsv4"를 서술하는 동안 실제 main 은 2026-06-28부터 클라우드였다. 스냅샷을 적으면 반드시 썩는다 — 그래서 위 실측 커맨드가 유일한 답이다.
+>
+> 2026-08-25 가용성 사실: dsv4 는 **srv2 `vllm-dsv4`**(sparkfleet launch 가 복구 경로). **srv1 의 qwen3.6-35b-a3b 는 2026-08-06 이후 죽어 있다**(hybrid dsv4 워커와 RAM 경합) — 웜홀에서 dsv4 별칭 2종의 fallback 이었으나, 죽은 홉이 그 뒤의 **유료** `deepseek-v4-flash-api` 로 트래픽을 흘려 12일간 1,346 회 과금시켰다. 지금 체인은 dsv4 별칭 → `glm-5.3`(구독 정액), qwen → 로컬 dsv4 이고, 유료 엔트리는 `metered: true` + 배포 게이트로 사슬에서 배제된다(도그마 #7). **adaptive effort router 는 전 wormhole 모델 개통**(deneb.json `providers.wormhole.routing.enabled` + `DENEB_ADAPTIVE_EFFORT=1`) — 단순 대화 턴은 glm 도 thinking-off 로 ~5s.
 >
 > 2026-08-02 **dsv4 thinking 기본 ON (모델 레이어)**: 0731 서빙이 템플릿 기본을 non-thinking 으로 뒤집어, 세션 레벨 미설정 시 dsv4 챗 런 — 특히 클라우드→dsv4 **폴백 턴** — 이 조용히 무추론으로 돌았다. `fillDualModeDefaultThinking`(chat/run_capability.go, 폴백 체인에도 배선)이 듀얼모드(토글 보유) 모델에 enabled-adaptive 를 기본 주입한다. 세션 "off" 는 존중, effort router 의 단순턴 off 도 그대로, tiny 역할 강제 off 도 무영향(raw 경로). 판정 주의 2가지: ① 응답 추론은 vLLM `reasoning` 필드로 온다(`reasoning_content` 아님 — llm 클라이언트는 양쪽 파싱) ② 쉬운 프롬프트는 적응형 모델이 추론 0자로 즉시 닫는 게 **정상** — 쉬운 프로브로 "thinking 고장" 을 판정하지 말 것 (2026-08-01~02 이틀간의 오판정 사례).
 
-| 역할 | 상수 | 의도 | 로컬/클라우드 (2026-07-17 스냅샷) |
-|---|---|---|---|
-| main | `RoleMain` | **대화형** 턴 — 사용자 대면 최고 지능 (가장 강력) | ⚠️ **클라우드** (kimi/kimi-for-coding 구독제, ≥07-17) |
-| main2 | `RoleMain2` | **opt-in 제2 메인** — main급 품질의 **난이도-라우팅 수신자**: 명백히 단순한 대화 턴(볼륨 대부분)이 여기로 흘러 플래그십 쿼터를 분석급 턴에 보존. **main과 상호 폴백 페어**: main 죽으면 main2가, main2 죽으면 main이 1순위로 이어받아(같은 티어 품질 보존) 그다음에야 lightweight로 강등. 미설정 시 체인 자동 스킵+라우팅 off(단일 main 동작) | 클라우드 (wormhole/glm-5.2 구독제) |
-| submain | `RoleSubmain` | **opt-in 자율 배경 레인** — heartbeat·phone-event 인입을 대화형 main 구독에서 분리해 실어 main 처리 여력을 확보하고, (세션 격리와 함께) 자동 턴이 live `client:main` 컨텍스트를 압축·오염하지 않게 한다. main2가 제외하는 automation 트래픽을 의도적으로 수신. 미설정 시 부재(호출자 `""`→main). | 클라우드 (wormhole/glm-5.2 구독제, 정액이라 비용중립) |
-| coding | `RoleCoding` | 코드 수정·구현자 서브에이전트·스킬 패치 | 클라우드 (glm-5.2) |
-| lightweight | `RoleLightweight` | **바운드 요약**·로컬 잡일꾼 | 로컬 (wormhole/dsv4-nothink@srv2 — qwen3.6에서 교체) |
-| tiny | `RoleTiny` | **단순 분류/추출** (가장 작음) | 로컬 (wormhole/dsv4-nothink) |
-| fallback | `RoleFallback` | 폴백 체인 **최종 안전망** (상호 main 페어 도입 후 별도 클라우드 종량제 지정은 은퇴 — 로컬로 충분) | 로컬 (wormhole/deepseek-v4-flash@srv2) |
-| vision | `RoleVision` | 이미지 턴 (#2510) | 클라우드 (google/gemini-3.5-flash) |
+| 역할 | 상수 | 의도 |
+|---|---|---|
+| main | `RoleMain` | **대화형** 턴 — 사용자 대면 최고 지능 (가장 강력) |
+| main2 | `RoleMain2` | **opt-in 제2 메인** — main급 품질의 **난이도-라우팅 수신자**: 명백히 단순한 대화 턴(볼륨 대부분)이 여기로 흘러 플래그십 쿼터를 분석급 턴에 보존. **main과 상호 폴백 페어**: main 죽으면 main2가, main2 죽으면 main이 1순위로 이어받아(같은 티어 품질 보존) 그다음에야 lightweight로 강등. 미설정 시 체인 자동 스킵+라우팅 off(단일 main 동작) |
+| submain | `RoleSubmain` | **opt-in 자율 배경 레인** — heartbeat·phone-event 인입을 대화형 main 구독에서 분리해 실어 main 처리 여력을 확보하고, (세션 격리와 함께) 자동 턴이 live `client:main` 컨텍스트를 압축·오염하지 않게 한다. main2가 제외하는 automation 트래픽을 의도적으로 수신. 미설정 시 부재(호출자 `""`→main). |
+| coding | `RoleCoding` | 코드 수정·구현자 서브에이전트·스킬 패치 |
+| lightweight | `RoleLightweight` | **바운드 요약**·잡일꾼 (로컬 선호, 원칙은 아님 — sidecar-models.md) |
+| tiny | `RoleTiny` | **단순 분류/추출** (가장 작음) |
+| fallback | `RoleFallback` | 폴백 체인 **최종 안전망**. 종량제(metered) 엔드포인트는 여기에도 두지 않는다 — 도그마 #7 |
+| vision | `RoleVision` | 이미지 턴 (#2510) |
 
 > ★ **main/main2 분리는 모델 분리지 페르소나 분리가 아니다** (2026-07-17, 운영자 설계): 단일 비서 페르소나 원칙은 그대로 — 두 구독제(kimi·glm)에 트래픽을 나누고 서로가 서로의 1순위 폴백이 되는 가용성 페어. 체인: main→main2→lightweight→fallback / main2→main→lightweight→fallback.
 >
@@ -56,7 +65,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 > 근거 칼럼의 "로컬/클라우드" 언급은 각 행 작성 시점의 스냅샷이다. 임무→**역할** 배치가 이 표의 불변 내용이고, 역할→모델(로컬 여부)은 위 스냅샷 표와 deneb.json 실측이 기준.
 
 | 임무 | 위치 | 역할 | 근거 |
-|---|---|---|---|
+|---|---|---|
 | 일간/모닝레터 합성 | `tools/routine/morning_letter.go` 결정적 수집 → `cronrunner` 1회 무도구 의미 투영 → `morning_card.go` 고정 렌더 | **main** | 사용자가 읽는 프로젝트별 중요도·맥락·후행 제안은 품질 종합이라 main. 모델은 JSON 의미 슬롯만 1턴 채우고 양식·수치·이스케이프는 서버가 소유한다. 모델/채팅 장애 시 동일 수집값의 사실 전용 카드로 fail-open. 수동 요청은 도구의 결정적 `delivery`를 그대로 반환 |
 | 프로젝트 위키 딥리서치 갱신 (6h) | `runtime/wikiwork/wiki_research_task.go` | **main** | 도구무거운 에이전트 턴(내부 소스 재조사→위키 본문 갱신·supersede). boot/heartbeat/goal과 동형의 에이전트 턴이라 main, 헬퍼 요약 콜 아님. wiki-research 프리셋(웹 제외)으로 내부 소스 한정, 로컬 |
 | 메일 리포트 종합 (stage2) | `mailAnalysisModels()` / `mailAnalysisAgentSynthesis()` | **main** for 수동·fallback single completion, **submain** for 자동 agent synthesis when configured | 사용자가 읽는 리포트라 수동 분석과 agent 실패 fallback은 main 품질 하한을 유지한다. 자동 메일 합성은 도구무거운 배경 레인이라 submain 구성 시 heartbeat·phone-event와 같은 자율 lane으로 보내 main latency p95를 보호한다. |
@@ -84,7 +93,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 ## LLM 안 쓰는 곳 (의도적)
 
 | 임무 | 위치 | 방식 | 왜 |
-|---|---|---|---|
+|---|---|---|
 | 웹페이지 인앱 번역 (en/ru→ko) | `chat/tools/translateops/translate.go` → `translate_deepl.go` | DeepL API (외부 번역 서비스) | 인앱 브라우저 인플레이스 번역은 **DeepL 전용**. LLM 역할 미사용 — DeepL 미설정/실패 시 그 배치는 원문 유지(개수 보존, 드롭/재정렬 금지). 이전 `translation` 역할 LLM 폴백은 폐기(2026-07-07) |
 | 주간업무보고 | `tools/routine/weekly_report.go` | 결정적 양식 | byte-identical 출력 (#2474) |
 | 메일 우선순위 분류 | `domain/mailpriority/score.go` | 정규식 점수 + 결합 신호 | 글랜스 트리아지 — 한국 업무메일 튜닝 휴리스틱. VIP(주소록)·활성 거래처(`wiki.ActiveCounterpartyDomains` — 최근 60일 프로젝트 연결 메일분석의 발신 도메인, freemail 제외, 서버 10분 캐시) 부스트는 콘텐츠 신호가 있을 때만 증폭(단독 발화 금지 — 글랜스성 보존). 같은 견적·금액 메일도 진행 거래처면 urgent로 — 단일 이벤트가 아닌 결합 신호(시나리오) 원칙 |
