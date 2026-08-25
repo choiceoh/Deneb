@@ -263,12 +263,12 @@ def _extract_roles(deneb: dict[str, object]) -> tuple[RoleBinding, ...]:
         if model_id:
             roles.append(RoleBinding(role, model_id))
 
-    subagents = _optional_object(defaults, "subagents", "deneb.agents.defaults.subagents")
-    subagent_model = _model_primary(
-        subagents.get("model"), "deneb.agents.defaults.subagents.model"
-    )
-    if subagent_model:
-        roles.append(RoleBinding("subagent", subagent_model))
+    # No "subagent" binding: agents.defaults.subagents.model is not a knob the
+    # gateway reads. Sub-agent routing is PROVIDER remapping — a spawned session
+    # swaps provider "zai" for "zai-subagent" (separate key/quota) and keeps the
+    # role's model (chat/run_model.go: shouldRemapSubagentProvider). Validating
+    # the phantom key made the config look load-bearing; it was pruned from
+    # deneb.json on 2026-08-25 along with the rest of the TypeScript-era block.
     return tuple(roles)
 
 
