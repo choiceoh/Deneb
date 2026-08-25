@@ -3,6 +3,7 @@ package genesis
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -120,12 +121,13 @@ func (e *Evolver) judgeVerdictOnce(ctx context.Context, client *llm.Client, mode
 
 ## 사용 이력
 - 총 %d회, 성공 %d, 실패 %d (%.0f%%)
-- 최근 에러: %s%s%s`,
+- 최근 에러: %s%s%s%s`,
 		originalSlot, candidateSlot,
 		stats.TotalUses, stats.SuccessCount, stats.FailureCount, stats.SuccessRate*100,
 		formatRecentErrors(stats.RecentErrors),
 		failurePatternSection,
-		validationSection)
+		validationSection,
+		e.registeredToolsSection())
 
 	// Non-streaming for the same reason as generateCandidateText: glm-class
 	// models leak reasoning into the content stream / append junk when
@@ -360,4 +362,43 @@ type teacherRewriteResp struct {
 			RequiredHeadings    []string `json:"required_headings,omitempty"`
 		} `json:"reproduction_case,omitempty"`
 	} `json:"changes,omitempty"`
+}
+
+// registeredToolsSection tells the judge which tools ACTUALLY exist.
+//
+// Without it the judge has no referent for "존재하지 않는 도구" and falls back to
+// the only list in front of it — the incumbent SKILL.md. The live judge prompt
+// had drifted to exactly that rule ("원본에 없는 도구·명령어·경로가 새로 등장하면
+// 반드시 거부한다"), which makes every candidate that CORRECTS a stale skill
+// look like fabrication.
+//
+// Measured 2026-08-26: youtube-summary-cards named web() as its entry point,
+// YouTube had since consolidated onto the watch tool, and a candidate updating
+// the skill to say so was rejected — "원본에 없는 'watch' 도구를 새로 도입했다 …
+// 검증 불가한 주장". WatchToolSchema is real. The candidate was right and the
+// judge was wrong, and the skill stayed stale because the fix kept being
+// refused. The staler a skill gets, the more reliably its repair is rejected.
+//
+// This goes in the USER payload, not the system prompt, on purpose: the system
+// prompt is a meta artifact the slow loop rewrites, and it already drifted once.
+// Data assembled by code cannot be evolved away and is always current.
+func (e *Evolver) registeredToolsSection() string {
+	if e == nil {
+		return ""
+	}
+	e.configMu.RLock()
+	fn := e.knownTools
+	e.configMu.RUnlock()
+	if fn == nil {
+		return ""
+	}
+	names := fn()
+	if len(names) == 0 {
+		return ""
+	}
+	sorted := append([]string(nil), names...)
+	sort.Strings(sorted)
+	return "\n\n## 실제 등록된 게이트웨이 도구 (권위 있는 목록)\n" +
+		strings.Join(sorted, ", ") +
+		"\n\n이 목록이 \"도구가 존재하는가\"의 유일한 기준이다. 원본 SKILL.md에 없더라도 이 목록에 있으면 실재하는 도구이니, 새로 등장했다는 이유만으로 날조로 판정하지 마라 — 도구가 통합·개명되면 낡은 스킬을 고치는 후보가 바로 그렇게 보인다. 이 목록에 없는 이름을 지어냈을 때만 거부하라."
 }

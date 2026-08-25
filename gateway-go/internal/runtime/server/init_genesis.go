@@ -98,6 +98,12 @@ func (s *Server) initGenesisServices() {
 	if reviewModel == "" {
 		reviewModel = s.modelRegistry.FullModelID(modelrole.RoleLightweight)
 	}
+	// Give the judge a referent for "존재하지 않는 도구". Without it it falls back
+	// to the incumbent SKILL.md and rejects every candidate that repairs a stale
+	// skill as fabrication (measured 2026-08-26 on youtube-summary-cards).
+	if s.genesisEvolver != nil {
+		s.genesisEvolver.SetKnownTools(s.chatHandler.ToolNames)
+	}
 	reviewFork := skilllifecycle.NewReviewFork(s.chatHandler, s.genesisTranscripts, s.genesisTracker, reviewModel, s.logger)
 	s.genesisNudger = skilllifecycle.NewNudgerFromEnvWithTrackerAndReviewer(
 		s.genesisSvc,
