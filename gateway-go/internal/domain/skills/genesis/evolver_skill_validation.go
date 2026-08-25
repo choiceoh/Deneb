@@ -167,6 +167,12 @@ func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candida
 	if ok, reason := requiredToolPreflight(cases, originalContent, candidateBody); !ok {
 		return false, reason
 	}
+	// Also cheap and also model-free: a `deneb.<fn>` the code_action bridge does
+	// not expose is not a style problem, it is an AttributeError the first time
+	// the agent follows the skill.
+	if ok, reason := bridgeSurfacePreflight(originalContent, candidateBody); !ok {
+		return false, reason
+	}
 	covered := hasScorableValidationCase(cases)
 	if ok, reason := guardrails.ValidateHermesEvolutionGuardrails(originalContent, candidateBody, covered); !ok {
 		return false, reason
