@@ -185,15 +185,17 @@ func (r *report) print() {
 // person read the output.
 //
 // What the survivors have in common is that context settles them: 걸물측 can only
-// be 건물측, 14일 유옄 can only be 유예. What these have in common is that it does
-// not — each has two readings a careful person could defend, and picking one to
-// look thorough is how a wrong company name enters a financial ledger. Leaving a
-// visible corruption is the cheaper error.
+// be 건물측, 14일 유옄 can only be 유예. What lands here is what context does not
+// settle — two readings a careful person could defend, where picking one to look
+// thorough is how a wrong company name enters a financial ledger.
+//
+// Four entries sat here on 2026-08-25 and the operator resolved three of them
+// (보해매실, 측면도, 내려와). Two of those had a guess of mine attached that was
+// wrong — 남려와 read as 나와서, not 내려와 — which is the argument for the list:
+// a plausible guess is indistinguishable from a correct one until someone who
+// knows the subject reads it. Leaving a visible corruption is the cheaper error.
 var jamoUnresolved = []struct{ bad, note string }{
-	{"보핵매실 / 보필매실", "매실농원 이름 3표기 공존 — 대표.md cues=보해매실농원, 로그.md 대표이사 기록·합의서 PDF 파일명=보필매실농원. 원본 문서나 운영자만 정할 수 있음"},
-	{"측멸도", "구조물 도면 문맥 — 측정도인가 측면도인가 (타입별 송부라면 측면도)"},
-	{"남려와", "\"SK가 직접 남려와 이야기하라\" — 남겨와인가 나와서인가"},
-	{"근종할", "\"진행 상황을 근종할 필요\" — 추종할인가 추적할인가"},
+	{"근종할", "\"진행 상황을 근종할 필요\" — 추종할인가 추적할인가. 2026-08-25 운영자도 판단 보류"},
 }
 
 // name marks a proper noun — a company, place, or project. Only those get the
@@ -204,44 +206,60 @@ var jamoUnresolved = []struct{ bad, note string }{
 var jamoRepairs = []struct {
 	bad, good string
 	name      bool
+	// confirmed records that a person signed off on this target. The audit skips
+	// those — not because it trusts the table, but because a finding that keeps
+	// reappearing after it has been answered is how real findings get ignored.
+	// Set it only for a target an operator actually stated.
+	confirmed bool
 }{
-	{"핵말고흥", "해밀고흥", true},
-	{"설치조걘부", "설치조건부", false},
-	{"정적화엽시험", "정적연소시험", false},
-	{"남도에코에코", "남도에코", true},
-	{"요청핵둔", "요청해둔", false},
-	{"이경개시졌", "개시됐", false},
-	{"손핵배상", "손해배상", false},
-	{"손핼배상", "손해배상", false},
-	{"직묵대행", "직무대행", false},
-	{"업묵보고", "업무보고", false},
-	{"나엘되지", "나열되지", false},
-	{"해상풉력", "해상풍력", false},
-	{"소규modal", "소규모", false},
-	{"탑솔라(쭈)", "탑솔라(주)", true},
-	{"핫남군청", "해남군청", true},
-	{"의신탕력", "의신풍력", true},
-	{"오리지인", "오리진", true},
-	{"주첳별", "주차별", false},
-	{"핵바람", "해바람", true},
-	{"뉴그렌", "뉴글렌", true},
-	{"파트ner", "파트너", false},
-	{"미엔랑", "미열람", false},
-	{"통볐다", "통했다", false},
-	{"지철된", "지체된", false},
-	{"휴드폰", "휴대폰", false},
-	{"미봉채", "미봉책", false},
-	{"태양꿕", "태양광", false},
-	{"조걸부", "조건부", false},
-	{"핵봄", "해봄", true},
-	{"걸물", "건물", false},
-	{"낶부", "내부", false},
-	{"핵밀", "해밀", true},
-	{"법묵", "법무", false},
-	{"법묲", "법무", false},
-	{"유옄", "유예", false},
-	{"즉닉", "즉시", false},
-	{"면살", "명분", false},
+	{"핵말고흥", "해밀고흥", true, false},
+	{"설치조걘부", "설치조건부", false, false},
+	{"정적화엽시험", "정적연소시험", false, false},
+	{"남도에코에코", "남도에코", true, false},
+	{"요청핵둔", "요청해둔", false, false},
+	{"이경개시졌", "개시됐", false, false},
+	{"손핵배상", "손해배상", false, false},
+	{"손핼배상", "손해배상", false, false},
+	// 운영자 확정 2026-08-25. 코퍼스만으로는 3표기(보해/보필/보핵) 중 어느 것도
+	// 정할 수 없었다 — 대표.md cues는 보해, 로그.md 대표이사 기록과 합의서 PDF
+	// 파일명은 보필이었다. 지상진실이 코퍼스 밖에 있는 경우다.
+	{"보핵매실", "보해매실", true, true},
+	{"보필매실", "보해매실", true, true},
+	// 운영자 확정 2026-08-25. 구조물 도면이라 측면도. 측정도로도 읽혀서 문맥이
+	// 못 정했다.
+	{"측멸도", "측면도", false, true},
+	// 운영자 확정 2026-08-25. "SK가 직접 내려와 이야기하라" — 현장으로 내려오라는
+	// 뜻. 남겨와/나와서 둘 다 틀린 추측이었다.
+	{"남려와", "내려와", false, true},
+	{"직묵대행", "직무대행", false, false},
+	{"업묵보고", "업무보고", false, false},
+	{"나엘되지", "나열되지", false, false},
+	{"해상풉력", "해상풍력", false, false},
+	{"소규modal", "소규모", false, false},
+	{"탑솔라(쭈)", "탑솔라(주)", true, false},
+	{"핫남군청", "해남군청", true, true},
+	{"의신탕력", "의신풍력", true, false},
+	{"오리지인", "오리진", true, false},
+	{"주첳별", "주차별", false, false},
+	{"핵바람", "해바람", true, false},
+	{"뉴그렌", "뉴글렌", true, false},
+	{"파트ner", "파트너", false, false},
+	{"미엔랑", "미열람", false, false},
+	{"통볐다", "통했다", false, false},
+	{"지철된", "지체된", false, false},
+	{"휴드폰", "휴대폰", false, false},
+	{"미봉채", "미봉책", false, false},
+	{"태양꿕", "태양광", false, false},
+	{"조걸부", "조건부", false, false},
+	{"핵봄", "해봄", true, false},
+	{"걸물", "건물", false, false},
+	{"낶부", "내부", false, false},
+	{"핵밀", "해밀", true, false},
+	{"법묵", "법무", false, false},
+	{"법묲", "법무", false, false},
+	{"유옄", "유예", false, false},
+	{"즉닉", "즉시", false, false},
+	{"면살", "명분", false, false},
 }
 
 // derivedPages are regenerated from the pages they summarize, so repairing them
@@ -298,7 +316,7 @@ func auditJamoTable(store *wiki.Store, paths []string, rep *report) {
 	}
 	curatedText, bodyText := curated.String(), body.String()
 	for _, r := range jamoRepairs {
-		if !r.name {
+		if !r.name || r.confirmed {
 			continue
 		}
 		if !strings.Contains(curatedText, r.bad) && !strings.Contains(bodyText, r.bad) {
