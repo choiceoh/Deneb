@@ -103,7 +103,7 @@ func TestAdversarialToolCaseBorrowsRealInput(t *testing.T) {
 		RequiredSubstrings: []string{"read_spillover"},
 		Replay:             SkillReplayCaseRecord{Input: "이 영상 요약해줘 https://youtu.be/abc"},
 	}}
-	for _, got := range probeBehavioralCoverageGaps("s", body, seeded) {
+	for _, got := range probeBehavioralCoverageGaps("s", body, seeded, testKnownTools) {
 		if got.Replay.Input != "이 영상 요약해줘 https://youtu.be/abc" {
 			t.Fatalf("input = %q, want the borrowed task", got.Replay.Input)
 		}
@@ -117,7 +117,7 @@ func TestAdversarialToolCaseBorrowsRealInput(t *testing.T) {
 		RequiredSubstrings: []string{"read_spillover"},
 		Replay:             SkillReplayCaseRecord{Input: "exercise the skill's use of tool read_spillover"},
 	}}
-	for _, got := range probeBehavioralCoverageGaps("s", body, placeholderOnly) {
+	for _, got := range probeBehavioralCoverageGaps("s", body, placeholderOnly, testKnownTools) {
 		if strings.TrimSpace(got.Replay.Input) != "" {
 			t.Fatalf("input = %q, want empty when no real task exists", got.Replay.Input)
 		}

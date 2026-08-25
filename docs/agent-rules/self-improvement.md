@@ -315,9 +315,13 @@ acceptance machinery stays forbidden at record time.
    still scored against the body) instead of pretending to be executable. 42
    legacy records across 18 skills carry the old placeholder and are filtered
    out of the behavioral set by prefix — the store is append-only so they stay,
-   and they still serve the deterministic gate. Note the generator also treats
-   parameter names (`max_results`, `no_reply`, `db_path`) as "tools"; that is a
-   separate, still-open extraction defect.
+   and they still serve the deterministic gate. The generator also used to treat
+   parameter names (`max_results`, `no_reply`, `db_path`) as "tools" — its
+   pattern was any snake_case token. It now matches against the **registry's own
+   names**, injected as `KnownTools` because the tool registry lives in the chat
+   pipeline and this is a domain package. With no registry wired it authors
+   section coverage only: a coverage case built on a guess is worse than no
+   coverage case.
 9. **A bundled-skill deletion is a tombstone, and a tombstone hides itself.**
    The repo tree is a production checkout so the files cannot be removed;
    `miniapp.skills.delete` records the name in `~/.deneb/data/deleted_skills.json`

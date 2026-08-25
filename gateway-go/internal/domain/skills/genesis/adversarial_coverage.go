@@ -163,11 +163,33 @@ var skillToolRefPattern = regexp.MustCompile(`[a-z][a-z0-9]*_[a-z0-9_]+`)
 
 // extractToolRefs returns the distinct snake_case tool identifiers referenced in
 // the body, in first-seen order.
-func extractToolRefs(body string) []string {
+// extractToolRefs returns the snake_case identifiers in body that are ACTUALLY
+// registered gateway tools.
+//
+// The pattern alone matches any snake_case token, and a SKILL body is full of
+// them that are not tools: parameter names (max_results, message_id,
+// include_body), config keys (db_path, md_dir, tailnet_id, serper_api_key), and
+// response fields (no_reply, as_json). Authoring a "tool coverage" case for
+// those probes nothing — dropping the line that mentions `max_results` does not
+// remove a tool contract. Measured 2026-08-26: of 42 tool-coverage cases in the
+// live corpus, close to half named a parameter rather than a tool.
+//
+// known is the registry's own name set, injected because the tool registry
+// lives in the chat pipeline and this is a domain package. An empty set means
+// the caller could not supply one; then no tool cases are authored at all,
+// which is the safe direction — a coverage case built on a guess is worse than
+// no coverage case.
+func extractToolRefs(body string, known map[string]struct{}) []string {
+	if len(known) == 0 {
+		return nil
+	}
 	seen := map[string]struct{}{}
 	var out []string
 	for _, m := range skillToolRefPattern.FindAllString(strings.ToLower(body), -1) {
 		if _, ok := seen[m]; ok {
+			continue
+		}
+		if _, isTool := known[m]; !isTool {
 			continue
 		}
 		seen[m] = struct{}{}
@@ -199,9 +221,9 @@ func dropLinesMentioning(body, token string) string {
 // the deterministic scorer checks against the body AND the executor gate checks
 // against the real tool-call plan (so the case tests behavior, not just prose).
 // Only tools NOT already asserted by an existing case are probed.
-func probeBehavioralCoverageGaps(skillName, body string, cases []SkillValidationCaseRecord) []SkillValidationCaseRecord {
+func probeBehavioralCoverageGaps(skillName, body string, cases []SkillValidationCaseRecord, known map[string]struct{}) []SkillValidationCaseRecord {
 	body = skillBodyOnly(body)
-	tools := extractToolRefs(body)
+	tools := extractToolRefs(body, known)
 	if len(tools) == 0 {
 		return nil
 	}
@@ -271,6 +293,26 @@ type AdversarialCoverageTask struct {
 	Evolver *Evolver
 	Tracker *Tracker
 	Logger  *slog.Logger
+
+	// KnownTools returns the registered gateway tool names. Without it the tool
+	// half of this probe does not run — see extractToolRefs for why guessing is
+	// the worse failure. The section half (heading drops) is unaffected.
+	KnownTools func() []string
+}
+
+// knownToolSet snapshots the injected tool names, lowercased for matching.
+func (t *AdversarialCoverageTask) knownToolSet() map[string]struct{} {
+	if t == nil || t.KnownTools == nil {
+		return nil
+	}
+	names := t.KnownTools()
+	out := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		if n = strings.ToLower(strings.TrimSpace(n)); n != "" {
+			out[n] = struct{}{}
+		}
+	}
+	return out
 }
 
 // Name identifies the task in the autonomous scheduler.
@@ -296,6 +338,11 @@ func (t *AdversarialCoverageTask) Run(ctx context.Context) error {
 		logger = slog.Default()
 	}
 	authored := 0
+	knownTools := t.knownToolSet()
+	if len(knownTools) == 0 {
+		// The section probe still runs; only the tool half needs the registry.
+		logger.Warn("adversarial-coverage: no tool registry wired — authoring section coverage only")
+	}
 	for _, entry := range t.Evolver.catalogEntries() {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -321,7 +368,7 @@ func (t *AdversarialCoverageTask) Run(ctx context.Context) error {
 		}
 		probes := append(
 			probeStructuralCoverageGaps(skill, string(raw), cases),
-			probeBehavioralCoverageGaps(skill, string(raw), cases)...,
+			probeBehavioralCoverageGaps(skill, string(raw), cases, knownTools)...,
 		)
 		for _, nc := range probes {
 			if rerr := t.Tracker.RecordSkillValidationCase(nc); rerr != nil {
