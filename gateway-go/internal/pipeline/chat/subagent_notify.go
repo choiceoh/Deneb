@@ -19,6 +19,9 @@ type SubagentNotifierDeps struct {
 	StartRun     func(reqID string, params RunParams, isSteer bool)
 	EnqueuePend  func(sessionKey string, params RunParams)
 	Sessions     func() *session.Manager
+	// LastAssistantText reads a child's final assistant text when the session's
+	// LastOutput is not populated yet (see leafbind.SubagentNotifierDeps).
+	LastAssistantText func(sessionKey string) string
 }
 
 // NewSubagentNotifier creates and subscribes a child-completion notifier.
@@ -29,6 +32,7 @@ func NewSubagentNotifier(deps SubagentNotifierDeps) *SubagentNotifier {
 		StartRun:               deps.StartRun,
 		EnqueuePend:            deps.EnqueuePend,
 		Sessions:               deps.Sessions,
+		LastAssistantText:      deps.LastAssistantText,
 		Delivery:               deliveryFromSessionKey,
 		ParentTerminatedReason: subagentParentTerminatedReason,
 	})
