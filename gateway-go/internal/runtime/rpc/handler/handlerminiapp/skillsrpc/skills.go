@@ -108,6 +108,8 @@ func SkillsMethods(deps SkillsDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.skills.detail":    skillsDetail(deps),
 		"miniapp.skills.update":    skillsUpdate(deps),
 		"miniapp.skills.delete":    skillsDelete(deps),
+		"miniapp.skills.restore":   skillsRestore(deps),
+		"miniapp.skills.deleted":   skillsDeletedList(),
 		"miniapp.skills.lifecycle": skillsLifecycle(deps),
 	}
 }
@@ -344,6 +346,50 @@ func skillsDelete(deps SkillsDeps) rpcutil.HandlerFunc {
 		invalidateSkills(deps)
 
 		return rpcutil.RespondOK(req.ID, map[string]any{"name": p.Name, "deleted": true})
+	})
+}
+
+// skillsRestore undoes a bundled-skill deletion. Deleting a bundled skill
+// records a tombstone (the repo tree is a production checkout, so the files
+// stay), and the tombstoned skill then disappears from every surface — the
+// list this restore would be reached from included. Without an undo, recovery
+// meant hand-editing ~/.deneb/data/deleted_skills.json.
+//
+// Idempotent: restoring a live skill succeeds and reports restored=false, so a
+// retry after a dropped response is safe.
+func skillsRestore(deps SkillsDeps) rpcutil.HandlerFunc {
+	return minibind.BindOptional[struct {
+		Name string `json:"name"`
+	}](func(ctx context.Context, req *protocol.RequestFrame, p struct {
+		Name string `json:"name"`
+	},
+	) *protocol.ResponseFrame {
+		p.Name = strings.TrimSpace(p.Name)
+		if p.Name == "" {
+			return rpcerr.MissingParam("name").Response(req.ID)
+		}
+		deleted := skills.LoadDeletedSkillNames()
+		if _, ok := deleted[p.Name]; !ok {
+			return rpcutil.RespondOK(req.ID, map[string]any{"name": p.Name, "restored": false})
+		}
+		if err := skills.UnmarkSkillDeleted(p.Name); err != nil {
+			return rpcerr.WrapUnavailable("failed to restore skill", err).Response(req.ID)
+		}
+		invalidateSkills(deps)
+		return rpcutil.RespondOK(req.ID, map[string]any{"name": p.Name, "restored": true})
+	})
+}
+
+// skillsDeletedList names the tombstoned skills. miniapp.skills.list cannot
+// carry them — it returns the live catalog, which is exactly what a tombstone
+// removes them from — so the surface that offers restore needs its own read.
+func skillsDeletedList() rpcutil.HandlerFunc {
+	return minibind.BindOptional[struct{}](func(ctx context.Context, req *protocol.RequestFrame, _ struct{}) *protocol.ResponseFrame {
+		names := skills.DeletedSkillNamesSorted()
+		if names == nil {
+			names = []string{}
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{"names": names})
 	})
 }
 

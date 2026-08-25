@@ -58,9 +58,11 @@ func TestEarlyCapabilityHelpers_PreserveMethodNames(t *testing.T) {
 			got:  srv.earlySkillMethods(),
 			want: []string{
 				"miniapp.skills.delete",
+				"miniapp.skills.deleted",
 				"miniapp.skills.detail",
 				"miniapp.skills.lifecycle",
 				"miniapp.skills.list",
+				"miniapp.skills.restore",
 				"miniapp.skills.update",
 			},
 		},

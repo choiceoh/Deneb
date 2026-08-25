@@ -90,3 +90,59 @@ func MarkSkillDeleted(name string) error {
 	}
 	return atomicfile.WriteFile(path, data, nil)
 }
+
+// UnmarkSkillDeleted removes name from the tombstone file, making a bundled
+// skill live again. Idempotent — unmarking a skill that was never deleted is a
+// no-op, not an error.
+//
+// This exists because deletion of a BUNDLED skill was one-way. The repo tree is
+// a production checkout so the files cannot be removed; the delete RPC records
+// a tombstone instead, and the tombstoned skill then vanishes from every
+// surface INCLUDING the list the operator would restore it from. Recovering
+// meant hand-editing ~/.deneb/data/deleted_skills.json.
+//
+// It cost real capability twice: on 2026-08-18 the operator typed two exact
+// triggers of kb-interview and nothing fired (tombstoned 07-21, nothing said
+// so), and on 2026-08-26 an RSI runtime check found evolution-proposal and
+// skill-factory — the loop's own proposal and skill-creation machinery —
+// tombstoned without intent, alongside four others.
+func UnmarkSkillDeleted(name string) error {
+	path := deletedSkillsPath()
+	if path == "" {
+		return os.ErrNotExist
+	}
+	names := LoadDeletedSkillNames()
+	if _, ok := names[name]; !ok {
+		return nil
+	}
+	delete(names, name)
+	merged := make([]string, 0, len(names))
+	for n := range names {
+		merged = append(merged, n)
+	}
+	sort.Strings(merged)
+	data, err := json.MarshalIndent(deletedSkillsFile{Skills: merged}, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return atomicfile.WriteFile(path, data, nil)
+}
+
+// DeletedSkillNamesSorted returns the tombstoned names in stable order, so a
+// surface can SHOW what it suppressed. A deletion nobody can see is a deletion
+// nobody can undo.
+func DeletedSkillNamesSorted() []string {
+	names := LoadDeletedSkillNames()
+	if len(names) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(names))
+	for n := range names {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
+}
