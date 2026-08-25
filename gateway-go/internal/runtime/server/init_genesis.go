@@ -510,6 +510,11 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 				Evolver: s.genesisEvolver,
 				Tracker: s.genesisTracker,
 				Logger:  s.logger,
+				// The registry's own names. Without them the probe would treat
+				// every snake_case token in a SKILL body as a tool — parameter
+				// names, config keys, response fields — and author coverage
+				// cases that probe nothing.
+				KnownTools: s.chatHandler.ToolNames,
 			})
 			// Runtime-error mining: recurring, code-actionable gateway errors in
 			// the live error ring become propose-only scope=code candidates — the

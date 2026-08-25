@@ -129,7 +129,7 @@ func TestProbeBehavioralCoverageGaps_CreatesCasesForUncaughtToolDrops(t *testing
 				Replay:             SkillReplayCaseRecord{Input: "이번 주 메일 첨부 정리해줘"},
 			},
 		}
-		got := probeBehavioralCoverageGaps("sk", advToolBody, cases)
+		got := probeBehavioralCoverageGaps("sk", advToolBody, cases, testKnownTools)
 		if len(got) == 0 {
 			t.Fatal("no behavioral gap authored despite unprotected tool")
 		}
@@ -160,20 +160,38 @@ func TestProbeBehavioralCoverageGaps_CreatesCasesForUncaughtToolDrops(t *testing
 		cases := []SkillValidationCaseRecord{
 			{SkillName: "sk", ID: "c1", Replay: SkillReplayCaseRecord{RequiredTools: []string{"wiki_search", "mail_archive"}}},
 		}
-		if got := probeBehavioralCoverageGaps("sk", advToolBody, cases); len(got) != 0 {
+		if got := probeBehavioralCoverageGaps("sk", advToolBody, cases, testKnownTools); len(got) != 0 {
 			t.Fatalf("authored despite protected tools: %+v", got)
 		}
 	})
 
 	t.Run("prose without snake_case tools yields nothing", func(t *testing.T) {
-		if got := probeBehavioralCoverageGaps("sk", "# S\n\n본문에 도구 없음.", nil); len(got) != 0 {
+		if got := probeBehavioralCoverageGaps("sk", "# S\n\n본문에 도구 없음.", nil, testKnownTools); len(got) != 0 {
 			t.Fatalf("false tool detected: %+v", got)
 		}
 	})
 }
 
-func TestExtractToolRefsReturnsSnakeCaseToolsOnly(t *testing.T) {
-	got := extractToolRefs("use wiki_search then Mail_Archive; skip plainword and CamelCase")
+// testKnownTools is the registry stand-in: only these names are real tools.
+var testKnownTools = map[string]struct{}{
+	"wiki_search":    {},
+	"mail_archive":   {},
+	"read_spillover": {},
+}
+
+// A SKILL body is full of snake_case that is NOT a tool — parameter names,
+// config keys, response fields. Authoring "tool coverage" for those probes
+// nothing, so only registry names survive extraction.
+func TestExtractToolRefsKeepsOnlyRegisteredTools(t *testing.T) {
+	got := extractToolRefs("use wiki_search then Mail_Archive with max_results=5, db_path, no_reply; skip plainword and CamelCase", testKnownTools)
+	for _, notTool := range []string{"max_results", "db_path", "no_reply"} {
+		if contains(got, notTool) {
+			t.Fatalf("parameter name %q extracted as a tool: %v", notTool, got)
+		}
+	}
+	if extractToolRefs("use wiki_search", nil) != nil {
+		t.Fatal("no registry wired must author no tool cases, not guess")
+	}
 	if !contains(got, "wiki_search") || !contains(got, "mail_archive") {
 		t.Fatalf("tool extraction = %v", got)
 	}
