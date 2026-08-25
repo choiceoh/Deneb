@@ -82,3 +82,29 @@ func TestSessionBoardTailRendersOnlyWhenStateExists(t *testing.T) {
 		t.Errorf("board tail not carried into tail additions: %v", got2)
 	}
 }
+
+// Ephemeral turns must leave no trace: no persistent board is minted for
+// them, and rendering a tail for a session must never create a board either.
+func TestSessionBoardLeavesNoTraceForEphemeralAndPeek(t *testing.T) {
+	key := "client:test:board-ephemeral"
+	t.Cleanup(func() { clearSessionBlackboard(key) })
+
+	if got := peekSessionBlackboard(key); got != nil {
+		t.Fatal("peek minted a board for a session that never used one")
+	}
+	sessionBoards.mu.Lock()
+	_, exists := sessionBoards.store[key]
+	sessionBoards.mu.Unlock()
+	if exists {
+		t.Fatal("peek left a registry entry behind")
+	}
+
+	// A real session's board IS visible to peek.
+	board := sessionBlackboard(key, time.Now())
+	if err := board.Put("k", json.RawMessage(`"v"`), "run"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if got := peekSessionBlackboard(key); got != board {
+		t.Fatal("peek must return the session's existing board")
+	}
+}

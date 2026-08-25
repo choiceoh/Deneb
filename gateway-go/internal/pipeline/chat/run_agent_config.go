@@ -436,7 +436,13 @@ func buildAgentConfig(
 		sessionToolPreset,
 	)
 	tools := buildAgentTools(acd.Tools, sessionToolPreset, initialDeferredTools)
-	state := newAgentRunState(params.SessionKey, initialDeferredTools)
+	// Ephemeral turns (evals, probes) must leave no trace: they get a
+	// run-scoped board via the empty key, never the session's persistent one.
+	boardKey := params.SessionKey
+	if params.EphemeralUser {
+		boardKey = ""
+	}
+	state := newAgentRunState(boardKey, initialDeferredTools)
 	policy := resolveAgentExecutionPolicy(params, deps, cachedSession, acd.MaxTokens)
 	turnHooks := newAgentTurnHooks(params, deps, acd, sessionToolPreset)
 
