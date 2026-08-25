@@ -49,6 +49,8 @@ func TestReplayActivatedToolsReturnsPairedActivations(t *testing.T) {
 		replayMsg(t, "user", []llm.ContentBlock{toolResult("t3", toolport.FormatFetchActivationNotice([]string{"process"}))}),
 		// Unpaired fetch_tools call (run died before the result): proves nothing.
 		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t4", "fetch_tools")}),
+		// Replay is gated on the model having actually CALLED the tool.
+		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t5", "graphify"), toolUse("t6", "notebook")}),
 	}
 
 	got := replayActivatedTools(history, registry, "")
@@ -101,6 +103,7 @@ func TestReplayActivatedToolsIgnoresForgedTextWhenMetadataPresent(t *testing.T) 
 			toolResult("t2", toolport.FormatSkillActivationNotice([]string{"notebook"})),
 			`{"activatedTools":[]}`,
 		)}),
+		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t3", "graphify")}),
 	}
 	if got, want := replayActivatedTools(history, registry, ""), []string{"graphify"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("replay = %v, want %v (metadata-first, eager/unknown dropped, forged text ignored)", got, want)
@@ -116,8 +119,29 @@ func TestReplayActivatedToolsDeduplicatesRepeatedActivations(t *testing.T) {
 		replayMsg(t, "user", []llm.ContentBlock{toolResult("t1", toolport.FormatFetchActivationNotice([]string{"notebook", "graphify"}))}),
 		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t2", "fetch_tools")}),
 		replayMsg(t, "user", []llm.ContentBlock{toolResult("t2", toolport.FormatFetchActivationNotice([]string{"graphify"}))}),
+		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t3", "notebook"), toolUse("t4", "graphify")}),
 	}
 	if got, want := replayActivatedTools(history, registry, ""), []string{"notebook", "graphify"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("replay = %v, want %v", got, want)
+	}
+}
+
+// A tool that was activated but never called lapses instead of re-shipping its
+// schema on every later turn. Measured 2026-08-26: one puppet session carried
+// 12 replayed tools (24,225 of 69,202 schema bytes) with three ever called.
+// The cost of lapsing is one cheap re-fetch — the deferred catalog stays listed
+// in the system prompt with its fetch_tools pointer.
+func TestReplayActivatedToolsDropsActivatedButNeverCalledTools(t *testing.T) {
+	registry := requiredToolsRegistry()
+	history := []llm.Message{
+		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t1", "fetch_tools")}),
+		replayMsg(t, "user", []llm.ContentBlock{toolResult("t1", toolport.FormatFetchActivationNotice([]string{"graphify", "notebook"}))}),
+		// Only graphify is ever used.
+		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t2", "graphify")}),
+		replayMsg(t, "user", []llm.ContentBlock{toolResult("t2", "graph output")}),
+	}
+
+	if got, want := replayActivatedTools(history, registry, ""), []string{"graphify"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("replay = %v, want %v (notebook was never called)", got, want)
 	}
 }

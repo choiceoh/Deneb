@@ -55,14 +55,20 @@ func replayActivatedTools(messages []llm.Message, registry *ToolRegistry, sessio
 
 	// Pass 1: map tool_use_id → name for calls made by activating tools —
 	// only the TEXT fallback needs this pairing; the metadata path below is
-	// server-attached and trusts the block directly.
+	// server-attached and trusts the block directly. The same walk records
+	// every tool the model actually CALLED, which gates the replay below.
 	writerCalls := make(map[string]bool)
+	calledTools := make(map[string]bool)
 	for _, msg := range messages {
 		if msg.Role != "assistant" {
 			continue
 		}
 		for _, b := range decodeBlocks(json.RawMessage(msg.Content.Bytes())) {
-			if b.Type == "tool_use" && activationNoticeWriters[b.Name] {
+			if b.Type != "tool_use" {
+				continue
+			}
+			calledTools[b.Name] = true
+			if activationNoticeWriters[b.Name] {
 				writerCalls[b.ID] = true
 			}
 		}
@@ -81,6 +87,18 @@ func replayActivatedTools(messages []llm.Message, registry *ToolRegistry, sessio
 			return
 		}
 		seen[name] = true
+		// Activated but never called: let it lapse. Activation used to be
+		// permanent for the life of the transcript, so one exploratory
+		// fetch_tools kept re-shipping that tool's whole schema on every later
+		// turn — measured 2026-08-26 in a puppet session: 12 replayed tools,
+		// 24,225 of the request's 69,202 schema bytes (35%), while only three
+		// were ever called (skill_lifecycle alone was 11,947 bytes). A lapsed
+		// tool costs one cheap re-fetch: the deferred catalog is still listed
+		// in the system prompt with its fetch_tools pointer. (Operator call,
+		// 2026-08-26: "실제 호출된 도구만 리플레이".)
+		if !calledTools[name] {
+			return
+		}
 		if _, ok := registry.DeferredToolDef(name); !ok {
 			return
 		}
