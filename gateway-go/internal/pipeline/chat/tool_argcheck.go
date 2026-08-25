@@ -8,8 +8,7 @@ import (
 // harnessArgKeys are top-level keys Deneb's own tool layer consumes before the
 // tool sees the input, so they are legitimately absent from every tool schema.
 var harnessArgKeys = map[string]bool{
-	"compress": true, // extractCompressFlag
-	"$ref":     true, // resolveRef
+	"compress": true, // extractCompressFlag — advertised in the Tool Usage prompt
 }
 
 // unknownToolArgKeys returns the input's top-level keys that the tool's schema

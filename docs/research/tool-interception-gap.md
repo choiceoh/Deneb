@@ -47,7 +47,7 @@ Trace a tool call from model response to execution:
    built per-handler in the chat pipeline startup and handed to the agent via
    `cfg.Tools` in `buildAgentConfig` (`run_exec.go:627-639`).
 4. **`ToolRegistry.Execute`** (`tools.go:84-179`) does a single map lookup, enforces
-   preset filtering, handles `$ref` injection, runs the tool function, applies
+   preset filtering, runs the tool function, applies
    post-processing, then returns.
 
 There is **no fork in this path**. Every tool name — read, write, edit, grep, exec, knowledge, polaris, mail_archive, sessions, sessions_spawn, subagents, cron, web, wiki, message, send_file, skills, fetch_tools, gateway, read_spillover, process — is a plain entry in the same map.

@@ -45,9 +45,9 @@ func TestUnknownToolArgKeys(t *testing.T) {
 			input:  `{"action":"list","hours_ahead":24}`,
 		},
 		{
-			name:   "harness keys are not the tool's business",
+			name:   "the compress harness key is not the tool's business",
 			schema: calendarSchema(),
-			input:  `{"action":"list","compress":true,"$ref":"call_1"}`,
+			input:  `{"action":"list","compress":true}`,
 		},
 		{
 			name:   "open schemas accept anything",

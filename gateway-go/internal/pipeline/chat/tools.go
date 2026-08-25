@@ -9,18 +9,12 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
-)
-
-const (
-	refWaitInitial = 2 * time.Second
-	refWaitMax     = 30 * time.Second
 )
 
 // ToolExecutor executes a named tool with JSON input and returns the result.
@@ -92,9 +86,6 @@ func (r *ToolRegistry) RegisterTool(def ToolDef) {
 }
 
 // Execute runs the named tool. Returns an error if the tool is not found.
-//
-// If the input contains "$ref", the referenced tool's output (from TurnContext)
-// is injected into the input as "_ref_content" before execution.
 //
 // If the input contains "compress": true, the tool output is automatically
 // compressed via the local AI model before returning. This lets the AI
@@ -274,9 +265,14 @@ func prepareToolInput(ctx context.Context, name string, schema map[string]any, i
 	// Check for compress flag before executing (avoids re-parsing in every tool).
 	wantCompress := !briefcasePreset && extractCompressFlag(input)
 
-	// Resolve $ref: wait for the referenced tool result and inject it.
+	// $board refs only. The sibling "$ref" tool-chaining path was removed on
+	// 2026-08-26: nothing produced it (absent from every tool schema and from
+	// the system prompt) and nothing consumed the "_ref_content" it injected,
+	// so a call that used it would block up to 30s waiting for another tool's
+	// result and then hand the tool a key it does not read. TurnContext.Wait
+	// stays — it is a sound primitive for a future consumer, just no longer
+	// wired to a feature the model was never told about.
 	if !briefcasePreset {
-		input = resolveRef(ctx, input)
 		resolved, boardErr := resolveBoardRefs(ctx, input)
 		if boardErr != nil {
 			return input, wantCompress, boardErr
@@ -600,73 +596,6 @@ func hasTopLevelJSONKey(input json.RawMessage, key string) bool {
 	}
 	_, ok := object[key]
 	return ok
-}
-
-// resolveRef checks for a "$ref" field in the input. If present, it waits for
-// the referenced tool result from TurnContext and injects the output as
-// "_ref_content" into the input JSON. This enables tool chaining: one tool can
-// consume the output of a previously (or concurrently) executed tool.
-func resolveRef(ctx context.Context, input json.RawMessage) json.RawMessage {
-	// Fast-path: skip json.Unmarshal when $ref is absent (vast majority of calls).
-	if !bytes.Contains(input, []byte(`"$ref"`)) {
-		return input
-	}
-	var meta struct {
-		Ref string `json:"$ref"`
-	}
-	if json.Unmarshal(input, &meta) != nil || meta.Ref == "" {
-		return input
-	}
-
-	tc := TurnContextFromContext(ctx)
-	if tc == nil {
-		return input
-	}
-
-	// Progressive timeout: try a short initial wait first (handles the common
-	// case where the referenced tool completes quickly). If that misses, extend
-	// to the remaining context deadline (capped at refWaitMax).
-	timeout := refWaitInitial
-	if deadline, ok := ctx.Deadline(); ok {
-		remaining := time.Until(deadline)
-		if remaining < timeout {
-			timeout = remaining
-		}
-	}
-
-	result, ok := tc.Wait(ctx, meta.Ref, timeout)
-	if !ok && timeout < refWaitMax {
-		// First wait expired — try again up to the max.
-		extended := refWaitMax - timeout
-		if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
-			if remaining := time.Until(deadline); remaining < extended {
-				extended = remaining
-			}
-		}
-		if extended > 0 {
-			result, ok = tc.Wait(ctx, meta.Ref, extended)
-		}
-	}
-	if !ok {
-		return injectRefContent(input, fmt.Sprintf("[ref timeout: %s not available within %s]", meta.Ref, refWaitMax))
-	}
-
-	return injectRefContent(input, result.Output)
-}
-
-// injectRefContent adds "_ref_content" to the input JSON object.
-func injectRefContent(input json.RawMessage, content string) json.RawMessage {
-	var obj map[string]json.RawMessage
-	if json.Unmarshal(input, &obj) != nil {
-		return input
-	}
-	contentBytes, _ := json.Marshal(content)
-	obj["_ref_content"] = contentBytes
-	result, err := json.Marshal(obj)
-	if err != nil {
-		return input
-	}
-	return result
 }
 
 // resolveBoardRefs replaces string values exactly equal to "$board.<key>" with
