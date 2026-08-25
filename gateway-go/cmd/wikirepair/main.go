@@ -174,6 +174,28 @@ func (r *report) print() {
 //
 // Ordering matters: longer keys first so 핵말고흥 is repaired before a shorter
 // key could bite into it.
+// jamoUnresolved are corruptions the corpus cannot settle. The tool REPORTS
+// them and never rewrites them.
+//
+// The list exists because this table's error rate on judgement calls turned out
+// to be real, not hypothetical. Three entries shipped wrong: 보핵매실→보필매실
+// (one typo to another), 핫남군청→하남군청 (해남 404 / 하남 0 in the corpus, on a
+// 영암 ledger), and 미엔랑→미얀마 (the phrase is 내용 미열람, 4 occurrences to 1 —
+// it would have written "내용 미얀마" into a 완도 log). Two were caught only when a
+// person read the output.
+//
+// What the survivors have in common is that context settles them: 걸물측 can only
+// be 건물측, 14일 유옄 can only be 유예. What these have in common is that it does
+// not — each has two readings a careful person could defend, and picking one to
+// look thorough is how a wrong company name enters a financial ledger. Leaving a
+// visible corruption is the cheaper error.
+var jamoUnresolved = []struct{ bad, note string }{
+	{"보핵매실 / 보필매실", "매실농원 이름 3표기 공존 — 대표.md cues=보해매실농원, 로그.md 대표이사 기록·합의서 PDF 파일명=보필매실농원. 원본 문서나 운영자만 정할 수 있음"},
+	{"측멸도", "구조물 도면 문맥 — 측정도인가 측면도인가 (타입별 송부라면 측면도)"},
+	{"남려와", "\"SK가 직접 남려와 이야기하라\" — 남겨와인가 나와서인가"},
+	{"근종할", "\"진행 상황을 근종할 필요\" — 추종할인가 추적할인가"},
+}
+
 // name marks a proper noun — a company, place, or project. Only those get the
 // curated-attestation audit: a wrong NAME is unverifiable from context and gets
 // written into ledgers, while a wrong ordinary word (휴대폰, 직무대행) is obvious
@@ -191,13 +213,6 @@ var jamoRepairs = []struct {
 	{"이경개시졌", "개시됐", false},
 	{"손핵배상", "손해배상", false},
 	{"손핼배상", "손해배상", false},
-	// Both spellings in 로그.md are corruptions of the same farm — the curated
-	// 대표.md (and its cues) spell it 보해매실농원, and 핵→해 is the corruption this
-	// table repairs everywhere else (핵봄/핵밀/핵바람/손핵배상). Mapping 보핵매실 to
-	// 보필매실 would have swapped one corruption for another and written a wrong
-	// counterparty name into a financial ledger.
-	{"보핵매실", "보해매실", true},
-	{"보필매실", "보해매실", true},
 	{"직묵대행", "직무대행", false},
 	{"업묵보고", "업무보고", false},
 	{"나엘되지", "나열되지", false},
@@ -211,13 +226,10 @@ var jamoRepairs = []struct {
 	{"핵바람", "해바람", true},
 	{"뉴그렌", "뉴글렌", true},
 	{"파트ner", "파트너", false},
-	{"미엔랑", "미얀마", true},
+	{"미엔랑", "미열람", false},
 	{"통볐다", "통했다", false},
-	{"측멸도", "측정도", false},
 	{"지철된", "지체된", false},
 	{"휴드폰", "휴대폰", false},
-	{"남려와", "남겨와", false},
-	{"근종할", "추종할", false},
 	{"미봉채", "미봉책", false},
 	{"태양꿕", "태양광", false},
 	{"조걸부", "조건부", false},
@@ -307,6 +319,9 @@ func repairJamo(store *wiki.Store, apply bool, rep *report) error {
 	paths, err := store.ListPages("")
 	if err != nil {
 		return err
+	}
+	for _, u := range jamoUnresolved {
+		rep.note("미결(적용 안 함) %s — %s", u.bad, u.note)
 	}
 	auditJamoTable(store, paths, rep)
 	for _, rp := range paths {
