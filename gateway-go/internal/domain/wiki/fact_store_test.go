@@ -1232,6 +1232,38 @@ func TestFactPlaneWorkspaceProjectionBacksUpLegacyAndRegenerates(t *testing.T) {
 	}
 }
 
+// A store that has not replayed the journal (or points at a shared workspace)
+// must not publish its empty view over a projection that already carries facts.
+// Production hit exactly this on 2026-08-25: workspace USER.md/MEMORY.md at
+// revision 0 with zero claims while the journal held 126.
+func TestFactPlaneWorkspaceProjectionRefusesToRegressRevision(t *testing.T) {
+	store, _, _ := newFactTestStore(t)
+	workspace := t.TempDir()
+	ahead := "<!-- deneb:generated-fact-projection revision=126; source=.fact-mutations.jsonl; do-not-edit -->\n# MEMORY\n\n- `communication.tone`: 간결하게\n"
+	for _, name := range []string{"MEMORY.md", "USER.md"} {
+		if err := os.WriteFile(filepath.Join(workspace, name), []byte(ahead), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err := store.SetFactProjectionDir(workspace)
+	if err == nil {
+		t.Fatal("expected the revision-0 store to refuse the write")
+	}
+	if !strings.Contains(err.Error(), "revision 126") {
+		t.Fatalf("error should name the on-disk revision: %v", err)
+	}
+	for _, name := range []string{"MEMORY.md", "USER.md"} {
+		raw, readErr := os.ReadFile(filepath.Join(workspace, name))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if string(raw) != ahead {
+			t.Fatalf("%s was modified:\n%s", name, raw)
+		}
+	}
+}
+
 func TestFactPlaneWorkspaceProjectionCutsOverProseOnlyLegacyAtRevisionZero(t *testing.T) {
 	store, _, _ := newFactTestStore(t)
 	workspace := t.TempDir()

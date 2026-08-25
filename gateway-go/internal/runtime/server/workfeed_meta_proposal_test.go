@@ -21,6 +21,7 @@ func TestHandleMetaProposalActionUpdatesArtifactOnAdoptOrReject(t *testing.T) {
 	newServer := func(t *testing.T) (*Server, string) {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())
+		t.Setenv("DENEB_STATE_DIR", "") // exercise HOME-based resolution (see TestMain)
 		metaDir := filepath.Join(t.TempDir(), "meta")
 		tracker, err := genesis.NewTracker(slog.Default())
 		if err != nil {
