@@ -59,6 +59,28 @@ type Params struct {
 	// LLM into modeling fake user requests.
 	EphemeralUser bool
 
+	// AllowRecall lets an EphemeralUser turn still run the recall preflight.
+	//
+	// EphemeralUser means one thing — do not persist the inbound message — but
+	// the recall gate had been reading it as a second, different thing: "there
+	// is no real user message to recall against". Most autonomous callers are
+	// unaffected because they ALSO pass SkipRecall explicitly (wiki scout and
+	// research, the noti/supernote digests, the board radar, approval Q&A), and
+	// the rest are either genuinely subject-less (heartbeat and boot
+	// self-triggers, the notifier) or grounded by their own path (mail analysis
+	// stage-1 already extracts thread, sender, and wiki-graph context).
+	//
+	// mail Q&A was the one caller that lost recall to the side effect alone: the
+	// operator asks a question about a specific mail and the answer was assembled
+	// from the mail body with no wiki evidence. The 2026-08-25 recall ledger shows
+	// it — zero evidence injections outside client sessions.
+	//
+	// The flag is separate rather than a flipped default so the gate stays exactly
+	// as it is for every caller that does not ask; enabling a lane is a decision
+	// with its own latency and input-budget cost. The end state is for recall to
+	// key on a signal of its own rather than on a persistence flag at all.
+	AllowRecall bool
+
 	// PendingEnrichment, when non-nil, is the join point of an in-flight link
 	// enrichment started at the send entry (startLinkEnrichment): it blocks
 	// until the URL fetches complete (bounded by their own 30s budget) and

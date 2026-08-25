@@ -103,6 +103,7 @@ func syncOptionsFromPort(req chatport.SyncRequest) *SyncOptions {
 		MaxHistoryTokens:       req.MaxHistoryTokens,
 		Delivery:               req.Delivery,
 		EphemeralUser:          req.EphemeralUser,
+		AllowRecall:            req.AllowRecall,
 		EphemeralAssistant:     req.EphemeralAssistant,
 		AutoDeliveredOutput:    req.AutoDeliveredOutput,
 		SkipRecall:             req.SkipRecall,

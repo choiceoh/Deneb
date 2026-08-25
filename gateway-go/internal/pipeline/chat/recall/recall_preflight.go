@@ -132,7 +132,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 		}
 	}()
 
-	if params.EphemeralUser || params.SkipRecall {
+	if params.recallSuppressed() {
 		return "", false
 	}
 

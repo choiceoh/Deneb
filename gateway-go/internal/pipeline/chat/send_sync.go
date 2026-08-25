@@ -157,6 +157,11 @@ type SyncOptions struct {
 	// recurring self-triggers do not crowd out the recent-history window.
 	EphemeralUser bool
 
+	// AllowRecall lets this ephemeral turn still run the recall preflight —
+	// see RunParams.AllowRecall. Set by autonomous callers that have a real
+	// subject to recall against.
+	AllowRecall bool
+
 	// SkipRecall skips the long-term-memory recall preflight for this turn —
 	// see RunParams.SkipRecall. Set from the native client's "memory off /
 	// focused chat" toggle so general questions skip work-context injection.
@@ -274,6 +279,7 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 			params.Delivery = opts.Delivery
 		}
 		params.EphemeralUser = opts.EphemeralUser
+		params.AllowRecall = opts.AllowRecall
 		params.SkipRecall = opts.SkipRecall
 		params.FeedContext = opts.FeedContext
 		params.EphemeralAssistant = opts.EphemeralAssistant
