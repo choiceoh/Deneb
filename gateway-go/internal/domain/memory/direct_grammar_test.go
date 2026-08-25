@@ -2,6 +2,7 @@ package memory
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,6 +101,29 @@ func TestLoadDirectGrammarRejectsBrokenCatalogs(t *testing.T) {
 				t.Fatalf("error = %v, want %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestLoadDirectGrammarCatalogReturnsTypedError(t *testing.T) {
+	axes, err := loadDirectGrammarCatalog([]byte(`{"schemaVersion":1,"axes":[]}`))
+	if axes != nil {
+		t.Fatalf("axes = %+v, want nil", axes)
+	}
+	var catalogErr *DirectGrammarCatalogError
+	if !errors.As(err, &catalogErr) {
+		t.Fatalf("error = %T %[1]v, want DirectGrammarCatalogError", err)
+	}
+	if !strings.Contains(catalogErr.Error(), "memory: direct grammar catalog: catalog is empty") {
+		t.Fatalf("error = %q", catalogErr.Error())
+	}
+	if !strings.Contains(errors.Unwrap(catalogErr).Error(), "catalog is empty") {
+		t.Fatalf("wrapped error = %v", errors.Unwrap(catalogErr))
+	}
+}
+
+func TestValidateDirectGrammarCatalogAcceptsShippedCatalog(t *testing.T) {
+	if err := ValidateDirectGrammarCatalog(); err != nil {
+		t.Fatalf("ValidateDirectGrammarCatalog: %v", err)
 	}
 }
 

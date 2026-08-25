@@ -23,6 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/phoneledger"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/prompts"
@@ -356,6 +357,14 @@ func (s *Server) safeGo(name string, fn func()) {
 
 // New creates a new gateway server bound to the given address.
 func New(addr string, opts ...Option) (*Server, error) {
+	return newWithDirectGrammarCatalogValidator(addr, memory.ValidateDirectGrammarCatalog, opts...)
+}
+
+func newWithDirectGrammarCatalogValidator(addr string, validateDirectGrammarCatalog func() error, opts ...Option) (*Server, error) {
+	if err := validateDirectGrammarCatalog(); err != nil {
+		return nil, fmt.Errorf("validate memory direct grammar: %w", err)
+	}
+
 	s := &Server{
 		ServerTransport:     &ServerTransport{addr: addr},
 		ServerRPC:           &ServerRPC{},

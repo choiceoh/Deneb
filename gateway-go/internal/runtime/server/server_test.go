@@ -3,17 +3,37 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	propussystem "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
+
+func TestNewReturnsDirectGrammarCatalogError(t *testing.T) {
+	catalogErr := &memory.DirectGrammarCatalogError{Cause: errors.New("broken fixture")}
+	_, err := newWithDirectGrammarCatalogValidator(":0", func() error {
+		return catalogErr
+	})
+	if err == nil {
+		t.Fatal("New unexpectedly succeeded")
+	}
+	var got *memory.DirectGrammarCatalogError
+	if !errors.As(err, &got) || got != catalogErr {
+		t.Fatalf("error = %T %[1]v, want wrapped DirectGrammarCatalogError", err)
+	}
+	if !strings.Contains(err.Error(), "validate memory direct grammar") {
+		t.Fatalf("error = %q", err.Error())
+	}
+}
 
 func TestHealthEndpointReturnsOKWithWorkerPoolStats(t *testing.T) {
 	t.Parallel()
