@@ -155,6 +155,59 @@ func themeCell(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
+// themeSignalMinOverlap is the character-bigram Jaccard floor at which an
+// incoming signal counts as the same signal as the stored one. Set low on
+// purpose: rewording is expected and explicitly allowed ("latest phrasing
+// wins"), so the floor only has to separate a rephrasing — which keeps the
+// subject nouns and scores well above it — from a topic swap, which shares
+// almost no bigrams and scores near zero.
+const themeSignalMinOverlap = 0.25
+
+// sameThemeSignal reports whether two signal descriptions are the same signal.
+// Character bigrams rather than words: Korean inflection changes suffixes
+// between cycles ("반복됨"/"반복된다"), so word equality understates continuity
+// while bigrams survive it.
+func sameThemeSignal(stored, incoming string) bool {
+	a, b := themeBigrams(stored), themeBigrams(incoming)
+	if len(a) == 0 || len(b) == 0 {
+		return true // nothing to compare on — fall back to the key's own claim
+	}
+	inter := 0
+	for g := range a {
+		if b[g] {
+			inter++
+		}
+	}
+	union := len(a) + len(b) - inter
+	if union == 0 {
+		return true
+	}
+	return float64(inter)/float64(union) >= themeSignalMinOverlap
+}
+
+func themeBigrams(s string) map[string]bool {
+	r := []rune(strings.ToLower(strings.Join(strings.Fields(s), "")))
+	if len(r) < 2 {
+		return nil
+	}
+	out := make(map[string]bool, len(r)-1)
+	for i := 0; i+1 < len(r); i++ {
+		out[string(r[i:i+2])] = true
+	}
+	return out
+}
+
+// freeThemeKey returns key with the lowest numeric suffix not already in the
+// ledger, so a diverging signal gets its own row instead of overwriting one.
+func freeThemeKey(byKey map[string]int, key string) string {
+	for n := 2; ; n++ {
+		cand := key + "-" + strconv.Itoa(n)
+		if _, taken := byKey[cand]; !taken {
+			return cand
+		}
+	}
+}
+
 // mergeThemeRows merges extracted signals into the ledger rows by key and
 // applies the lifecycle rules: one count per distinct observation day, latest
 // phrasing/evidence wins, dormancy after themeDormantAfterDays without
@@ -167,15 +220,31 @@ func mergeThemeRows(rows []themeRow, signals []ThemeSignal, today string) []them
 	}
 	for _, s := range signals {
 		if i, ok := byKey[s.Key]; ok {
-			if rows[i].Last != today {
-				rows[i].Count++
-				rows[i].Last = today
+			// A key match is only a recurrence if it is the same signal. The
+			// extractor is handed the whole keyspace and told to reuse a
+			// matching key, so it sometimes reaches for a key that merely reads
+			// close — srv2-vllm-endpoint-setup came back carrying 현대차 출고센터 EPC
+			// content. Overwriting Signal in place would graft that row's First
+			// date and Count (and so its 정착 stage) onto a first-ever
+			// observation: the ledger would assert a months-old recurring
+			// pattern for something seen once, today.
+			//
+			// Divergence is recorded as its own row instead. The established
+			// row keeps the history it earned; the new observation starts at
+			// Count 1 where it belongs. Neither is destroyed, because we cannot
+			// tell which one the next cycle will legitimately continue.
+			if sameThemeSignal(rows[i].Signal, s.Signal) {
+				if rows[i].Last != today {
+					rows[i].Count++
+					rows[i].Last = today
+				}
+				rows[i].Signal = s.Signal
+				if s.Evidence != "" {
+					rows[i].Evidence = s.Evidence
+				}
+				continue
 			}
-			rows[i].Signal = s.Signal
-			if s.Evidence != "" {
-				rows[i].Evidence = s.Evidence
-			}
-			continue
+			s.Key = freeThemeKey(byKey, s.Key)
 		}
 		byKey[s.Key] = len(rows)
 		rows = append(rows, themeRow{

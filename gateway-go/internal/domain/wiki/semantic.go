@@ -1116,6 +1116,26 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 // High on purpose: a sparse, trustworthy graph beats a dense, noisy one.
 const relatedSuggestMinScore = 0.6
 
+// A cosine floor filters weak neighbours; it cannot filter confident ones that
+// belong to a different world. 시스템/ pages are gateway operating config and
+// 기타/ holds personal miscellany — neither is business context for a project.
+// Embedding proximity nonetheless linked 기타/lr458313 (차량 핫스팟) and
+// 기타/stsjhouse-wifi (집 와이파이) into EPC contract mail, and 시스템/톤-규칙 into a
+// 가배치 mail: short pages crowd together in vector space regardless of subject,
+// the same effect isPersonStubPage guards against for person stubs.
+//
+// Those become graph edges the RRF ranker trusts, so recall on a contract
+// question can surface the operator's home wifi page. The 2026-08-25 corpus
+// audit found five such edges and zero legitimate ones, while the business
+// cross-category edges the graph depends on (프로젝트↔인물 64, 프로젝트↔업무 67)
+// are untouched by this rule.
+func relatedDomainCompatible(src, dst string) bool {
+	if !strings.HasPrefix(src, "프로젝트/") {
+		return true
+	}
+	return !strings.HasPrefix(dst, "시스템/") && !strings.HasPrefix(dst, "기타/")
+}
+
 // suggestRelated returns the wiki paths most semantically similar to the page
 // at relPath, excluding itself and any page already in its Related[]. Only
 // neighbors above relatedSuggestMinScore are returned, best first. Returns nil
@@ -1152,6 +1172,9 @@ func (s *Store) suggestRelated(ctx context.Context, relPath string, limit int) [
 	cands := make([]scored, 0, len(s.sem.vecs))
 	for path, cv := range s.sem.vecs {
 		if path == relPath || already[path] || already[strings.TrimSuffix(path, ".md")] {
+			continue
+		}
+		if !relatedDomainCompatible(relPath, path) {
 			continue
 		}
 		if sc := cosine(self.vec, cv.vec); sc >= relatedSuggestMinScore {
