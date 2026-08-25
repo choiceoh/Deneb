@@ -19,6 +19,9 @@
 //	              was reused for an unrelated signal.
 //	stubedges   — cut related[] edges to and from pages with no prose, which
 //	              matched each other on their shared empty template.
+//	noisemail   — delete machine-sender analyses misfiled INTO project folders,
+//	              where they escape the staging demotion and vouch for their
+//	              own sender domain.
 //
 // Deliberately NOT here: relocating non-business mail out of 프로젝트/. A
 // 메일분석 page's path is derived from its message ID, so a later re-analysis
@@ -43,6 +46,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/mailpriority"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 )
@@ -85,6 +89,7 @@ func run() error {
 		{"unusable", deleteUnusableAnalyses},
 		{"themes", repairThemeHistory},
 		{"stubedges", stripStubRelatedEdges},
+		{"noisemail", deleteProjectFiledNoiseMail},
 	}
 	for _, p := range passes {
 		if *only != "" && *only != p.name {
@@ -667,4 +672,87 @@ func stripStubRelatedEdges(store *wiki.Store, apply bool, rep *report) error {
 		rep.add("cut %d edge(s) from %s", len(dropped), p)
 	}
 	return nil
+}
+
+// --- pass: noisemail --------------------------------------------------------
+
+// deleteProjectFiledNoiseMail removes machine-sender mail analyses that were
+// filed INTO a project folder rather than the unlinked staging bucket.
+//
+// The path is what makes these harmful rather than merely useless. Three
+// separate mechanisms key on it:
+//
+//   - validityFactor demotes staging noise ×0.25 via IsUnlinkedMailAnalysisPath,
+//     which matches 프로젝트/메일분석/ only. A noise page one folder deeper ranks
+//     at FULL validity. Measured 2026-08-25: the single most-recalled page in
+//     the entire wiki (30 injections) is a Cursor payment-failure notice whose
+//     own body says "업무 메일이 아닙니다".
+//   - ActiveCounterpartyDomains reads the sender-domain tags of PROJECT-LINKED
+//     mail analyses, so each of these vouches for its own sender — the trust
+//     loop #4716 closed at intake was fuelled from here.
+//   - Their related[] reaches into the project's own 대표.md, putting a lunch-memo
+//     transcription notice on the project graph.
+//
+// Deleting is safe now in a way it was not before: #4716 routes these senders to
+// review instead of analysis, so re-analysis cannot recreate the page. Only
+// pages carrying a `resource:` pointer are removed, so the mail itself remains
+// reachable. The criterion is the sender ADDRESS alone (empty subject) — the
+// tightest form of mailpriority.IsBulkNoise, and the same judgement the intake
+// gate makes, so the corpus and the gate cannot disagree.
+func deleteProjectFiledNoiseMail(store *wiki.Store, apply bool, rep *report) error {
+	paths, err := store.ListPages("프로젝트")
+	if err != nil {
+		return err
+	}
+	for _, rp := range paths {
+		slash := filepath.ToSlash(rp)
+		if !strings.Contains(slash, "/메일분석/") || wiki.IsUnlinkedMailAnalysisPath(slash) {
+			continue
+		}
+		page, err := store.ReadPage(rp)
+		if err != nil || page == nil {
+			continue
+		}
+		from := provenanceFrom(page.Body)
+		if from == "" {
+			continue
+		}
+		noise, reason := mailpriority.IsBulkNoise(from, "")
+		if !noise {
+			continue
+		}
+		if strings.TrimSpace(page.Meta.Resource) == "" {
+			rep.add("keep (no resource, unrecoverable) %s — %s", rp, from)
+			continue
+		}
+		if !apply {
+			rep.add("would delete %s — %s (%s)", rp, from, reason)
+			continue
+		}
+		if err := store.DeletePage(rp); err != nil {
+			rep.fail("noisemail %s: %v", rp, err)
+			continue
+		}
+		rep.add("deleted %s — %s", rp, from)
+	}
+	return nil
+}
+
+// provenanceFrom pulls the sender out of the "> From: …" line that
+// buildMailAnalysisPage writes above every analysis.
+func provenanceFrom(body string) string {
+	for _, ln := range strings.Split(body, "\n") {
+		t := strings.TrimSpace(ln)
+		if !strings.HasPrefix(t, ">") {
+			if t != "" && !strings.HasPrefix(t, "#") {
+				return "" // past the provenance block
+			}
+			continue
+		}
+		t = strings.TrimSpace(strings.TrimPrefix(t, ">"))
+		if rest, ok := strings.CutPrefix(t, "From:"); ok {
+			return strings.TrimSpace(rest)
+		}
+	}
+	return ""
 }
