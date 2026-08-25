@@ -194,12 +194,18 @@ func (t *Task) Run(ctx context.Context) error {
 
 // sshShip streams the archive into `ssh host "cat > dir/name.partial && mv"`.
 // The temp-then-rename keeps a half-shipped archive from masquerading as a
-// good backup. BatchMode prevents an interactive prompt from hanging the task.
+// good backup — but rename alone is not enough: when the GATEWAY side dies
+// gracefully mid-stream (deploy hot-swap, operator restart), the remote cat
+// sees a clean EOF, exits 0, and && promotes a truncated archive under the
+// final name. The date-stamped name then makes the hourly catch-up probe
+// report "already shipped", so the corrupt file silently stands for the whole
+// day (2026-08-25: a 00:03 restart left a 584MB torso of an 1.5GB archive,
+// gzip: unexpected end of file). gzip -t before the rename closes that hole:
+// truncation always breaks the gzip stream, the .partial never promotes, and
+// the next hourly tick re-ships. BatchMode prevents an interactive prompt
+// from hanging the task.
 func (t *Task) sshShip(ctx context.Context, name string, archive io.Reader) error {
-	dst := t.cfg.RemoteDir + "/" + name
-	remote := fmt.Sprintf("mkdir -p %s && cat > %s.partial && mv %s.partial %s",
-		t.cfg.RemoteDir, dst, dst, dst)
-	cmd := exec.CommandContext(ctx, "ssh", "-o", "BatchMode=yes", t.cfg.SSHHost, remote) //nolint:gosec // G204 — host and dir are validated in NewTask; ssh is the designed transport
+	cmd := exec.CommandContext(ctx, "ssh", "-o", "BatchMode=yes", t.cfg.SSHHost, sshShipCommand(t.cfg.RemoteDir, name)) //nolint:gosec // G204 — host and dir are validated in NewTask; ssh is the designed transport
 	cmd.Stdin = archive
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -381,4 +387,14 @@ func expandTargets(stateDir string, targets []string) []string {
 		}
 	}
 	return out
+}
+
+// sshShipCommand builds the remote shell line for one archive ship. Every
+// stage is load-bearing: mkdir for first contact, .partial so a dead transport
+// never leaves the final name, gzip -t so a clean-EOF truncation (graceful
+// sender death) never promotes, mv as the atomic commit.
+func sshShipCommand(remoteDir, name string) string {
+	dst := remoteDir + "/" + name
+	return fmt.Sprintf("mkdir -p %s && cat > %s.partial && gzip -t %s.partial && mv %s.partial %s",
+		remoteDir, dst, dst, dst, dst)
 }

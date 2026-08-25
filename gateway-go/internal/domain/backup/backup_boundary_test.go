@@ -1034,3 +1034,18 @@ func TestRunAttemptsWhenProbeFails(t *testing.T) {
 		t.Error("probe failure suppressed the backup attempt")
 	}
 }
+
+// The remote ship line is the last defense between a truncated stream and a
+// promoted archive. A graceful sender death gives remote cat a clean EOF and a
+// zero exit, so without the gzip -t gate the && chain promotes a torso under
+// the final date-stamped name — which the hourly catch-up probe then reports
+// as "already shipped" for the rest of the day (observed 2026-08-25).
+func TestSSHShipCommandVerifiesIntegrityBeforePromotion(t *testing.T) {
+	got := sshShipCommand("/backups", "deneb-memory-20260825.tar.gz")
+	want := "mkdir -p /backups && cat > /backups/deneb-memory-20260825.tar.gz.partial" +
+		" && gzip -t /backups/deneb-memory-20260825.tar.gz.partial" +
+		" && mv /backups/deneb-memory-20260825.tar.gz.partial /backups/deneb-memory-20260825.tar.gz"
+	if got != want {
+		t.Fatalf("ship command drifted:\n got  %s\n want %s", got, want)
+	}
+}
