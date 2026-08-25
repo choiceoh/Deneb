@@ -1152,6 +1152,11 @@ func (s *Store) suggestRelated(ctx context.Context, relPath string, limit int) [
 	if err != nil || page == nil {
 		return nil
 	}
+	// A page with no prose of its own has nothing to be similar ABOUT, and the
+	// empty scaffolding it does carry is what it matches on. See HasOwnProse.
+	if !HasOwnProse(page.Body) {
+		return nil
+	}
 	s.sem.refreshAsync(s) // background re-embed; suggest from current vectors
 
 	already := make(map[string]bool, len(page.Meta.Related))
@@ -1189,14 +1194,47 @@ func (s *Store) suggestRelated(ctx context.Context, relPath string, limit int) [
 		}
 		return cands[a].path < cands[b].path
 	})
-	if len(cands) > limit {
-		cands = cands[:limit]
-	}
-	out := make([]string, len(cands))
-	for i := range cands {
-		out[i] = cands[i].path
+	// Drop prose-less neighbours too, so an empty template cannot be linked TO
+	// either. Reading pages is only affordable because this runs on the handful
+	// that already cleared the cosine floor, in score order, until limit is met.
+	out := make([]string, 0, limit)
+	for _, c := range cands {
+		if len(out) == limit {
+			break
+		}
+		cand, err := s.ReadPage(c.path)
+		if err != nil || cand == nil || !HasOwnProse(cand.Body) {
+			continue
+		}
+		out = append(out, c.path)
 	}
 	return out
+}
+
+// HasOwnProse reports whether a body says anything of its own — any line that
+// is not a heading, a provenance blockquote, or a horizontal rule.
+//
+// Empty scaffolding is not merely uninformative here, it is actively harmful:
+// the 현장 template is byte-identical across projects apart from the place name,
+// so those pages are each other's NEAREST neighbours and the cosine floor
+// cannot separate them. The 2026-08-25 corpus audit found 30 of 36 현장 pages
+// with zero prose, wired to each other across unrelated projects — 광명시→광주,
+// 울주군→완도군, 영광군→광주 — edges that then mislead recall by region. The
+// duplicate-folding pass had already made it worse, concatenating four empty
+// templates into one page with four identical heading blocks.
+//
+// This is the category-agnostic form of what isPersonStubPage does for 인물,
+// which needs a marker list because a synced person skeleton carries real
+// value lines; a page that is nothing but headings needs no such list.
+func HasOwnProse(body string) bool {
+	for _, line := range strings.Split(body, "\n") {
+		t := strings.TrimSpace(line)
+		if t == "" || strings.HasPrefix(t, "#") || strings.HasPrefix(t, ">") || strings.HasPrefix(t, "---") {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 // cosine returns the cosine similarity of two equal-length vectors (0 when

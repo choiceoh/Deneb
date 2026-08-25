@@ -15,6 +15,10 @@
 //	              left as a date, four two-year-off ledger dates).
 //	unusable    — delete pages whose body is narration/error rather than
 //	              analysis, so the mail re-analyzes cleanly under the new gate.
+//	themes      — drop the unearned history from repeat-signal rows whose key
+//	              was reused for an unrelated signal.
+//	stubedges   — cut related[] edges to and from pages with no prose, which
+//	              matched each other on their shared empty template.
 //
 // Deliberately NOT here: relocating non-business mail out of 프로젝트/. A
 // 메일분석 page's path is derived from its message ID, so a later re-analysis
@@ -79,6 +83,8 @@ func run() error {
 		{"related", repairRelated},
 		{"numbers", repairNumbers},
 		{"unusable", deleteUnusableAnalyses},
+		{"themes", repairThemeHistory},
+		{"stubedges", stripStubRelatedEdges},
 	}
 	for _, p := range passes {
 		if *only != "" && *only != p.name {
@@ -453,4 +459,168 @@ func analysisBodyOf(body string) string {
 		out = append(out, ln)
 	}
 	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+// --- pass: themes -----------------------------------------------------------
+
+// Repeat-signal rows whose key was reused for an unrelated signal. Until
+// sameThemeSignal shipped, mergeThemeRows overwrote a row's Signal in place and
+// kept its First date and Count, so the new signal inherited a recurrence it
+// never had: "srv2 vLLM 엔드포인트 설정" had been seen 4 times since 07-25, and a
+// first-ever observation about a 현대차 EPC 텀시트 landed on that row reading as a
+// 정착 pattern.
+//
+// Each of these was read against its key and its 최근 근거 by hand — a Korean
+// signal and an English slug share no tokens, so nothing here can be derived.
+// The lost signal text is not recoverable, so the repair is to stop the row
+// asserting a history that is not its own: First becomes Last, Count becomes 1,
+// stage returns to 관찰. The key is left alone. It is only a slug, and once the
+// dreamer coins a correct key for this content the stale row simply goes dormant.
+var themeKeyReuse = []struct {
+	key    string
+	signal string // prefix of the current (unrelated) signal, to confirm the row
+}{
+	{"srv2-vllm-endpoint-setup", "현대차 출고센터 EPC 텀시트"},
+	{"solar-monitoring-dashboard-widget-development", "SKN 이천 모듈 바이패스"},
+	{"gaon-electronics-payment-delay", "결제 실패로 인한 인프라 구독"},
+	{"ja-solar-financial-review", "중견 기업 관련 사용자 문의"},
+	{"goheung-permit-renewal-risk", "옹진 해상풍력"},
+	{"sindasan-equity-injunction", "빛가람이엔씨-제이에스파워"},
+}
+
+const themeLedgerPath = "업무/반복신호.md"
+
+func repairThemeHistory(store *wiki.Store, apply bool, rep *report) error {
+	// Unlike the corpus-wide passes, this one has exactly one target. A skip
+	// here would let --apply report success having repaired nothing, so an
+	// unreadable ledger stops the run instead.
+	page, err := store.ReadPage(themeLedgerPath)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", themeLedgerPath, err)
+	}
+	if page == nil {
+		return fmt.Errorf("%s not found", themeLedgerPath)
+	}
+	body, changed := rewriteThemeRows(page.Body, rep, apply)
+	if !apply || changed == 0 {
+		return nil
+	}
+	if err := store.UpdatePage(themeLedgerPath, func(cur *wiki.Page) (*wiki.Page, error) {
+		if cur == nil {
+			return nil, nil
+		}
+		cur.Body = body
+		return cur, nil
+	}); err != nil {
+		rep.fail("themes: %v", err)
+	}
+	return nil
+}
+
+// rewriteThemeRows resets the inherited history on each listed row. Columns are
+// 신호키|신호|최초|최근|근거수|단계|상태|최근 근거 between leading and trailing pipes.
+func rewriteThemeRows(body string, rep *report, apply bool) (string, int) {
+	lines := strings.Split(body, "\n")
+	changed := 0
+	for _, want := range themeKeyReuse {
+		found := false
+		for i, ln := range lines {
+			cols := strings.Split(ln, "|")
+			if len(cols) < 10 || strings.TrimSpace(cols[1]) != want.key {
+				continue
+			}
+			found = true
+			if !strings.HasPrefix(strings.TrimSpace(cols[2]), want.signal) {
+				rep.fail("themes: %s no longer carries %q — verify by hand", want.key, want.signal)
+				break
+			}
+			first, last := strings.TrimSpace(cols[3]), strings.TrimSpace(cols[4])
+			count, stage := strings.TrimSpace(cols[5]), strings.TrimSpace(cols[6])
+			if count == "1" && first == last {
+				rep.add("already reset %s", want.key)
+				break
+			}
+			rep.add("reset %s: 최초 %s→%s · 근거수 %s→1 · 단계 %s→관찰", want.key, first, last, count, stage)
+			changed++
+			if !apply {
+				break
+			}
+			cols[3] = " " + last + " "
+			cols[5] = " 1 "
+			cols[6] = " 관찰 "
+			lines[i] = strings.Join(cols, "|")
+			break
+		}
+		if !found {
+			rep.fail("themes: row %s not found", want.key)
+		}
+	}
+	return strings.Join(lines, "\n"), changed
+}
+
+// --- pass: stubedges --------------------------------------------------------
+
+// stripStubRelatedEdges removes related[] edges that involve a page carrying no
+// prose. Those pages are byte-identical scaffolding apart from a place name, so
+// they are each other's nearest neighbours and the cosine floor cannot separate
+// them — 광명시 was linked to 광주, 울주군 to 완도군, across unrelated projects.
+//
+// Both directions go: a prose-less page's own related[] is cleared (it has
+// nothing to be related about), and every other page drops the entries pointing
+// at one. wiki.HasOwnProse is the same predicate suggestRelated now applies at
+// write time, so the corpus and the enricher cannot disagree about what counts
+// as an empty page.
+func stripStubRelatedEdges(store *wiki.Store, apply bool, rep *report) error {
+	paths, err := store.ListPages("")
+	if err != nil {
+		return err
+	}
+	stub := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		page, err := store.ReadPage(p)
+		if err != nil || page == nil {
+			continue
+		}
+		if !wiki.HasOwnProse(page.Body) {
+			stub[strings.TrimSuffix(p, ".md")] = true
+		}
+	}
+	rep.add("prose 없는 페이지 %d장 / 전체 %d장", len(stub), len(paths))
+
+	for _, p := range paths {
+		page, err := store.ReadPage(p)
+		if err != nil || page == nil {
+			continue
+		}
+		selfStub := stub[strings.TrimSuffix(p, ".md")]
+		kept := make([]string, 0, len(page.Meta.Related))
+		var dropped []string
+		for _, r := range page.Meta.Related {
+			t := strings.TrimSuffix(strings.TrimSpace(r), ".md")
+			if selfStub || stub[t] {
+				dropped = append(dropped, t)
+				continue
+			}
+			kept = append(kept, r)
+		}
+		if len(dropped) == 0 {
+			continue
+		}
+		if !apply {
+			rep.add("would cut %d edge(s) from %s → %s", len(dropped), p, strings.Join(dropped, ", "))
+			continue
+		}
+		if err := store.UpdatePageMetaOnly(p, func(cur *wiki.Page) (*wiki.Page, error) {
+			if cur == nil {
+				return nil, nil
+			}
+			cur.Meta.Related = kept
+			return cur, nil
+		}); err != nil {
+			rep.fail("stubedges %s: %v", p, err)
+			continue
+		}
+		rep.add("cut %d edge(s) from %s", len(dropped), p)
+	}
+	return nil
 }
