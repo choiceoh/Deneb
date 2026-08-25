@@ -861,6 +861,13 @@ func companyEmailDomains(emails []string) []string {
 			continue
 		}
 		dom := e[at+1:]
+		// A wikilink to a 메일분석 page is `[[…/<message-id>@<host>.md]]`, which
+		// reads as an address to the body scanner — and its ".md host" then
+		// counted as a SECOND employer, flagging people who merely link a mail
+		// page (김익환 부장 was reported for months on `…@real-web-kr1-….md`).
+		if strings.HasSuffix(dom, ".md") {
+			continue
+		}
 		if _, free := freemailDomains[dom]; free || seen[dom] {
 			continue
 		}

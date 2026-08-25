@@ -89,3 +89,16 @@ func TestSplitAnswerableFindings_KeepsIdentityQuestionsOutOfTheFold(t *testing.T
 		t.Errorf("나머지 발견이 장부 경로에서 빠짐: %+v", rest)
 	}
 }
+
+// A 인물 page that links a 메일분석 page carries `[[…/<id>@<host>.md]]`, which the
+// body scanner reads as an address. Counting that ".md host" as an employer is
+// what put 김익환 부장 on the homonym list for months.
+func TestCompanyEmailDomains_IgnoresWikilinkFilenames(t *testing.T) {
+	got := companyEmailDomains(bodyEmailAddresses(
+		"- 이메일: ikhwankim@gsdep.com\n" +
+			"related: [프로젝트/메일분석/79b67eb9@real-web-kr1-57485fbddd-pn9gh.md]\n",
+	))
+	if len(got) != 1 || got[0] != "gsdep.com" {
+		t.Errorf("위키링크 파일명이 회사 도메인으로 잡힘: %v", got)
+	}
+}
