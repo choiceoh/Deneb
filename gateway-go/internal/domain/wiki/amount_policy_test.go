@@ -35,8 +35,10 @@ func TestScanAmountPolicyViolations(t *testing.T) {
 func TestScanAmountPolicyViolationsSeesSummary(t *testing.T) {
 	s, _ := newVerifyStore(t)
 	if err := s.WritePage("프로젝트/y/대표.md", &Page{
-		Meta: Frontmatter{ID: "y", Title: "y", Category: "프로젝트",
-			Summary: "누적 78억원(VAT포함) 납품"},
+		Meta: Frontmatter{
+			ID: "y", Title: "y", Category: "프로젝트",
+			Summary: "누적 78억원(VAT포함) 납품",
+		},
 		Body: "본문에는 금액 없음",
 	}); err != nil {
 		t.Fatal(err)
