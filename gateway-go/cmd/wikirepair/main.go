@@ -169,29 +169,31 @@ func (r *report) print() {
 //
 // Ordering matters: longer keys first so 핵말고흥 is repaired before a shorter
 // key could bite into it.
-// jamoUnresolved are corruptions the corpus cannot settle. The tool REPORTS
-// them and never rewrites them.
+// jamoUnresolved holds corruptions this tool reports and never rewrites.
 //
-// The list exists because this table's error rate on judgement calls turned out
-// to be real, not hypothetical. Three entries shipped wrong: 보핵매실→보필매실
-// (one typo to another), 핫남군청→하남군청 (해남 404 / 하남 0 in the corpus, on a
-// 영암 ledger), and 미엔랑→미얀마 (the phrase is 내용 미열람, 4 occurrences to 1 —
-// it would have written "내용 미얀마" into a 완도 log). Two were caught only when a
-// person read the output.
+// It is empty right now, and the mechanism stays because of what filled it. The
+// jamo corruptions are NOT transcription errors over some source document —
+// every page carrying one is written by the pipeline itself (the analysis body
+// below the provenance blockquote, the dream-maintained 로그.md). The corruption
+// happens at GENERATION. There is no original to restore.
 //
-// What the survivors have in common is that context settles them: 걸물측 can only
-// be 건물측, 14일 유옄 can only be 유예. What lands here is what context does not
-// settle — two readings a careful person could defend, where picking one to look
-// thorough is how a wrong company name enters a financial ledger.
+// That splits the table into three kinds of entry, and only the first two can be
+// settled by anything but a person:
 //
-// Four entries sat here on 2026-08-25 and the operator resolved three of them
-// (보해매실, 측면도, 내려와). Two of those had a guess of mine attached that was
-// wrong — 남려와 read as 나와서, not 내려와 — which is the argument for the list:
-// a plausible guess is indistinguishable from a correct one until someone who
-// knows the subject reads it. Leaving a visible corruption is the cheaper error.
-var jamoUnresolved = []struct{ bad, note string }{
-	{"근종할", "\"진행 상황을 근종할 필요\" — 추종할인가 추적할인가. 2026-08-25 운영자도 판단 보류"},
-}
+//	names       — no original either, but the REFERENT is real. 해봄, 해밀, 해남군청,
+//	              보해매실. Someone who knows the business can rule, it drives
+//	              recall, and getting it wrong writes a false name into a ledger.
+//	vocabulary  — context fixes it. 걸물측 can only be 건물측, 14일 유옄 only 유예,
+//	              whatever the model meant to type.
+//	neither     — the model's own commentary, where context does not narrow it.
+//	              근종할 sat here: "진행 상황을근종할 필요가 있습니다" reads as 추종/추적/
+//	              주시 equally. Not undecidable — there was nothing to decide. The
+//	              operator ruled 주시할 on MEANING, which is a call about their own
+//	              wiki, not a recovery of a lost word.
+//
+// So an entry lands here when it is that third kind: report it, leave the text
+// alone, and let a person decide whether the sentence is worth rewriting at all.
+var jamoUnresolved = []struct{ bad, note string }{}
 
 // name marks a proper noun — a company, place, or project. Only those get the
 // curated-attestation audit: a wrong NAME is unverifiable from context and gets
@@ -215,6 +217,9 @@ var jamoRepairs = []struct {
 	{"이경개시졌", "개시됐", false, false},
 	{"손핵배상", "손해배상", false, false},
 	{"손핼배상", "손해배상", false, false},
+	// 운영자 확정 2026-08-25 — "곧 진행 상황을근종할 필요가 있습니다"에서 주시할.
+	// 띄어쓰기까지 삼켜져 있어 함께 복원한다.
+	{"상황을근종할", "상황을 주시할", false, true},
 	// 운영자 확정 2026-08-25. 코퍼스만으로는 3표기(보해/보필/보핵) 중 어느 것도
 	// 정할 수 없었다 — 대표.md cues는 보해, 로그.md 대표이사 기록과 합의서 PDF
 	// 파일명은 보필이었다. 지상진실이 코퍼스 밖에 있는 경우다.
