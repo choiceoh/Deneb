@@ -163,7 +163,10 @@ func RegisterDefaultPostProcessors(registry *ToolRegistry) {
 	// Summarizers are per-tool so they only run for their respective tools,
 	// avoiding unnecessary function calls across all 34+ tools every turn.
 	pp.Add("exec", ExecAnnotator)
-	pp.Add("grep", GrepResultSummarizer)
+	// Overflowing grep output keeps the matches relevant to the turn's request
+	// instead of the first N (tool_grep_rerank.go); without a query signal it
+	// degrades to the old positional cut.
+	pp.Add("grep", GrepResultRelevanceSummarizer)
 	// Skill-consult attribution + required-tool activation: a SKILL.md load —
 	// via plain `read` (the compact index teaches exactly that path) or via
 	// skills(action=read) — counts as a consult for the usage ledger, and the
