@@ -133,6 +133,15 @@ func (r *report) add(format string, args ...any) {
 	r.count[r.cur]++
 }
 
+// note prints a line WITHOUT counting it. Context lines — a pass summarising how
+// many pages it scanned, or breaking its own result down by sender — are not
+// actions, and folding them into the total made this tool misreport its own work
+// (spammail read 83 when it would delete 59, the difference being 24 per-sender
+// lines). A repair tool that cannot count its own repairs is worse than none.
+func (r *report) note(format string, args ...any) {
+	r.lines = append(r.lines, "   "+fmt.Sprintf(format, args...))
+}
+
 func (r *report) fail(format string, args ...any) {
 	r.errs = append(r.errs, fmt.Sprintf(format, args...))
 }
@@ -637,7 +646,7 @@ func stripStubRelatedEdges(store *wiki.Store, apply bool, rep *report) error {
 			stub[strings.TrimSuffix(p, ".md")] = true
 		}
 	}
-	rep.add("prose 없는 페이지 %d장 / 전체 %d장", len(stub), len(paths))
+	rep.note("prose 없는 페이지 %d장 / 전체 %d장", len(stub), len(paths))
 
 	for _, p := range paths {
 		page, err := store.ReadPage(p)
@@ -725,7 +734,7 @@ func deleteProjectFiledNoiseMail(store *wiki.Store, apply bool, rep *report) err
 			continue
 		}
 		if strings.TrimSpace(page.Meta.Resource) == "" {
-			rep.add("keep (no resource, unrecoverable) %s — %s", rp, from)
+			rep.note("keep (no resource, unrecoverable) %s — %s", rp, from)
 			continue
 		}
 		if !apply {
@@ -822,7 +831,7 @@ func deleteSelfDeclaredSpamMail(store *wiki.Store, apply bool, rep *report) erro
 		return senders[a] < senders[b]
 	})
 	for _, sdr := range senders {
-		rep.add("  발신자별: %-46s %d장", sdr, bySender[sdr])
+		rep.note("  발신자별: %-46s %d장", sdr, bySender[sdr])
 	}
 	return nil
 }
