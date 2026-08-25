@@ -741,13 +741,31 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 			storeNotebookGrounding(params.SessionKey, nbID, updated, g)
 		}
 	}
+	// Re-attach the tails recorded for HISTORICAL user messages first: the
+	// transcript stores clean messages (display/search never see recall
+	// blocks), so without this the request bytes diverge from the previous
+	// run's cache at the first tailed message and content-prefix providers
+	// (kimi) re-bill the whole conversation every run (tail_register.go).
+	cleanMessagesForOrdinal := messages
+	if !deps.briefcaseMode {
+		messages = attachPersistedTails(params.SessionKey, messages)
+	}
+	// Skill hints are computed AFTER the historical tails are re-attached: a
+	// skill body already sitting in this session's history must not be sent a
+	// second time. The tail register keeps every earlier copy on the wire for
+	// cache stability, so re-injecting an identical static document once per
+	// matching turn grows the request without adding information — measured
+	// 2026-08-26 in puppet mode: three copies of deneb-ui-authoring, 16,116 of
+	// the request's 92,285 bytes.
 	var skillHints string
 	var hintedSkills []string
 	var autoLoadedSkills []string
 	var autoActivatedTools []string
 	if !deps.briefcaseMode {
 		resolved := cachedResolvedSkills()
-		skillHints, hintedSkills, autoLoadedSkills = buildSkillHints(params, sessionToolPreset, resolved)
+		skillHints, hintedSkills, autoLoadedSkills = buildSkillHints(
+			params, sessionToolPreset, resolved, skillBodiesInHistory(messages),
+		)
 		autoActivatedTools = skillRequiredDeferredTools(deps.tools, autoLoadedSkills, resolved, sessionToolPreset)
 	}
 	if len(hintedSkills) > 0 {
@@ -762,15 +780,6 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 			"autoLoaded":         autoLoadedSkills,
 			"autoActivatedTools": autoActivatedTools,
 		})
-	}
-	// Re-attach the tails recorded for HISTORICAL user messages first: the
-	// transcript stores clean messages (display/search never see recall
-	// blocks), so without this the request bytes diverge from the previous
-	// run's cache at the first tailed message and content-prefix providers
-	// (kimi) re-bill the whole conversation every run (tail_register.go).
-	cleanMessagesForOrdinal := messages
-	if !deps.briefcaseMode {
-		messages = attachPersistedTails(params.SessionKey, messages)
 	}
 	boardState := ""
 	if !deps.briefcaseMode && !params.EphemeralUser {
