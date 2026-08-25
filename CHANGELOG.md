@@ -1,5 +1,59 @@
 # Changelog
 
+## [5.6.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.5.0...deneb-v5.6.0) (2026-08-25)
+
+
+### ✨ Features
+
+* **agent:** 툴 에러 시점에 이전 교정을 되돌려준다 (AMD 2608.07169) ([#4672](https://github.com/choiceoh/Deneb/issues/4672)) ([fd3aa5b](https://github.com/choiceoh/Deneb/commit/fd3aa5b47f9ba19a9c7e36bb86fc60ea743c95f8))
+* **audit:** 위키 confidence 자기신고가 실제 회상을 예측하는지 감사한다 (2608.04570) ([#4683](https://github.com/choiceoh/Deneb/issues/4683)) ([de35d79](https://github.com/choiceoh/Deneb/commit/de35d7940febc233fc04dfbebfccd61fc8890141))
+* **audit:** 장기 런 실패를 논문 분류로 태깅하는 수요 감사 (2608.15089·01964·05013) ([#4684](https://github.com/choiceoh/Deneb/issues/4684)) ([b106e52](https://github.com/choiceoh/Deneb/commit/b106e5263ee14fbc7ffe4f52a60d07299c713f3d))
+* **chat:** blackboard를 세션 수명으로 승격하고 매 턴 tail로 재주입한다 ([#4703](https://github.com/choiceoh/Deneb/issues/4703)) ([e0d62b6](https://github.com/choiceoh/Deneb/commit/e0d62b64f10d9da8929b2402a0cf3ddab9c3de54))
+* **chat:** 넘친 grep 출력을 위치가 아니라 질의 관련도로 남긴다 (RARG 2607.24223) ([#4699](https://github.com/choiceoh/Deneb/issues/4699)) ([abd6104](https://github.com/choiceoh/Deneb/commit/abd6104e693b4c804c0271ecc27774a57eb96ec1))
+* **chat:** 서브에이전트 스폰에 부모 blackboard(L₂)를 인계한다 ([#4702](https://github.com/choiceoh/Deneb/issues/4702)) ([c4acb1a](https://github.com/choiceoh/Deneb/commit/c4acb1a15e08e1882d1bff97c1970f065d8683ea))
+* **genesis:** judge 사다리에 수사적 과장 등급을 추가한다 (2608.08975) ([#4673](https://github.com/choiceoh/Deneb/issues/4673)) ([e0199a5](https://github.com/choiceoh/Deneb/commit/e0199a50119516413054a2a2795ff90a262f4462))
+* **genesis:** judge 승급 시험지를 개정 세대마다 회전시킨다 (HarnessOpt-Bench 2608.06301) ([#4686](https://github.com/choiceoh/Deneb/issues/4686)) ([5a4dbf0](https://github.com/choiceoh/Deneb/commit/5a4dbf0d439eb5cb676d541ae3b3c9aa6a20c5c4))
+* **genesis:** 메타 개정을 가장 강한 모델이 쓰게 한다 (AI4AI 2608.12307) ([#4680](https://github.com/choiceoh/Deneb/issues/4680)) ([3a50e34](https://github.com/choiceoh/Deneb/commit/3a50e348a6beb464d5855018384b887335efcdd3))
+* **genesis:** 스킬 실패를 검색·미사용·무효 층으로 귀속한다 (2608.14036) ([#4674](https://github.com/choiceoh/Deneb/issues/4674)) ([f3d3058](https://github.com/choiceoh/Deneb/commit/f3d3058ba4b0969137a14fd0c6551fd512861b2b))
+* **models:** expose the submain (자율) role in the phone model picker ([#4676](https://github.com/choiceoh/Deneb/issues/4676)) ([4529bb5](https://github.com/choiceoh/Deneb/commit/4529bb5757749413e9abd99c7a65820b2b304959))
+* **prompt:** 외부 발신문의 제3자 개인정보 최소화 지시 (AISPA 감사 갭) ([#4708](https://github.com/choiceoh/Deneb/issues/4708)) ([c0a0c08](https://github.com/choiceoh/Deneb/commit/c0a0c081ea83d7dfbeee86714b6fd8cd600d6c0c))
+* **recall:** 답변이 이름 대신 내용을 인용해도 cite를 잡는다 ([#4696](https://github.com/choiceoh/Deneb/issues/4696)) ([b74fa35](https://github.com/choiceoh/Deneb/commit/b74fa35e57def6bc784b7c6267bf67b8eec568c6))
+* **rsi-bench:** confirm rate에 경로 귀속을 붙인다 (PAST-Bench 2608.04003) ([#4678](https://github.com/choiceoh/Deneb/issues/4678)) ([fc8e2ac](https://github.com/choiceoh/Deneb/commit/fc8e2ac7f1354379898d3b33eb0026ea82020d89))
+* **web:** focus extraction, search rerank, archive recovery, and probe mode ([#4670](https://github.com/choiceoh/Deneb/issues/4670)) ([e2b30cf](https://github.com/choiceoh/Deneb/commit/e2b30cfada7d79ee266bad70b71fcea57bd6cc8c))
+* **wiki:** purge contentless person stubs past a grace window (operator order) ([#4685](https://github.com/choiceoh/Deneb/issues/4685)) ([0add527](https://github.com/choiceoh/Deneb/commit/0add52743ce02fe101db686a7f5739c2944a06d9))
+* **wiki:** surface VAT-inclusive-only amounts as a review advisory (operator policy) ([#4705](https://github.com/choiceoh/Deneb/issues/4705)) ([54d0c66](https://github.com/choiceoh/Deneb/commit/54d0c6696ca228e7dfc07fe7ece6729de1f73a7e))
+* **wiki:** unwrap body wikilinks that stay dead past a grace window ([#4687](https://github.com/choiceoh/Deneb/issues/4687)) ([184c893](https://github.com/choiceoh/Deneb/commit/184c893fffcf0d3415f2d09ffeca2f7d1c6b68fd))
+* **wiki:** 반복 노출·미사용 페이지를 회상 랭킹에서 강등한다 (SMA TRS, 2608.12743) ([#4695](https://github.com/choiceoh/Deneb/issues/4695)) ([b3ce715](https://github.com/choiceoh/Deneb/commit/b3ce715560173f2ae97d073eeeb3a983d168a6ac))
+
+
+### 🐛 Bug Fixes
+
+* **backup:** verify gzip integrity before promoting a shipped archive ([#4698](https://github.com/choiceoh/Deneb/issues/4698)) ([48b682a](https://github.com/choiceoh/Deneb/commit/48b682adb4105cc2dcf3be44bb106189c1ef9e61))
+* **chat:** ephemeral 턴은 세션 보드에 흔적을 남기지 않는다 ([#4704](https://github.com/choiceoh/Deneb/issues/4704)) ([5a79a2d](https://github.com/choiceoh/Deneb/commit/5a79a2d8a8f5f86ed9086cadc43a12e112359b7b))
+* **dev:** isolate the dev gateway's agent workspace from production ([#4693](https://github.com/choiceoh/Deneb/issues/4693)) ([eccee16](https://github.com/choiceoh/Deneb/commit/eccee165ca883ad141ed18a5c6bcec6368eaa14f))
+* **filestore:** remove dead chunk text helper ([#4694](https://github.com/choiceoh/Deneb/issues/4694)) ([850d3a2](https://github.com/choiceoh/Deneb/commit/850d3a2f1823bc2acccb23ac3a94e06c78040fb0))
+* **genesis:** L1 기아의 제안측 결함 2종을 수리한다 (반복 재제안·판별불능 코퍼스) ([#4707](https://github.com/choiceoh/Deneb/issues/4707)) ([8c5eae1](https://github.com/choiceoh/Deneb/commit/8c5eae1ae8a9242043c0271515d3f7ccfead9594))
+* **media:** honor watch start/end on YouTube and bound frame-extraction ffmpeg ([#4682](https://github.com/choiceoh/Deneb/issues/4682)) ([49e2798](https://github.com/choiceoh/Deneb/commit/49e27988beb7baf653e16357e4f272db4cba3188))
+* **memory:** return direct grammar catalog errors ([#4710](https://github.com/choiceoh/Deneb/issues/4710)) ([8501aa2](https://github.com/choiceoh/Deneb/commit/8501aa2a644af46859b12a781d28b62706447817))
+* **memory:** 출처 검증을 권위 승격이 아니라 보고로 (문서 권위는 provenance 이후) ([#4688](https://github.com/choiceoh/Deneb/issues/4688)) ([293e4dd](https://github.com/choiceoh/Deneb/commit/293e4ddb426c592c335924e6c9153db029c633bd))
+* **memory:** 한국어 질의가 영어 fact 키에 닿게 하고, 미탐 장부를 읽는다 ([#4668](https://github.com/choiceoh/Deneb/issues/4668)) ([1972e35](https://github.com/choiceoh/Deneb/commit/1972e35d6668925f63adb5ecc3fdbb267d8a7d99))
+* **server:** bound fact-plane cutover retries so a deterministic failure degrades instead of crash-looping ([#4671](https://github.com/choiceoh/Deneb/issues/4671)) ([8c35724](https://github.com/choiceoh/Deneb/commit/8c35724374de48f4caebd3018afa16c411b970f0))
+* **usage:** label per-role usage by role instead of raw model id ([#4679](https://github.com/choiceoh/Deneb/issues/4679)) ([ff3399b](https://github.com/choiceoh/Deneb/commit/ff3399b28341c5d84753e52c1fd8c5fb0a68896f))
+* **wiki:** count contacts-sync value lines as template in the person stub predicate ([#4706](https://github.com/choiceoh/Deneb/issues/4706)) ([b0a6cbb](https://github.com/choiceoh/Deneb/commit/b0a6cbb96664aa5b9b2fec1163dcdf06c9d18a67))
+* **wiki:** re-key 40 legacy sentence-keyed facts to bounded axis identities ([#4700](https://github.com/choiceoh/Deneb/issues/4700)) ([f1f5c79](https://github.com/choiceoh/Deneb/commit/f1f5c79106619640dc1b3d79d1a4c5d7833f90b2))
+* 최근 병합 PR의 사후검토 결함 5건을 바로잡는다 ([#4689](https://github.com/choiceoh/Deneb/issues/4689)) ([1f2cbd7](https://github.com/choiceoh/Deneb/commit/1f2cbd773fa21eba3ce7062ad0e88f92507fa841))
+
+
+### ⚡ Performance
+
+* **agentlog:** prune session log files older than every consumer window ([#4697](https://github.com/choiceoh/Deneb/issues/4697)) ([9a6f42a](https://github.com/choiceoh/Deneb/commit/9a6f42a6427622e3f9342bc8a3f196b74cf47110))
+
+
+### 🔧 Internal
+
+* **embedindex:** remove sync refresh test option ([#4701](https://github.com/choiceoh/Deneb/issues/4701)) ([4a6ccbe](https://github.com/choiceoh/Deneb/commit/4a6ccbe385f77689b62f29e818976da635a2acb4))
+* **knowledge:** remove dead router recall wrappers ([#4692](https://github.com/choiceoh/Deneb/issues/4692)) ([0fd75f0](https://github.com/choiceoh/Deneb/commit/0fd75f00eff081b9a6f039caaf568c5b6f2a381c))
+
 ## [5.5.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.4.0...deneb-v5.5.0) (2026-08-24)
 
 

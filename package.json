@@ -1,6 +1,6 @@
 {
   "name": "deneb",
-  "version": "5.5.0",
+  "version": "5.6.0",
   "description": "Deneb — AI gateway for DGX Spark (version tracking only)",
   "license": "MIT",
   "repository": {
