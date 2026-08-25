@@ -39,3 +39,66 @@ func TestBackfillWithExpansion_SkipsWhenContextBudgetIsNearlyGone(t *testing.T) 
 		t.Errorf("expander calls with a full budget = %d, want 1", called)
 	}
 }
+
+// The floor must track the MEASURED cost distribution, not a guess: production
+// firings run p50 479ms / p90 613ms, so a budget that clears the old 600ms
+// floor is still routinely too small.
+func TestBackfillWithExpansion_FloorCoversMeasuredP90(t *testing.T) {
+	t.Setenv("DENEB_WIKI_QUERY_EXPANSION", "backfill")
+	s, _ := newVerifyStore(t)
+	called := 0
+	s.SetQueryExpander(func(context.Context, string) []string {
+		called++
+		return nil
+	})
+	primary := []SearchResult{{Path: "업무/케이블.md", Score: 1.2}}
+
+	// 700ms cleared the old floor and did not cover a p90 call.
+	ctx, cancel := context.WithTimeout(context.Background(), 700*time.Millisecond)
+	defer cancel()
+	if got := s.backfillWithExpansion(ctx, "케이블", primary, 8); len(got) != len(primary) {
+		t.Errorf("primary results not preserved: %+v", got)
+	}
+	if called != 0 {
+		t.Errorf("expander fired with %v left — below the measured p90 + reserve", 700*time.Millisecond)
+	}
+}
+
+// A slow expander must be CANCELLED by the remaining budget, leaving room for
+// the caller to finish. Before this, a 1250ms call inside a 1.5s preflight
+// returned just as the deadline expired and the whole wiki source was scored
+// incomplete (wiki=0(deadline)) despite ready primary results.
+func TestBackfillWithExpansion_CapsSlowExpanderAndKeepsPrimary(t *testing.T) {
+	t.Setenv("DENEB_WIKI_QUERY_EXPANSION", "backfill")
+	s, _ := newVerifyStore(t)
+
+	var sawDeadline time.Duration
+	s.SetQueryExpander(func(ctx context.Context, _ string) []string {
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Error("expander must run under a bounded deadline")
+			return nil
+		}
+		sawDeadline = time.Until(deadline)
+		<-ctx.Done() // a slow model: run until cancelled
+		return nil
+	})
+	primary := []SearchResult{{Path: "업무/케이블.md", Score: 1.2}}
+
+	budget := 1200 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+	start := time.Now()
+	got := s.backfillWithExpansion(ctx, "케이블", primary, 8)
+	elapsed := time.Since(start)
+
+	if len(got) != len(primary) {
+		t.Errorf("primary results lost to a slow expansion: %+v", got)
+	}
+	if sawDeadline >= budget {
+		t.Errorf("expander deadline %v not reduced below the caller budget %v", sawDeadline, budget)
+	}
+	if remaining := budget - elapsed; remaining < expansionCompletionReserve/2 {
+		t.Errorf("expansion consumed the completion window: %v elapsed of %v", elapsed, budget)
+	}
+}

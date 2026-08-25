@@ -58,7 +58,19 @@ func (s *Store) SetQueryExpander(fn QueryExpander) {
 // expansionMinRemaining is the context budget below which the expansion call is
 // skipped: an LLM round trip plus the follow-up BM25 lookups do not fit, and
 // overrunning costs the primary results too.
-const expansionMinRemaining = 600 * time.Millisecond
+// Measured on the production journal (2026-08-25, 68 firings since the
+// deterministic-client fix): p50 479ms, p90 613ms, max 1250ms. The old 600ms
+// floor sat BELOW p90, so a routine call started with "enough" room and then
+// overran — and because the guard only gated the START, nothing stopped the
+// overrun from consuming the recall source's completion window.
+const expansionMinRemaining = 900 * time.Millisecond
+
+// expansionCompletionReserve is held back from the expansion call so the
+// caller can still finish (term lookups, ranking, evidence assembly) inside
+// the shared deadline. Without it a slow expander returns just as the budget
+// expires and the source is scored as incomplete — the primary results are
+// discarded even though they were ready before the call started.
+const expansionCompletionReserve = 300 * time.Millisecond
 
 func (s *Store) backfillWithExpansion(ctx context.Context, intent string, results []SearchResult, limit int) []SearchResult {
 	if s == nil || s.queryExpander == nil || expansionMode() != "backfill" {
@@ -74,11 +86,20 @@ func (s *Store) backfillWithExpansion(ctx context.Context, intent string, result
 	// caller already has (measured: 15 of 87 preflights in 12 days reported
 	// wiki=0(deadline)). Skip and keep what we found.
 	if deadline, ok := ctx.Deadline(); ok {
-		if remaining := time.Until(deadline); remaining < expansionMinRemaining {
+		remaining := time.Until(deadline)
+		if remaining < expansionMinRemaining {
 			slog.Debug("wiki expansion skipped: insufficient context budget",
 				"remainingMs", remaining.Milliseconds(), "needMs", expansionMinRemaining.Milliseconds())
 			return results
 		}
+		// Cap the call itself at the remaining budget minus the completion
+		// reserve. A slow expander is then CANCELLED and we keep the primary
+		// results, instead of the expander finishing late and taking the whole
+		// source down with it (measured: expansion durMs=1250 immediately
+		// followed by wiki=0(deadline) in the same second, 2026-08-25 10:21).
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, remaining-expansionCompletionReserve)
+		defer cancel()
 	}
 	started := time.Now()
 	terms := s.queryExpander(ctx, intent)
