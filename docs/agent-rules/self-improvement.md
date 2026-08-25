@@ -294,7 +294,37 @@ acceptance machinery stays forbidden at record time.
 7. **L4 ledger corruption freezes review and dispatch** — a skipped terminal
    review or delivery row could resurrect vetoed work, so safety decisions must
    surface malformed/oversize rows instead of silently using a partial fold.
-8. **Impact never rewrites delivery truth** — an ineffective or regressed
+8. **One unusable replay case must not blind a skill's behavioral gate.**
+   `runBehaviorGate` scores the original twice and the candidate once on the
+   SAME case set — that is what makes the delta a signal rather than noise — so
+   a case any of the three cannot execute is dropped from **all three** and the
+   remainder still scores. It used to abort the whole gate: the executor
+   answered "실제 YouTube URL이나 영상 요청 없이 …" on a case whose input names no
+   video, the plan parse failed, and that skill stopped being gate-checked
+   entirely. Measured 2026-08-26 the lifecycle ledger read `evolved: 0` across
+   every skill. Every executor failure now logs the **case** id, not just the
+   skill — the failure is nearly always a property of one case, and without an
+   id nobody can find which one to repair.
+9. **A bundled-skill deletion is a tombstone, and a tombstone hides itself.**
+   The repo tree is a production checkout so the files cannot be removed;
+   `miniapp.skills.delete` records the name in `~/.deneb/data/deleted_skills.json`
+   and the catalog filters it out of **every** surface — including the list a
+   restore would be reached from. Use `miniapp.skills.deleted` to see them and
+   `miniapp.skills.restore` to undo. Before that undo existed this cost real
+   capability twice: `kb-interview` swallowed two exact operator triggers on
+   2026-08-18 (tombstoned 07-21, nothing said so), and on 2026-08-26 an RSI
+   check found `evolution-proposal` and `skill-factory` — the loop's own
+   proposal and skill-creation machinery — tombstoned without intent.
+10. **A bench-cleared proposal the bench cannot RANK goes to a tie-break judge,
+   not to a person.** Low-confidence routing (margin ≤ 0, "no measurable
+   improvement") used to request an operator verdict; measured 2026-08-26 that
+   ask went unanswered — one proposal expired after three weeks pending. The
+   judge decides only those ties: it cannot accept what the bench rejected or
+   reject what the bench auto-adopts, so the deterministic chain is still the
+   approver. A missing judge, a call error, or a verdict with no rationale all
+   fall back to the operator card — a broken judge stalls the loop instead of
+   adopting on a guess.
+11. **Impact never rewrites delivery truth** — an ineffective or regressed
    result does not erase `watch_passed`/`applied`; it is independent evidence
    for prioritization and later policy, and can only be recorded for the same
    attempt after the safety watch passes.
