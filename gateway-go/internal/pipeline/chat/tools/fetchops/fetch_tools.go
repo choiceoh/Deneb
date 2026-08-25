@@ -356,6 +356,14 @@ type fetchToolsReport struct {
 	output        strings.Builder
 	activated     []string
 	alreadyActive []string
+	// inlineSchemas writes each activated tool's full JSON schema into the tool
+	// RESULT text. That is only useful when the tools array cannot be changed
+	// mid-turn (no DeferredActivation in context) — when activation works, the
+	// same schema arrives in the tools array and the result copy is dead
+	// weight that also persists in the transcript for every later turn.
+	// Measured 2026-08-25 in puppet mode: one query-based fetch activated 5
+	// tools and shipped 22.4KB of schema twice.
+	inlineSchemas bool
 }
 
 func buildFetchToolsReport(
@@ -365,7 +373,7 @@ func buildFetchToolsReport(
 	access fetchToolAccess,
 	activation *toolport.DeferredActivation,
 ) (*fetchToolsReport, error) {
-	report := &fetchToolsReport{}
+	report := &fetchToolsReport{inlineSchemas: activation == nil}
 	for _, name := range names {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -391,7 +399,7 @@ func (r *fetchToolsReport) add(resolution fetchToolResolution) {
 
 func (r *fetchToolsReport) writeSchema(def toolport.ToolDef) {
 	fmt.Fprintf(&r.output, "## %s\n%s\n", def.Name, def.Description)
-	if def.InputSchema != nil {
+	if def.InputSchema != nil && r.inlineSchemas {
 		schemaJSON, _ := json.MarshalIndent(def.InputSchema, "", "  ")
 		fmt.Fprintf(&r.output, "```json\n%s\n```\n", schemaJSON)
 	}

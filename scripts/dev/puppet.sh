@@ -13,7 +13,7 @@
 # via DENEB_CONFIG_PATH (the same plumbing live-test.sh uses).
 #
 # Usage:
-#   scripts/dev/puppet.sh start [--main-only] [--rebuild]
+#   scripts/dev/puppet.sh start [--main-only] [--no-rebuild]
 #   scripts/dev/puppet.sh send "메시지" [--new-session] [--sync]
 #   scripts/dev/puppet.sh pending [--wait N]      # poll for held LLM requests
 #   scripts/dev/puppet.sh show ID [--full|--raw|--outline|--tool NAME|--system]
@@ -184,11 +184,12 @@ PYEOF
 }
 
 cmd_start() {
-  local all_roles=1 rebuild=0
+  local all_roles=1 rebuild=1
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --main-only) all_roles=0; shift ;;
       --rebuild)   rebuild=1; shift ;;
+      --no-rebuild) rebuild=0; shift ;;
       *) echo "unknown flag: $1" >&2; return 1 ;;
     esac
   done
@@ -211,9 +212,16 @@ cmd_start() {
     devlib_wait_port_free "$DEV_PORT" || true
   fi
 
+  # Rebuild by default (live-test.sh already does). Reusing a stale binary is
+  # the worst failure this harness can have: you edit gateway code, `restart`,
+  # watch the OLD behavior, and conclude the change did nothing. Measured
+  # 2026-08-25 — a verified fix read as "not applied" until the binary mtime
+  # gave it away. --no-rebuild opts out when iterating on prompts only.
   if [[ "$rebuild" == "1" || ! -x "$DEV_BINARY" ]]; then
     echo "==> Building gateway..."
     devlib_build "$DEV_BINARY"
+  else
+    echo "==> Reusing existing binary (--no-rebuild): $(date -r "$DEV_BINARY" '+%Y-%m-%d %H:%M')"
   fi
 
   echo "==> Starting puppet broker on $PUPPET_URL..."
