@@ -12,7 +12,8 @@
 # always runs against a throwaway COPY — production stays untouched. Pass
 # --emit-gold to also print deterministic gold candidates for uncovered projects.
 set -euo pipefail
-cd "$(dirname "$0")/../../gateway-go"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/../../gateway-go"
 
 # The srv4 self-hosted runner's PATH has no Go toolchain (it lives in
 # ~/go-sdk/go/bin), so every scheduled run of this script died on "go: command
@@ -70,25 +71,8 @@ export DENEB_WIKI_QUERY_EXPANSION="${DENEB_WIKI_QUERY_EXPANSION:-backfill}"
 # 2026-08-14..23 measuring a cloud reasoning model (the pinned qwen3.6-35b-a3b
 # died on 08-06 and wormhole failed every call over). A role that moves takes the
 # bench with it; a name does not.
-prod_tiny="$(python3 -c 'import json,os,sys
-try:
-    cfg=json.load(open(os.path.expanduser("~/.deneb/deneb.json")))
-except Exception:
-    sys.exit()
-def find(node):
-    if isinstance(node,dict):
-        if isinstance(node.get("tinyModel"),str):
-            return node["tinyModel"]
-        for v in node.values():
-            hit=find(v)
-            if hit: return hit
-    elif isinstance(node,list):
-        for v in node:
-            hit=find(v)
-            if hit: return hit
-    return ""
-print(find(cfg).rsplit("/",1)[-1])' 2>/dev/null || true)"
-export DENEB_EXPANSION_MODEL="${DENEB_EXPANSION_MODEL:-${prod_tiny:-dsv4-nothink}}"
+prod_tiny="$(python3 "$SCRIPT_DIR/model_role.py" tiny --fallback dsv4-nothink 2>/dev/null || true)"
+export DENEB_EXPANSION_MODEL="${DENEB_EXPANSION_MODEL:-$prod_tiny}"
 if [[ -z "${DENEB_EXPANSION_API_KEY:-}" && -f "$HOME/.wormhole/config.json" ]]; then
     DENEB_EXPANSION_API_KEY="$(python3 -c 'import json,os;print(os.path.expandvars(json.load(open(os.path.expanduser("~/.wormhole/config.json")))["token"]))' 2>/dev/null || true)"
     export DENEB_EXPANSION_API_KEY

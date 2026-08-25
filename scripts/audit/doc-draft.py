@@ -34,6 +34,9 @@ import subprocess
 import sys
 import urllib.request
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dev"))
+from model_role import role_model  # noqa: E402  (path set above)
+
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 GATEWAY = os.path.join(REPO, "gateway-go")
 INTERNAL = os.path.join(GATEWAY, "internal")
@@ -42,7 +45,12 @@ WORMHOLE_CFG = os.path.expanduser("~/.wormhole/config.json")
 WORMHOLE_URL = "http://127.0.0.1:18800/v1/chat/completions"
 
 CONTEXT_CHAR_BUDGET = 42_000   # per grounding section is capped below this total
-DEFAULT_MODEL = "glm-5.2"      # best quality; use --model qwen3.6-35b-a3b for local GPU
+# Ask for a ROLE, not a model name: names churn with every fleet swap and a dead
+# pin does not fail, it silently routes elsewhere (see scripts/dev/model_role.py).
+# Drafting agent-facing docs is coding-tier work; --model still overrides for
+# A/B runs (comparing models by name is that flag's whole purpose).
+DEFAULT_ROLE = "coding"
+FALLBACK_MODEL = "glm-5.2"
 DEFAULT_EXEMPLAR = "hub-wiring.md"
 
 
@@ -228,7 +236,12 @@ def main() -> int:
     ap.add_argument("--list-gaps", action="store_true", help="rank undocumented heavy subsystems")
     ap.add_argument("--target", help="package path under internal/ (e.g. domain/skills/genesis)")
     ap.add_argument("--name", help="doc slug / subsystem name (e.g. self-improvement)")
-    ap.add_argument("--model", default=DEFAULT_MODEL, help=f"wormhole model (default {DEFAULT_MODEL})")
+    default_model = role_model(DEFAULT_ROLE, FALLBACK_MODEL)
+    ap.add_argument(
+        "--model",
+        default=default_model,
+        help=f"wormhole model (default: the {DEFAULT_ROLE} role, currently {default_model})",
+    )
     ap.add_argument("--exemplar", default=DEFAULT_EXEMPLAR, help="agent-rule to match for style")
     ap.add_argument("--out", help="output path (default docs/agent-rules/<name>.draft.md)")
     args = ap.parse_args()

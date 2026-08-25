@@ -84,6 +84,14 @@ type modelEntry struct {
 	// cycle-guarded); a candidate must speak the same protocol and pass the
 	// local-only guard. Failover happens only before any bytes stream.
 	Fallback string `json:"fallback,omitempty"`
+	// Metered marks an entry as pay-per-token, so failover INTO it changes the
+	// billing class of every call that lands there. Routing ignores this flag;
+	// validateConfig warns when an unmetered entry's chain reaches a metered one
+	// and scripts/audit/model_route_topology.py fails the deploy on the same
+	// wiring. Motivation (2026-08-14..25): local dsv4 -> dead qwen3.6 -> the
+	// DeepSeek cloud API silently moved 1,346 of 1,425 failovers onto a metered
+	// endpoint; nothing in the config said that hop cost money.
+	Metered bool `json:"metered,omitempty"`
 	// Pricing optionally declares this entry's per-token cost, consumed ONLY by
 	// GET /v1/usage to estimate spend — it never affects routing.
 	Pricing *modelPricing `json:"pricing,omitempty"`
