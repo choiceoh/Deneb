@@ -90,6 +90,8 @@ class RouteNode:
     upstream_model: str
     has_static_url: bool
     fleet: bool
+    metered: bool
+    fallback: str
     index: int
 
 
@@ -366,6 +368,12 @@ def _extract_routes(wormhole: dict[str, object] | None) -> tuple[RouteNode, ...]
         raw_fleet = route.get("fleet")
         if raw_fleet is not None and not isinstance(raw_fleet, bool):
             raise ConfigShapeError(f"wormhole.models[{index}].fleet must be a boolean")
+        raw_metered = route.get("metered")
+        if raw_metered is not None and not isinstance(raw_metered, bool):
+            raise ConfigShapeError(f"wormhole.models[{index}].metered must be a boolean")
+        fallback = _optional_raw_string(
+            route, "fallback", f"wormhole.models[{index}].fallback"
+        )
         routes.append(
             RouteNode(
                 name=name,
@@ -374,6 +382,8 @@ def _extract_routes(wormhole: dict[str, object] | None) -> tuple[RouteNode, ...]
                 upstream_model=upstream_model or name,
                 has_static_url=bool(static_url.strip()),
                 fleet=bool(raw_fleet),
+                metered=bool(raw_metered),
+                fallback=fallback,
                 index=index,
             )
         )
@@ -555,6 +565,55 @@ def validate_topology(topology: ModelRouteTopology) -> tuple[Finding, ...]:
                     f"route {model!r} has neither a static url nor a configured fleet source",
                 )
             )
+        check_failover_chain(provider, route)
+
+    def check_failover_chain(provider: ProviderNode, route: RouteNode) -> None:
+        """Walk route.fallback and report chains that break or change billing.
+
+        Wormhole failover is silent by design (one WARN line, no client signal),
+        so a chain is a promise the config makes on every caller's behalf. Two
+        ways it lies: a hop that names nothing (no failover happens at all) and
+        a hop that lands on a metered endpoint (a dead local model turns every
+        call into a per-token bill). Both were live on 2026-08-25 — 1,346 of
+        1,425 failovers in twelve days ran local -> dead qwen -> paid API.
+        """
+        subject = f"model={provider.provider_id}/{route.name}"
+        seen = [route.name]
+        current = route
+        while current.fallback:
+            nxt = effective_routes.get(current.fallback)
+            if nxt is None:
+                findings.append(
+                    Finding(
+                        "ROUTE_FALLBACK_UNKNOWN",
+                        subject,
+                        f"route {current.name!r} falls back to {current.fallback!r}, "
+                        "which is not a configured route — no failover will happen",
+                    )
+                )
+                return
+            if nxt.name in seen:
+                findings.append(
+                    Finding(
+                        "ROUTE_FALLBACK_CYCLE",
+                        subject,
+                        "failover chain loops: " + " -> ".join([*seen, nxt.name]),
+                    )
+                )
+                return
+            if nxt.metered and not route.metered:
+                findings.append(
+                    Finding(
+                        "ROUTE_FALLBACK_METERED",
+                        subject,
+                        f"failover chain reaches metered route {nxt.name!r} "
+                        f"({' -> '.join([*seen, nxt.name])}) — an unmetered model going "
+                        "down would silently bill per token",
+                    )
+                )
+                return
+            seen.append(nxt.name)
+            current = nxt
 
     for provider in active_wormhole_providers:
         visible_models = list(provider.models)

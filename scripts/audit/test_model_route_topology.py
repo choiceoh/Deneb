@@ -49,12 +49,18 @@ def route(
     protocol: str = "anthropic",
     upstream_model: str | None = None,
     url: str | None = "https://upstream.example/v1",
+    fallback: str | None = None,
+    metered: bool = False,
 ) -> dict[str, object]:
     value: dict[str, object] = {"name": name, "protocol": protocol}
     if upstream_model is not None:
         value["upstreamModel"] = upstream_model
     if url is not None:
         value["url"] = url
+    if fallback is not None:
+        value["fallback"] = fallback
+    if metered:
+        value["metered"] = True
     return value
 
 
@@ -236,6 +242,59 @@ class ModelRouteTopologyTests(unittest.TestCase):
         self.assertEqual(exit_code, 2)
         self.assertIn("not valid JSON", stderr.getvalue())
         self.assertNotIn("do-not-print", stdout.getvalue() + stderr.getvalue())
+
+    # --- failover chain invariants (the 2026-08 metered-leak class) ---------- #
+
+    def test_chain_into_a_metered_route_fails(self) -> None:
+        """local -> dead local hop -> paid API: the wiring that leaked in August."""
+        codes = self.codes(
+            deneb_config(model_ids=("k3",)),
+            wormhole_config(
+                route("k3", fallback="k3-local"),
+                route("k3-local", fallback="k3-api"),
+                route("k3-api", metered=True),
+            ),
+        )
+
+        self.assertIn("ROUTE_FALLBACK_METERED", codes)
+
+    def test_metered_route_may_fall_back_to_another_metered_route(self) -> None:
+        report = check_topology(
+            deneb_config(model_ids=("k3",)),
+            wormhole_config(
+                route("k3", metered=True, fallback="k3-api"),
+                route("k3-api", metered=True),
+            ),
+        )
+
+        self.assertTrue(report.ok, report.findings)
+
+    def test_fallback_naming_no_route_fails(self) -> None:
+        codes = self.codes(
+            deneb_config(model_ids=("k3",)),
+            wormhole_config(route("k3", fallback="ghost")),
+        )
+
+        self.assertIn("ROUTE_FALLBACK_UNKNOWN", codes)
+
+    def test_fallback_cycle_fails(self) -> None:
+        codes = self.codes(
+            deneb_config(model_ids=("k3",)),
+            wormhole_config(
+                route("k3", fallback="k3-b"),
+                route("k3-b", fallback="k3"),
+            ),
+        )
+
+        self.assertIn("ROUTE_FALLBACK_CYCLE", codes)
+
+    def test_metered_must_be_a_boolean(self) -> None:
+        wormhole = wormhole_config(route("k3"))
+        wormhole["models"][0]["metered"] = "yes"
+
+        with self.assertRaises(ConfigShapeError):
+            check_topology(deneb_config(model_ids=("k3",)), wormhole)
+
 
 
 if __name__ == "__main__":

@@ -76,6 +76,16 @@ func validateConfig(cfg config) []string {
 			warns = append(warns, "model "+e.Name+" fallback "+fb+" speaks a different protocol ("+target.protocol()+" vs "+e.protocol()+") — no failover will happen")
 		}
 	}
+	// A metered hop anywhere in an unmetered entry's chain means a dead local
+	// model bills per token, silently — the 2026-08 leak (see modelEntry.Metered).
+	for _, e := range cfg.Models {
+		if e.Metered {
+			continue
+		}
+		if hop, chain := meteredHop(byName, e); hop != "" {
+			warns = append(warns, "model "+e.Name+" fails over to metered model "+hop+" ("+chain+") — a local outage would bill per token")
+		}
+	}
 	return warns
 }
 
@@ -85,4 +95,25 @@ func logConfigWarnings(log *slog.Logger, cfg config) {
 	for _, w := range validateConfig(cfg) {
 		log.Warn("config", "warning", w)
 	}
+}
+
+// meteredHop walks e's failover chain and returns the first metered entry it
+// reaches (plus the chain for the message), or "" when the chain stays
+// unmetered. Cycle-guarded like failoverChain.
+func meteredHop(byName map[string]modelEntry, e modelEntry) (string, string) {
+	seen := map[string]bool{e.Name: true}
+	chain := []string{e.Name}
+	for cur := e; strings.TrimSpace(cur.Fallback) != ""; {
+		next, ok := byName[strings.TrimSpace(cur.Fallback)]
+		if !ok || seen[next.Name] {
+			return "", ""
+		}
+		seen[next.Name] = true
+		chain = append(chain, next.Name)
+		if next.Metered {
+			return next.Name, strings.Join(chain, " -> ")
+		}
+		cur = next
+	}
+	return "", ""
 }

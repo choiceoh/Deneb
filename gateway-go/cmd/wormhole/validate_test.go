@@ -47,6 +47,33 @@ func TestValidateConfig_ReturnsWarningsForInvalidEntries(t *testing.T) {
 			cfg:        config{Models: []modelEntry{{Name: "x", URL: ""}}},
 			wantSubstr: "empty url",
 		},
+		{
+			// The 2026-08 leak: a local model's chain ran through a dead local
+			// hop into the metered DeepSeek API, so an outage billed per token.
+			name: "chain reaches a metered entry",
+			cfg: config{Models: []modelEntry{
+				{Name: "dsv4", URL: "http://127.0.0.1:8000/v1", Fallback: "qwen"},
+				{Name: "qwen", URL: "http://10.0.0.2:8000/v1", Fallback: "dsv4-api"},
+				{Name: "dsv4-api", URL: "https://api.deepseek.com/v1", Metered: true},
+			}},
+			wantSubstr: "dsv4 fails over to metered model dsv4-api (dsv4 -> qwen -> dsv4-api)",
+		},
+		{
+			name: "unmetered chain is clean",
+			cfg: config{Models: []modelEntry{
+				{Name: "dsv4", URL: "http://127.0.0.1:8000/v1", Fallback: "glm"},
+				{Name: "glm", URL: "https://api.z.ai/api/coding/paas/v4"},
+			}},
+			wantClean: true,
+		},
+		{
+			name: "a metered entry may fall back to another metered entry",
+			cfg: config{Models: []modelEntry{
+				{Name: "pro-api", URL: "https://api.deepseek.com/v1", Metered: true, Fallback: "flash-api"},
+				{Name: "flash-api", URL: "https://api.deepseek.com/v1", Metered: true},
+			}},
+			wantClean: true,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
