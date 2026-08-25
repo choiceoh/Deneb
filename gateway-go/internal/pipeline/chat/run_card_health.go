@@ -21,8 +21,13 @@ func normalizeRunCardReplies(result *agent.AgentResult, params RunParams, deps r
 		if value, ok := normalized[text]; ok {
 			return value
 		}
-		value := deps.normalizeCardReply(text, params.SessionKey, logger)
+		value, rejections := deps.normalizeCardReply(text, params.SessionKey, logger)
 		normalized[text] = value
+		// One correction hint per turn: the first rejection is the one the
+		// author has to fix before the rest can even be judged.
+		if len(rejections) > 0 {
+			recordCardRejection(params.SessionKey, "schema_issues", rejections[0])
+		}
 		return value
 	}
 	result.Text = normalize(result.Text)

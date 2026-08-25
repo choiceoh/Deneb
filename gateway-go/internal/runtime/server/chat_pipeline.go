@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -291,7 +292,19 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// the calendar tool. nil when no calendar source is wired (feature off).
 	chatCfg.Ambient.CalendarGlance = toolbind.NewCalendarGlance(&s.toolDeps.Calendar)
 	chatCfg.Ambient.GoalGlance = chat.NewGoalGlanceFunc()
-	chatCfg.NormalizeCardReply = denebui.NormalizeFinalReply
+	// Adapter: chat takes reasons as plain strings so it never imports denebui.
+	chatCfg.NormalizeCardReply = func(text, sessionKey string, logger *slog.Logger) (string, []string) {
+		normalized, rejections := denebui.NormalizeFinalReplyWithRejections(text, sessionKey, logger)
+		var details []string
+		for _, rejection := range rejections {
+			detail := rejection.Issue
+			if strings.TrimSpace(detail) == "" {
+				detail = rejection.Reason
+			}
+			details = append(details, detail)
+		}
+		return normalized, details
+	}
 	chatCfg.ReportCardHealth = denebui.ReportCardHealth
 	chatCfg.LinkEnrichStart = toolbind.NewLinkEnrichStart(s.logger)
 

@@ -88,6 +88,11 @@ func buildTailAdditions(params RunParams, recallMemory, notebookGrounding, skill
 	if params.AutoDeliveredOutput {
 		adds = append(adds, autoDeliveryDirective)
 	}
+	// Correction hint for a card the delivery boundary rejected last turn
+	// (card_rejection_notice.go). Consumed on read, so it appears exactly once.
+	if notice := takeCardRejectionNotice(params.SessionKey); notice != "" {
+		adds = append(adds, notice)
+	}
 	return adds
 }
 

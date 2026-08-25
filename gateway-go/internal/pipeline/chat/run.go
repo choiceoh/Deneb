@@ -139,7 +139,7 @@ type runDeps struct {
 
 	// normalizeCardReply validates and repairs deneb-ui fences before final
 	// persistence/delivery; reportCardHealth observes the normalized result.
-	normalizeCardReply func(text, sessionKey string, logger *slog.Logger) string
+	normalizeCardReply func(text, sessionKey string, logger *slog.Logger) (string, []string)
 	reportCardHealth   func(text, sessionKey string, logger *slog.Logger)
 }
 
