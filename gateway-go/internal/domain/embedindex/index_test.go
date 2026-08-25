@@ -24,13 +24,15 @@ func (f fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, err
 }
 
 func TestIndexRefreshLoadsItemsAndSearchRanksExactMatch(t *testing.T) {
-	ix := New("test", fakeEmbedder{healthy: true}, "", WithSyncRefresh())
+	ix := New("test", fakeEmbedder{healthy: true}, "")
 	defer ix.Close()
 	items := []Item{
 		{ID: "a", Hash: ContentHash("금호타이어 곡성 납기 지연 검토"), Text: "금호타이어 곡성 납기 지연 검토"},
 		{ID: "b", Hash: ContentHash("당진 해저케이블 포설 공정"), Text: "당진 해저케이블 포설 공정"},
 	}
-	ix.RefreshAsync(func() []Item { return items })
+	if err := ix.Warm(context.Background(), func() []Item { return items }); err != nil {
+		t.Fatalf("Warm: %v", err)
+	}
 
 	hits := ix.Search(context.Background(), "금호타이어 곡성 납기 지연 검토", 5)
 	if len(hits) == 0 {
@@ -63,14 +65,18 @@ func TestDisabledEmbedderReturnsNilSearchResults(t *testing.T) {
 // TestReembedEvictsVectorWhenItemRemoved: dropping an item removes its vector.
 // Guards the content-hash cache key + vanished-entry cleanup.
 func TestReembedEvictsVectorWhenItemRemoved(t *testing.T) {
-	ix := New("test", fakeEmbedder{healthy: true}, "", WithSyncRefresh())
+	ix := New("test", fakeEmbedder{healthy: true}, "")
 	defer ix.Close()
 	v1 := []Item{{ID: "a", Hash: ContentHash("first"), Text: "first version text"}}
-	ix.RefreshAsync(func() []Item { return v1 })
+	if err := ix.Warm(context.Background(), func() []Item { return v1 }); err != nil {
+		t.Fatalf("initial Warm: %v", err)
+	}
 	if got := ix.Search(context.Background(), "first version text", 3); len(got) == 0 {
 		t.Fatal("expected a hit after first embed")
 	}
-	ix.RefreshAsync(func() []Item { return nil })
+	if err := ix.Warm(context.Background(), func() []Item { return nil }); err != nil {
+		t.Fatalf("drop Warm: %v", err)
+	}
 	if got := ix.Search(context.Background(), "first version text", 3); len(got) != 0 {
 		t.Errorf("expected no hits after item dropped, got %d", len(got))
 	}

@@ -88,7 +88,6 @@ type Index struct {
 	vecs            map[string]cachedVec // id -> embedding
 	pendingSupplier Supplier             // latest refresh request while one is running
 	refreshing      atomic.Bool          // single-flight guard for RefreshAsync
-	syncRefresh     bool                 // tests: run RefreshAsync inline
 	lastRefreshAt   atomic.Int64
 	refreshCount    atomic.Uint64
 	refreshErrors   atomic.Uint64
@@ -110,9 +109,6 @@ type Index struct {
 
 // Option configures an Index at construction.
 type Option func(*Index)
-
-// WithSyncRefresh runs RefreshAsync inline (tests only, deterministic).
-func WithSyncRefresh() Option { return func(ix *Index) { ix.syncRefresh = true } }
 
 // WithPreprocessingFingerprint identifies the caller's text construction and
 // normalization contract. Change it when identical source items would be
@@ -227,12 +223,6 @@ func (ix *Index) Close() {
 // instead of blocking on the embed under a tight query deadline.
 func (ix *Index) RefreshAsync(supplier Supplier) {
 	if ix == nil || ix.embedder == nil || supplier == nil {
-		return
-	}
-	if ix.syncRefresh {
-		ctx, cancel := context.WithTimeout(ix.baseCtx, ix.refreshTO)
-		defer cancel()
-		_ = ix.Warm(ctx, supplier)
 		return
 	}
 	ix.mu.Lock()

@@ -8,8 +8,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 )
 
 type semanticMailEmbedder struct {
@@ -81,7 +79,10 @@ func TestSearchContextFindsSemanticOnlyMailAndUsesQueryRole(t *testing.T) {
 		contractMessage("other", "INBOX", "점심 메뉴", "구내식당 안내", "2026-07-02"),
 	)
 	embedder := &semanticMailEmbedder{}
-	s.SetEmbedder(embedder, embedindex.WithSyncRefresh())
+	s.SetEmbedder(embedder)
+	if err := s.WarmSemanticIndex(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 
 	hits := s.SearchContext(context.Background(), nil, "배송 일정 위험", time.Time{}, 10)
 	if len(hits) == 0 || hits[0].ID != "risk" {
@@ -99,7 +100,10 @@ func TestSearchContextRejectsSemanticOnlyHitBelowFloor(t *testing.T) {
 	s := newContractStore(t)
 	defer s.Close()
 	putContractMessages(t, s, contractMessage("noise", "INBOX", "약한 관련 문서", "별도 본문", "2026-07-01"))
-	s.SetEmbedder(&semanticMailEmbedder{}, embedindex.WithSyncRefresh())
+	s.SetEmbedder(&semanticMailEmbedder{})
+	if err := s.WarmSemanticIndex(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 
 	if hits := s.SearchContext(context.Background(), nil, "배송 일정 위험", time.Time{}, 10); len(hits) != 0 {
 		t.Fatalf("below-floor semantic hits = %v", messageIDs(hits))
@@ -110,7 +114,10 @@ func TestSearchContextRejectsSemanticOnlyHitForUncalibratedModel(t *testing.T) {
 	s := newContractStore(t)
 	defer s.Close()
 	putContractMessages(t, s, contractMessage("risk", "INBOX", "공급망 경보", "계약상 납기 지연 가능성이 커졌습니다", "2026-07-01"))
-	s.SetEmbedder(&semanticMailEmbedder{fingerprint: "future-embedder:2"}, embedindex.WithSyncRefresh())
+	s.SetEmbedder(&semanticMailEmbedder{fingerprint: "future-embedder:2"})
+	if err := s.WarmSemanticIndex(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 
 	if hits := s.SearchContext(context.Background(), nil, "배송 일정 위험", time.Time{}, 10); len(hits) != 0 {
 		t.Fatalf("uncalibrated semantic-only hits = %v", messageIDs(hits))
@@ -152,7 +159,10 @@ func TestSearchContextRRFPromotesLexicalSemanticAgreement(t *testing.T) {
 		contractMessage("both", "INBOX", "배송 일정 위험", "계약상 납기 지연", "2026-07-01"),
 		contractMessage("lexical", "INBOX", "배송 일정 위험", "일반 공지", "2026-07-02"),
 	)
-	s.SetEmbedder(&semanticMailEmbedder{}, embedindex.WithSyncRefresh())
+	s.SetEmbedder(&semanticMailEmbedder{})
+	if err := s.WarmSemanticIndex(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 
 	hits := s.SearchContext(context.Background(), nil, "배송 일정 위험", time.Time{}, 10)
 	if len(hits) < 2 || hits[0].ID != "both" {

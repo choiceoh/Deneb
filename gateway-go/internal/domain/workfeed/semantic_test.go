@@ -10,8 +10,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 )
 
 type semanticWorkFeedEmbedder struct {
@@ -84,7 +82,7 @@ func TestAppendIfNewSemanticallyGroupsRelatedCardsWithoutDeduping(t *testing.T) 
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	defer store.Close()
 	embedder := &semanticWorkFeedEmbedder{}
-	store.SetEmbedder(embedder, embedindex.WithSyncRefresh())
+	store.SetEmbedder(embedder)
 	now := time.Now().UnixMilli()
 
 	first, created, err := store.AppendIfNew(Item{
@@ -130,7 +128,7 @@ func TestAppendIfNewSemanticallyGroupsRelatedCardsWithoutDeduping(t *testing.T) 
 func TestAppendIfNewSemanticGroupingRejectsWeakOrUnrelatedHits(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	defer store.Close()
-	store.SetEmbedder(&semanticWorkFeedEmbedder{}, embedindex.WithSyncRefresh())
+	store.SetEmbedder(&semanticWorkFeedEmbedder{})
 	now := time.Now().UnixMilli()
 
 	if _, _, err := store.AppendIfNew(Item{
@@ -154,7 +152,7 @@ func TestAppendIfNewSemanticGroupingRejectsWeakOrUnrelatedHits(t *testing.T) {
 func TestAppendIfNewSemanticGroupingRejectsUncalibratedModel(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	defer store.Close()
-	store.SetEmbedder(&semanticWorkFeedEmbedder{fingerprint: "future-embedder:3"}, embedindex.WithSyncRefresh())
+	store.SetEmbedder(&semanticWorkFeedEmbedder{fingerprint: "future-embedder:3"})
 	now := time.Now().UnixMilli()
 	for _, item := range []Item{
 		{ID: "risk-mail", Source: SourceMailReport, Title: "공급망 경보", Body: "계약상 납기 지연 가능성이 커졌습니다.", CreatedAtMs: now - 1_000},
@@ -179,7 +177,7 @@ func TestAppendIfNewExactDuplicateBypassesSemanticGrouping(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	defer store.Close()
 	embedder := &semanticWorkFeedEmbedder{}
-	store.SetEmbedder(embedder, embedindex.WithSyncRefresh())
+	store.SetEmbedder(embedder)
 	now := time.Now().UnixMilli()
 	item := Item{
 		ID: "original", Source: SourceMailReport, Title: "공급망 경보",
@@ -202,7 +200,7 @@ func TestAppendIfNewExactDuplicateBypassesSemanticGrouping(t *testing.T) {
 func TestAppendIfNewPersistsCardWhenSemanticGroupingFails(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	defer store.Close()
-	store.SetEmbedder(&semanticWorkFeedEmbedder{failPass: true}, embedindex.WithSyncRefresh())
+	store.SetEmbedder(&semanticWorkFeedEmbedder{failPass: true})
 	now := time.Now().UnixMilli()
 
 	for _, item := range []Item{
@@ -256,7 +254,7 @@ func TestApplySemanticGroupCapsClusterGrowth(t *testing.T) {
 func TestAckReconcilesSemanticGroupMembership(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	defer store.Close()
-	store.SetEmbedder(&semanticWorkFeedEmbedder{}, embedindex.WithSyncRefresh())
+	store.SetEmbedder(&semanticWorkFeedEmbedder{})
 	now := time.Now().UnixMilli()
 	for _, item := range []Item{
 		{ID: "risk-mail", Source: SourceMailReport, Title: "공급망 경보", Body: "계약상 납기 지연 가능성이 커졌습니다.", CreatedAtMs: now - 1_000},

@@ -20,8 +20,7 @@ const (
 
 // SetEmbedder enables semantic mail retrieval. Corpus vectors are refreshed
 // lazily and cached under the mailstore directory; query failures leave the
-// existing lexical index fully usable. Options are primarily for deterministic
-// tests (WithSyncRefresh); production uses the default background refresh.
+// existing lexical index fully usable.
 func (s *Store) SetEmbedder(embedder embedindex.Embedder, opts ...embedindex.Option) {
 	if s == nil {
 		return
