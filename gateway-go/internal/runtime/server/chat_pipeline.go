@@ -297,11 +297,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		normalized, rejections := denebui.NormalizeFinalReplyWithRejections(text, sessionKey, logger)
 		var details []string
 		for _, rejection := range rejections {
-			detail := rejection.Issue
-			if strings.TrimSpace(detail) == "" {
-				detail = rejection.Reason
-			}
-			details = append(details, detail)
+			details = append(details, cardRejectionDetail(rejection))
 		}
 		return normalized, details
 	}
@@ -497,5 +493,24 @@ func spilloverAskFunc() tooldeps.LocalAIFunc {
 			return "", errors.New("local AI hub unavailable")
 		}
 		return pilot.CallLocalLLM(ctx, system, user, maxTokens)
+	}
+}
+
+// cardRejectionDetail renders one rejection as the sentence the MODEL reads on
+// its next turn. A schema issue already carries its own JSON-path message; the
+// other reasons only have an enum, and shipping `additional_block` verbatim
+// into a Korean instruction (observed 2026-08-26) tells the author nothing
+// about what to change.
+func cardRejectionDetail(rejection denebui.Rejection) string {
+	if issue := strings.TrimSpace(rejection.Issue); issue != "" {
+		return issue
+	}
+	switch rejection.Reason {
+	case "additional_block":
+		return "한 응답에 deneb-ui 펜스는 하나만 허용된다 — 두 번째 이후 블록은 평문으로 내려갔다. 여러 주제는 카드 하나 안에서 <card>를 여러 개 써라."
+	case "unparseable":
+		return "카드 본문을 파싱할 수 없었다 — 라벨 HTML 문법(닫는 태그·속성 인용부호)을 확인하라."
+	default:
+		return "카드가 스키마 검증에 걸렸다."
 	}
 }
