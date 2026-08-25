@@ -272,9 +272,42 @@ func TestSubjectAwareSelfFactsRenderSuppliedRecallEpoch(t *testing.T) {
 		nil,
 		"그거 기억나?",
 		currentFactMaxChars,
+		false,
 	)
 	if !strings.Contains(out, `revision="42"`) || !strings.Contains(out, value) {
 		t.Fatalf("self context did not render supplied fact epoch:\n%s", out)
+	}
+}
+
+// With the projection in the system prompt the same self claim must not be
+// repeated in the turn block; a subject named in the message still renders.
+func TestSubjectAwareSelfFactsAreSkippedWhenTheProjectionCarriesThem(t *testing.T) {
+	selfClaim := wiki.FactClaim{
+		Subject: "self", Key: "communication.response_length", Value: "짧고 간결하게 답한다",
+		Kind: wiki.FactKindPreference, Authority: wiki.FactAuthorityDirectUser,
+		Status: wiki.FactStatusCurrent, Revision: 42,
+	}
+	subjectClaim := wiki.FactClaim{
+		Subject: "탑솔라", Key: "contract.amount", Value: "공급가 1억 2천",
+		Kind: wiki.FactKindAmount, Authority: wiki.FactAuthorityDirectUser,
+		Status: wiki.FactStatusCurrent, Revision: 42,
+	}
+
+	if out := subjectAwareCurrentFactContext(
+		42, []wiki.FactClaim{selfClaim}, nil, "그거 기억나?", currentFactMaxChars, true,
+	); out != "" {
+		t.Fatalf("self-only block should be empty when the projection has it:\n%s", out)
+	}
+
+	matched := map[string]struct{}{"탑솔라": {}}
+	out := subjectAwareCurrentFactContext(
+		42, []wiki.FactClaim{selfClaim, subjectClaim}, matched, "탑솔라 계약 금액", currentFactMaxChars, true,
+	)
+	if !strings.Contains(out, subjectClaim.Value) {
+		t.Fatalf("subject fact must still render:\n%s", out)
+	}
+	if strings.Contains(out, selfClaim.Value) {
+		t.Fatalf("self fact should not be duplicated:\n%s", out)
 	}
 }
 
