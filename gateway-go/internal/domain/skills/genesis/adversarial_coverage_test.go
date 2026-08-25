@@ -117,8 +117,17 @@ func TestProbeBehavioralCoverageGaps_CreatesCasesForUncaughtToolDrops(t *testing
 	t.Run("uncaught tool drop is authored as a RequiredTools case", func(t *testing.T) {
 		// Only 'mail_archive' is protected (via a required substring); dropping
 		// 'wiki_search' goes undetected.
+		// The seed carries a REAL user task. The authored coverage case borrows
+		// it, which is what makes it behaviorally evaluable — the generator no
+		// longer synthesizes an input, because a synthesized one ("exercise the
+		// skill's use of tool X") is a meta-instruction the executor refuses.
 		cases := []SkillValidationCaseRecord{
-			{SkillName: "sk", ID: "c1", RequiredSubstrings: []string{"mail_archive"}},
+			{
+				SkillName:          "sk",
+				ID:                 "c1",
+				RequiredSubstrings: []string{"mail_archive"},
+				Replay:             SkillReplayCaseRecord{Input: "이번 주 메일 첨부 정리해줘"},
+			},
 		}
 		got := probeBehavioralCoverageGaps("sk", advToolBody, cases)
 		if len(got) == 0 {
@@ -130,8 +139,8 @@ func TestProbeBehavioralCoverageGaps_CreatesCasesForUncaughtToolDrops(t *testing
 				t.Fatalf("malformed behavioral case: %+v", c)
 			}
 			names = append(names, c.Replay.RequiredTools[0])
-			// Discriminative: passes on the good body, and the case is
-			// behaviorally evaluable (executor gate can pick it up).
+			// Discriminative: passes on the good body, and — because a real task
+			// was available to borrow — the executor gate can pick it up.
 			if !scoreSkillValidationCases(advToolBody, []SkillValidationCaseRecord{c}).casePasses() {
 				t.Fatalf("authored case fails on the good body: %+v", c)
 			}

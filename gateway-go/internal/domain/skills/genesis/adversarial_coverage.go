@@ -235,7 +235,21 @@ func probeBehavioralCoverageGaps(skillName, body string, cases []SkillValidation
 			ID:          fmt.Sprintf("advtool-%s-%s", skillName, tool),
 			Description: "adversarial coverage: tool \"" + tool + "\" was unprotected",
 			Replay: SkillReplayCaseRecord{
-				Input:         "exercise the skill's use of tool " + tool,
+				// Borrow a REAL user task from the skill's existing cases.
+				//
+				// This case is meant to be checked behaviorally — drop the lines
+				// naming the tool and the emitted plan should stop calling it.
+				// That needs a task a model can actually plan for. The generator
+				// used to synthesize one ("exercise the skill's use of tool
+				// read_spillover"), which is a meta-instruction, not a task: the
+				// executor refused it ("실제 YouTube URL이나 영상 요청 없이 …"), the plan
+				// parse failed, and the skill lost its behavioral gate entirely.
+				//
+				// When the skill has no case carrying a real task, Input stays
+				// empty and replayBehaviorEvaluable skips it — the deterministic
+				// scorer still checks RequiredTools against the body, so the case
+				// keeps its value instead of pretending to be executable.
+				Input:         borrowedReplayInput(cases),
 				RequiredTools: []string{tool},
 			},
 			Source:       "adversarial-coverage",
@@ -388,4 +402,19 @@ func probeGateExploitTrap(e *Evolver, skillName, originalContent string, cases [
 	ok, reason := e.validateCandidatePreflight(skillName, originalContent, trap,
 		gateExploitTrapAudit(), &UsageStats{SkillName: skillName}, "adversarial gate-trap probe (synthetic)")
 	return ok, reason
+}
+
+// borrowedReplayInput returns a real user task from the skill's existing cases,
+// or "" when none carries one. Placeholder inputs from earlier generator
+// versions are skipped — borrowing one would recreate the very failure this
+// exists to avoid.
+func borrowedReplayInput(cases []SkillValidationCaseRecord) string {
+	for _, tc := range cases {
+		input := strings.TrimSpace(tc.Replay.Input)
+		if input == "" || strings.HasPrefix(input, legacyCoverageInputPrefix) {
+			continue
+		}
+		return input
+	}
+	return ""
 }
