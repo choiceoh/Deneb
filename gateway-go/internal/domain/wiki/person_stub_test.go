@@ -64,3 +64,34 @@ func TestValidityFactor_DemotesPersonStubsBelowCuratedPages(t *testing.T) {
 		t.Errorf("stub factor %v should outrank archived %v", stubF, archived)
 	}
 }
+
+// The contacts-sync skeleton — org/title/company value lines plus contact
+// bullets — must classify as a stub: every line restates the address book.
+// Counting the value lines as prose let 267 skeletons dodge the first purge
+// cycle (2026-08-25: purged=12 instead of draining the 280 backlog).
+func TestIsPersonStubPageTreatsSyncValueLinesAsTemplate(t *testing.T) {
+	page := &Page{Meta: Frontmatter{Category: "인물"}, Body: `## 소속 · 직책
+
+- **소속**: 탑솔라그룹
+- **직급 · 직책**: —
+
+## 담당 · 관계
+
+_(미기재)_
+
+## 연락처
+
+- 전화: 010-0000-0000
+- 회사: 탑솔라그룹
+
+_주소록에서 동기화됨_
+`}
+	if !isPersonStubPage("인물/야샤.md", page) {
+		t.Fatal("contacts-sync skeleton not classified as stub")
+	}
+	// One human sentence still lifts it out.
+	page.Body += "\n금호타이어 곡성 담당, 계약 창구. 실사 일정을 조율한다.\n"
+	if isPersonStubPage("인물/야샤.md", page) {
+		t.Fatal("page with real prose misclassified as stub")
+	}
+}

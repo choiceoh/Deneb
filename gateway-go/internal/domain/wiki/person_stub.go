@@ -28,6 +28,13 @@ var personTemplateMarkers = []string{
 	"- 이메일:",
 	"- 전화:",
 	"- 휴대폰:",
+	// Contacts-sync value lines (contacts.go writePersonSkeleton): the org and
+	// title the address book already knows. Counting these as prose made 267 of
+	// 280 skeletons score ≥20 runes and dodge the stub predicate — the first
+	// purge cycle (2026-08-25) removed only the 12 pages bare of even these.
+	"- **소속**:",
+	"- **직급 · 직책**:",
+	"- 회사:",
 }
 
 // isPersonStubPage reports whether a 인물 page carries no prose of its own.
