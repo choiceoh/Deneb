@@ -119,3 +119,25 @@ func TestIsPersonStubPage_KeepsOperatorDecisions(t *testing.T) {
 		t.Error("빈 씨앗 페이지가 퍼지 대상에서 빠짐")
 	}
 }
+
+// The dreamer records what it learned about a person in the SUMMARY while the
+// body stays a contact template — so a body-only scan called real knowledge
+// contentless and deleted it.
+func TestIsPersonStubPage_KeepsLearnedSummaries(t *testing.T) {
+	body := "## 소속 · 직책\n- **소속**: —\n\n## 연락처\n- 이메일: a@b.co.kr\n\n_주소록에서 동기화됨_"
+	learned := &Page{Meta: Frontmatter{
+		Title:   "신정훈",
+		Summary: "파인드그린 대표 — 감포 풍력(etc-gpo-wnd-001) 개발비·양수도 협의 창구",
+	}}
+	learned.Body = body
+	if isPersonStubPage("인물/신정훈.md", learned) {
+		t.Error("학습된 요약이 있는 페이지가 빈 껍데기로 판정됨")
+	}
+	for _, seeded := range []string{"", "탑솔라 소속", "탑솔라(주) 소속", "탑솔라 — 주소록 기반 자동 생성"} {
+		p := &Page{Meta: Frontmatter{Title: "홍길동", Summary: seeded}}
+		p.Body = body
+		if !isPersonStubPage("인물/홍길동.md", p) {
+			t.Errorf("씨앗 요약 %q 가 퍼지 대상에서 빠짐", seeded)
+		}
+	}
+}
