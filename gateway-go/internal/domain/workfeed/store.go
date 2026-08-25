@@ -33,6 +33,13 @@ const (
 	SourceGroupwareApproval = "groupware-approval" //nolint:gosec // feed-source kind label, not a credential
 	// SourceGroupwareBoard is an important Amaranth notice surfaced read-only.
 	SourceGroupwareBoard = "groupware-board"
+	// SourceWikiMaint is an advisory wiki mismatch the operator must judge
+	// (동명이인 의심, 연락처 불일치). Its producer re-scans every 12h and the
+	// findings are long-lived by nature — nothing auto-repairs them — so it is
+	// ref-idempotent: while a card for the same page is still open, the rescan
+	// must not stack a second one on top (2026-08-25: the same three people had
+	// a fresh card on consecutive days, which is what "계속 물어본다" was).
+	SourceWikiMaint = "wiki-maint"
 
 	StatusUnread  = "unread"
 	StatusAcked   = "acked"
@@ -319,8 +326,13 @@ func workFeedItemSnapshot(items []Item, fallback Item) Item {
 	return fallback
 }
 
+// isGroupwareRefSource reports whether a source is idempotent on (source,
+// RefID) while a card is ACTIVE: a rescan of a finding already sitting in the
+// inbox must return the open card, not stack another. An acked card
+// deliberately does not block a genuine re-occurrence.
 func isGroupwareRefSource(source string) bool {
-	return source == SourceGroupwareApproval || source == SourceGroupwareBoard
+	return source == SourceGroupwareApproval || source == SourceGroupwareBoard ||
+		source == SourceWikiMaint
 }
 
 // isDuplicateCard reports whether cur duplicates prev: same source and the same
