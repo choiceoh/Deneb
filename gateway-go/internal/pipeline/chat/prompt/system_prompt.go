@@ -83,6 +83,12 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	if params.Briefcase {
 		cacheKey += "|briefcase"
 	}
+	// The static block now branches on the spawn preset (rich-answer contract
+	// vs the parent-reporting rule), so the preset has to key the cache too —
+	// two presets with the same tool set would otherwise share one entry.
+	if isSpawnPreset(params.ToolPreset) {
+		cacheKey += "|spawn:" + params.ToolPreset
+	}
 	if cached, ok := Cache.StaticPrompt(cacheKey); ok {
 		staticText = cached
 	} else {
@@ -159,17 +165,17 @@ func buildStaticPrompt(params SystemPromptParams, eagerSet, toolSet toolNameSet)
 	// validator downgraded. The static block now carries the minimum inventory
 	// to author a valid card without a tool round-trip, plus the deneb-html
 	// contract for webpage-style answers; the skill remains the full grammar.
-	s.WriteString("### Rich answers (deneb-ui card · deneb-html page)\n")
-	// Rich-by-default routing (2026-07-18 operator): the earlier "structure is
-	// central" framing read as opt-in and real chat stayed plain prose — the
-	// post-deploy sample shipped card-less. The default flips: substantive
-	// content renders rich; prose is the exception for short conversation.
-	s.WriteString("Default to a RICH answer, not plain text: whenever your reply carries data, a list of items, a comparison, a schedule, a status or result summary, a plan, or options—anything beyond a few conversational sentences—render it as one ```deneb-ui fenced card (labeled HTML, one root <column>) or one ```deneb-html page, on your own initiative (do not wait for the user to ask for a card or page). Reserve plain prose for short conversational turns, one-line facts, and mid-work narration. When you ask the user to decide, choose, or confirm, never ask in prose alone: put the options in the card as chips or buttons.\n")
-	s.WriteString("deneb-ui tags (ONLY these; anything else degrades): column row card box hr · text (style=headline|title|body|caption) markdown code img icon badge stat(value label description) progress(value 0..1) alert(severity=info|success|warning|error) blockquote table/tr/th/td ul/ol/li chart(type=bar|line + <point label value/>) tabs/tab accordion avatar countdown · interactive (id required): button input textarea checkbox switch select/option radio-group slider chips/chip. Buttons: event=\"name\" (+ collect=\"id1,id2\" to submit input values), or href=/toggle=/copy=. A press returns as `Pressed: 이벤트`, collected values as `Responded with: id: 값` — act on that next user message. Escape literal backticks inside markdown/code bodies as &#96;.\n")
-	s.WriteString("Decision example: ```deneb-ui\n<column><card><text style=\"title\">시간 선택</text><chips id=\"slot\"><chip value=\"10:00\">오전 10시</chip><chip value=\"14:00\">오후 2시</chip></chips><row><button event=\"confirm_slot\" collect=\"slot\">확정</button><button event=\"skip\" variant=\"outlined\">다음에</button></row></card></column>\n```\n")
-	s.WriteString("For a webpage-like visual answer—custom layout, rich visualization, an interactive explainer or mini tool—author one ```deneb-html fence containing a complete self-contained HTML document instead. It renders sandboxed INLINE in the chat. Rules: inline CSS/JS only; no external resources (network is blocked); NEVER use a backtick character anywhere in the document (write JS without template literals); Korean UI text; design for a ~380px-wide surface. The client injects a base stylesheet AND a micro design system — vary the look per answer instead of always default: pick a mood with <body class=\"theme-dark|theme-warm|theme-mono\"> (omit = clean light), and build with the prebuilt classes card, grid (auto-fit columns), stat-value/stat-label, badge (+ok|warn|bad), bar with an inner <i style=\"width:NN%\"> gauge, muted, accent, button/button.primary. Typography, tables, and margins are already styled — add custom CSS only for what these do not cover. Keep the document lean — generation time is user-visible latency. To send a reply back into the chat from the page, call window.deneb.send('메시지') (e.g. from a button's onclick).\n")
-	s.WriteString("Routing: deneb-ui for compact structured data and decisions; deneb-html when custom design, richer visualization, or scripted interactivity makes the answer better — vary the format and mood across answers instead of settling into one default. For complex card compositions read the `deneb-ui-authoring` skill first.\n")
-	s.WriteString("At most one deneb-ui fence AND at most one deneb-html fence per response, never both. The server validates the final reply and degrades invalid cards, oversized documents, or extra fences to safe plain text.\n")
+	if isSpawnPreset(params.ToolPreset) {
+		// A spawned sub-agent's reply is consumed by its PARENT as tool text —
+		// no client renders it, so the card/HTML grammar (4KB, measured
+		// 2026-08-26 in puppet mode: 27KB sub-agent prompt, 15% of it this
+		// block) teaches a surface this run does not have, and a card it
+		// authored would reach the user only as the parent's quoted text.
+		s.WriteString("### 보고 형식\n")
+		s.WriteString("네 응답은 사용자가 아니라 **부모 에이전트**가 읽는다. `deneb-ui`·`deneb-html` 펜스를 쓰지 마라 — 평문이나 짧은 마크다운으로, 부모가 그대로 인용할 수 있게 사실과 근거만 보고한다.\n\n")
+	} else {
+		writeRichAnswerContract(&s)
+	}
 	s.WriteString("If the user asks '왜 대답이 없었어?' or '방금 뭐라고 했어?':\n")
 	s.WriteString("- If the transcript contains a `[SYSTEM: ... 전송이 확인되지 않았습니다 ...]` note, report only that fact.\n")
 	s.WriteString("- Otherwise, **never invent a reason** such as '채널이 끊겼었어' or '연결이 안 됐어'. Say you do not know, then answer the original request.\n")
@@ -650,4 +656,22 @@ func writeCompactToolList(sb *strings.Builder, toolSet map[string]struct{}) {
 		sort.Strings(extra)
 		fmt.Fprintf(sb, "Other: %s\n", strings.Join(extra, ", "))
 	}
+}
+
+// writeRichAnswerContract emits the deneb-ui / deneb-html authoring contract.
+// Split out so a spawned sub-agent can be given the one-line reporting rule
+// instead: its reply goes to the parent agent as tool text, where card grammar
+// is dead weight (~4KB) and an authored card would surface only as quoted text.
+func writeRichAnswerContract(s *strings.Builder) {
+	s.WriteString("### Rich answers (deneb-ui card · deneb-html page)\n")
+	// Rich-by-default routing (2026-07-18 operator): the earlier "structure is
+	// central" framing read as opt-in and real chat stayed plain prose — the
+	// post-deploy sample shipped card-less. The default flips: substantive
+	// content renders rich; prose is the exception for short conversation.
+	s.WriteString("Default to a RICH answer, not plain text: whenever your reply carries data, a list of items, a comparison, a schedule, a status or result summary, a plan, or options—anything beyond a few conversational sentences—render it as one ```deneb-ui fenced card (labeled HTML, one root <column>) or one ```deneb-html page, on your own initiative (do not wait for the user to ask for a card or page). Reserve plain prose for short conversational turns, one-line facts, and mid-work narration. When you ask the user to decide, choose, or confirm, never ask in prose alone: put the options in the card as chips or buttons.\n")
+	s.WriteString("deneb-ui tags (ONLY these; anything else degrades): column row card box hr · text (style=headline|title|body|caption) markdown code img icon badge stat(value label description) progress(value 0..1) alert(severity=info|success|warning|error) blockquote table/tr/th/td ul/ol/li chart(type=bar|line + <point label value/>) tabs/tab accordion avatar countdown · interactive (id required): button input textarea checkbox switch select/option radio-group slider chips/chip. Buttons: event=\"name\" (+ collect=\"id1,id2\" to submit input values), or href=/toggle=/copy=. A press returns as `Pressed: 이벤트`, collected values as `Responded with: id: 값` — act on that next user message. Escape literal backticks inside markdown/code bodies as &#96;.\n")
+	s.WriteString("Decision example: ```deneb-ui\n<column><card><text style=\"title\">시간 선택</text><chips id=\"slot\"><chip value=\"10:00\">오전 10시</chip><chip value=\"14:00\">오후 2시</chip></chips><row><button event=\"confirm_slot\" collect=\"slot\">확정</button><button event=\"skip\" variant=\"outlined\">다음에</button></row></card></column>\n```\n")
+	s.WriteString("For a webpage-like visual answer—custom layout, rich visualization, an interactive explainer or mini tool—author one ```deneb-html fence containing a complete self-contained HTML document instead. It renders sandboxed INLINE in the chat. Rules: inline CSS/JS only; no external resources (network is blocked); NEVER use a backtick character anywhere in the document (write JS without template literals); Korean UI text; design for a ~380px-wide surface. The client injects a base stylesheet AND a micro design system — vary the look per answer instead of always default: pick a mood with <body class=\"theme-dark|theme-warm|theme-mono\"> (omit = clean light), and build with the prebuilt classes card, grid (auto-fit columns), stat-value/stat-label, badge (+ok|warn|bad), bar with an inner <i style=\"width:NN%\"> gauge, muted, accent, button/button.primary. Typography, tables, and margins are already styled — add custom CSS only for what these do not cover. Keep the document lean — generation time is user-visible latency. To send a reply back into the chat from the page, call window.deneb.send('메시지') (e.g. from a button's onclick).\n")
+	s.WriteString("Routing: deneb-ui for compact structured data and decisions; deneb-html when custom design, richer visualization, or scripted interactivity makes the answer better — vary the format and mood across answers instead of settling into one default. For complex card compositions read the `deneb-ui-authoring` skill first.\n")
+	s.WriteString("At most one deneb-ui fence AND at most one deneb-html fence per response, never both. The server validates the final reply and degrades invalid cards, oversized documents, or extra fences to safe plain text.\n")
 }
