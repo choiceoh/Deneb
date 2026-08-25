@@ -37,13 +37,25 @@ func (p Params) recallSuppressed() bool {
 
 // Deps contains the optional recall evidence sources. Nil fields disable their source.
 type Deps struct {
-	Wiki         *wiki.Store
-	Transcript   toolport.TranscriptStore
-	FileRecall   FileRecallFunc
-	Org          OrgLoader
-	Briefcase    bool
-	StrictErrors interface{ Record(error) }
-	Now          func() time.Time
+	Wiki       *wiki.Store
+	Transcript toolport.TranscriptStore
+	FileRecall FileRecallFunc
+	Org        OrgLoader
+	Briefcase  bool
+	// SelfFactsInSystemPrompt reports that this turn's system prompt already
+	// carries the generated self-fact projection (workspace MEMORY.md). When it
+	// does, repeating self claims in the per-turn <current-facts> block is pure
+	// duplication — measured 2026-08-25: the block's 18 self claims were a
+	// strict subset of the projection's 46. Subject facts (a person or client
+	// named in THIS message) are never in the projection and always render.
+	//
+	// False keeps every self claim in the block. That is the correct default
+	// and the only safe value whenever the projection is absent: the briefcase
+	// preset loads no context files at all, and a degraded projection window
+	// suppresses the generated files (chat.WithoutFactDerivedFiles).
+	SelfFactsInSystemPrompt bool
+	StrictErrors            interface{ Record(error) }
+	Now                     func() time.Time
 }
 
 func (d Deps) now() time.Time {

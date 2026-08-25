@@ -199,9 +199,15 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 		unmatchedSubjectAliases = unmatchedNonSelfFactAliases(activeFacts, matchedSubjects)
 		evidence = filterUnmatchedSubjectFactEvidence(evidence, unmatchedSubjectValues)
 		evidence = filterUnmatchedSubjectAliases(evidence, unmatchedSubjectAliases, matchedSubjects)
-		currentFacts = subjectAwareCurrentFactContext(factRevision, activeFacts, matchedSubjects, searchMessage, currentFactMaxChars)
-		currentFactsResolveCue = strings.TrimSpace(currentFacts) != "" &&
-			currentFactsResolveMessage(searchMessage, activeFacts, matchedSubjects)
+		currentFacts = subjectAwareCurrentFactContext(
+			factRevision, activeFacts, matchedSubjects, searchMessage, currentFactMaxChars,
+			deps.SelfFactsInSystemPrompt,
+		)
+		// The cue is computed from the FULL claim set, never from what the block
+		// happened to render. Dropping duplicated self claims must not turn a
+		// turn that resolves from current facts into a "no evidence" notice plus
+		// a recorded recall miss — the accounting is a measured metric.
+		currentFactsResolveCue = currentFactsResolveMessage(searchMessage, activeFacts, matchedSubjects)
 	}
 	// Recent-diary fallback ONLY for topicless cues ("아까 뭐였지?" — no signal
 	// terms, so nothing was searchable). A topical question that found nothing

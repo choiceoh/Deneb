@@ -19,8 +19,14 @@ func subjectAwareCurrentFactContext(
 	matched map[string]struct{},
 	message string,
 	maxChars int,
+	selfFactsInSystemPrompt bool,
 ) string {
 	if len(matched) == 0 {
+		// Nothing but self claims would render, and the system prompt already
+		// has all of them — emit no block at all rather than a duplicate one.
+		if selfFactsInSystemPrompt {
+			return ""
+		}
 		return renderSelfFactContext(revision, active, maxChars)
 	}
 	broadSubjectQuery := factQueryOnlyNamesMatchedSubjects(message, matched)
@@ -29,7 +35,8 @@ func subjectAwareCurrentFactContext(
 	for _, claim := range active {
 		subject := strings.ToLower(strings.TrimSpace(claim.Subject))
 		if subject == mem.SubjectSelf {
-			if liveSelfTurnFact(claim) {
+			// Self claims ride the system prompt's projection when it is there.
+			if !selfFactsInSystemPrompt && liveSelfTurnFact(claim) {
 				selected = append(selected, claim)
 			}
 			continue

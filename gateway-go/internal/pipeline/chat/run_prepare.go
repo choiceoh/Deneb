@@ -199,6 +199,12 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, lo
 			Briefcase:    deps.briefcaseMode,
 			StrictErrors: deps.strictErrors,
 			Now:          deps.now,
+			// Self claims are already in the system prompt whenever the
+			// generated projection is loaded — which is exactly when context
+			// files are read (not briefcase) and the fact-derived files are not
+			// suppressed by a degraded-projection window. Both conditions must
+			// hold; either one alone would drop the only copy the model gets.
+			SelfFactsInSystemPrompt: !deps.briefcaseMode && promptSnapshots.factDerivedContextAllowed(),
 		},
 		logger,
 	)
