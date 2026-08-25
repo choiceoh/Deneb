@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -205,6 +206,22 @@ func (s *Store) syncFactWorkspaceLocked() error {
 		expected, err := preserveLegacyProjection(targets[i].path)
 		if err != nil {
 			return err
+		}
+		// A projection never goes backwards. The cutover deliberately replaces
+		// prose-only legacy files with an empty revision-0 view, so "empty" on
+		// its own is legitimate — but overwriting a GENERATED view that already
+		// declares a higher revision only ever loses facts. Observed on the
+		// production workspace 2026-08-25: USER.md/MEMORY.md sat at revision=0
+		// with zero claims while the journal held 126 and the wiki-page
+		// projection was intact, so the system prompt embedded a factless view
+		// (the degraded-projection gate only fires on write ERRORS, and an empty
+		// write succeeds). Any store reaching here before replaying the journal,
+		// or a fresh state dir pointed at a shared workspace, can do this.
+		if existing := generatedProjectionRevision(expected.raw); existing > s.factState.Revision {
+			return fmt.Errorf(
+				"refusing to overwrite %s: on-disk projection is revision %d, this store is at %d",
+				targets[i].name, existing, s.factState.Revision,
+			)
 		}
 		targets[i].expected = expected
 	}
@@ -736,4 +753,35 @@ func rollbackFactProjectionWrites(targets []factProjectionWrite, rename func(str
 		return syncFactParentDir(targets[0].path)
 	}
 	return nil
+}
+
+// generatedProjectionRevision extracts the revision a generated projection file
+// declares in its marker line, or 0 when the bytes are not a generated
+// projection (hand-written legacy content, missing file, unparsable marker).
+func generatedProjectionRevision(raw []byte) FactRevision {
+	if !bytesContainGeneratedMarker(raw) {
+		return 0
+	}
+	line := raw
+	if idx := bytes.IndexByte(line, '\n'); idx >= 0 {
+		line = line[:idx]
+	}
+	const key = "revision="
+	i := bytes.Index(line, []byte(key))
+	if i < 0 {
+		return 0
+	}
+	digits := line[i+len(key):]
+	end := 0
+	for end < len(digits) && digits[end] >= '0' && digits[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return 0
+	}
+	value, err := strconv.ParseUint(string(digits[:end]), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return FactRevision(value)
 }

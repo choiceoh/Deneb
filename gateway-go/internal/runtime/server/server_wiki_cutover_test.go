@@ -75,7 +75,9 @@ func TestServerNewFailsClosedOnWikiCutoverFailure(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			homeDir := t.TempDir()
 			stateDir := filepath.Join(homeDir, "state")
-			workspaceDir := filepath.Join(homeDir, ".deneb", "workspace")
+			// The workspace follows the RESOLVED state dir (paths.go), which is
+			// what keeps tests and dev gateways off ~/.deneb/workspace.
+			workspaceDir := filepath.Join(stateDir, "workspace")
 			if err := os.MkdirAll(stateDir, 0o700); err != nil {
 				t.Fatal(err)
 			}
@@ -216,7 +218,7 @@ const wikiDegradeChildEnv = "DENEB_TEST_WIKI_DEGRADE_CHILD"
 func TestServerStartsWithWikiDisabledAfterRepeatedCutoverFailures(t *testing.T) {
 	homeDir := t.TempDir()
 	stateDir := filepath.Join(homeDir, "state")
-	workspaceDir := filepath.Join(homeDir, ".deneb", "workspace")
+	workspaceDir := filepath.Join(stateDir, "workspace") // follows the resolved state dir
 	for _, dir := range []string{stateDir, workspaceDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)

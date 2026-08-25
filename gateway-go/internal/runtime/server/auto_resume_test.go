@@ -626,6 +626,7 @@ func TestAutoResumeEnabled_DefaultWhenMissing(t *testing.T) {
 func TestAutoResumeEnabledReturnsFalseWhenConfigDisables(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("DENEB_STATE_DIR", "") // exercise HOME-based resolution (see TestMain)
 	denebDir := filepath.Join(tmp, ".deneb")
 	_ = os.MkdirAll(denebDir, 0o755)
 

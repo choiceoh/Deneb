@@ -198,7 +198,7 @@ func ResolveGatewayPort(cfg *DenebConfig) int {
 // Priority:
 //  1. agents.list[] entry with default=true → workspace
 //  2. agents.defaults.workspace
-//  3. ~/.deneb/workspace (built-in default)
+//  3. <state dir>/workspace (built-in default; DENEB_STATE_DIR honored)
 func ResolveAgentWorkspaceDir(cfg *DenebConfig) string {
 	if cfg != nil && cfg.Agents != nil {
 		// Per-agent workspace (default=true) takes highest priority.
@@ -213,13 +213,24 @@ func ResolveAgentWorkspaceDir(cfg *DenebConfig) string {
 		}
 	}
 
-	// Built-in default: ~/.deneb/workspace.
-	home := resolveHomeDir()
+	// Built-in default: <state dir>/workspace. Deriving this from the RESOLVED
+	// state dir (DENEB_STATE_DIR honored) rather than $HOME is what keeps a dev
+	// gateway or a unit test off the production workspace: the fact-plane
+	// projection writes generated USER.md/MEMORY.md there, so a store that has
+	// not replayed the journal would otherwise publish an empty view over the
+	// live one. Measured 2026-08-25: `go test ./internal/runtime/server/...`
+	// rewrote ~/.deneb/workspace/{USER,MEMORY}.md at revision 0 even though the
+	// tests redirect DENEB_STATE_DIR — the state dir moved, the workspace did not.
+	stateDir := strings.TrimSpace(ResolveStateDir())
+	if stateDir == "" {
+		home := resolveHomeDir()
+		stateDir = filepath.Join(home, DefaultStateDirname)
+	}
 	profile := strings.TrimSpace(os.Getenv("DENEB_PROFILE"))
 	if profile != "" && strings.ToLower(profile) != "default" {
-		return filepath.Join(home, DefaultStateDirname, "workspace-"+profile)
+		return filepath.Join(stateDir, "workspace-"+profile)
 	}
-	return filepath.Join(home, DefaultStateDirname, "workspace")
+	return filepath.Join(stateDir, "workspace")
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
