@@ -21,6 +21,8 @@
 //	              matched each other on their shared empty template.
 //	spammail    — delete analyses whose own opening line classifies the mail as
 //	              an ad / newsletter / marketing blast (operator-directed).
+//	foldsites   — fold 현장 pages back into their project page and delete them,
+//	              now that the 현장 지도 they fed is gone.
 //
 // Deliberately NOT here: relocating non-business mail out of 프로젝트/. A
 // 메일분석 page's path is derived from its message ID, so a later re-analysis
@@ -88,6 +90,7 @@ func run() error {
 		{"themes", repairThemeHistory},
 		{"stubedges", stripStubRelatedEdges},
 		{"spammail", deleteSelfDeclaredSpamMail},
+		{"foldsites", foldSitePagesIntoProject},
 	}
 	for _, p := range passes {
 		if *only != "" && *only != p.name {
@@ -943,4 +946,169 @@ func provenanceFrom(body string) string {
 		}
 	}
 	return ""
+}
+
+// --- pass: foldsites --------------------------------------------------------
+
+// foldSitePagesIntoProject folds each 현장 page into its project's 대표 page and
+// deletes it.
+//
+// 현장 pages were never a documentation slot — they were the data model for the
+// 현장 지도, one page per map pin (address=position, capacity=size, kinds=colour
+// and shape, and five milestone dates=timeline). The client dropped that map in
+// #4517 and the gateway read path went with it, so a page per pin now costs a
+// page and buys nothing. The corpus shows it: of 30 pages the five schedule
+// fields are filled 0/30 — nobody fills a field with nowhere to render.
+//
+// What actually has to survive is narrow. 29 of 30 addresses are ALREADY in the
+// project page's sites[] (that is where seed-sites bootstrapped them from), and
+// the project page carries client and kinds of its own. Unique to the site pages
+// are capacity (19) and status (13), which 대표 has no field for at all — so they
+// go into a body table rather than new frontmatter, and the fold stays a
+// presentation change instead of a schema change.
+//
+// A project that already has a hand-written "## 현장" section keeps it untouched
+// and is only reported: those tables (기아 충주 8,100kW · 이천덕평 5,252kW …) are
+// richer than anything derivable from a seeded stub, and overwriting curated
+// prose with generated rows is how a repair becomes a regression.
+func foldSitePagesIntoProject(store *wiki.Store, apply bool, rep *report) error {
+	paths, err := store.ListPages("프로젝트")
+	if err != nil {
+		return err
+	}
+	byProject := map[string][]*wiki.Page{}
+	pagePath := map[*wiki.Page]string{}
+	for _, rp := range paths {
+		slash := filepath.ToSlash(rp)
+		if !strings.Contains(slash, "/현장/") {
+			continue
+		}
+		page, err := store.ReadPage(rp)
+		if err != nil || page == nil {
+			continue
+		}
+		proj, ok := wiki.ProjectNameOf(slash)
+		if !ok || proj == "" {
+			rep.fail("foldsites: %s — 소유 프로젝트를 못 찾음", rp)
+			continue
+		}
+		byProject[proj] = append(byProject[proj], page)
+		pagePath[page] = rp
+	}
+
+	projects := make([]string, 0, len(byProject))
+	for k := range byProject {
+		projects = append(projects, k)
+	}
+	sort.Strings(projects)
+
+	for _, proj := range projects {
+		sites := byProject[proj]
+		sort.Slice(sites, func(a, b int) bool { return sites[a].Meta.Title < sites[b].Meta.Title })
+		repPath := wiki.RepPagePath(proj)
+		repPage, err := store.ReadPage(repPath)
+		if err != nil || repPage == nil {
+			rep.fail("foldsites: %s 대표 페이지 없음 — %d장 보류", proj, len(sites))
+			continue
+		}
+		if strings.Contains(repPage.Body, "\n## 현장") {
+			rep.note("건너뜀(대표에 손으로 쓴 ## 현장 있음) %s — 현장 %d장 유지", proj, len(sites))
+			continue
+		}
+		section, addrs := siteSection(sites)
+		if !apply {
+			rep.add("would fold %d site(s) into %s (+주소 %d개)", len(sites), repPath, len(addrs))
+			continue
+		}
+		if err := store.UpdatePage(repPath, func(cur *wiki.Page) (*wiki.Page, error) {
+			if cur == nil {
+				return nil, nil
+			}
+			cur.Body = strings.TrimRight(cur.Body, "\n") + "\n\n" + section
+			cur.Meta.Sites = mergeStrings(cur.Meta.Sites, addrs)
+			return cur, nil
+		}); err != nil {
+			rep.fail("foldsites %s: %v", repPath, err)
+			continue
+		}
+		folded := 0
+		for _, sp := range sites {
+			if err := store.DeletePage(pagePath[sp]); err != nil {
+				rep.fail("foldsites delete %s: %v", pagePath[sp], err)
+				continue
+			}
+			folded++
+		}
+		rep.add("folded %d site(s) into %s", folded, repPath)
+	}
+	return nil
+}
+
+// siteSection renders the fold target: the fields the map used to carry, as a
+// table a person reads. Columns with nothing in them are dropped, so a project
+// whose sites only ever had an address gets two columns, not six empty ones.
+func siteSection(sites []*wiki.Page) (string, []string) {
+	type col struct {
+		head string
+		get  func(*wiki.Page) string
+	}
+	cols := []col{
+		{"현장", func(p *wiki.Page) string { return p.Meta.Title }},
+		{"주소", func(p *wiki.Page) string { return p.Meta.Address }},
+		{"거래처", func(p *wiki.Page) string { return p.Meta.Client }},
+		{"특성", func(p *wiki.Page) string { return strings.Join(p.Meta.Kinds, "·") }},
+		{"상태", func(p *wiki.Page) string { return p.Meta.Status }},
+		{"용량", func(p *wiki.Page) string {
+			if p.Meta.Capacity == 0 {
+				return ""
+			}
+			return strings.TrimSuffix(strings.TrimRight(fmt.Sprintf("%.2f", p.Meta.Capacity), "0"), ".") + "MW"
+		}},
+	}
+	used := make([]col, 0, len(cols))
+	for _, c := range cols {
+		for _, sp := range sites {
+			if strings.TrimSpace(c.get(sp)) != "" {
+				used = append(used, c)
+				break
+			}
+		}
+	}
+	var b strings.Builder
+	b.WriteString("## 현장\n\n|")
+	for _, c := range used {
+		b.WriteString(" " + c.head + " |")
+	}
+	b.WriteString("\n|")
+	for range used {
+		b.WriteString("---|")
+	}
+	b.WriteString("\n")
+	var addrs []string
+	for _, sp := range sites {
+		b.WriteString("|")
+		for _, c := range used {
+			b.WriteString(" " + strings.TrimSpace(c.get(sp)) + " |")
+		}
+		b.WriteString("\n")
+		if a := strings.TrimSpace(sp.Meta.Address); a != "" {
+			addrs = append(addrs, a)
+		}
+	}
+	return b.String(), addrs
+}
+
+// mergeStrings appends the values of b that a does not already hold.
+func mergeStrings(a, b []string) []string {
+	have := make(map[string]bool, len(a))
+	for _, v := range a {
+		have[strings.TrimSpace(v)] = true
+	}
+	for _, v := range b {
+		if v = strings.TrimSpace(v); v != "" && !have[v] {
+			a = append(a, v)
+			have[v] = true
+		}
+	}
+	return a
 }
