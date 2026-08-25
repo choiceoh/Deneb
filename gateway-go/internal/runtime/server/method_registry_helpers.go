@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
@@ -9,6 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calprop"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localtodo"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	minischedule "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/schedule"
 	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -26,6 +28,12 @@ func makeMailAnalysisWikiSink(hub *rpcutil.GatewayHub) func(handlermail.WikiAnal
 		store := hub.Opt.WikiStore
 		if store == nil {
 			return nil
+		}
+		// Same gate as the autonomous sink: a body that is process narration or
+		// an error string is not an analysis, and persisting it would put it in
+		// recall. Refuse rather than store — the caller surfaces the failure.
+		if err := mailanalysis.AnalysisUsable(in.Analysis); err != nil {
+			return fmt.Errorf("분석 본문을 위키에 저장할 수 없음: %w", err)
 		}
 		return store.WritePage(mailAnalysisWikiPath(in.MsgID, in.RelatedProjects), buildMailAnalysisPage(in))
 	}

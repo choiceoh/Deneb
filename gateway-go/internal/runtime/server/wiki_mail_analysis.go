@@ -222,6 +222,18 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, mailanalysis.
 			s.logger.Warn("mail analysis cache 저장 실패", "id", msg.ID, "error", err)
 			errs = append(errs, err)
 		}
+		// A degraded synthesis (prefatory narration, a bare heading, or the
+		// delivery layer's own timeout string) must not become a wiki page: it
+		// would be indistinguishable from an analysis in recall. Skip the write
+		// and mark the message failed so a later pass re-analyzes it — an
+		// unanalyzed mail is recoverable, a poisoned page is not.
+		if err := mailanalysis.AnalysisUsable(res.Text); err != nil {
+			s.logger.Warn("mail analysis 위키 저장 거부 — 사용 불가한 본문", "id", msg.ID, "reason", err)
+			_, _ = workStore.MarkAnalysisFailed(mailwork.MessageInput{
+				ID: msg.ID, Subject: msg.Subject, From: msg.From, Date: msg.Date,
+			}, err)
+			return errors.Join(errs...)
+		}
 		if s.wikiStore != nil {
 			page := buildMailAnalysisPage(handlermail.WikiAnalysisInput{
 				MsgID:           msg.ID,
