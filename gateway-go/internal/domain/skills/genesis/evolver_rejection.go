@@ -30,6 +30,7 @@ func (e *Evolver) recordRejectedSkillEdit(skillName, candidateBody, reason, sour
 	}
 	e.queueRejectedEvolveValidationDraft(skillName, reason, source, audit)
 	e.queueRepeatedPatchFirstReviewDraft(skillName, reason, source)
+	e.queueHeldOutTieCorpusDraft(skillName, reason, source)
 }
 
 // rejectedEvolveDraftSource is the shared dedup signature for held-out

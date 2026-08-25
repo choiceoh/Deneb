@@ -89,6 +89,15 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, snap p
 	committedAudit := audit
 	prov := provenanceFromProducer(snap)
 
+	// Deterministic repeat refusal BEFORE the gate pipeline: a candidate
+	// byte-identical to a recently rejected one re-buys nothing but replay,
+	// judge, and held-out cost (measured: the same body ran the full pipeline
+	// three times in 08). The rejected-edit buffer's prompt steering is soft;
+	// this is the hard stop when the model ignores it.
+	if reason, repeat := e.refuseRepeatedRejectedCandidate(entry.Skill.Name, candidateBody); repeat {
+		return e.rejectCandidateEdit(entry.Skill.Name, candidateBody, reason, "repeat-refusal", "", audit, &prov), nil
+	}
+
 	// Gate order is inviolable: behavioral replay → deterministic selection
 	// preflight (self-test-off mode) → LLM self-test + teacher escalation.
 	if rejected := e.preSelfTestGates(ctx, entry, originalContent, candidateBody, audit, stats, reviewFinding, &prov); rejected != nil {
