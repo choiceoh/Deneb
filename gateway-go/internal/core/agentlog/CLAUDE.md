@@ -13,7 +13,8 @@
 - `runlogger.go`의 `RunLogger`, `NewRunLogger`가 한 run의 ID/session/time을
   묶어 typed events를 기록한다.
 - `reader.go`의 `Writer.Read`, `Writer.ReadRun`, `Writer.ToolProvenance`와
-  `aggregate_model.go`의 `Writer.AggregateByModel`이 파생 read model을 제공한다.
+  `aggregate_model.go`의 `Writer.AggregateByModel`, `aggregate_served.go`의
+  `Writer.AggregateByServedModel`이 파생 read model을 제공한다.
 
 ## 의존 방향과 불변조건
 
@@ -29,6 +30,15 @@
   sanitized target, file-effect metadata만 남긴다.
 - model 집계의 run ID 상관관계는 session 파일마다 격리하고 requested model에
   실패를 귀속한다. fallback model은 별도 counter로만 기록한다.
+- `AggregateByModel`(requested 귀속)과 `AggregateByServedModel`(provider가 보고한
+  served model 귀속)은 서로 다른 질문에 답한다. 튜너 scorecard는 전자, 사용량
+  패널 라벨은 후자를 쓴다 — 엔드포인트가 핀을 alias 하면(예: `glm-5.1` 핀에
+  glm-5.3이 응답) requested id는 실제로 돌지 않은 모델을 가리키기 때문이다.
+  served 집계의 토큰은 turn.llm에서 오므로 run 중간에 fallback이 걸리면 두 모델로
+  쪼개진다. 두 집계의 run 수와 token 합은 같은 window에서 항상 일치해야 한다
+  (served는 라벨만 바꾸지 usage를 잃지 않는다). run ID는 session 파일 안에서도
+  재사용되므로(게이트웨이 재시작 시 run_0000부터 다시) run.start가 해당 ID의
+  scope를 새로 연다.
 
 ## 테스트와 집중 검증
 

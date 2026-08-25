@@ -27,8 +27,9 @@ type UsageStat struct {
 }
 
 // UsageStatsResult is the miniapp.usage.stats response: token usage over the
-// last `Days` days, broken down three ways — by the model that answered, by the
-// role the run requested, and by work-type (heartbeat, phone-event, chat, …).
+// last `Days` days, broken down three ways — by the model the provider reported
+// serving, by the role the run requested, and by work-type (heartbeat,
+// phone-event, chat, …).
 // Each list is sorted by total (input+output) tokens descending.
 //
 //deneb:wire
@@ -94,9 +95,11 @@ func usageStats(deps UsageDeps) rpcutil.HandlerFunc {
 
 		since := time.Now().Add(-time.Duration(days) * 24 * time.Hour).UnixMilli()
 
-		// By model (the model that actually answered).
+		// By model (the model the provider reported serving — an endpoint may
+		// alias a pinned id to newer weights, so the requested id can name a
+		// model that never ran).
 		byModel := make([]UsageStat, 0)
-		for _, m := range alog.AggregateByModel(since) {
+		for _, m := range alog.AggregateByServedModel(since) {
 			name := m.Model
 			if m.Provider != "" {
 				name = m.Provider + "/" + m.Model
