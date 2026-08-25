@@ -38,6 +38,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -55,6 +56,38 @@ import (
 
 //go:embed codeaction_runtime.py
 var codeActionRuntime string
+
+// bridgeMethodPattern matches a public method on the _Deneb class in the
+// embedded runtime. Four-space indent is the class-body level; `_`-prefixed
+// helpers are private and excluded.
+var bridgeMethodPattern = regexp.MustCompile(`(?m)^    def ([a-z][a-z0-9_]*)\(`)
+
+// BridgeSurface returns the attribute names the preloaded `deneb` object
+// exposes, read from the EMBEDDED runtime that defines them.
+//
+// It is derived, never written down twice. A checked-in copy of this list is
+// how the vocabulary drifts: the list and the implementation are edited by
+// different changes, nothing compares them, and a consumer holding the stale
+// copy rejects a correct call or accepts a broken one. That is not
+// hypothetical — the first version of the skill-side guard hardcoded eight
+// names and had already missed `gmail`, on the day it was written.
+//
+// Sorted, so callers that render it produce stable output.
+func BridgeSurface() []string {
+	matches := bridgeMethodPattern.FindAllStringSubmatch(codeActionRuntime, -1)
+	out := make([]string, 0, len(matches))
+	seen := make(map[string]struct{}, len(matches))
+	for _, m := range matches {
+		name := m[1]
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
 
 // ToolInvoker is the read-only tool surface the code_action bridge dials back
 // into. *chat.ToolRegistry already satisfies it (see chat/tools.go), so no new

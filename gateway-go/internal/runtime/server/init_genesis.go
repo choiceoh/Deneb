@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/codeaction"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
@@ -98,6 +100,10 @@ func (s *Server) initGenesisServices() {
 	if reviewModel == "" {
 		reviewModel = s.modelRegistry.FullModelID(modelrole.RoleLightweight)
 	}
+	// The code_action bridge surface, derived from the embedded runtime that
+	// defines it — the skill preflight rejects a deneb.<fn> that does not exist,
+	// and a hardcoded copy of that list is exactly how the vocabulary drifts.
+	genesis.SetBridgeSurface(codeaction.BridgeSurface)
 	// Give the judge a referent for "존재하지 않는 도구". Without it it falls back
 	// to the incumbent SKILL.md and rejects every candidate that repairs a stale
 	// skill as fabrication (measured 2026-08-26 on youtube-summary-cards).

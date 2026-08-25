@@ -341,7 +341,27 @@ acceptance machinery stays forbidden at record time.
    approver. A missing judge, a call error, or a verdict with no rationale all
    fall back to the operator card — a broken judge stalls the loop instead of
    adopting on a guess.
-11. **Impact never rewrites delivery truth** — an ineffective or regressed
+11. **A vocabulary the code shares must be DERIVED, never written down twice.**
+   Three defects found on 2026-08-26 were one defect: a component needed to know
+   "what tools exist" and had nowhere to ask, so it substituted whatever was in
+   front of it — the coverage generator took any snake_case token in a SKILL
+   body, the evolve judge took the incumbent SKILL.md (rejecting every repair of
+   a stale skill as fabrication), and a skill body took a real name from a
+   NEIGHBOURING vocabulary (`deneb.deal_ledger` for the tool `deal_ledger`,
+   whose bridge attribute is `deals`).
+   The authority differs per vocabulary and each consumer must take the right
+   one: the complete tool set is **runtime-only** (`Handler.ToolNames()` — MCP
+   servers register dynamically, so no checked-in list can be complete), while
+   the code_action bridge surface is a closed list **derived from the embedded
+   runtime** (`codeaction.BridgeSurface()` parses the class that defines the
+   methods). Both are injected, and a consumer with no authority wired must
+   DEGRADE, not guess — author nothing, omit the section, skip the check —
+   because a guess reads as an answer.
+   The copy is the failure mode, not the absence of a list. The first version of
+   the bridge guard hardcoded eight names with a "keep in sync" comment and had
+   already missed `gmail` **on the day it was written** — the exact drift it
+   existed to catch, committed by the guard itself.
+12. **Impact never rewrites delivery truth** — an ineffective or regressed
    result does not erase `watch_passed`/`applied`; it is independent evidence
    for prioritization and later policy, and can only be recorded for the same
    attempt after the safety watch passes.
