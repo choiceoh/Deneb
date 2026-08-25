@@ -881,9 +881,41 @@ func companyEmailDomains(emails []string) []string {
 // section writes "- 이메일: a@b.co, c@d.co").
 var bodyEmailAddressRe = regexp.MustCompile(`[\w.+-]+@[\w-]+\.[\w.-]+`)
 
-// bodyEmailAddresses returns the addresses written in a page body.
+// bodyEmailAddresses returns the addresses written in a page body, EXCLUDING
+// any inside a 동명이인 주의 callout. That block exists to say "this other
+// address belongs to someone else"; counting it as this person's contact made
+// documenting a homonym create one — the note named the other employer, the
+// page then held two employers, and the scan re-reported the page it had just
+// been told about (2026-08-25, both 조동욱 pages).
 func bodyEmailAddresses(body string) []string {
-	return bodyEmailAddressRe.FindAllString(strings.ToLower(body), -1)
+	return bodyEmailAddressRe.FindAllString(strings.ToLower(stripHomonymCallouts(body)), -1)
+}
+
+// stripHomonymCallouts removes blockquote blocks that declare a homonym. A
+// block is every run of consecutive `>` lines; the run is dropped when any of
+// its lines says 동명이인.
+func stripHomonymCallouts(body string) string {
+	lines := strings.Split(body, "\n")
+	var out []string
+	for i := 0; i < len(lines); i++ {
+		if !strings.HasPrefix(strings.TrimSpace(lines[i]), ">") {
+			out = append(out, lines[i])
+			continue
+		}
+		start := i
+		homonym := false
+		for i < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[i]), ">") {
+			if strings.Contains(lines[i], "동명이인") {
+				homonym = true
+			}
+			i++
+		}
+		if !homonym {
+			out = append(out, lines[start:i]...)
+		}
+		i--
+	}
+	return strings.Join(out, "\n")
 }
 
 // groupPagePaths lists a duplicate-name group's pages in scan order.

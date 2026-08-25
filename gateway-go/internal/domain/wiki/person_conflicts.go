@@ -92,7 +92,7 @@ func (s *Store) PersonMailConflictFor(ctx context.Context, path string) (PersonM
 		return PersonMailConflict{}, false
 	}
 	page, err := s.ReadPage(path)
-	if err != nil || page == nil {
+	if err != nil || page == nil || page.Meta.Archived {
 		return PersonMailConflict{}, false
 	}
 	title := strings.TrimSpace(page.Meta.Title)
@@ -108,16 +108,31 @@ func (s *Store) PersonMailConflictFor(ctx context.Context, path string) (PersonM
 		if !IsMailAnalysisPath(hit.Path) {
 			continue
 		}
-		// The analysis must be about this person, not merely mention the name
-		// in passing next to someone else's address.
-		if !personConflictAbout(title, hit.Content) {
+		// Read the PAGE, never the search hit: hit.Content is a matching
+		// snippet, so "the first address in it" is routinely a recipient or a
+		// quoted address. That is what filed 강동민 against a 태한 RECIPIENT and
+		// 김건호 against a mail 박종원 sent (live cards, 2026-08-25).
+		mailPage, merr := s.ReadPage(hit.Path)
+		if merr != nil || mailPage == nil {
 			continue
 		}
-		from := personConflictFrom(hit.Content)
+		// The analysis must be about this person AS THE SENDER, not merely
+		// mention the name somewhere in the body.
+		if !personConflictSenderIs(title, mailPage) {
+			continue
+		}
+		from := personConflictFrom(mailPage.Body)
 		if from == "" {
 			continue
 		}
 		if personConflictMismatch(emails, from) {
+			// The operator may have judged this exact address already ("that
+			// 박준영 is a job applicant, not our 에이디에프 박준영"). Without a
+			// durable answer the lane only had a 30-day snooze, so a homonym
+			// came back every month forever (person_identity_ack.go).
+			if identityEvidenceReviewed(page.Meta, []string{mailConflictAckToken(from)}) {
+				continue
+			}
 			return PersonMailConflict{
 				PagePath:   path,
 				Title:      title,
@@ -155,21 +170,44 @@ func personConflictAbout(title, mailText string) bool {
 	return strings.Contains(mailText, title)
 }
 
+// personConflictSenderIs reports whether the analysis is about mail this person
+// SENT. Evidence is the sender line itself (the one carrying the From address)
+// or the page summary (`"박종원" 메일 분석`) — never a mention anywhere in the
+// body, which is how a person ended up "conflicting" with the address of
+// whoever they were being discussed with.
+func personConflictSenderIs(title string, mailPage *Page) bool {
+	if mailPage == nil || strings.TrimSpace(title) == "" {
+		return false
+	}
+	if strings.Contains(mailPage.Meta.Summary, title) {
+		return true
+	}
+	return strings.Contains(personConflictSenderLine(mailPage.Body), title)
+}
+
 // personConflictFrom extracts the mail analysis's From address: a "From:" /
 // "**발신**" line if present, else the first email in the text.
 func personConflictFrom(mailText string) string {
+	return personConflictParseAddress(personConflictSenderLine(mailText))
+}
+
+// personConflictSenderLine returns the first line that both looks like a sender
+// header and actually carries an address. Returning the LINE (not just the
+// address) lets the sender check and the address agree on one piece of evidence.
+//
+// There is deliberately no "first address anywhere" fallback: an analysis with
+// no parsable From header says nothing about who sent it, and guessing filed
+// real cards against recipients (2026-08-25).
+func personConflictSenderLine(mailText string) string {
 	for _, line := range strings.Split(mailText, "\n") {
 		trim := strings.TrimSpace(line)
 		lower := strings.ToLower(trim)
 		if strings.HasPrefix(lower, "> from:") || strings.HasPrefix(lower, "from:") ||
 			strings.Contains(lower, "**발신**") || strings.HasPrefix(lower, "발신") {
-			if addr := personConflictParseAddress(trim); addr != "" {
-				return addr
+			if personConflictParseAddress(trim) != "" {
+				return trim
 			}
 		}
-	}
-	if found := personConflictEmailRe.FindAllString(mailText, 1); len(found) > 0 {
-		return strings.ToLower(found[0])
 	}
 	return ""
 }

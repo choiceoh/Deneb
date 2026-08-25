@@ -102,3 +102,28 @@ func TestCompanyEmailDomains_IgnoresWikilinkFilenames(t *testing.T) {
 		t.Errorf("위키링크 파일명이 회사 도메인으로 잡힘: %v", got)
 	}
 }
+
+// Documenting a homonym must not CREATE one: the 동명이인 주의 callout names the
+// other person's address on purpose, and counting it as this page's contact
+// made the scan re-report the page it had just been told about.
+func TestBodyEmailAddresses_IgnoresHomonymCallout(t *testing.T) {
+	body := "## 연락처\n- 이메일: djo@argoenergy.co.kr\n\n" +
+		"> ⚠️ **동명이인 주의**: 무림피앤피 조동욱은 별개 인물이다\n" +
+		"> (dwcho@moorim.co.kr).\n\n" +
+		"> 참고: 일반 인용문의 주소 keep@example.co.kr 는 남는다\n"
+	got := companyEmailDomains(bodyEmailAddresses(body))
+	for _, d := range got {
+		if d == "moorim.co.kr" {
+			t.Errorf("동명이인 경고문의 주소가 본인 연락처로 잡힘: %v", got)
+		}
+	}
+	var hasKeep bool
+	for _, d := range got {
+		if d == "example.co.kr" {
+			hasKeep = true
+		}
+	}
+	if !hasKeep {
+		t.Errorf("동명이인과 무관한 인용문까지 지움: %v", got)
+	}
+}
