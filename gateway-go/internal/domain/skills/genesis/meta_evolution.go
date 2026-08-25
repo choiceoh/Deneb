@@ -344,6 +344,25 @@ func (t *Tracker) operatorUtilitySignals() operatorUtilitySignals {
 // MetaEvolutionTask is the weekly slow-loop cycle. Registered like the other
 // genesis autonomous tasks; a dev/live-test instance writes only under its
 // isolated state dir, so no extra production gate is needed for propose-only.
+// LowConfidenceCase is what the tie-break judge sees: the two texts, which
+// artifact and epoch they belong to, and the bench's own statement of why it
+// could not choose.
+type LowConfidenceCase struct {
+	Artifact  string
+	Epoch     string
+	Incumbent string
+	Proposal  string
+	Margin    string // the bench's reason, verbatim
+	Reason    string // why the revision was proposed at all
+}
+
+// LowConfidenceVerdict is the judge's answer. Rationale is recorded on the
+// ledger either way, so a wrong adoption can be read back and attributed.
+type LowConfidenceVerdict struct {
+	Adopt     bool
+	Rationale string
+}
+
 type MetaEvolutionTask struct {
 	Evolver *Evolver
 	Meta    *generation.MetaArtifacts
@@ -382,6 +401,20 @@ type MetaEvolutionTask struct {
 	// drops genesis-epoch proposals (bench unavailable), mirroring the
 	// evaluator epoch's no-judge behavior.
 	GenesisGen genesisShadowGenFn
+
+	// LowConfidenceJudge decides the proposals the deterministic evidence
+	// cleared but could not RANK — bench margin <= 0, "no measurable
+	// improvement". Those used to wait on an operator verdict and, measured
+	// 2026-08-26, that is where the loop stalled: one proposal pending since
+	// 08-03 expired without a verdict, the self-coding nudger reached
+	// ignoredStreak=5, and the feed carried 1,249 unread cards.
+	//
+	// This does NOT move the gate. The deterministic chain (contract + epoch
+	// bench) remains the approver and still rejects on its own; the judge only
+	// breaks ties the bench declared it cannot break. A nil judge, or one that
+	// errors, falls back to the operator card — the loop degrades to its old
+	// behavior instead of adopting blind.
+	LowConfidenceJudge func(ctx context.Context, in LowConfidenceCase) (LowConfidenceVerdict, error)
 
 	// pending bench outcomes for the in-flight cycle's ledger write (set via
 	// recordWithBench; Run is single-flight per task so no locking needed).
@@ -692,15 +725,31 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	// evidence cannot decide. Benchless cycles keep their documented behavior.
 	lowConfidence := metaLowConfidenceReason(benchIncumbent, benchProposal, benchShadow, benchGenesis)
 	if lowConfidence != "" {
-		logger.Info("meta-evolution: revision routed to operator verdict (bench-cleared but low-confidence)",
-			"artifact", artifact, "epoch", epoch, "margin", lowConfidence)
-		if t.OnProposal != nil {
-			// The verdict card must say WHY the loop is asking instead of
-			// auto-adopting — the margin is the whole context for the decision.
-			t.OnProposal(artifact, epoch, annotateReason(reason, "저신뢰 라우팅: "+lowConfidence), path, false)
+		verdict, judged := t.judgeLowConfidence(ctx, logger, artifact, epoch, incumbent, proposal, lowConfidence, reason)
+		switch {
+		case judged && !verdict.Adopt:
+			logger.Info("meta-evolution: revision rejected by low-confidence judge",
+				"artifact", artifact, "epoch", epoch, "margin", lowConfidence, "rationale", verdict.Rationale)
+			if t.OnProposal != nil {
+				t.OnProposal(artifact, epoch, annotateReason(reason, "저신뢰 판정 기각: "+verdict.Rationale), path, false)
+			}
+			return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow,
+				false, "", annotateReason(reason, "[저신뢰 기각: "+verdict.Rationale+"]"))
+		case judged && verdict.Adopt:
+			// Fall through to the adoption block below, carrying the judge's
+			// reasoning onto the ledger so the adoption is attributable.
+			reason = annotateReason(reason, "저신뢰 판정 채택: "+verdict.Rationale)
+		default:
+			logger.Info("meta-evolution: revision routed to operator verdict (judge unavailable)",
+				"artifact", artifact, "epoch", epoch, "margin", lowConfidence)
+			if t.OnProposal != nil {
+				// The verdict card must say WHY the loop is asking instead of
+				// auto-adopting — the margin is the whole context for the decision.
+				t.OnProposal(artifact, epoch, annotateReason(reason, "저신뢰 라우팅: "+lowConfidence), path, false)
+			}
+			return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow,
+				true, toVersion, annotateReason(reason, "[저신뢰: "+lowConfidence+" — 운영자 verdict 대기]"))
 		}
-		return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow,
-			true, toVersion, annotateReason(reason, "[저신뢰: "+lowConfidence+" — 운영자 verdict 대기]"))
 	}
 	if metaAutoAdoptEnabled() && !driftVerdict.Frozen && !t.Tracker.AutoAdoptFrozen() {
 		// Operator mandate (2026-07-11): the deterministic gate chain (contract
@@ -733,6 +782,46 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 		t.OnProposal(artifact, epoch, reason, path, false)
 	}
 	return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow, true, toVersion, reason)
+}
+
+// judgeLowConfidence asks the tie-break judge to decide a proposal the bench
+// cleared but could not rank. Returns judged=false when no judge is wired or
+// the call fails, which sends the proposal back to the operator card — the
+// fallback is the OLD behavior, so a broken judge stalls the loop rather than
+// adopting on a guess.
+//
+// The judge is deliberately given the bench's own margin text. Its job is not
+// to re-run the evaluation the bench already did; it is to say whether a change
+// the evidence rates as neutral is still worth taking, which is exactly the
+// question the deterministic chain cannot answer.
+func (t *MetaEvolutionTask) judgeLowConfidence(
+	ctx context.Context, logger *slog.Logger,
+	artifact, epoch, incumbent, proposal, margin, reason string,
+) (LowConfidenceVerdict, bool) {
+	if t.LowConfidenceJudge == nil {
+		return LowConfidenceVerdict{}, false
+	}
+	verdict, err := t.LowConfidenceJudge(ctx, LowConfidenceCase{
+		Artifact:  artifact,
+		Epoch:     epoch,
+		Incumbent: incumbent,
+		Proposal:  proposal,
+		Margin:    margin,
+		Reason:    reason,
+	})
+	if err != nil {
+		logger.Warn("meta-evolution: low-confidence judge failed; falling back to operator verdict",
+			"artifact", artifact, "epoch", epoch, "error", err)
+		return LowConfidenceVerdict{}, false
+	}
+	if strings.TrimSpace(verdict.Rationale) == "" {
+		// A verdict with no reasoning cannot be audited later, and this decision
+		// is precisely the one that will need auditing. Treat it as no verdict.
+		logger.Warn("meta-evolution: low-confidence judge returned no rationale; falling back",
+			"artifact", artifact, "epoch", epoch)
+		return LowConfidenceVerdict{}, false
+	}
+	return verdict, true
 }
 
 // benchIncumbentOnSkip runs the epoch's bench against the incumbent alone on a
