@@ -2,8 +2,10 @@ package chat
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -60,8 +62,9 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 		ExcludedSkills: excludedSkillNames(),
 	}
 	// Discover entries first so we can cache them for slash command routing.
-	allEntries := skills.DiscoverWorkspaceSkills(cfg.DiscoverConfig)
-	allEntries = skills.FilterExcludedSkills(allEntries, cfg.ExcludedSkills)
+	discovered := skills.DiscoverWorkspaceSkills(cfg.DiscoverConfig)
+	allEntries := skills.FilterExcludedSkills(discovered, cfg.ExcludedSkills)
+	logSuppressedSkills(discovered, allEntries)
 	SetCachedSkillEntries(allEntries, 0)
 
 	snapshot := skills.BuildWorkspaceSkillSnapshot(cfg)
@@ -186,6 +189,46 @@ func skillCuratorStateVersion() int64 {
 		return 0
 	}
 	return info.ModTime().UnixNano()
+}
+
+// logSuppressedSkills names the skills that were discovered on disk but kept
+// out of every surface, split by WHY.
+//
+// Suppression is silent by design (a deleted skill "disappears from every
+// surface at once"), and that silence has a cost: on 2026-08-18 the operator
+// typed "지식 인터뷰 … 인터뷰로 정리하자" — two exact triggers of the
+// kb-interview skill, still shipped in the repo — and nothing fired, because
+// the skill had been tombstoned on 07-21. Nothing anywhere said so. One line
+// per catalog rebuild (boot / curator-state change, not per turn) makes the
+// divergence between "shipped in skills/" and "live in the catalog" visible
+// where every other startup fact already is.
+func logSuppressedSkills(discovered, kept []skills.SkillEntry) {
+	if len(discovered) == len(kept) {
+		return
+	}
+	live := make(map[string]struct{}, len(kept))
+	for _, e := range kept {
+		live[e.Skill.Name] = struct{}{}
+	}
+	deleted := skills.LoadDeletedSkillNames()
+	var tombstoned, archived []string
+	for _, e := range discovered {
+		name := e.Skill.Name
+		if _, ok := live[name]; ok {
+			continue
+		}
+		if _, ok := deleted[name]; ok {
+			tombstoned = append(tombstoned, name)
+			continue
+		}
+		archived = append(archived, name)
+	}
+	sort.Strings(tombstoned)
+	sort.Strings(archived)
+	slog.Info("skills suppressed from every surface",
+		"tombstoned", strings.Join(tombstoned, ","),
+		"curatorArchived", strings.Join(archived, ","),
+		"discovered", len(discovered), "live", len(kept))
 }
 
 // excludedSkillNames is the union of curator-archived skills and
