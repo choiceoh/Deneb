@@ -45,10 +45,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/mailpriority"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -764,27 +762,6 @@ func provenanceFrom(body string) string {
 
 // --- pass: spammail ---------------------------------------------------------
 
-// Self-classification tokens: what an analysis calls a mail when the mail is
-// bulk. Drawn from the live corpus, not invented — every one of these appears
-// verbatim in an opening line (see spamClassifyWindow).
-var spamClassifyRe = regexp.MustCompile(
-	`업무 *메일이 아|업무와 *무관|업무와는 *무관|업무 *무관|광고|뉴스레터|마케팅|프로모션|스팸|` +
-		`자동 *발신|구독 *(안내|갱신|결제)|결제 *(실패|오류)|수신 *거부|홍보 *(메일|뉴스)`,
-)
-
-// An analysis of a REAL mail often mentions the day's junk in passing — the
-// corpus case is "오늘 메일 24건 중 광고·테스트성(…)을 제외하고, 이 건은 진코솔라 본사
-// GM급이 …", a GM-level price escalation that a naive keyword match would have
-// deleted. These markers say the classification is being applied to OTHER mail,
-// so the line is a contrast, not a verdict on this one.
-var spamContrastRe = regexp.MustCompile(`제외|와 달리|과 달리|이 건은|이번 건은|이 메일은 다|반면`)
-
-// spamClassifyWindow bounds how far into the opening line the verdict may sit.
-// A real classification leads ("TLDR 테크 뉴스레터 — 업무와 무관한…", "광고 메일 —
-// DeepL…"); a passing mention sits deeper in a sentence that is about something
-// else. Runes, so Korean counts by character.
-const spamClassifyWindow = 60
-
 // deleteSelfDeclaredSpamMail removes 메일분석 pages whose own opening line
 // classifies the mail as bulk — advertising, a newsletter, a marketing blast, a
 // subscription/billing notice.
@@ -797,9 +774,12 @@ const spamClassifyWindow = 60
 // the verdict sits in the first line, in the analyst's own words, and a human
 // reading the list can see whether each one is right.
 //
-// Two guards keep it from over-reaching: the verdict must LEAD the line (a
-// passing mention of the day's junk does not count) and the line must not be
-// drawing a contrast with other mail.
+// The judgement itself is mailanalysis.AnalysisNonBusiness — the same predicate
+// the autonomous write path now applies, so the corpus and the intake gate
+// cannot disagree about what counts as bulk mail (the discipline the unusable
+// pass follows with AnalysisUsable). Its two guards — the verdict must LEAD the
+// opening line, and the line must not be drawing a contrast with other mail —
+// live there with the corpus evidence for each.
 func deleteSelfDeclaredSpamMail(store *wiki.Store, apply bool, rep *report) error {
 	paths, err := store.ListPages("프로젝트")
 	if err != nil {
@@ -814,10 +794,10 @@ func deleteSelfDeclaredSpamMail(store *wiki.Store, apply bool, rep *report) erro
 		if err != nil || page == nil {
 			continue
 		}
-		line := firstProseLine(page.Body)
-		if line == "" || !spamVerdict(line) {
+		if mailanalysis.AnalysisNonBusiness(page.Body) == nil {
 			continue
 		}
+		line := firstProseLine(page.Body)
 		from := provenanceFrom(page.Body)
 		if !apply {
 			rep.add("would delete %s — %s", rp, truncRunes(line, 70))
@@ -845,19 +825,6 @@ func deleteSelfDeclaredSpamMail(store *wiki.Store, apply bool, rep *report) erro
 		rep.add("  발신자별: %-46s %d장", sdr, bySender[sdr])
 	}
 	return nil
-}
-
-// spamVerdict reports whether the opening line is this analysis calling THIS
-// mail bulk, rather than mentioning bulk mail while discussing something else.
-func spamVerdict(line string) bool {
-	if spamContrastRe.MatchString(line) {
-		return false
-	}
-	loc := spamClassifyRe.FindStringIndex(line)
-	if loc == nil {
-		return false
-	}
-	return utf8.RuneCountInString(line[:loc[0]]) <= spamClassifyWindow
 }
 
 // firstProseLine returns the first line of actual analysis — past the

@@ -234,6 +234,15 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, mailanalysis.
 			}, err)
 			return errors.Join(errs...)
 		}
+		// A correct analysis of mail that is not business mail still costs a page
+		// that ranks like any other. Skip the write — but do NOT mark the message
+		// failed the way an unusable body is: this analysis succeeded, and queuing
+		// it for re-analysis would retry it forever. The result still reaches the
+		// inbox card and the notifier; only the wiki page is withheld.
+		if err := mailanalysis.AnalysisNonBusiness(res.Text); err != nil {
+			s.logger.Info("mail analysis 위키 저장 생략 — 업무 메일 아님", "id", msg.ID, "reason", err)
+			return errors.Join(errs...)
+		}
 		if s.wikiStore != nil {
 			page := buildMailAnalysisPage(handlermail.WikiAnalysisInput{
 				MsgID:           msg.ID,
