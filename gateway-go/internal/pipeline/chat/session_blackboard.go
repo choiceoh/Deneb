@@ -19,6 +19,7 @@ package chat
 
 import (
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -101,15 +102,21 @@ func pruneSessionBoardsLocked(now time.Time) {
 			delete(sessionBoards.store, key)
 		}
 	}
-	for len(sessionBoards.store) > sessionBoardMaxSessions {
-		oldestKey := ""
-		var oldest time.Time
-		for key, entry := range sessionBoards.store {
-			if oldestKey == "" || entry.lastUsed.Before(oldest) {
-				oldestKey, oldest = key, entry.lastUsed
-			}
+	if over := len(sessionBoards.store) - sessionBoardMaxSessions; over > 0 {
+		// One sort instead of `over` full scans — the cap is small, but the
+		// quadratic shape was noted in review and costs nothing to retire.
+		type aged struct {
+			key      string
+			lastUsed time.Time
 		}
-		delete(sessionBoards.store, oldestKey)
+		entries := make([]aged, 0, len(sessionBoards.store))
+		for key, entry := range sessionBoards.store {
+			entries = append(entries, aged{key: key, lastUsed: entry.lastUsed})
+		}
+		sort.Slice(entries, func(i, j int) bool { return entries[i].lastUsed.Before(entries[j].lastUsed) })
+		for _, e := range entries[:over] {
+			delete(sessionBoards.store, e.key)
+		}
 	}
 }
 
