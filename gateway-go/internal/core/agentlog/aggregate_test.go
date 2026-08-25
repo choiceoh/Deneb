@@ -86,10 +86,11 @@ func TestAggregateFoldsUnknownBlockedAndRepairedToolCounters(t *testing.T) {
 	rl.LogTurnTool(TurnToolData{Turn: 2, Name: "frobnicate", IsError: true, UnknownTool: true})
 	rl.LogTurnTool(TurnToolData{Turn: 3, Name: "web", IsError: true, Blocked: "loop"})
 	rl.LogEnd(RunEndData{
-		Turns:              3,
-		RepairedToolCalls:  map[string]int{"fs": 2},
-		CacheHitToolCalls:  map[string]int{"grep": 3},
-		TruncatedToolCalls: map[string]int{"fs": 1},
+		Turns:               3,
+		RepairedToolCalls:   map[string]int{"fs": 2},
+		CacheHitToolCalls:   map[string]int{"grep": 3},
+		TruncatedToolCalls:  map[string]int{"fs": 1},
+		UnknownArgToolCalls: map[string]int{"calendar": 4},
 	})
 
 	agg := w.Aggregate(0)
@@ -108,6 +109,9 @@ func TestAggregateFoldsUnknownBlockedAndRepairedToolCounters(t *testing.T) {
 	}
 	if fs.Truncated != 1 {
 		t.Errorf("fs.Truncated = %d, want 1", fs.Truncated)
+	}
+	if cal := byName["calendar"]; cal.UnknownArgs != 4 {
+		t.Errorf("calendar.UnknownArgs = %d, want 4", cal.UnknownArgs)
 	}
 	if grep := byName["grep"]; grep.CacheHits != 3 {
 		t.Errorf("grep.CacheHits = %d, want 3", grep.CacheHits)

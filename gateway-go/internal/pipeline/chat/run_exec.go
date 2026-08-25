@@ -645,6 +645,7 @@ func recordRunCompletion(rec runCompletionRecord, logger *slog.Logger) {
 		EffortDecision:      effortDecision,
 		EffortEscalated:     effortRt != nil && effortRt.escalated,
 		RepairedToolCalls:   execStats.RepairedCounts(),
+		UnknownArgToolCalls: execStats.UnknownArgCounts(),
 		CacheHitToolCalls:   execStats.CacheHitCounts(),
 		TruncatedToolCalls:  execStats.TruncatedCounts(),
 	})
