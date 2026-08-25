@@ -1,5 +1,30 @@
 # Changelog
 
+## [5.7.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.6.0...deneb-v5.7.0) (2026-08-25)
+
+
+### ✨ Features
+
+* **chat:** 카탈로그에서 억제된 스킬을 부팅 로그에 드러낸다 ([#4718](https://github.com/choiceoh/Deneb/issues/4718)) ([6c24175](https://github.com/choiceoh/Deneb/commit/6c2417538897dbc1c6bafa32146370b5aa8f0316))
+* **scripts:** 모델 이름 핀을 역할 조회로 통일하고 유료 폴백 사슬을 게이트로 막는다 ([#4726](https://github.com/choiceoh/Deneb/issues/4726)) ([1c7f956](https://github.com/choiceoh/Deneb/commit/1c7f956e5028b5dfcee8be63e080518c80158c2a))
+
+
+### 🐛 Bug Fixes
+
+* **gateway:** 사용량 모델 라벨을 프로바이더가 실제로 서빙한 모델로 바꾼다 ([#4720](https://github.com/choiceoh/Deneb/issues/4720)) ([7c57b9a](https://github.com/choiceoh/Deneb/commit/7c57b9a58932d751e6e3caa9b0ecbf05a9c4f52b))
+* **genesis:** 행동 replay 실행자의 봉투형 응답을 벗겨 게이트가 열리지 않게 한다 ([#4715](https://github.com/choiceoh/Deneb/issues/4715)) ([6f0eeca](https://github.com/choiceoh/Deneb/commit/6f0eecaa3d7935d5c521743ae6916a33d82f02c3))
+* **mail:** 뉴스레터가 스스로 신뢰를 만들어 필터를 무력화하던 고리를 끊는다 ([#4716](https://github.com/choiceoh/Deneb/issues/4716)) ([368bb70](https://github.com/choiceoh/Deneb/commit/368bb7060b9857c6890bdc8d5d2e2c72f50be178))
+* **mail:** 업무 메일이 아닌 분석은 위키 페이지로 만들지 않는다 ([#4725](https://github.com/choiceoh/Deneb/issues/4725)) ([eb0b9ad](https://github.com/choiceoh/Deneb/commit/eb0b9ad1c1823d6af9ea73beb750ee82fb029fa9))
+* **scripts:** 모델 이름 핀을 tiny 역할 조회로 바꿔 죽은 모델의 조용한 유료 페일오버를 막는다 ([#4724](https://github.com/choiceoh/Deneb/issues/4724)) ([3779cbc](https://github.com/choiceoh/Deneb/commit/3779cbcf389b7c0cfbf69a893e4a2e36d4b1d8b8))
+* **wiki:** 끝낼 수 있는 인물 확인 질문과 한국어 판단 요약 ([#4722](https://github.com/choiceoh/Deneb/issues/4722)) ([3ccdb45](https://github.com/choiceoh/Deneb/commit/3ccdb45a26e0d180fcae4718ced48d5661bc1565))
+* **wiki:** 내용 없는 템플릿 페이지끼리 서로를 최근접 이웃으로 엮던 엣지를 끊는다 ([#4717](https://github.com/choiceoh/Deneb/issues/4717)) ([0c7128b](https://github.com/choiceoh/Deneb/commit/0c7128bd14b55c624874617c4b0e6993acaa66e7))
+* **wiki:** 분석 아닌 본문의 위키 저장을 막고, 오염된 related·신호키 재사용을 차단한다 ([#4711](https://github.com/choiceoh/Deneb/issues/4711)) ([692d1d9](https://github.com/choiceoh/Deneb/commit/692d1d9b90aff30239a16aa20c292ec16587af83))
+* **wiki:** 분석이 스스로 광고·뉴스레터라고 판정한 메일분석 페이지를 지운다 ([#4723](https://github.com/choiceoh/Deneb/issues/4723)) ([8a55732](https://github.com/choiceoh/Deneb/commit/8a557327253a9cfab230d400d9be6eeeec6faf3a))
+* **wiki:** 재분석 불가능한 분석실패 페이지는 지우지 말고 본문만 비운다 ([#4719](https://github.com/choiceoh/Deneb/issues/4719)) ([637d3ca](https://github.com/choiceoh/Deneb/commit/637d3ca9381d8e1ffbefeff213bbd5f615eefa48))
+* **wiki:** 전량 판독 감사가 찾은 코퍼스 손상을 일괄 수리하는 도구를 더한다 ([#4714](https://github.com/choiceoh/Deneb/issues/4714)) ([07efc1d](https://github.com/choiceoh/Deneb/commit/07efc1dc063c28d5e1d5677d25ee98c420ff9721))
+* **wiki:** 질의 확장이 회상 프리플라이트 예산을 삼키지 못하게 한다 ([#4713](https://github.com/choiceoh/Deneb/issues/4713)) ([5ff4d69](https://github.com/choiceoh/Deneb/commit/5ff4d69f59b73360ef7db3208b3321f4bd06c583))
+* **wiki:** 프로젝트 폴더로 잘못 들어간 자동발신 메일 분석을 지운다 ([#4721](https://github.com/choiceoh/Deneb/issues/4721)) ([903ecee](https://github.com/choiceoh/Deneb/commit/903ecee10dac633c6bf7757687157ca43e8f23b1))
+
 ## [5.6.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.5.0...deneb-v5.6.0) (2026-08-25)
 
 
