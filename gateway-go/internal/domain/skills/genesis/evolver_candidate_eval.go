@@ -368,6 +368,26 @@ func (e *Evolver) teacherModelSnapshot() (*llm.Client, string) {
 	return e.teacherClient, e.teacherModel
 }
 
+// JudgeClient and JudgeModel expose the configured judge for callers outside
+// the evolver that need the SAME model — the meta-evolution tie-break judge
+// reuses it so one host has one judge, not two that can disagree.
+func (e *Evolver) JudgeClient() *llm.Client {
+	c, _ := e.judgeModelSnapshot()
+	return c
+}
+
+// JudgeModel returns the judge model id ("" when unconfigured).
+func (e *Evolver) JudgeModel() string {
+	_, m := e.judgeModelSnapshot()
+	return m
+}
+
+// ThinkingOff exposes the per-model thinking-disable config so an external
+// judge call carries the same kwarg handling as the evolver's own.
+func (e *Evolver) ThinkingOff(model string) *llm.ThinkingConfig {
+	return e.thinkingOff(model)
+}
+
 func (e *Evolver) judgeModelSnapshot() (*llm.Client, string) {
 	e.configMu.RLock()
 	defer e.configMu.RUnlock()

@@ -417,6 +417,20 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// prompts on the PRODUCTION genesis model (never persists, no
 			// daily-cap interaction).
 			GenesisGen: s.genesisSvc.ShadowGenerate,
+			// The tie-break judge for proposals the bench cleared but could not
+			// rank. Before this the loop asked the operator and, measured
+			// 2026-08-26, that ask went unanswered: one proposal expired after
+			// three weeks pending and the feed had 1,249 unread cards. The
+			// deterministic chain still gates; this only decides the ties it
+			// declared it cannot decide, and a nil/erroring judge falls back to
+			// the operator card. Coding role — the same tool-capable model the
+			// evolver drives; the lightweight role emits prose and would return
+			// unparseable verdicts.
+			LowConfidenceJudge: genesis.NewLowConfidenceJudge(
+				s.genesisEvolver.JudgeClient(),
+				s.genesisEvolver.JudgeModel(),
+				s.genesisEvolver.ThinkingOff,
+			),
 		})
 		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{
 			Tracker: s.genesisTracker,
