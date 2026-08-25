@@ -183,7 +183,13 @@ var jamoRepairs = []struct{ bad, good string }{
 	{"이경개시졌", "개시됐"},
 	{"손핵배상", "손해배상"},
 	{"손핼배상", "손해배상"},
-	{"보핵매실", "보필매실"},
+	// Both spellings in 로그.md are corruptions of the same farm — the curated
+	// 대표.md (and its cues) spell it 보해매실농원, and 핵→해 is the corruption this
+	// table repairs everywhere else (핵봄/핵밀/핵바람/손핵배상). Mapping 보핵매실 to
+	// 보필매실 would have swapped one corruption for another and written a wrong
+	// counterparty name into a financial ledger.
+	{"보핵매실", "보해매실"},
+	{"보필매실", "보해매실"},
 	{"직묵대행", "직무대행"},
 	{"업묵보고", "업무보고"},
 	{"나엘되지", "나열되지"},
