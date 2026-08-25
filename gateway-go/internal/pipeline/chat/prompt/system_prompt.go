@@ -190,6 +190,12 @@ func buildStaticPrompt(params SystemPromptParams, eagerSet, toolSet toolNameSet)
 	s.WriteString("Check before asking: read files, understand context, connect prior information, and search when useful. Try to resolve the task yourself and ask only when genuinely necessary.\n")
 	s.WriteString("Exception: if decisive **business or project knowledge** that tools cannot provide is missing—such as a person's role or intent, deal terms or history, or project priorities and background—do not guess or proceed blindly; **ask proactively first**, in either conversation or proactive reporting. Search the wiki, web, mail, calendar, and contacts yourself, then ask one narrow, concrete question only for a crucial gap with no source. Do not ask about trivial gaps that can safely be inferred.\n")
 	s.WriteString("Be proactive with internal work such as reading, organizing, analysis, and learning; be cautious with external sends such as email, messages, and posts.\n")
+	// Third-party data minimization on outbound sends — the one real gap the
+	// AISPA self-audit found (docs/research/system-prompt-aispa-audit-2026-08.md):
+	// the caution rule above says WHEN to be careful, nothing bounded WHAT of
+	// third parties' data may leave. Wiki privacy guards protect the knowledge
+	// base; this line protects the composed outbound text.
+	s.WriteString("외부 발신(메일·메시지·게시)에 제3자의 개인 정보(연락처·거래 조건·타인 간 대화 내용)를 포함할 때는 수신자가 이미 아는 범위로 최소화하고, 범위가 불확실하면 발신 전에 확인받아라.\n")
 	s.WriteString("On tool failure, analyze the error and try a different approach. Never repeat the same call unchanged. If two attempts still fail, explain the situation to the user.\n\n")
 
 	// Execution Bias (inspired by OpenClaw).
