@@ -409,9 +409,17 @@ func repairNumbers(store *wiki.Store, apply bool, rep *report) error {
 // write time, so the corpus and the intake path cannot disagree about what
 // counts as a usable analysis.
 //
-// Deleting is the repair: the mail stays in the archive, and the page's absence
-// is what lets a later pass re-analyze it. Leaving a placeholder would instead
-// keep asserting that this mail was analyzed.
+// Deleting is the repair when the mail can be analyzed again: the source stays
+// in the archive, and the page's absence is what lets a later pass redo it. A
+// placeholder would instead keep asserting that this mail WAS analyzed.
+//
+// Two of the seventeen cannot be redone. They predate the archive and carry no
+// `resource: mail:<id>` pointer, so nothing can fetch the source again — the
+// page's title (the mail's subject line) is the only surviving trace that the
+// mail existed. Deleting those would be a permanent loss to remove a body that
+// is merely worthless, so they keep the page and lose only the body: it is
+// replaced with a line saying the analysis failed and the source is gone. That
+// tells the truth in both directions — the mail happened, the analysis did not.
 func deleteUnusableAnalyses(store *wiki.Store, apply bool, rep *report) error {
 	paths, err := store.ListPages("")
 	if err != nil {
@@ -430,6 +438,26 @@ func deleteUnusableAnalyses(store *wiki.Store, apply bool, rep *report) error {
 		if reason == nil {
 			continue
 		}
+		// The pipeline re-fetches by `resource: mail:<id>`; without it the page
+		// is the last trace of the mail and must not be deleted.
+		if strings.TrimSpace(page.Meta.Resource) == "" {
+			if !apply {
+				rep.add("would blank (source unrecoverable, no resource) %s (%v)", rp, reason)
+				continue
+			}
+			if err := store.UpdatePage(rp, func(cur *wiki.Page) (*wiki.Page, error) {
+				if cur == nil {
+					return nil, nil
+				}
+				cur.Body = unrecoverableBody(cur.Body)
+				return cur, nil
+			}); err != nil {
+				rep.fail("blank %s: %v", rp, err)
+				continue
+			}
+			rep.add("blanked %s (%v)", rp, reason)
+			continue
+		}
 		if !apply {
 			rep.add("would delete %s (%v)", rp, reason)
 			continue
@@ -441,6 +469,22 @@ func deleteUnusableAnalyses(store *wiki.Store, apply bool, rep *report) error {
 		rep.add("deleted %s (%v)", rp, reason)
 	}
 	return nil
+}
+
+// unrecoverableBody keeps the provenance blockquote (who sent it, when) and
+// replaces the failed analysis with a statement of what happened.
+func unrecoverableBody(body string) string {
+	var quote []string
+	for _, ln := range strings.Split(body, "\n") {
+		t := strings.TrimSpace(ln)
+		if strings.HasPrefix(t, ">") || strings.HasPrefix(t, "#") || t == "" {
+			quote = append(quote, ln)
+			continue
+		}
+		break
+	}
+	head := strings.TrimRight(strings.Join(quote, "\n"), "\n")
+	return head + "\n\n분석 실패 — 저장된 본문이 분석이 아니라 오류 문구였고, 원본 메일이 아카이브에 없어 재분석할 수 없다. 이 페이지는 메일이 존재했다는 기록으로만 남는다. (wikirepair, 2026-08-25)\n"
 }
 
 // analysisBodyOf drops the leading provenance blockquote (From/Date/Message ID)
