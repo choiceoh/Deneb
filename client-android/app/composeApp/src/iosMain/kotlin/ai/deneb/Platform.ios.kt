@@ -225,3 +225,6 @@ actual fun sendProactiveReportNotification(
     approveActionId: String?,
     rejectActionId: String?,
 ) = sendHeartbeatNotification(title, body)
+
+/** No tray slot to clear off Android. */
+actual fun cancelWorkFeedNotification(itemId: String) = Unit
