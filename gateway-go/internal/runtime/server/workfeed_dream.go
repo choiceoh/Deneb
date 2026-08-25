@@ -60,13 +60,18 @@ func (s *Server) postDreamWorkfeedCard(r *autonomous.DreamReport) {
 	}
 	// W15-style 정비 signal: verify advisories the operator should see (first-time
 	// findings listed in the body, repeats only counted).
-	maintCount := len(r.VerifyFindings) + r.VerifyFindingsRepeat
+	// Count what the operator can act on THIS card: new advisories plus the
+	// identity questions that now carry a decision chip. The standing repeat
+	// total used to ride the headline, so a backlog nobody could close kept
+	// announcing itself every cycle (it stays in the report JSON and the
+	// dream notification, which is where a trend belongs).
+	maintCount := len(r.VerifyFindings) + len(r.VerifyPending)
 	if maintCount > 0 {
 		summary += fmt.Sprintf(" · 정비 필요 %d건", maintCount)
 	}
 
 	body := strings.TrimSpace(title + "\n" + r.WikiChangeSummary)
-	if maintCount > 0 {
+	if len(r.VerifyFindings) > 0 {
 		var b strings.Builder
 		b.WriteString("\n\n## 정비 필요\n")
 		for _, finding := range r.VerifyFindings {
@@ -74,9 +79,17 @@ func (s *Server) postDreamWorkfeedCard(r *autonomous.DreamReport) {
 			b.WriteString(finding)
 			b.WriteByte('\n')
 		}
-		if r.VerifyFindingsRepeat > 0 {
-			fmt.Fprintf(&b, "- 이전에 보고된 자문 %d건 포함\n", r.VerifyFindingsRepeat)
+		body += b.String()
+	}
+	if len(r.VerifyPending) > 0 {
+		var b strings.Builder
+		b.WriteString("\n\n## 확인 부탁 (자동으로 못 고치는 것)\n")
+		for _, item := range r.VerifyPending {
+			b.WriteString("- ")
+			b.WriteString(item.Detail)
+			b.WriteByte('\n')
 		}
+		b.WriteString("\n맞게 되어 있으면 아래 \"확인했음\" 을 눌러 주세요 — 다시 묻지 않습니다. 나눠야 하거나 합쳐야 하면 그렇게 말씀해 주세요.\n")
 		body += b.String()
 	}
 	if r.CorrectionsConsidered > 0 {
@@ -89,6 +102,25 @@ func (s *Server) postDreamWorkfeedCard(r *autonomous.DreamReport) {
 	// repairs, resolving each page from the cycle ledger at run time, so good
 	// and bad changes in one commit no longer live or die together.
 	actions := []workfeed.Action{{ID: "dream:ack", Kind: workfeed.ActionAck, Label: "확인"}}
+	pendingChips := 0
+	for _, item := range r.VerifyPending {
+		if len(item.Pages) == 0 {
+			continue
+		}
+		if pendingChips >= dreamMaxIdentityAckActions {
+			// Never silently: the body says how many are waiting for the next
+			// card, so a capped list does not read as a finished one.
+			body += fmt.Sprintf("\n확인 부탁이 많아 이번 카드에는 %d건만 올렸습니다 — 나머지는 다음 사이클에 이어서 여쭙습니다.\n",
+				dreamMaxIdentityAckActions)
+			break
+		}
+		pendingChips++
+		actions = append(actions, workfeed.Action{
+			ID:    identityReviewedActionPrefix + item.Kind + ":" + strings.Join(item.Pages, "|"),
+			Kind:  workfeed.ActionAck,
+			Label: identityAckLabel(item),
+		})
+	}
 	if r.GitCommit != "" {
 		actions = append(actions, workfeed.Action{
 			ID: dreamRevertActionPrefix + r.GitCommit, Kind: workfeed.ActionAck, Label: "전체 되돌리기",
@@ -116,6 +148,11 @@ func (s *Server) postDreamWorkfeedCard(r *autonomous.DreamReport) {
 // id: "dream:revert:<hash>" (whole cycle) and "dream:revert-page:<hash>:<idx>"
 // (a single page, index into wiki.DreamRevertPageList's canonical order).
 const (
+	// dreamMaxIdentityAckActions bounds the identity decision chips on one
+	// card — the two scans cap at five each, and a card of ten questions is
+	// the wall of noise the ack exists to end.
+	dreamMaxIdentityAckActions = 6
+
 	dreamRevertActionPrefix     = "dream:revert:"
 	dreamRevertPageActionPrefix = "dream:revert-page:"
 	dreamMaxPageRevertActions   = 10
@@ -246,4 +283,15 @@ func (s *Server) handleDreamRevertPageAction(item workfeed.Item, actionID string
 	}
 	s.logger.Info("dream page reverted from feed card", "commit", hash, "page", page)
 	return nil
+}
+
+// identityAckLabel names the decision chip after the person in question, so a
+// card with several reads as a list of people rather than a row of identical
+// buttons.
+func identityAckLabel(item autonomous.VerifyPendingItem) string {
+	name := strings.TrimSpace(item.Label)
+	if name == "" {
+		return "확인했음"
+	}
+	return name + " 확인했음"
 }

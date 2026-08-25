@@ -90,8 +90,14 @@ func TestPostDreamWorkfeedCardSurfacesMaintFindingsAndCorrections(t *testing.T) 
 		t.Fatalf("expected one dream card, got %d (err=%v)", len(items), err)
 	}
 	card := items[0]
-	if !strings.Contains(card.Summary, "정정 1건 반영") || !strings.Contains(card.Summary, "정비 필요 3건") {
+	// The headline counts what this card can act on. The standing repeat total
+	// used to ride it, so a backlog nobody could close re-announced itself every
+	// cycle; it stays in the report JSON and the dream notification instead.
+	if !strings.Contains(card.Summary, "정정 1건 반영") || !strings.Contains(card.Summary, "정비 필요 1건") {
 		t.Fatalf("summary = %q", card.Summary)
+	}
+	if strings.Contains(card.Body, "이전에 보고된 자문") {
+		t.Errorf("standing backlog must not re-nag in the card body: %q", card.Body)
 	}
 	if !strings.Contains(card.Body, "## 정비 필요") || !strings.Contains(card.Body, "id 충돌 수리 대상") {
 		t.Fatalf("body must list first-time findings, got %q", card.Body)
@@ -163,5 +169,52 @@ func TestPostDreamWorkfeedCardMintsPerPageRevertActions(t *testing.T) {
 	}
 	if got := len(items[0].Actions); got != 2 {
 		t.Fatalf("ledger-less cycle actions = %d, want 2", got)
+	}
+}
+
+// Person-identity questions (동명이인 의심, 같은 이름 여러 장) are unfixable by
+// any automation, so the card must give the operator a way to END them. Before
+// this they rode the first-time/repeat fold: shown once, then folded into a
+// count forever — permanently open and permanently unanswerable.
+func TestPostDreamWorkfeedCardOffersIdentityDecisionChips(t *testing.T) {
+	dir := t.TempDir()
+	s := &Server{
+		logger: slog.Default(),
+		MemorySubsystem: &MemorySubsystem{
+			workFeedStore:   workfeed.NewStore(filepath.Join(dir, "feed.jsonl")),
+			nativeSyncStore: nativesync.NewStore(filepath.Join(dir, "sync.jsonl")),
+		},
+	}
+	s.postDreamWorkfeedCard(&autonomous.DreamReport{
+		WikiPagesUpdated: 1,
+		VerifyPending: []autonomous.VerifyPendingItem{{
+			Kind:   "homonym",
+			Label:  "김성환",
+			Detail: `"김성환" 한 페이지에 회사 도메인 bmenergy.co.kr, topsolar.kr — 동명이인 병합 의심`,
+			Pages:  []string{"인물/김성환.md"},
+		}},
+	})
+	items, _, err := s.workFeedStore.List(10, true)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("expected one dream card, got %d (err=%v)", len(items), err)
+	}
+	card := items[0]
+	if !strings.Contains(card.Summary, "정비 필요 1건") {
+		t.Errorf("pending identity questions must count in the headline: %q", card.Summary)
+	}
+	if !strings.Contains(card.Body, "확인 부탁") || !strings.Contains(card.Body, "동명이인 병합 의심") {
+		t.Errorf("body must state the question: %q", card.Body)
+	}
+	var found bool
+	for _, a := range card.Actions {
+		if a.ID == "identity_reviewed:homonym:인물/김성환.md" {
+			found = true
+			if a.Label != "김성환 확인했음" {
+				t.Errorf("chip label = %q", a.Label)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no decision chip on the card: %+v", card.Actions)
 	}
 }

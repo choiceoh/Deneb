@@ -870,6 +870,16 @@ func (wd *WikiDreamer) rebuildAndVerifyDreamWiki(ctx context.Context, cycle *dre
 	}
 
 	findings := wd.verifyPages(ctx)
+	// Operator-answerable identity questions leave the fresh/repeat fold: they
+	// are unfixable by any automation, so folding a repeat into a count made
+	// them permanently invisible AND permanently open. They ride VerifyPending
+	// with a decision chip instead, and disappear for good once answered.
+	findings, pending := splitAnswerableFindings(findings)
+	for _, f := range pending {
+		cycle.report.VerifyPending = append(cycle.report.VerifyPending, autonomous.VerifyPendingItem{
+			Kind: f.Type, Label: f.AckLabel, Detail: f.Detail, Pages: f.AckPages,
+		})
+	}
 	// Reconcile even on zero findings: entries for issues that no longer
 	// re-appear are how the ledger records "resolved" (a recurrence later
 	// counts as new again).
@@ -877,7 +887,7 @@ func (wd *WikiDreamer) rebuildAndVerifyDreamWiki(ctx context.Context, cycle *dre
 	if err := wd.saveVerifyLedger(ledger); err != nil {
 		cycle.addPhaseError("verify-ledger: %v", err)
 	}
-	if len(findings) == 0 {
+	if len(findings) == 0 && len(pending) == 0 {
 		return
 	}
 	// Fact ledger + measured counters (5.6): every applied verify fix records
