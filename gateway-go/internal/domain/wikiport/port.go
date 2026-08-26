@@ -113,6 +113,10 @@ const (
 	FactStatusTombstoned        = wiki.FactStatusTombstoned
 )
 
+// ErrFactProjectionAhead re-exports the sentinel so startup can tell the one
+// harmless projection failure apart from a broken fact plane.
+var ErrFactProjectionAhead = wiki.ErrFactProjectionAhead
+
 // Tier1Store is the prompt-injection read surface for high-importance pages.
 type Tier1Store interface {
 	Tier1Pages(minImportance float64) []Tier1Result

@@ -76,6 +76,19 @@ func (s *Server) initWikiSubsystem(chatCfg *chat.HandlerConfig, reg *modelrole.R
 			cutoverErr = fmt.Errorf("configure fact projections: %w", cutoverErr)
 		}
 	}
+	if cutoverErr != nil && errors.Is(cutoverErr, wiki.ErrFactProjectionAhead) {
+		// Nothing is broken and nothing is lost: the on-disk MEMORY/USER view
+		// already declares a higher revision than this store, so the guard
+		// skipped the write and left the richer file in place. The live
+		// mutation path only logs this; startup used to spend three
+		// fail-closed restarts on it and then disable the entire wiki, which
+		// costs recall and the wiki tool to protect a derived view that was
+		// already fine. Boot with wiki ENABLED and say how it clears.
+		s.logger.Error("wiki: generated MEMORY/USER view is ahead of this fact store; leaving it untouched",
+			"dir", workspaceDir, "error", cutoverErr,
+			"action", "expected after a state-dir swap or a restored workspace; writes resume once this journal passes the on-disk revision. If this store is the canonical one, delete the stale workspace projections and restart.")
+		cutoverErr = nil
+	}
 	if cutoverErr != nil {
 		wrapped := fmt.Errorf("initialize enabled wiki fact plane for workspace %q: %w", workspaceDir, cutoverErr)
 		// Never serve a hybrid state where the journal advanced but frozen
