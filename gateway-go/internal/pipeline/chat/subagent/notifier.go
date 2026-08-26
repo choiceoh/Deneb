@@ -238,7 +238,7 @@ func (sn *SubagentNotifier) getOrCreateQueue(parentKey string) *notifyQueue {
 	q := &notifyQueue{
 		capacity: notifyQueueCap,
 		flushFn: func(items []notifyItem) {
-			notification := formatBatchNotification(sn.refreshOutputs(items))
+			notification := formatBatchNotificationFor(parentKey, sn.refreshOutputs(items))
 
 			if sn.hasActiveRun(parentKey) {
 				sn.pushNotification(parentKey, notification)
@@ -391,8 +391,31 @@ func buildNotifyItem(child *session.Session) notifyItem {
 // formatBatchNotification renders a batch of child completions into a single
 // structured notification. When the batch exceeds notifyQueueCap, overflowed
 // items are summarized as a count to prevent unbounded text growth.
+// formatBatchNotification keeps the user-facing wording. Kept as the default so
+// existing callers and tests read the common case.
 func formatBatchNotification(items []notifyItem) string {
+	return formatBatchNotificationFor("client:main", items)
+}
+
+// noReplyClause states WHY the parent must not answer with NO_REPLY.
+//
+// The instruction itself is not optional either way: NO_REPLY suppresses
+// delivery, so a cron job that reports (the morning letter) would silently
+// drop the work its children just did. What differs is the reason — a cron or
+// system parent has nobody waiting, and telling it otherwise is simply false.
+// Classification uses the canonical predicate (domain/session/native_keys.go),
+// which counts a client-spawned sub-agent as user-facing: the chain still ends
+// at a person.
+func noReplyClause(parentKey string) string {
+	if session.IsClientSession(parentKey) {
+		return "Do NOT use NO_REPLY — the user is waiting for this answer."
+	}
+	return "Do NOT use NO_REPLY — 이 턴의 출력이 이 작업의 산출물이고, NO_REPLY는 그것을 버린다."
+}
+
+func formatBatchNotificationFor(parentKey string, items []notifyItem) string {
 	var sb strings.Builder
+	clause := noReplyClause(parentKey)
 
 	// IMPORTANT: the trailing instruction prevents the LLM from using NO_REPLY
 	// (which would suppress delivery of the synthesized response to the user).
@@ -404,9 +427,9 @@ func formatBatchNotification(items []notifyItem) string {
 	failed := failedItems(items)
 	if len(items) == 1 {
 		if len(failed) == 1 {
-			sb.WriteString("**System:** subagent가 과업을 끝내지 못했다. 아래 실패 내용을 보고 네가 직접 처리하거나, 처리할 수 없으면 사용자에게 실패 사실과 이유를 알려라. Do NOT use NO_REPLY — the user is waiting for this answer.\n")
+			sb.WriteString("**System:** subagent가 과업을 끝내지 못했다. 아래 실패 내용을 보고 네가 직접 처리하거나, 처리할 수 없으면 사용자에게 실패 사실과 이유를 알려라. " + clause + "\n")
 		} else {
-			sb.WriteString("**System:** subagent completed. Synthesize the result below into your response for the user. Do NOT re-do this work. Do NOT use NO_REPLY — the user is waiting for this answer.\n")
+			sb.WriteString("**System:** subagent completed. Synthesize the result below into your response for the user. Do NOT re-do this work. " + clause + "\n")
 		}
 		writeNotifyItem(&sb, items[0])
 		return sb.String()
@@ -414,11 +437,11 @@ func formatBatchNotification(items []notifyItem) string {
 
 	switch {
 	case len(failed) == len(items):
-		fmt.Fprintf(&sb, "**System:** subagent %d개가 모두 과업을 끝내지 못했다. 아래 실패 내용을 보고 네가 직접 처리하거나, 처리할 수 없으면 사용자에게 실패 사실과 이유를 알려라. Do NOT use NO_REPLY — the user is waiting for this answer.\n", len(items))
+		fmt.Fprintf(&sb, "**System:** subagent %d개가 모두 과업을 끝내지 못했다. 아래 실패 내용을 보고 네가 직접 처리하거나, 처리할 수 없으면 사용자에게 실패 사실과 이유를 알려라. %s\n", len(items), clause)
 	case len(failed) > 0:
-		fmt.Fprintf(&sb, "**System:** subagent %d개 중 %d개가 실패했다. 성공한 결과는 종합하고(다시 하지 마라), 실패한 과업은 네가 직접 처리하거나 사용자에게 실패 사실과 이유를 알려라. Do NOT use NO_REPLY — the user is waiting for this answer.\n", len(items), len(failed))
+		fmt.Fprintf(&sb, "**System:** subagent %d개 중 %d개가 실패했다. 성공한 결과는 종합하고(다시 하지 마라), 실패한 과업은 네가 직접 처리하거나 사용자에게 실패 사실과 이유를 알려라. %s\n", len(items), len(failed), clause)
 	default:
-		fmt.Fprintf(&sb, "**System:** %d subagents completed. Synthesize the results below into a unified response for the user. Do NOT re-do their work. Do NOT use NO_REPLY — the user is waiting for this answer.\n", len(items))
+		fmt.Fprintf(&sb, "**System:** %d subagents completed. Synthesize the results below into a unified response for the user. Do NOT re-do their work. %s\n", len(items), clause)
 	}
 
 	// Render up to cap detailed items.
