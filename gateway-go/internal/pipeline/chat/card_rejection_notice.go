@@ -33,9 +33,12 @@ func recordCardRejection(sessionKey, reason, issue string) {
 		detail = reason
 	}
 	cardRejections.Store(sessionKey, fmt.Sprintf(
-		"[직전 턴 알림] 네가 낸 deneb-ui 카드가 전달 직전에 거부돼 평문으로 바뀌어 나갔다: %s\n"+
-			"같은 내용을 카드로 다시 낼 생각이면 이 문제부터 고쳐라. 못 고치겠으면 산문으로 답해라 — "+
-			"거부된 카드는 사용자에게 납작한 텍스트로 보인다.", detail,
+		// Format-neutral envelope: the detail names the format (카드 or 웹페이지)
+		// precisely, and hardcoding "deneb-ui 카드" mislabeled every deneb-html
+		// degradation once those started reporting through this same channel.
+		"[직전 턴 알림] 네가 낸 리치 응답이 전달 직전에 거부돼 평문으로 바뀌어 나갔다: %s\n"+
+			"같은 내용을 다시 낼 생각이면 이 문제부터 고쳐라. 못 고치겠으면 산문으로 답해라 — "+
+			"거부된 블록은 사용자에게 납작한 텍스트로 보인다.", detail,
 	))
 }
 

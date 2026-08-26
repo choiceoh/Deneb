@@ -506,6 +506,12 @@ func cardRejectionDetail(rejection denebui.Rejection) string {
 		return issue
 	}
 	switch rejection.Reason {
+	case "html_additional_block":
+		return "한 응답에 deneb-html 페이지는 하나만 허용된다 — 두 번째 이후 문서는 코드블록으로 내려갔다."
+	case "html_oversize":
+		return "deneb-html 문서가 허용 크기를 넘어 코드블록으로 내려갔다 — 더 짧게 만들거나 카드(deneb-ui)로 바꿔라."
+	case "html_not_markup":
+		return "deneb-html 펜스 안이 HTML 문서로 시작하지 않아 코드블록으로 내려갔다 — `<`로 시작하는 완결된 문서를 넣어라."
 	case "additional_block":
 		return "한 응답에 deneb-ui 펜스는 하나만 허용된다 — 두 번째 이후 블록은 평문으로 내려갔다. 여러 주제는 카드 하나 안에서 <card>를 여러 개 써라."
 	case "unparseable":

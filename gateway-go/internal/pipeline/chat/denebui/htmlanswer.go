@@ -26,10 +26,11 @@ const MaxHTMLAnswerBytes = 96 * 1024
 // degrade to ```html code blocks so raw markup stays readable but never
 // executes. Old clients that predate the fence render it as a code block
 // anyway, so the degrade path and the compatibility path look identical.
-func normalizeHTMLAnswers(text, sessionKey string, logger *slog.Logger) string {
+func normalizeHTMLAnswers(text, sessionKey string, logger *slog.Logger) (string, []Rejection) {
 	if !hasHTMLAnswerFence(text) {
-		return text
+		return text, nil
 	}
+	var rejections []Rejection
 	lines := strings.Split(text, "\n")
 	out := make([]string, 0, len(lines)+1)
 	kept := false
@@ -64,11 +65,15 @@ func normalizeHTMLAnswers(text, sessionKey string, logger *slog.Logger) string {
 		}
 		logger.Warn("deneb-html answer degraded to code block",
 			"session", sessionKey, "reason", reason, "bytes", len(doc))
+		// Same channel the deneb-ui rejections use: a degraded page reaches the
+		// user as a raw code block, and until now its author was told nothing
+		// (the card path has carried a correction hint since #4753).
+		rejections = append(rejections, Rejection{Reason: "html_" + reason})
 		if doc != "" {
 			out = append(out, "```html", doc, "```")
 		}
 	}
-	return strings.Join(out, "\n")
+	return strings.Join(out, "\n"), rejections
 }
 
 // StripHTMLAnswers removes ```deneb-html documents from text, leaving a short

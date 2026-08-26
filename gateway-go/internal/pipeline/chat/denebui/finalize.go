@@ -40,16 +40,15 @@ func NormalizeFinalReplyWithRejections(text, sessionKey string, logger *slog.Log
 	// deneb-html answers first: their bodies must never contain backticks per
 	// contract, so running the (lenient) deneb-ui scan afterwards cannot split
 	// a kept HTML document.
-	text = normalizeHTMLAnswers(text, sessionKey, logger)
+	text, rejections := normalizeHTMLAnswers(text, sessionKey, logger)
 	if repairedText, glitched := RepairFenceGlitches(text); glitched {
 		logger.Warn("deneb-ui fence glitch repaired", "session", sessionKey)
 		text = repairedText
 	}
 	if !HasFence(text) {
-		return text, nil
+		return text, rejections
 	}
 
-	var rejections []Rejection
 	block := 0
 	normalized := ReplaceFences(text, func(body string) string {
 		block++
