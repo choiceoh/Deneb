@@ -65,3 +65,20 @@ func TestAnomalyDigestSurfacesGapsSeparately(t *testing.T) {
 		t.Errorf("the clean pass must still be counted:\n%s", out)
 	}
 }
+
+// TestAnomalyDigestFlagsTruncatedWindows: a stretch of clean passes over
+// truncated windows is much weaker evidence than its count suggests, and the
+// digest must say so rather than letting the count speak for itself.
+func TestAnomalyDigestFlagsTruncatedWindows(t *testing.T) {
+	out := renderAnomalyDigest([]anomalywatch.Entry{{
+		At: "2026-08-26T08:21:10Z", WindowMinutes: 90,
+		Examined: anomalywatch.Examined{LogLines: 1, CoveredMinutes: 6, Partial: true},
+		Findings: []anomalywatch.Finding{{Severity: "low", Summary: "s", Evidence: "e"}},
+	}}, 12*time.Hour)
+	if !strings.Contains(out, "창이 잘렸다") {
+		t.Errorf("truncated windows must be called out:\n%s", out)
+	}
+	if !strings.Contains(out, "90분 중 6분") {
+		t.Errorf("per-pass coverage must be explicit:\n%s", out)
+	}
+}

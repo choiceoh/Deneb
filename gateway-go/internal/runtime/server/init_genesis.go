@@ -596,6 +596,10 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 					StateDir: config.ResolveStateDir(),
 					Model:    string(modelrole.RoleLightweight),
 					Logger:   s.logger,
+					// The ring is in-process, so it can never hold more history
+					// than the process has been alive — and auto-deploy restarts
+					// the gateway several times a day.
+					StartedAt: time.Now(),
 				})
 			}
 			// Curriculum lane (RSI P5-1): coverage-gap demand injection for the

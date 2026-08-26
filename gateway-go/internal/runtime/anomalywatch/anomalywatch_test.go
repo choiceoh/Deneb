@@ -196,3 +196,62 @@ func TestSinceReturnsOnlyNewerPasses(t *testing.T) {
 		t.Errorf("Since = %+v, want only the newer pass", got)
 	}
 }
+
+// TestRunMarksTruncatedWindowAsPartial: the ring is in-process, so a pass that
+// runs shortly after a restart saw almost nothing. Recording it as a full-window
+// pass would let a six-minute-old process assert that the last 90 minutes were
+// quiet — the single most misleading thing this ledger could say.
+func TestRunMarksTruncatedWindowAsPartial(t *testing.T) {
+	dir := t.TempDir()
+	task := &Task{
+		StateDir:  dir,
+		StartedAt: time.Now().Add(-6 * time.Minute),
+		Lines: func(int64, int) []observe.LogLine {
+			return []observe.LogLine{{Level: "warn", Msg: "mcp: unparseable line"}}
+		},
+		Judge: func(context.Context, string, string, int) (string, error) {
+			return `{"findings":[]}`, nil
+		},
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	got, err := Read(dir, 1)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("Read: %v (%d entries)", err, len(got))
+	}
+	e := got[0]
+	if !e.Examined.Partial {
+		t.Error("a pass 6 minutes after start must be marked partial")
+	}
+	if e.Examined.CoveredMinutes != 6 {
+		t.Errorf("coveredMinutes = %d, want 6", e.Examined.CoveredMinutes)
+	}
+	if e.WindowMinutes != 90 {
+		t.Errorf("windowMinutes = %d, want 90 — the ledger must not understate its own window", e.WindowMinutes)
+	}
+}
+
+// TestRunReportsFullCoverageOnceAlivePastTheWindow.
+func TestRunReportsFullCoverageOnceAlivePastTheWindow(t *testing.T) {
+	dir := t.TempDir()
+	task := &Task{
+		StateDir:  dir,
+		StartedAt: time.Now().Add(-5 * time.Hour),
+		Lines:     func(int64, int) []observe.LogLine { return nil },
+		Judge:     func(context.Context, string, string, int) (string, error) { return `{"findings":[]}`, nil },
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	got, _ := Read(dir, 1)
+	if len(got) != 1 {
+		t.Fatal("no entry written")
+	}
+	if got[0].Examined.Partial {
+		t.Error("a long-lived process must not report a partial window")
+	}
+	if got[0].Examined.CoveredMinutes != 90 {
+		t.Errorf("coveredMinutes = %d, want the full 90", got[0].Examined.CoveredMinutes)
+	}
+}

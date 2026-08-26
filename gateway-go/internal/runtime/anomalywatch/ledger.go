@@ -48,8 +48,10 @@ import (
 // the same empty ledger, which is precisely the confusion this whole family of
 // lanes exists to remove.
 type Entry struct {
-	At          string `json:"at"`
-	WindowHours int    `json:"windowHours"`
+	At string `json:"at"`
+	// WindowMinutes is the window the pass ASKED for. What it actually got is
+	// Examined.CoveredMinutes, and the two diverge routinely.
+	WindowMinutes int `json:"windowMinutes"`
 	// Examined is what the pass actually read. A finding count means nothing
 	// without it — zero findings over zero lines is not a healthy runtime.
 	Examined Examined  `json:"examined"`
@@ -63,11 +65,24 @@ type Entry struct {
 	Model string `json:"model,omitempty"`
 }
 
-// Examined describes the window the pass could see.
+// Examined describes the window the pass could actually see.
 type Examined struct {
 	LogLines int `json:"logLines"`
 	Warns    int `json:"warns"`
 	Errors   int `json:"errors"`
+	// CoveredMinutes is how much of the requested window the log ring could
+	// actually supply. The ring lives in-process, so every gateway restart
+	// empties it — and with auto-deploy restarting the gateway several times a
+	// day, a truncated window is the NORMAL case, not an edge one.
+	//
+	// Without this field the two readings that matter most are identical: a
+	// quiet hour and a six-minute-old process both write "logLines: 1". The
+	// first says the runtime is healthy; the second says almost nothing was
+	// observed. Recording only the requested window would make the ledger
+	// assert the first whenever the second was true.
+	CoveredMinutes int `json:"coveredMinutes"`
+	// Partial marks a window the process was not alive long enough to fill.
+	Partial bool `json:"partial,omitempty"`
 	// DistinctMessages is the number of unique log messages, which separates a
 	// window of 200 lines of one repeating error from 200 distinct events.
 	DistinctMessages int `json:"distinctMessages"`
