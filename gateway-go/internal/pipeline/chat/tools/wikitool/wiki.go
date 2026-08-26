@@ -434,13 +434,14 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsBook tooldeps.Con
 	}
 
 	logAppend := shouldAppendProjectLog(path, req.force)
-	page, existed, err := persistWikiWrite(store, path, req, logAppend)
+	page, existed, replaced, err := persistWikiWrite(store, path, req, logAppend)
 	if err != nil {
 		return fmt.Sprintf("위키 페이지 쓰기 실패: %v", err), nil
 	}
 	marked, failed := markSupersededPages(store, req.supersedes, path)
 	note := autoRecordPeople(store, contactsBook, page, req.category)
-	return formatWikiWriteResult(path, req, note, existed, logAppend, marked, failed), nil
+	result := formatWikiWriteResult(path, req, note, existed, logAppend, marked, failed)
+	return result + wikiReplacedBodyNotice(replaced, page, logAppend), nil
 }
 
 func validateWikiWrite(req wikiWriteRequest) string {
@@ -518,15 +519,67 @@ func shouldAppendProjectLog(path string, force bool) bool {
 
 // persistWikiWrite keeps the read-modify-write inside Store.UpdatePage so a
 // concurrent writer cannot clobber the page between a separate read and write.
-func persistWikiWrite(store *wiki.Store, path string, req wikiWriteRequest, logAppend bool) (*wiki.Page, bool, error) {
+func persistWikiWrite(store *wiki.Store, path string, req wikiWriteRequest, logAppend bool) (*wiki.Page, bool, string, error) {
 	var page *wiki.Page
 	var existed bool
+	var replaced string
 	req.path = path
 	err := store.UpdatePage(path, func(existing *wiki.Page) (*wiki.Page, error) {
+		// The body about to be discarded, captured before the merge mutates it.
+		if existing != nil {
+			replaced = existing.Body
+		}
 		page, existed = mergeWikiWrite(existing, req, logAppend)
 		return page, nil
 	})
-	return page, existed, err
+	return page, existed, replaced, err
+}
+
+// wikiReplacedBodyNotice reports what a full-body write destroyed.
+//
+// wiki write REPLACES a non-log page's body; only the project-log path appends.
+// The result line said "업데이트" either way, so overwriting a person page with
+// a contradictory one read exactly like extending it. The same function already
+// surfaces silently-dropped enum values on the principle that a silent drop
+// must be visible — a dropped page BODY is the larger loss.
+//
+// Quiet by construction: it fires only when something is actually gone. An
+// edit that keeps every section, or that extends the previous text, says
+// nothing.
+func wikiReplacedBodyNotice(oldBody string, page *wiki.Page, logAppend bool) string {
+	if logAppend || page == nil || strings.TrimSpace(oldBody) == "" {
+		return ""
+	}
+	if strings.Contains(page.Body, strings.TrimSpace(oldBody)) {
+		return "" // the write extended the previous text rather than replacing it
+	}
+	oldPage := &wiki.Page{Body: oldBody}
+	_, oldSections := oldPage.SplitByH2()
+	_, newSections := page.SplitByH2()
+	kept := make(map[string]struct{}, len(newSections))
+	for _, section := range newSections {
+		kept[section.Heading] = struct{}{}
+	}
+	var lost []string
+	for _, section := range oldSections {
+		if _, ok := kept[section.Heading]; !ok {
+			lost = append(lost, section.Heading)
+		}
+	}
+	if len(lost) > 0 {
+		return fmt.Sprintf(
+			"\n⚠️ 이 쓰기로 사라진 기존 섹션: %s — write는 본문을 통째로 교체한다(append 아님). "+
+				"남겨야 할 내용이면 그 섹션까지 포함해 다시 써라.",
+			strings.Join(lost, ", "),
+		)
+	}
+	if len(oldSections) == 0 {
+		return fmt.Sprintf(
+			"\n⚠️ 기존 본문 %d자를 새 내용으로 교체했다 (append 아님). 이전 내용이 필요하면 그 부분까지 포함해 다시 써라.",
+			len([]rune(strings.TrimSpace(oldBody))),
+		)
+	}
+	return ""
 }
 
 func mergeWikiWrite(existing *wiki.Page, req wikiWriteRequest, logAppend bool) (*wiki.Page, bool) {
