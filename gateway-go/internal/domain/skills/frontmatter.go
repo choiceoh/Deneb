@@ -52,7 +52,17 @@ type DenebSkillMetadata struct {
 	// gates activation, because a skill must not disappear just because someone
 	// wanted to measure it (requires_tools hides a skill when any listed tool is
 	// missing, which is how skills silently die).
-	ExerciseTools    []string           `json:"exercise_tools,omitempty"`
+	ExerciseTools []string `json:"exercise_tools,omitempty"`
+	// ExerciseOutput names deterministic patterns whose presence in the answer
+	// PROVES the procedure ran, for skills whose procedure produces a shape
+	// rather than a tool call (ADR 0006). Same measurement-only rules as
+	// ExerciseTools: never gates activation, evaluated any-of, and only
+	// UNCONDITIONAL outputs belong here — a pattern on a conditional artifact
+	// records correct runs as failures.
+	//
+	// Syntax: "fence:<lang>" (a code fence with that info string),
+	// "heading:<text>" (a markdown heading), anything else a substring.
+	ExerciseOutput   []string           `json:"exercise_output,omitempty"`
 	FallbackForTools []string           `json:"fallback_for_tools,omitempty"`
 	Requires         *SkillRequires     `json:"requires,omitempty"`
 	Install          []SkillInstallSpec `json:"install,omitempty"`
@@ -272,6 +282,7 @@ func ResolveDenebMetadata(frontmatter ParsedFrontmatter) *DenebSkillMetadata {
 	meta.RelatedSkills = parseJSONStringList(obj, "related_skills")
 	meta.RequiresTools = parseJSONStringList(obj, "requires_tools")
 	meta.ExerciseTools = parseJSONStringList(obj, "exercise_tools")
+	meta.ExerciseOutput = parseJSONStringList(obj, "exercise_output")
 	meta.FallbackForTools = parseJSONStringList(obj, "fallback_for_tools")
 
 	// Parse requires.

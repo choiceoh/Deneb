@@ -551,17 +551,43 @@ func skillUseAttribution(name string, autoLoaded map[string]bool, result *agent.
 		attr.Delivery = chatport.SkillDeliveryAutoLoad
 	}
 	required := skillRequiredToolSet(name)
-	if len(required) == 0 || result == nil {
+	output := skillOutputEvidencePatterns(name)
+	if (len(required) == 0 && len(output) == 0) || result == nil {
+		attr.Evidence = chatport.SkillEvidenceNone
 		return attr
 	}
 	attr.Exercised = chatport.SkillExercisedNo
+	attr.Evidence = chatport.SkillEvidenceTools
+	if len(required) == 0 {
+		attr.Evidence = chatport.SkillEvidenceOutput
+	}
 	for _, a := range result.ToolActivities {
 		if required[a.Name] {
 			attr.Exercised = chatport.SkillExercisedYes
-			break
+			attr.Evidence = chatport.SkillEvidenceTools
+			return attr
 		}
 	}
+	// Answer-shape evidence is read from DeliverableText, not AllText: the
+	// narration a model emits alongside tool calls ("이제 카드로 정리할게요")
+	// announces the artifact instead of being it, and matching that would call
+	// an ignored procedure exercised.
+	if matchesSkillOutputEvidence(result.DeliverableText, output) {
+		attr.Exercised = chatport.SkillExercisedYes
+		attr.Evidence = chatport.SkillEvidenceOutput
+	}
 	return attr
+}
+
+// skillOutputEvidencePatterns reads the answer-shape patterns a skill declares
+// (ADR 0006). Measurement only — like exercise_tools it never gates activation.
+func skillOutputEvidencePatterns(name string) []string {
+	for _, s := range cachedResolvedSkills() {
+		if s.Name == name {
+			return s.ExerciseOutput
+		}
+	}
+	return nil
 }
 
 // skillRequiredToolSet reads the tools whose use proves the skill's procedure
