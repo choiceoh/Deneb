@@ -627,7 +627,16 @@ func TestChatMessageTextContentBoundaryCases(t *testing.T) {
 		{name: "empty string", content: `""`, wantText: "", wantHasAny: false},
 		{name: "spaces", content: `"   "`, wantText: "   ", wantHasAny: true},
 		{name: "rich text", content: `[{"type":"text","text":"one"},{"type":"tool_use","name":"read"},{"type":"text","text":"two"}]`, wantText: "one\n\ntwo", wantHasAny: true},
-		{name: "rich empty", content: `[{"type":"thinking","text":"secret"}]`, wantText: `[{"type":"thinking","text":"secret"}]`, wantHasAny: true},
+		// A block array that parses cleanly and holds only known non-text kinds
+		// has no text — dumping the raw JSON leaked the thinking block (and, in
+		// production, its 4KB cryptographic signature) into every consumer of
+		// TextContent: recall evidence, polaris rows, transcript search, and the
+		// skill-relevance judge.
+		{name: "known non-text blocks", content: `[{"type":"thinking","text":"secret"}]`, wantText: "", wantHasAny: true},
+		{name: "tool_use only", content: `[{"type":"tool_use","name":"read"}]`, wantText: "", wantHasAny: true},
+		// An UNKNOWN block type still falls through to the raw-JSON escape
+		// hatch — that is what "unknown content stays observable" is for.
+		{name: "unknown block type", content: `[{"type":"mystery","payload":1}]`, wantText: `[{"type":"mystery","payload":1}]`, wantHasAny: true},
 		{name: "malformed", content: `{bad`, wantText: `{bad`, wantHasAny: true},
 		{name: "number", content: `42`, wantText: `42`, wantHasAny: true},
 	}

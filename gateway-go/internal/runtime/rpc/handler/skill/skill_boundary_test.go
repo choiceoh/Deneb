@@ -587,7 +587,11 @@ func TestBuildSessionContextNilFailureAndRichTranscript(t *testing.T) {
 	if got.Key != "session:rich" || got.Turns != 3 {
 		t.Fatalf("session identity/turns = %#v", got)
 	}
-	if got.AllText != "user: please inspect\nassistant: working\nassistant: [{\"type\":\"tool_use\",\"name\":\"read\"},{\"type\":\"tool_use\",\"name\":\"\"}]\ntool: result" {
+	// A tool_use-only message contributes no TEXT: it used to paste its raw
+	// serialized blocks into the transcript that downstream classifiers read,
+	// which in production meant a thinking block's 4KB signature crowding out
+	// the conversation. Its tools are still counted below via ToolActivities.
+	if got.AllText != "user: please inspect\nassistant: working\ntool: result" {
 		t.Fatalf("AllText = %q", got.AllText)
 	}
 	names := make([]string, 0, len(got.ToolActivities))

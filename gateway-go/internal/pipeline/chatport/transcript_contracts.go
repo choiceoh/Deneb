@@ -37,18 +37,48 @@ func (m *ChatMessage) TextContent() string {
 		Type string `json:"type"`
 		Text string `json:"text,omitempty"`
 	}
-	if err := json.Unmarshal(m.Content, &blocks); err == nil {
+	if err := json.Unmarshal(m.Content, &blocks); err == nil && len(blocks) > 0 {
 		var texts []string
+		recognized := true
 		for _, block := range blocks {
 			if block.Type == "text" && block.Text != "" {
 				texts = append(texts, block.Text)
+				continue
+			}
+			if !knownNonTextBlock(block.Type) {
+				recognized = false
 			}
 		}
 		if len(texts) > 0 {
 			return joinTexts(texts)
 		}
+		// Parsed cleanly and every block is a known non-text kind: there is
+		// simply no text here. Falling through to the raw-JSON escape hatch
+		// dumped the whole serialized block array — including a thinking
+		// block's cryptographic `signature`, which is pure provider bookkeeping.
+		// Measured 2026-08-26 from the puppet seat: the skill-relevance judge's
+		// prompt was 6,114 chars of which 4,340 (71%) were one signature, and
+		// the conversation it had to classify was truncated away to make room.
+		// The same fallback feeds recall evidence notes, polaris rows, the
+		// sub-agent last-text fallback, and transcript SEARCH — which then
+		// matches inside base64.
+		if recognized {
+			return ""
+		}
 	}
 	return string(m.Content)
+}
+
+// knownNonTextBlock reports whether a block type is one this codebase emits and
+// that legitimately carries no transcript text. An UNKNOWN type still falls
+// through to the raw-JSON escape hatch, which is what "unknown content stays
+// observable" was always for.
+func knownNonTextBlock(t string) bool {
+	switch t {
+	case "thinking", "redacted_thinking", "tool_use", "tool_result", "image", "document":
+		return true
+	}
+	return false
 }
 
 // HasContent reports whether a message contains non-empty transcript content.
