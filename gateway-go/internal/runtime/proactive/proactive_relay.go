@@ -3,6 +3,7 @@ package proactive
 import (
 	"context"
 	"encoding/base64"
+	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -371,8 +372,8 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 			}
 		}
 	}
-	pushKind, pushRef := d.appendProactiveWorkFeed(target, content, deliverBody, opts)
-	if d.pushHub != nil {
+	pushKind, pushRef, actionable := d.appendProactiveWorkFeed(target, content, deliverBody, opts)
+	if d.pushHub != nil && shouldPushCard(pushKind, actionable) {
 		d.pushHub.Publish(nativepush.Event{
 			Title: "Deneb",
 			Body:  pushPreview(content),
@@ -400,9 +401,9 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 func (d proactiveRelayDeps) appendProactiveWorkFeed(
 	target, content, deliverBody string,
 	opts proactiveRelayOptions,
-) (pushKind, pushRef string) {
+) (pushKind, pushRef string, actionable bool) {
 	if d.workFeed == nil || target != nativeWorkSessionKey {
-		return "", ""
+		return "", "", false
 	}
 
 	cardSrc, choices := splitChoicesFence(content)
@@ -434,6 +435,7 @@ func (d proactiveRelayDeps) appendProactiveWorkFeed(
 		}
 	}
 
+	question := opts.forceQuestion || len(choices) > 0 || endsWithQuestionMark(extractSrc)
 	appended, err := d.workFeed.Append(workfeed.Item{
 		Source:     source,
 		Title:      title,
@@ -441,7 +443,7 @@ func (d proactiveRelayDeps) appendProactiveWorkFeed(
 		Body:       cardBody,
 		SessionKey: target,
 		RefID:      strings.TrimSpace(opts.refID),
-		Question:   opts.forceQuestion || len(choices) > 0 || endsWithQuestionMark(extractSrc),
+		Question:   question,
 		Actions:    append(coalesceActions(opts.actions, choiceAnswerActions(choices)), deadlineMarkActions(cardBody)...),
 	})
 	if err != nil {
@@ -449,9 +451,9 @@ func (d proactiveRelayDeps) appendProactiveWorkFeed(
 			d.logger.Error("proactive native relay: work feed append failed",
 				"sessionKey", target, "error", err)
 		}
-		return "", ""
+		return "", "", false
 	}
-	return nativepush.PushKindWorkfeed, appended.ID
+	return nativepush.PushKindWorkfeed, appended.ID, question
 }
 
 // Relay delivers content to the native work session.
@@ -631,4 +633,32 @@ func (d proactiveRelayDeps) deliverNativeImage(caption string, pngBytes []byte) 
 // DeliverNativeImage appends an image report to the native work transcript.
 func (d proactiveRelayDeps) DeliverNativeImage(caption string, pngBytes []byte) (bool, error) {
 	return d.deliverNativeImage(caption, pngBytes)
+}
+
+// shouldPushCard decides whether a relayed report interrupts the phone.
+//
+// The feed is PULL (CLAUDE.md: "over-notification 금지 — the feed is pull"), but
+// the code pushed EVERY card: 899 cards in 30 days ≈ 30 notifications a day.
+// Measured against what the operator actually did with them, only one signal
+// separates worth-interrupting from not:
+//
+//	question cards (승인·거절 등 행동 요구)  15% ignored   (n=187)
+//	informational cards                    66% ignored   (n=712)
+//
+// Nothing else predicts it — priority 1→4 runs 74/66/69/61% and urgency markers
+// (⚠️·도용·급증·마감) run 62% vs 67%. So the gate is the action requirement, not
+// a severity guess. Informational cards still land in the feed unchanged; only
+// the interruption stops (~30/day → ~6/day, zero content lost).
+//
+// A relay with no feed card (transcript-only session) still pushes — there the
+// notification is the only delivery. DENEB_PUSH_ALL_CARDS=1 restores the old
+// push-everything behavior.
+func shouldPushCard(pushKind string, actionable bool) bool {
+	if os.Getenv("DENEB_PUSH_ALL_CARDS") == "1" {
+		return true
+	}
+	if pushKind == "" {
+		return true // no card was created — the push is the only channel
+	}
+	return actionable
 }
