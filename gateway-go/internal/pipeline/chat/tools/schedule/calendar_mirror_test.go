@@ -98,3 +98,57 @@ func TestCalendarToolMirrorFailureLeavesLocalWriteSuccessful(t *testing.T) {
 		}
 	}
 }
+
+// The Google mirror has no retry, no backlog and no reconciliation pass, so a
+// failed push is permanent: the event lives locally and never reaches the
+// calendar the operator reads on their phone. Discarding the error left the
+// result claiming a clean 추가 while only a Warn line knew otherwise.
+func TestCalendarToolReportsGoogleMirrorFailure(t *testing.T) {
+	w := &fakeCalWriter{err: errors.New("insufficient authentication scopes")}
+	d := depsWithWriter(t, w)
+
+	created := createEvent(t, d)
+	if !strings.Contains(created, "일정을 추가했습니다") {
+		t.Fatalf("the local write must still succeed:\n%s", created)
+	}
+	if !strings.Contains(created, "⚠️") || !strings.Contains(created, "구글 캘린더") {
+		t.Errorf("a failed mirror was reported as a clean create:\n%s", created)
+	}
+	if !strings.Contains(created, "insufficient authentication scopes") {
+		t.Errorf("notice dropped the cause the operator needs:\n%s", created)
+	}
+	if !strings.Contains(created, "재시도") {
+		t.Errorf("notice did not say the divergence is permanent:\n%s", created)
+	}
+
+	id := extractCalID(created)
+	updated := callCal(t, d, map[string]any{
+		"action": "update", "id": id, "summary": "탑솔라 미팅 (수정)",
+		"start": "2026-08-03T16:00:00+09:00",
+	})
+	if !strings.Contains(updated, "⚠️") || !strings.Contains(updated, "구글 캘린더") {
+		t.Errorf("update did not report the mirror failure:\n%s", updated)
+	}
+	deleted := callCal(t, d, map[string]any{"action": "delete", "id": id})
+	if !strings.Contains(deleted, "⚠️") || !strings.Contains(deleted, "구글 캘린더") {
+		t.Errorf("delete did not report the mirror failure:\n%s", deleted)
+	}
+}
+
+// A healthy mirror stays quiet, and so does a deliberately local-only setup —
+// otherwise the warning fires constantly and stops meaning anything.
+func TestCalendarToolStaysQuietWhenTheMirrorIsHealthyOrOff(t *testing.T) {
+	healthy := createEvent(t, depsWithWriter(t, &fakeCalWriter{}))
+	if strings.Contains(healthy, "구글 캘린더") {
+		t.Errorf("a successful mirror warned:\n%s", healthy)
+	}
+
+	localOnly := depsWith(&fakeCalReader{}, wrapTestLocalCal(newTestLocalCal(t)))
+	localOnly.Writer = func() (tooldeps.CalendarWriter, error) {
+		return nil, errors.New("Google Calendar 쓰기 동기화가 꺼져 있습니다")
+	}
+	off := createEvent(t, localOnly)
+	if strings.Contains(off, "구글 캘린더") {
+		t.Errorf("a deliberately local-only setup warned:\n%s", off)
+	}
+}
