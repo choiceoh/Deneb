@@ -155,3 +155,13 @@ func humanDuration(d time.Duration) string {
 		return fmt.Sprintf("%d분", int(d.Minutes()))
 	}
 }
+
+// LaneCount reports how many lanes this watch covers, so a run can say what it
+// actually checked. A watch that shrank to zero lanes (nothing wired) would
+// otherwise report "all clear" forever.
+func (w *Watch) LaneCount() int {
+	if w == nil {
+		return 0
+	}
+	return len(w.lanes)
+}
