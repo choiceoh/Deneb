@@ -49,6 +49,8 @@ from typing import Any
 # L1 dormancy horizon: with zero evolves/genesis in the 7d window, recent
 # lifecycle activity (reviews, proposals) within this many hours still counts
 # as "alive but dormant" (WARN) instead of dead (FAIL).
+CORPUS_REAL_SHARE_FLOOR = 10.0
+
 DORMANT_HORIZON_HOURS = 48
 
 # Below this many resolved evolves, a rate is reported but never FAILs the
@@ -287,12 +289,47 @@ def check_dispatch(rsi_status: dict | None) -> Result:
                         missing_diagnosis="L4 layer not in rsi.status — RPC too old or L4 unwired")
 
 
-def run_checks(health: dict | None, rsi_status: dict | None, now_ms: int | None = None) -> list[Result]:
-    """All six audit checks, in report order."""
+def check_corpus(state_dir: str | None = None) -> Result:
+    """Why acceptance stalls: can the held-out corpus tell candidates apart?
+
+    The other checks report THAT evolves stop resolving; none says why. Traced
+    by hand on 2026-08-26: 1,695 validation cases held only 10 from real
+    failures (0.6%) — the rest are adversarial mutations, backfill and
+    curriculum. A synthetic pool cannot separate a rewrite from its original, so
+    every candidate ties and the strict-improvement margin can never be met
+    (30d: 118 proposals, 28 rejections, 0 accepted; the top rejection reason was
+    "did not improve (5.9 vs 5.9)"). That is gate saturation, not candidate
+    quality, and it is invisible from the accept-rate alone.
+    """
+    root = state_dir or os.path.join(os.path.expanduser("~"), ".deneb")
+    path = os.path.join(root, "data", "skill_validation_cases.jsonl")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            rows = [json.loads(line) for line in fh if line.strip()]
+    except (OSError, json.JSONDecodeError):
+        return Result("corpus.discrim", Result.SOFT, "검증 케이스 원장을 읽을 수 없음 — 코퍼스 판별력 미측정")
+    if not rows:
+        return Result("corpus.discrim", Result.SOFT, "검증 케이스 0건 — held-out 게이트가 잴 것이 없다")
+    real = sum(1 for r in rows if str(r.get("source", "")).startswith(("auto-failed-skill-use", "auto-successful-skill-use")))
+    share = real * 100.0 / len(rows)
+    detail = (f"전체 {len(rows)}건 · 실사용 유래 {real}건 ({share:.1f}%) · "
+              f"나머지는 합성(adversarial/backfill/curriculum)")
+    if share >= CORPUS_REAL_SHARE_FLOOR:
+        return Result("corpus.discrim", Result.OK,
+                      f"실사용 유래 케이스 {share:.1f}% — 후보를 가를 근거가 있다", detail)
+    return Result("corpus.discrim", Result.SOFT,
+                  f"코퍼스 {share:.1f}%만 실사용 유래 — 후보가 원본과 동점날 수밖에 없다 (게이트 포화)",
+                  detail + " · 실패 케이스를 늘려야 수용이 가능해진다 (exercised=no 캡처, 실패 트레이스 채굴)")
+
+
+def run_checks(health: dict | None, rsi_status: dict | None, now_ms: int | None = None,
+               state_dir: str | None = None) -> list[Result]:
+    """All seven audit checks, in report order."""
     return [
         check_liveness(health, now_ms),
         check_honesty(health),
         check_confirm(health),
+        check_corpus(state_dir),
         check_slowloop(rsi_status, health),
         check_labels(rsi_status),
         check_dispatch(rsi_status),

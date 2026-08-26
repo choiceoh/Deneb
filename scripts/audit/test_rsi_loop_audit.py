@@ -10,10 +10,14 @@ live loop FAIL.
 
 from __future__ import annotations
 
+import json
+import os
+import tempfile
 import unittest
 
 from rsi_loop_audit import (
     Result,
+    check_corpus,
     check_confirm,
     check_dispatch,
     check_honesty,
@@ -73,6 +77,23 @@ def rsi_status_fixture(l2="LIVE", l3="DATA-GATED", l4="STARVED"):
         "turning": 2,
     }
 
+
+
+def healthy_corpus_dir() -> str:
+    """A state dir whose validation corpus can discriminate.
+
+    run_checks would otherwise read the REAL ~/.deneb ledger and make these
+    assertions depend on the machine — the same production-state leak the
+    genesis tracker guard closes.
+    """
+    d = tempfile.mkdtemp()
+    os.makedirs(os.path.join(d, "data"), exist_ok=True)
+    with open(os.path.join(d, "data", "skill_validation_cases.jsonl"), "w", encoding="utf-8") as fh:
+        for _ in range(80):
+            fh.write('{"source":"adversarial-coverage"}\n')
+        for _ in range(20):
+            fh.write('{"source":"auto-failed-skill-use"}\n')
+    return d
 
 class TestEnvelope(unittest.TestCase):
     def test_payload_key_is_unwrapped(self):
@@ -220,16 +241,52 @@ class TestOverall(unittest.TestCase):
             health_fixture(resolved_evolves_7d=5, confirm_rate=0.9, false_accept_rate=0.1),
             rsi_status_fixture(l2="LIVE", l3="LIVE", l4="LIVE"),
             NOW,
+            healthy_corpus_dir(),
         )
         worst, exit_code = overall_status(results)
         self.assertEqual((worst, exit_code), (Result.OK, 0))
 
     def test_when_dead_loop_exits_two(self):
         h = health_fixture(evolves_7d=0, genesis_7d=0, last_activity_ms=NOW - 100 * HOUR)
-        results = run_checks(h, rsi_status_fixture(), NOW)
+        results = run_checks(h, rsi_status_fixture(), NOW, healthy_corpus_dir())
         worst, exit_code = overall_status(results)
         self.assertEqual((worst, exit_code), (Result.HARD, 2))
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CorpusDiscriminationTest(unittest.TestCase):
+    """Why acceptance stalls — the link the other checks never showed.
+
+    Traced by hand 2026-08-26: 1,695 validation cases, 10 from real failures
+    (0.6%). A synthetic pool cannot separate a rewrite from its original, so
+    candidates tie and the strict-improvement margin is unreachable (30d: 118
+    proposals, 28 rejections, 0 accepted). The accept-rate alone reads
+    "unmeasured" and says nothing about the cause.
+    """
+
+    def _corpus(self, rows):
+        d = tempfile.mkdtemp()
+        os.makedirs(os.path.join(d, "data"), exist_ok=True)
+        with open(os.path.join(d, "data", "skill_validation_cases.jsonl"), "w", encoding="utf-8") as fh:
+            for r in rows:
+                fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+        return d
+
+    def test_synthetic_corpus_warns(self):
+        rows = [{"source": "adversarial-coverage"}] * 99 + [{"source": "auto-failed-skill-use"}]
+        res = check_corpus(self._corpus(rows))
+        self.assertEqual(res.status, Result.SOFT)
+        self.assertIn("동점", res.diagnosis)
+
+    def test_real_failure_corpus_passes(self):
+        rows = [{"source": "adversarial-coverage"}] * 80 + [{"source": "auto-failed-skill-use"}] * 20
+        res = check_corpus(self._corpus(rows))
+        self.assertEqual(res.status, Result.OK)
+
+    def test_missing_ledger_is_unmeasured_not_failure(self):
+        res = check_corpus(tempfile.mkdtemp())
+        self.assertEqual(res.status, Result.SOFT)
+        self.assertIn("미측정", res.diagnosis)
