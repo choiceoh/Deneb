@@ -395,9 +395,15 @@ func TestRunAgentWithFallback_OpenCircuitSkipIsDebugOnly(t *testing.T) {
 }
 
 // TestIsEmptyFinalResult pins the accidental-empty-completion classifier: an
-// end_turn with tool activity (Turns > 1) and zero text is a failure surface
-// (blank bubble), while intentional silence (NO_REPLY token), single-shot
-// answers, and timeout stalls (isStalledResult's territory) are left alone.
+// end_turn with zero text is a failure surface (blank bubble) whether or not
+// tools ran, while intentional silence (NO_REPLY token) and timeout stalls
+// (isStalledResult's territory) are left alone.
+//
+// The single-shot case used to be excluded here, and this test contracted the
+// exclusion. It was never justified — Turns > 1 exists to detect tool
+// activity, which is what forbids an auto-rerun, not to decide who deserves a
+// blank bubble — and it left an empty "end_turn" at Turns 1 uncovered by this
+// guard AND by isStalledResult, which only fires on "timeout".
 func TestIsEmptyFinalResult(t *testing.T) {
 	cases := []struct {
 		name string
@@ -409,7 +415,9 @@ func TestIsEmptyFinalResult(t *testing.T) {
 		{"whitespace only after tools", &agent.AgentResult{StopReason: "end_turn", Turns: 3, AllText: " \n\t"}, true},
 		{"NO_REPLY intentional silence", &agent.AgentResult{StopReason: "end_turn", Turns: 2, AllText: "NO_REPLY"}, false},
 		{"text produced", &agent.AgentResult{StopReason: "end_turn", Turns: 2, AllText: "답변"}, false},
-		{"single-shot empty left alone", &agent.AgentResult{StopReason: "end_turn", Turns: 1}, false},
+		{"single-shot empty is the same blank bubble", &agent.AgentResult{StopReason: "end_turn", Turns: 1}, true},
+		{"single-shot NO_REPLY stays intentional", &agent.AgentResult{StopReason: "end_turn", Turns: 1, AllText: "NO_REPLY"}, false},
+		{"no round ran at all", &agent.AgentResult{StopReason: "end_turn", Turns: 0}, false},
 		{"timeout is the stall path", &agent.AgentResult{StopReason: "timeout", Turns: 2}, false},
 	}
 	for _, tc := range cases {
@@ -618,5 +626,33 @@ func TestCompactionRecoverySkipsReplayAfterSideEffectingTool(t *testing.T) {
 	retry, stuck := tr.compactionRecovery(context.Background(), 0)
 	if retry || stuck != nil {
 		t.Fatalf("compactionRecovery = (retry=%v, stuck=%v), want (false, nil)", retry, stuck)
+	}
+}
+
+// The notice must not claim tools finished when none ran — that would put a
+// second false statement on top of the blank reply.
+func TestFallbackForEmptyFinalReplyMatchesWhetherToolsRan(t *testing.T) {
+	withTools := fallbackForEmptyFinalReply(true)
+	if !strings.Contains(withTools, "도구 실행은 끝났는데") {
+		t.Errorf("tool-round notice lost its wording: %q", withTools)
+	}
+	plain := fallbackForEmptyFinalReply(false)
+	if strings.Contains(plain, "도구") {
+		t.Errorf("single-shot notice claims tools ran: %q", plain)
+	}
+	if plain == "" || !strings.Contains(plain, "빈 응답") {
+		t.Errorf("single-shot notice does not name the failure: %q", plain)
+	}
+}
+
+func TestEmptyFinalResultRanToolsTracksRoundCount(t *testing.T) {
+	if emptyFinalResultRanTools(&agent.AgentResult{Turns: 1}) {
+		t.Error("a single round means no tool round ran")
+	}
+	if !emptyFinalResultRanTools(&agent.AgentResult{Turns: 2}) {
+		t.Error("a tool round always leaves Turns >= 2")
+	}
+	if emptyFinalResultRanTools(nil) {
+		t.Error("nil result must not claim tool activity")
 	}
 }

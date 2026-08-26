@@ -375,7 +375,7 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 	// (measured from the puppet seat). The silent-token case cannot land
 	// here: its raw AllText is non-empty, so isEmptyFinalResult is false.
 	if res.BestText() == "" && isEmptyFinalResult(result.AgentResult) {
-		msg := fallbackForEmptyFinalReply()
+		msg := fallbackForEmptyFinalReply(emptyFinalResultRanTools(result.AgentResult))
 		res.Text, res.AllText, res.DeliverableText = msg, msg, msg
 		res.synthesizedFallback = true
 	}
