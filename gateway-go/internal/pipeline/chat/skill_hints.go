@@ -55,8 +55,9 @@ func cachedResolvedSkills() []skills.PromptSkill {
 
 // buildSkillHints returns the tail-addition block for skills whose triggers
 // match the user message, the matched names, and the subset whose bodies were
-// loaded directly. Empty bodies and cap overflows keep the explicit read
-// fallback. All outputs are empty when nothing matches. Skipped
+// loaded directly. Cap overflows keep the explicit read fallback; a skill the
+// JIT loader produced NO body for is dropped entirely (skillHasLoadableBody).
+// All outputs are empty when nothing matches. Skipped
 // for system-internal runs (session "system:*" — skill-review forks carry
 // SKILL.md bodies as messages, which would self-trigger on their own trigger
 // lists) and for recall-suppressed runs (ephemeral probes share the same "no
@@ -83,6 +84,7 @@ func buildSkillHints(
 	// client pasted in with it (skill_hint_scope.go).
 	hints := skills.MatchSkillTriggers(skillTriggerScope(params.Message), resolved, maxSkillHints)
 	hints = skillsRunnableUnderPreset(hints, sessionToolPreset)
+	hints = skillsWithLoadableBody(hints)
 	if len(hints) == 0 {
 		return "", nil, nil
 	}
@@ -207,6 +209,32 @@ func skillBodiesInHistory(messages []llm.Message) map[string]bool {
 // success-rate gate.
 //
 // A preset with no allow-list (nil) restricts nothing and every skill stays.
+// skillsWithLoadableBody drops matches the JIT loader produced no body for.
+//
+// The fallback line tells the model `skills(action="read", name=…)`로 필요한
+// 절차만 로드하라 — it promises a procedure. jitSkillInstructionBody returns ""
+// in exactly the cases where that promise cannot hold: a SKILL.md that is
+// frontmatter and nothing else (the read returns the metadata the hint line
+// already carried), and a non-prompt skill, whose body the loader withholds ON
+// PURPOSE because a local/system skill is something to invoke, not a procedure
+// to follow. Pointing the model at either costs a round trip and returns no
+// instruction. Measured from the puppet seat 2026-08-26: a frontmatter-only
+// skill was advertised, read, and answered with its own frontmatter.
+//
+// Dropping them from the hint list also keeps them out of hintedSkills, so a
+// skill that could never have been followed is not recorded as one the model
+// ignored.
+func skillsWithLoadableBody(hints []skills.PromptSkill) []skills.PromptSkill {
+	loadable := hints[:0:0]
+	for _, skill := range hints {
+		if strings.TrimSpace(skill.Body) == "" {
+			continue
+		}
+		loadable = append(loadable, skill)
+	}
+	return loadable
+}
+
 func skillsRunnableUnderPreset(hints []skills.PromptSkill, sessionToolPreset string) []skills.PromptSkill {
 	allowed := toolwire.AllowedTools(sessionToolPreset)
 	if allowed == nil || len(hints) == 0 {

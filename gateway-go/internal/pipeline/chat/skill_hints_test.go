@@ -21,11 +21,13 @@ func hintSkills() []skills.PromptSkill {
 			Name:        "meeting-minutes",
 			Description: "회의·통화·논의 녹음의 전사본을 회의록으로 정리하고 업무 관점에서 분석한다. Use when: 회의 녹음.",
 			Triggers:    []string{"회의록", "녹취"},
+			Body:        "# 회의록\n\n## Completion\n- 결정사항\n- 액션아이템",
 		},
 		{
 			Name:        "fact-check",
 			Description: "응답에 담을 사실 주장을 도구로 독립 재확인한다. Use when: 팩트체크.",
 			Triggers:    []string{"팩트체크", "확실해?"},
+			Body:        "# 팩트체크\n\n## Completion\n- 근거 URL",
 		},
 		// No triggers — must never hint regardless of message content.
 		{Name: "github", Description: "GitHub operations via gh CLI."},
