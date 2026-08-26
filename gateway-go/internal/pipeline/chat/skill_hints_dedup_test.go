@@ -30,8 +30,15 @@ func TestAutoLoadedSkillIsNotSentTwiceInOneSession(t *testing.T) {
 
 	history := []llm.Message{{Role: "user", Content: llm.FlexibleFromValue(first)}}
 	second, names2, autoLoaded2 := buildSkillHints(params, "", cardSkill(), skillBodiesInHistory(history))
-	if second != "" || len(names2) != 0 || len(autoLoaded2) != 0 {
-		t.Fatalf("second turn must not repeat the body: %q %v %v", second, names2, autoLoaded2)
+	if second != "" {
+		t.Fatalf("second turn must not repeat the body: %q", second)
+	}
+	// The skill still counts as loaded for this turn: its instructions are in
+	// context, so the tools it declares (RequiresTools) must keep being
+	// activated — dropping the skill entirely made morning_letter vanish while
+	// the history still told the model to use it.
+	if len(names2) != 1 || len(autoLoaded2) != 1 {
+		t.Fatalf("skill must stay active for tool activation: %v %v", names2, autoLoaded2)
 	}
 }
 
