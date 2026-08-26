@@ -623,11 +623,63 @@ func TestSpillAskBoundsTheWholePhase(t *testing.T) {
 	}
 }
 
+// The chunk map stage is independent: running it serially made
+// read_spillover(question=) pay one local-model round trip per chunk even
+// though the slot below already bounds the whole invocation. Two chunk calls
+// must be able to start before either returns.
+func TestSpillAskRunsMapChunksConcurrently(t *testing.T) {
+	store, ctx, id := spillWithLines(t, 4000)
+
+	started := make(chan struct{}, spillAskMaxChunks)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseAll := func() { releaseOnce.Do(func() { close(release) }) }
+
+	answer := func(callCtx context.Context, _, user string, _ int) (string, error) {
+		if strings.Contains(user, "부분 답변") {
+			return stubAnswer(user, "합쳐진 답"), nil
+		}
+		started <- struct{}{}
+		select {
+		case <-release:
+			return stubAnswer(user, "구간 답"), nil
+		case <-callCtx.Done():
+			return "", callCtx.Err()
+		}
+	}
+	fn := ToolSpilloverRead(store, tooldeps.LocalAIFunc(answer))
+
+	done := make(chan error, 1)
+	var out string
+	go func() {
+		raw, _ := json.Marshal(map[string]any{"spill_id": id, "question": "무엇?"})
+		var err error
+		out, err = fn(ctx, raw)
+		done <- err
+	}()
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-started:
+		case <-time.After(500 * time.Millisecond):
+			releaseAll()
+			t.Fatalf("only %d chunk call(s) started before a return; map stage is still serial", i)
+		}
+	}
+	releaseAll()
+	if err := <-done; err != nil {
+		t.Fatalf("read_spillover: %v", err)
+	}
+	if !strings.Contains(out, "합쳐진 답") {
+		t.Errorf("delegated answer missing:\n%s", out)
+	}
+}
+
 // read_spillover is parallel-safe, so one assistant turn can emit several
-// question-bearing calls and the executor runs them concurrently. Each would
-// launch its own four map requests plus a reduce against the single local hub,
-// making the advertised four-chunk bound per-invocation rather than per-turn.
-func TestSpillAskSerializesConcurrentDelegatedReads(t *testing.T) {
+// question-bearing calls and the executor runs them concurrently. The slot
+// keeps the turn-level helper fan-out bounded to one invocation's chunks plus
+// reduce instead of multiplying by the number of read_spillover calls.
+func TestSpillAskBoundsConcurrentDelegatedReadsToOneInvocation(t *testing.T) {
 	store, ctx, id := spillWithLines(t, 4000)
 
 	var mu sync.Mutex
@@ -639,7 +691,7 @@ func TestSpillAskSerializesConcurrentDelegatedReads(t *testing.T) {
 			peak = inFlight
 		}
 		mu.Unlock()
-		time.Sleep(5 * time.Millisecond) // long enough to overlap if unbounded
+		time.Sleep(25 * time.Millisecond) // long enough to overlap if unbounded
 		mu.Lock()
 		inFlight--
 		mu.Unlock()
@@ -662,8 +714,11 @@ func TestSpillAskSerializesConcurrentDelegatedReads(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	if peak > 1 {
-		t.Errorf("%d delegated calls ran at once — the turn's fan-out is unbounded", peak)
+	if peak > spillAskMaxChunks {
+		t.Errorf("%d delegated calls ran at once — concurrent reads bypassed the invocation slot", peak)
+	}
+	if peak < 2 {
+		t.Errorf("map chunks did not overlap; peak helper concurrency was %d", peak)
 	}
 }
 

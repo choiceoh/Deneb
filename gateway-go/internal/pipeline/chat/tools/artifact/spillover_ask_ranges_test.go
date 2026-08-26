@@ -1,6 +1,8 @@
 package artifact
 
 import (
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -10,15 +12,13 @@ import (
 // let a fabricated [L<n>] inside that range pass as grounded.
 func TestSpillAskRejectsReducedCitationIntoNoEvidenceChunk(t *testing.T) {
 	store, ctx, id := spillWithLines(t, 4000) // several chunks
-	var firstChunk bool
 	rec := &askRecorder{reply: func(user string) (string, error) {
 		if strings.Contains(user, "부분 답변") {
 			// Cite a line inside the SECOND chunk — read, but it answered
 			// "no evidence", so nothing there was ever evidenced.
 			return "합쳐진 답 [L1000]", nil
 		}
-		if !firstChunk {
-			firstChunk = true
+		if firstLineFromPrompt(user) == 1 {
 			return stubAnswer(user, "구간 답"), nil // the only chunk with evidence
 		}
 		return "이 구간에는 근거 없음", nil
@@ -30,4 +30,15 @@ func TestSpillAskRejectsReducedCitationIntoNoEvidenceChunk(t *testing.T) {
 	if strings.Contains(out, "합쳐진 답") {
 		t.Errorf("reducer cited into a chunk that supplied no evidence:\n%s", out)
 	}
+}
+
+var spillAskRangePromptRe = regexp.MustCompile(`발췌 \((\d+)–`)
+
+func firstLineFromPrompt(user string) int {
+	m := spillAskRangePromptRe.FindStringSubmatch(user)
+	if len(m) != 2 {
+		return 0
+	}
+	n, _ := strconv.Atoi(m[1])
+	return n
 }
