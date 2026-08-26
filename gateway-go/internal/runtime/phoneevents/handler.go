@@ -578,12 +578,20 @@ func (s *Handler) processJudgment(ctx context.Context, eventType, source, text s
 	maxTok := phoneEventMaxTokens
 	sessionKey := phoneEventSessionPrefix + ":" + shortid.New("e")
 	result, err := s.chatHandler.RunSync(ctx, chatport.SyncRequest{
-		SessionKey:          sessionKey,
-		Message:             msg,
-		Model:               s.judgmentModel, // submain lane when configured, else main
-		MaxTokens:           &maxTok,
-		EphemeralUser:       true, // throwaway session — persist nothing
-		EphemeralAssistant:  true,
+		SessionKey:         sessionKey,
+		Message:            msg,
+		Model:              s.judgmentModel, // submain lane when configured, else main
+		MaxTokens:          &maxTok,
+		EphemeralUser:      true, // throwaway session — persist nothing
+		EphemeralAssistant: true,
+		// Ephemeral runs skip recall by default, which left this judge with no
+		// memory at all: it re-derived the same verdict from every notification
+		// forever. On 2026-06-23 the operator answered a 분실카드 card with "이미
+		// 분실신고함. 관련 코멘트 앞으로 하지마" and 16 more 삼성카드 분실 cards
+		// followed over the next month, each re-reasoning from scratch. Standing
+		// facts are exactly what tells this judge a matter is settled, and at
+		// ~7.5 judgments/day (225 in 30 days) the recall cost is negligible.
+		AllowRecall:         true,
 		AutoDeliveredOutput: true, // relayNative delivers; agent must not use message tool
 	})
 	if err != nil {

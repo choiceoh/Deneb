@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -249,5 +250,31 @@ func TestRecordClientCrash_BoundedTruncatesAtEntryMarker(t *testing.T) {
 	}
 	if len(data) == 0 || !strings.HasPrefix(string(data), "===== ") {
 		t.Fatalf("bounded log must start at an entry marker, got head: %.40q", string(data))
+	}
+}
+
+// The judgment run is ephemeral (it persists nothing), but ephemeral also means
+// "no recall" by default — and a judge with no memory re-derives the same
+// verdict from every notification forever. Live evidence: the operator answered
+// a 분실카드 card with "이미 분실신고함. 관련 코멘트 앞으로 하지마" on 2026-06-23
+// and 16 more 삼성카드 분실 cards followed over the next month.
+type recallProbeRunner struct{ got chatport.SyncRequest }
+
+func (r *recallProbeRunner) ChatReady() bool { return true }
+
+func (r *recallProbeRunner) RunSync(_ context.Context, req chatport.SyncRequest) (*chatport.SyncResult, error) {
+	r.got = req
+	return &chatport.SyncResult{BestText: "별 일 없음"}, nil
+}
+
+func TestPhoneEventJudgmentAsksForRecall(t *testing.T) {
+	probe := &recallProbeRunner{}
+	h := &Handler{chatHandler: probe, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	_, _ = h.processJudgment(context.Background(), "notification", "phone", "삼성카드 결제 거절")
+	if !probe.got.EphemeralUser {
+		t.Error("판정 세션은 영속되면 안 된다")
+	}
+	if !probe.got.AllowRecall {
+		t.Error("판정기가 현행 사실을 못 보면 같은 알림을 영원히 재판단한다")
 	}
 }
