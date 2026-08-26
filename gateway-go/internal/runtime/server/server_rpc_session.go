@@ -489,27 +489,7 @@ func (s *Server) relayCronAnalysis(
 }
 
 func (s *Server) wireSessionACP(transcriptStore chat.TranscriptStore) {
-	s.wireACPTranscriptLoader(transcriptStore)
 	s.wireACPResultInjection(transcriptStore)
-}
-
-func (s *Server) wireACPTranscriptLoader(transcriptStore chat.TranscriptStore) {
-	if s.acpDeps == nil || transcriptStore == nil {
-		return
-	}
-	s.acpDeps.TranscriptLoader = func(sessionKey string, limit int) ([]string, []string, error) {
-		messages, _, err := transcriptStore.Load(sessionKey, limit)
-		if err != nil {
-			return nil, nil, err
-		}
-		roles := make([]string, len(messages))
-		contents := make([]string, len(messages))
-		for i, message := range messages {
-			roles[i] = message.Role
-			contents[i] = message.TextContent()
-		}
-		return roles, contents, nil
-	}
 }
 
 func (s *Server) wireACPResultInjection(transcriptStore chat.TranscriptStore) {
