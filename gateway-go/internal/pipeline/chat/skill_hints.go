@@ -82,6 +82,7 @@ func buildSkillHints(
 	// Match only what the operator actually asked for — not the payload their
 	// client pasted in with it (skill_hint_scope.go).
 	hints := skills.MatchSkillTriggers(skillTriggerScope(params.Message), resolved, maxSkillHints)
+	hints = skillsRunnableUnderPreset(hints, sessionToolPreset)
 	if len(hints) == 0 {
 		return "", nil, nil
 	}
@@ -193,4 +194,36 @@ func skillBodiesInHistory(messages []llm.Message) map[string]bool {
 		}
 	}
 	return present
+}
+
+// skillsRunnableUnderPreset drops skills whose declared tools this run cannot
+// reach. The eligibility filter behind the ambient catalog is computed against
+// the WHOLE registry (run_exec_skills.go: availableToolNames returns
+// tools.SortedNames()), so a scoped run — a researcher sub-agent, boot, 대화모드
+// — still trigger-matches skills whose procedure needs exec/write it does not
+// have. Injecting one is worse than useless since #4783: a skill that is
+// delivered and then not followed is recorded as that SKILL's failure, so the
+// preset's restriction gets charged to the skill and feeds the evolver's
+// success-rate gate.
+//
+// A preset with no allow-list (nil) restricts nothing and every skill stays.
+func skillsRunnableUnderPreset(hints []skills.PromptSkill, sessionToolPreset string) []skills.PromptSkill {
+	allowed := toolwire.AllowedTools(sessionToolPreset)
+	if allowed == nil || len(hints) == 0 {
+		return hints
+	}
+	runnable := hints[:0:0]
+	for _, skill := range hints {
+		missing := false
+		for _, tool := range skill.RequiresTools {
+			if _, ok := allowed[tool]; !ok {
+				missing = true
+				break
+			}
+		}
+		if !missing {
+			runnable = append(runnable, skill)
+		}
+	}
+	return runnable
 }
