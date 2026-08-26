@@ -519,3 +519,49 @@ func shortDur(d time.Duration) string {
 	}
 	return fmt.Sprintf("%d분", int(d.Minutes()))
 }
+
+// --- write-path conflict notice ------------------------------------------
+
+// calEventSpan returns the event's effective [start, end), applying the same
+// one-hour default detectConflicts uses for an open-ended event.
+func calEventSpan(e tooldeps.CalendarEvent) (time.Time, time.Time) {
+	end := e.End
+	if end.IsZero() || !end.After(e.Start) {
+		end = e.Start.Add(time.Hour)
+	}
+	return e.Start, end
+}
+
+// calConflictNotice reports the events an added or rescheduled event now
+// collides with.
+//
+// list, brief and audit all treat a double-booking as something the operator
+// must see — list marks it ⚠️, audit exists to hunt it down. The write path
+// said nothing, so booking a meeting straight onto an occupied slot produced a
+// clean success line and the model had no signal to mention the clash. This
+// does not block the write: the operator asked for the event, and the local
+// store already holds it. It only makes the result honest about what happened.
+func calConflictNotice(ctx context.Context, d *tooldeps.CalendarDeps, ev tooldeps.CalendarEvent) string {
+	if d == nil || ev.AllDay || ev.Start.IsZero() {
+		return ""
+	}
+	start, end := calEventSpan(ev)
+	// Widen the query by an hour on each side so a neighbour that starts before
+	// this event and runs into it is still in the window.
+	events, _ := calMerged(ctx, d, start.Add(-time.Hour), end.Add(time.Hour))
+	var clashes []string
+	for _, other := range events {
+		if other.ID == ev.ID || other.AllDay || other.Start.IsZero() {
+			continue
+		}
+		otherStart, otherEnd := calEventSpan(other)
+		if otherStart.Before(end) && start.Before(otherEnd) {
+			clashes = append(clashes, fmt.Sprintf("%s (%s)", calTitle(other), calWhen(other)))
+		}
+	}
+	if len(clashes) == 0 {
+		return ""
+	}
+	return "\n⚠️ 이 시간에 이미 있는 일정: " + strings.Join(clashes, ", ") +
+		"\n사용자에게 겹침을 알리고 옮길지 물어라 (calendar action=\"free_slots\"로 빈 시간을 제안할 수 있다)."
+}
