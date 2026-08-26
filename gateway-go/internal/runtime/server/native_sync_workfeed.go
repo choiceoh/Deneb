@@ -2,6 +2,7 @@ package server
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -135,6 +136,9 @@ func (s *nativeWorkFeedStore) MarkRead(id string) (workfeed.Item, error) {
 	return item, nil
 }
 
+// minDreamCorrectionRunes is the shortest note that can carry a correction.
+const minDreamCorrectionRunes = 4
+
 // Correct attaches operator feedback to an item and mirrors the change.
 func (s *nativeWorkFeedStore) Correct(id, note string) (workfeed.Item, error) {
 	item, err := s.store.Correct(id, note)
@@ -146,18 +150,36 @@ func (s *nativeWorkFeedStore) Correct(id, note string) (workfeed.Item, error) {
 	return item, nil
 }
 
-// funnelDreamCorrection routes a correction made on a dream/digest card into
-// the dreamer's disconfirming-evidence queue (improvement-ideas 5.7) so the
-// next critique-eligible cycle re-examines the corrected fact instead of the
-// correction dying in the card body. Best-effort by design.
+// funnelDreamCorrection routes an operator correction into the dreamer's
+// disconfirming-evidence queue (improvement-ideas 5.7) so the next
+// critique-eligible cycle re-examines what it got wrong instead of the
+// correction dying in the card body.
+//
+// It used to accept dream cards ONLY, and the operator corrects almost
+// everything else: of 30 corrections on the live feed (2026-06~08) — 박암민→
+// 박환민, 남해연구소→남양연구소, 한미 조선→한미 전선, 박승수→박상수 — exactly
+// ZERO came from a dream card, so the queue held one record in its lifetime and
+// the 5.7 loop was effectively empty. The facts themselves did get fixed in the
+// session that received them; what was lost is the dreamer ever learning which
+// of its own outputs were wrong.
+//
+// Agent-internal log cards are still excluded: a correction typed on a ladder
+// or model-tuner card ("잠금해제해") is an instruction, not a fact the wiki holds.
+// Best-effort by design.
 func (s *nativeWorkFeedStore) funnelDreamCorrection(item workfeed.Item, note string) {
-	if s.wikiDir == "" || strings.TrimSpace(note) == "" {
+	note = strings.TrimSpace(note)
+	if s.wikiDir == "" || note == "" {
 		return
 	}
-	if item.Source != workfeed.SourceDream && item.Source != dreamDigestSource {
+	// Bare acknowledgements ("ㅇㅇ", "승인") carry no disconfirming content and
+	// would only dilute the critique prompt.
+	if utf8.RuneCountInString(note) < minDreamCorrectionRunes {
 		return
 	}
-	if err := wiki.RecordDreamCorrection(s.wikiDir, "workfeed-correct", item.RefID, note); err != nil {
+	if workfeed.IsLogSource(item.Source) {
+		return
+	}
+	if err := wiki.RecordDreamCorrection(s.wikiDir, "workfeed-correct:"+item.Source, item.RefID, note); err != nil {
 		if s.log != nil {
 			s.log.Error("native sync: dream correction queue append failed", "error", err)
 		}
