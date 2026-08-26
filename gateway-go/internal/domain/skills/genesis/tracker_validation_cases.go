@@ -218,7 +218,70 @@ func (t *Tracker) recentValidationCases(skillName string, limit int, keep func(S
 		seen[key] = struct{}{}
 		out = append(out, rec)
 	}
-	return out, nil
+	return reserveRealUseCase(entries, filter, keep, seen, out, limit), nil
+}
+
+// isRealUseValidationCase reports whether a case was minted from an actual
+// skill invocation rather than synthesized by a coverage/curriculum lane.
+// Only these carry evidence of how the skill behaves against live input.
+func isRealUseValidationCase(rec SkillValidationCaseRecord) bool {
+	switch strings.ToLower(strings.TrimSpace(rec.Source)) {
+	case "auto-failed-skill-use", "auto-successful-skill-use":
+		return true
+	default:
+		return false
+	}
+}
+
+// reserveRealUseCase keeps one real-use case inside a recency window that
+// synthetic lanes would otherwise flush.
+//
+// The window is small (5) and strictly newest-first, while adversarial and
+// curriculum lanes mint cases continuously — so a real-use case ages out within
+// days of being recorded. Measured 2026-08-26: of the 7 skills holding any
+// real-use case, 3 had it already evicted, and the corpus was 1.9% real-use
+// overall. A candidate scored only against synthesized cases ties its original,
+// which is exactly the "did not improve (5.9 vs 5.9)" rejection that stalled
+// acceptance. Trading the oldest synthetic slot for the newest real one costs
+// nothing when no real-use case exists.
+func reserveRealUseCase(
+	entries []SkillValidationCaseRecord,
+	filter string,
+	keep func(SkillValidationCaseRecord) bool,
+	seen map[string]struct{},
+	out []SkillValidationCaseRecord,
+	limit int,
+) []SkillValidationCaseRecord {
+	if limit <= 1 || len(out) == 0 {
+		return out
+	}
+	for _, rec := range out {
+		if isRealUseValidationCase(rec) {
+			return out
+		}
+	}
+	for i := len(entries) - 1; i >= 0; i-- {
+		rec := entries[i]
+		if filter != "" && rec.SkillName != filter {
+			continue
+		}
+		if !isRealUseValidationCase(rec) {
+			continue
+		}
+		if keep != nil && !keep(rec) {
+			continue
+		}
+		if _, ok := seen[validationCaseDedupeKey(rec)]; ok {
+			return out
+		}
+		if len(out) < limit {
+			return append(out, rec)
+		}
+		// Displace the oldest synthetic case, keeping recency order intact.
+		out[len(out)-1] = rec
+		return out
+	}
+	return out
 }
 
 // ValidationCaseSummary reports raw vs unique case counts and weak automatic
