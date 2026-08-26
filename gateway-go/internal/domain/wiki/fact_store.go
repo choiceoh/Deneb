@@ -2,6 +2,7 @@ package wiki
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -150,16 +151,21 @@ func (s *Store) TombstoneFact(input FactTombstoneInput) (FactWriteResult, error)
 
 func (s *Store) syncFactDerivedLocked() string {
 	var projectionErrors []string
-	if err := s.saveFactSnapshotLocked(); err != nil {
-		projectionErrors = append(projectionErrors, "snapshot: "+err.Error())
+	aheadOnly := true
+	record := func(prefix string, err error) {
+		if err == nil {
+			return
+		}
+		if !errors.Is(err, ErrFactProjectionAhead) {
+			aheadOnly = false
+		}
+		projectionErrors = append(projectionErrors, prefix+err.Error())
 	}
-	if err := s.syncFactPageLocked(); err != nil {
-		projectionErrors = append(projectionErrors, "wiki: "+err.Error())
-	}
-	if err := s.syncFactWorkspaceLocked(); err != nil {
-		projectionErrors = append(projectionErrors, "workspace: "+err.Error())
-	}
+	record("snapshot: ", s.saveFactSnapshotLocked())
+	record("wiki: ", s.syncFactPageLocked())
+	record("workspace: ", s.syncFactWorkspaceLocked())
 	s.factProjectionError = strings.Join(projectionErrors, "; ")
+	s.factProjectionAheadOnly = len(projectionErrors) > 0 && aheadOnly
 	return s.factProjectionError
 }
 

@@ -82,6 +82,15 @@ func (s *Store) SetFactProjectionDir(dir string) error {
 	previousDir := s.factProjectionDir
 	s.factProjectionDir = abs
 	if projectionError := s.syncFactDerivedLocked(); projectionError != "" {
+		// An ahead-of-store projection keeps the directory bound on purpose:
+		// the write resumes on its own as soon as the journal passes the
+		// on-disk revision. Rolling the directory back would make that
+		// self-healing impossible.
+		if s.factProjectionAheadOnly {
+			// The message already carries the sentinel's text; wrap without
+			// repeating it so the operator log reads once, not twice.
+			return factProjectionAheadError{msg: "wiki: sync fact projections: " + projectionError}
+		}
 		s.factProjectionDir = previousDir
 		return fmt.Errorf("wiki: sync fact projections: %s", projectionError)
 	}
@@ -194,6 +203,26 @@ func (s *Store) syncFactPageLocked() error {
 	return s.writePageLocked(factProfilePagePath, page)
 }
 
+// ErrFactProjectionAhead marks the one projection failure that costs nothing:
+// the on-disk generated view already declares a HIGHER revision than this
+// store holds, so the never-go-backwards guard skips the write. The journal
+// stays authoritative, the richer on-disk view stays readable, and the block
+// lifts by itself once this store's revision passes the on-disk one.
+//
+// Callers must not treat it as a broken fact plane. Startup used to: the same
+// guard string reached the cutover as a plain error, cost three fail-closed
+// restarts, and then disabled the whole wiki — while the identical condition
+// on the live mutation path was only logged (fact_store.go's ProjectionError).
+var ErrFactProjectionAhead = errors.New("fact projection is ahead of this store")
+
+// factProjectionAheadError carries the full guard message while still
+// matching ErrFactProjectionAhead under errors.Is.
+type factProjectionAheadError struct{ msg string }
+
+func (e factProjectionAheadError) Error() string { return e.msg }
+
+func (e factProjectionAheadError) Unwrap() error { return ErrFactProjectionAhead }
+
 func (s *Store) syncFactWorkspaceLocked() error {
 	if s.factProjectionDir == "" {
 		return nil
@@ -224,8 +253,8 @@ func (s *Store) syncFactWorkspaceLocked() error {
 		// or a fresh state dir pointed at a shared workspace, can do this.
 		if existing := generatedProjectionRevision(expected.raw); existing > s.factState.Revision {
 			return fmt.Errorf(
-				"refusing to overwrite %s: on-disk projection is revision %d, this store is at %d",
-				targets[i].name, existing, s.factState.Revision,
+				"%w: refusing to overwrite %s: on-disk projection is revision %d, this store is at %d",
+				ErrFactProjectionAhead, targets[i].name, existing, s.factState.Revision,
 			)
 		}
 		targets[i].expected = expected

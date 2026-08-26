@@ -84,6 +84,12 @@ type Store struct {
 	// The append-only journal remains authoritative and readable while this is
 	// non-empty. Guarded by factMu.
 	factProjectionError string
+	// factProjectionAheadOnly records that the ONLY thing blocking the derived
+	// views is the never-go-backwards guard: the on-disk projection already
+	// declares a higher revision than this store holds. Nothing is lost by not
+	// writing, and the block clears by itself once the journal passes that
+	// revision. Guarded by factMu.
+	factProjectionAheadOnly bool
 	// factProjectionRename is a test seam for the two-file workspace commit.
 	// Production leaves it nil and uses os.Rename.
 	factProjectionRename func(string, string) error
