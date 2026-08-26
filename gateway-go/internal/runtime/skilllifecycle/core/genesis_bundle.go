@@ -146,6 +146,14 @@ func BuildCore(in CoreBuildInput) *GenesisBundle {
 			TemplateKwarg: in.ThinkingKwargs[in.MainModel],
 		})
 	}
+	// The same treatment for GENERATION, from the same kwarg map. The judge got
+	// it when dual-mode models were burning their output budget on reasoning and
+	// returning truncated JSON; the generation calls were left out, and returned
+	// prose instead of JSON on every backlog-drain attempt until the anomaly
+	// ledger surfaced it. Resolved per call because a session can pin its model.
+	svc.SetGenerationThinking(func(model string) *llm.ThinkingConfig {
+		return &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: in.ThinkingKwargs[model]}
+	})
 
 	in.Logger.Info("genesis: core bundle built",
 		"model", in.LWModel, "evolverRole", evolverRole, "evolverModel", evolverModel,
