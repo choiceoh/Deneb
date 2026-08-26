@@ -139,8 +139,18 @@ internal fun WaitingResponseRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = DenebType.rowSubtitle,
                 maxLines = 1,
-                // Stay on the first line when the status summary wraps to two.
-                modifier = Modifier.align(Alignment.Top),
+                // Same rule as the star in PulsingStatusIndicator: top-align ONLY when
+                // the status can wrap to two lines, so the suffix stays on the first
+                // line. Top-aligning it unconditionally lifted it ABOVE the status
+                // baseline on the common one-line row — the star makes the indicator
+                // row taller than its own text, so that text centers inside it while a
+                // top-aligned sibling does not. Inheriting the Row's CenterVertically
+                // puts both 14sp rowSubtitle runs on the same line.
+                modifier = if (effectiveStatusOnly && summary != null) {
+                    Modifier.align(Alignment.Top)
+                } else {
+                    Modifier
+                },
             )
         }
     }
