@@ -285,7 +285,15 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 		logger = slog.Default()
 	}
 
-	dir := filepath.Join(config.ResolveStateDir(), "data")
+	stateDir := config.ResolveStateDir()
+	// The sentence above is a rule, so enforce it: a test binary that resolved
+	// the live state dir fails here instead of appending to the ledgers the
+	// gateway is using. Test rows once tripped the self-brake's
+	// adoption-monotony detector and cost three manual freeze clearings.
+	if err := config.GuardProductionState(stateDir, "genesis-tracker"); err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(stateDir, "data")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("genesis-tracker: mkdir: %w", err)
 	}
