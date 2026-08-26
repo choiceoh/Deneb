@@ -7,11 +7,15 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-// spilloverRefPattern matches the read_spillover pointer that
-// ai/agent.TruncateHeadTail embeds when a large tool result is spilled
-// to disk: `... [N lines truncated — use read_spillover("sp_abc123") for full
-// content] ...`. The id is `sp_%x` (hex) — see agent.SpilloverStore.Store.
-var spilloverRefPattern = regexp.MustCompile(`read_spillover\("(sp_[0-9a-fA-F]+)"\)`)
+// spilloverRefPatterns match read_spillover pointers embedded in tool results:
+//   - truncation: read_spillover("sp_abc123")  (ai/agent.TruncateHeadTail)
+//   - compression: read_spillover(spill_id="sp_abc123")  (chat/localai_hooks)
+//
+// The id is sp_%x (hex) — see agent.SpilloverStore.Store.
+var (
+	spilloverRefTruncPattern    = regexp.MustCompile(`read_spillover\("(sp_[0-9a-fA-F]+)"\)`)
+	spilloverRefCompressPattern = regexp.MustCompile(`read_spillover\(spill_id="(sp_[0-9a-fA-F]+)"\)`)
+)
 
 // spilloverRef returns the sp_ id in a tool result whose full output was
 // spilled to disk, or "" if the result carries no such pointer. The cheap
@@ -22,9 +26,10 @@ var spilloverRefPattern = regexp.MustCompile(`read_spillover\("(sp_[0-9a-fA-F]+)
 // through. protectedToolResultIDs keys protection by tool_use id; a spilled
 // result is identified by this content marker instead.
 func spilloverRef(content string) string {
-	m := spilloverRefPattern.FindStringSubmatch(content)
-	if len(m) == 2 {
-		return m[1]
+	for _, pat := range []*regexp.Regexp{spilloverRefTruncPattern, spilloverRefCompressPattern} {
+		if m := pat.FindStringSubmatch(content); len(m) == 2 {
+			return m[1]
+		}
 	}
 	return ""
 }
