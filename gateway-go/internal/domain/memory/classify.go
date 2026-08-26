@@ -292,8 +292,15 @@ func embeddedSelfFactForget(message string) (key, kind string, ok bool) {
 }
 
 func directRememberPayload(message string) (string, bool) {
-	for _, lead := range []*regexp.Regexp{directRememberLeadRe, directEnglishRememberRe} {
-		match := lead.FindStringIndex(message)
+	leads := []struct {
+		re      *regexp.Regexp
+		english bool
+	}{
+		{directRememberLeadRe, false},
+		{directEnglishRememberRe, true},
+	}
+	for _, lead := range leads {
+		match := lead.re.FindStringIndex(message)
 		if match == nil || match[0] != 0 {
 			continue
 		}
@@ -301,9 +308,34 @@ func directRememberPayload(message string) (string, bool) {
 		body = strings.TrimLeftFunc(body, func(r rune) bool {
 			return unicode.IsSpace(r) || strings.ContainsRune(",，:：.!?。！？-", r)
 		})
+		if lead.english {
+			body = trimEnglishRememberConjunction(body)
+		}
 		return trimMatchingProfileQuotes(body), true
 	}
 	return "", false
+}
+
+// trimEnglishRememberConjunction drops the "that" in "remember that I am
+// vegan".
+//
+// Every per-axis englishAssert pattern is anchored at ^, so the conjunction
+// English speakers naturally reach for makes the assertion unmatchable — while
+// "remember: I am vegan" binds, because the extractor already trims the
+// punctuation lead. Measured 2026-08-26: trimming it recovers diet.vegan,
+// health.allergy, communication.response_length and goals.long_term, all four
+// of which failed only on that word.
+//
+// A demonstrative "that" is harmless: "remember that meeting was tuesday"
+// becomes "meeting was tuesday", which matches no axis and stays diary-only,
+// exactly as before. The trailing space keeps "thatcher" intact.
+func trimEnglishRememberConjunction(body string) string {
+	const conjunction = "that "
+	rest := strings.TrimSpace(body)
+	if len(rest) >= len(conjunction) && strings.EqualFold(rest[:len(conjunction)], conjunction) {
+		return strings.TrimSpace(rest[len(conjunction):])
+	}
+	return rest
 }
 
 func trimMatchingProfileQuotes(value string) string {
