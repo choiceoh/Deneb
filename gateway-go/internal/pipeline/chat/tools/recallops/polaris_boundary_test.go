@@ -107,3 +107,51 @@ func TestBoundaryToolPolarisRejectsMalformedAndUnknownActions(t *testing.T) {
 		t.Fatalf("SEARCH alias did not reach search: %q", got)
 	}
 }
+
+// Expand shows the conversation AROUND a search hit, where a tool call is
+// content — "what happened here" is the question. Rendering it through
+// TextContent ("what was said") produced an empty [assistant]: row that cost a
+// line and told the model nothing; before the raw-JSON hatch was narrowed it
+// pasted the whole block array, signature included.
+func TestSerializeExpandRendersToolCallsWithoutSignatures(t *testing.T) {
+	msgs := []toolport.ChatMessage{
+		toolport.NewTextChatMessage("user", "위키 확인해줘", 1),
+		{Role: "assistant", Content: json.RawMessage(
+			`[{"type":"thinking","thinking":"위키를 보자","signature":"ZZZZSIGNATUREZZZZ"},` +
+				`{"type":"tool_use","name":"wiki","input":{"action":"search"}}]`,
+		)},
+		toolport.NewTextChatMessage("assistant", "3건 찾았어요", 3),
+	}
+
+	got, omitted := serializeExpandMessages(msgs, 10_000)
+	if omitted != 0 {
+		t.Fatalf("omitted = %d, want 0", omitted)
+	}
+	if !strings.Contains(got, "[도구 wiki]") {
+		t.Errorf("tool call missing from the expanded conversation:\n%s", got)
+	}
+	if strings.Contains(got, "ZZZZSIGNATURE") {
+		t.Errorf("thinking signature leaked into the expansion:\n%s", got)
+	}
+	if strings.Contains(got, "[assistant]: \n") {
+		t.Errorf("an empty role row was rendered:\n%s", got)
+	}
+	if !strings.Contains(got, "3건 찾았어요") {
+		t.Errorf("plain assistant text lost:\n%s", got)
+	}
+}
+
+// A message that yields nothing at all is skipped, not rendered as a blank row.
+func TestSerializeExpandSkipsEmptyMessages(t *testing.T) {
+	msgs := []toolport.ChatMessage{
+		{Role: "assistant"},
+		toolport.NewTextChatMessage("assistant", "본문", 2),
+	}
+	got, _ := serializeExpandMessages(msgs, 10_000)
+	if strings.Contains(got, "[assistant]: \n") {
+		t.Errorf("empty message rendered as a blank row:\n%s", got)
+	}
+	if !strings.Contains(got, "본문") {
+		t.Errorf("real message lost:\n%s", got)
+	}
+}

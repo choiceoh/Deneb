@@ -256,7 +256,16 @@ func serializeExpandMessages(msgs []toolport.ChatMessage, maxChars int) (string,
 	var sb strings.Builder
 	totalChars := 0
 	for i, m := range msgs {
-		text := m.TextContent()
+		// Expand shows the conversation AROUND a hit, where a tool call is
+		// content: "what happened here" is the question. TextContent answers
+		// "what was said", so a tool-only turn renders as an empty [assistant]:
+		// row that costs a line and tells the model nothing. SearchableText is
+		// the same rendering polaris's own index uses — tool name plus capped
+		// input, never the thinking signature.
+		text := m.SearchableText()
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
 		entry := fmt.Sprintf("[%s]: %s\n\n", m.Role, text)
 		if totalChars+len(entry) > maxChars {
 			omitted := len(msgs) - i
