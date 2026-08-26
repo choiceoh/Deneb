@@ -134,8 +134,10 @@ func TestBuildSkillHintsReturnsEmptyWhenGated(t *testing.T) {
 		t.Errorf("nil catalog: expected no hint, got:\n%s", out)
 	}
 	// The self-review preset DOES allow the skills tool — the preset gate must
-	// key on the allow-list, not blanket-suppress preset runs.
-	if out, _, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서 검토"}, "self-review", hintSkills(), nil); out == "" {
+	// key on the allow-list, not blanket-suppress preset runs. The probe uses a
+	// skill that declares no tools: contract-review needs graphify, which this
+	// preset cannot reach, and is dropped by the per-skill runnability filter.
+	if out, _, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "회의록 정리"}, "self-review", hintSkills(), nil); out == "" {
 		t.Error("self-review preset allows the skills tool; hint should fire")
 	}
 }
