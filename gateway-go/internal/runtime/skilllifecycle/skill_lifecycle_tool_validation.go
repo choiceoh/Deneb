@@ -84,6 +84,17 @@ func (b *skillLifecycleBackend) ReviewSelfCorrectionCandidate(_ context.Context,
 		Reviewer:   req.Reviewer,
 		ReviewNote: req.ReviewNote,
 	})
+	if errors.Is(err, genesis.ErrSelfCorrectionTransition) {
+		// Already settled by another path. This is an ANSWER, not a tool
+		// failure: the review contract tells the model to stop the turn on an
+		// error, so returning one here let a single stale id — carried in from
+		// memory or a spillover rather than the current status output — cost
+		// every other candidate in that turn its review. Say what happened and
+		// let the turn continue.
+		return chattools.SkillSelfCorrectionReviewResult{
+			Reason: "이 후보는 이미 종결됐습니다 (" + err.Error() + "). 다른 경로에서 처리된 건이니 건너뛰고 나머지를 계속 검토하세요 — status 출력에 실제로 들어 있는 후보만 대상입니다.",
+		}, nil
+	}
 	if err != nil {
 		return chattools.SkillSelfCorrectionReviewResult{}, err
 	}

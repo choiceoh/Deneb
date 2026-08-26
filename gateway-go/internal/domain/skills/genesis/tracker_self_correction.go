@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"sort"
@@ -169,6 +170,15 @@ func (t *Tracker) RecordSelfCorrectionCandidate(record SelfCorrectionCandidateRe
 }
 
 // RecordSelfCorrectionReview appends a status update for a deferred candidate.
+// ErrSelfCorrectionTransition marks a review whose target has already left the
+// reviewable states. It is a sentinel so callers can answer "this one is
+// already settled" instead of surfacing a tool ERROR — the heartbeat review
+// contract tells the model to abort the whole turn on an error, so one stale id
+// carried in from memory used to cost every other candidate its review.
+// Measured 2026-08-26: 18 such attempts over 7 days across 7 ids, one retried
+// five times, all of them <terminal> -> accepted.
+var ErrSelfCorrectionTransition = errors.New("genesis-tracker: invalid self-correction status transition")
+
 func (t *Tracker) RecordSelfCorrectionReview(record SelfCorrectionCandidateRecord) (SelfCorrectionCandidateRecord, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -191,13 +201,16 @@ func (t *Tracker) RecordSelfCorrectionReview(record SelfCorrectionCandidateRecor
 		return record, fmt.Errorf("genesis-tracker: load self-correction candidates: %w", err)
 	}
 	if !found {
+		// A hard error on purpose: an unknown id means the caller is reviewing
+		// something that never existed, which is a different problem from
+		// reviewing something already settled.
 		return record, fmt.Errorf("genesis-tracker: self-correction candidate not found: %s", record.ID)
 	}
 	if current.Status == record.Status {
 		return record, nil // idempotent retry: do not inflate the append-only funnel
 	}
 	if !validSelfCorrectionStatusTransition(current.Status, record.Status) {
-		return record, fmt.Errorf("genesis-tracker: invalid self-correction status transition %s -> %s", current.Status, record.Status)
+		return record, fmt.Errorf("%w: %s -> %s", ErrSelfCorrectionTransition, current.Status, record.Status)
 	}
 	if err := jsonlstore.Append(t.selfCorrectionPath, record); err != nil {
 		return record, fmt.Errorf("genesis-tracker: append self-correction review: %w", err)
