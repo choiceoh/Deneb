@@ -62,7 +62,7 @@ func TestCacheBreakpointBudget_AnthropicWithSemiStatic(t *testing.T) {
 	// Static + Semi-static + Dynamic (no marker) + msg×2 = 4 breakpoints.
 	sysBlocks := prompt.BuildSystemPromptBlocks(prompt.SystemPromptParams{
 		WorkspaceDir: "/tmp",
-		ToolDefs:     []prompt.ToolDef{{Name: "read"}},
+		ToolDefs:     []prompt.ToolDef{{Name: "read"}, {Name: "skills"}},
 		SkillsPrompt: `<available_skills><skill><name>x</name></skill></available_skills>`,
 	})
 	msgs := []llm.Message{
@@ -89,7 +89,7 @@ func TestCacheBreakpointBudget_AnthropicWithEmptySkillsPrompt(t *testing.T) {
 	// the 4-breakpoint budget.
 	sysBlocks := prompt.BuildSystemPromptBlocks(prompt.SystemPromptParams{
 		WorkspaceDir: "/tmp",
-		ToolDefs:     []prompt.ToolDef{{Name: "read"}},
+		ToolDefs:     []prompt.ToolDef{{Name: "read"}, {Name: "skills"}},
 	})
 	msgs := []llm.Message{
 		llm.NewTextMessage("user", "u1"),
@@ -112,7 +112,7 @@ func TestCacheBreakpointBudgetWithSingleMessage(t *testing.T) {
 	// when only one exists; the budget invariant still holds.
 	sysBlocks := prompt.BuildSystemPromptBlocks(prompt.SystemPromptParams{
 		WorkspaceDir: "/tmp",
-		ToolDefs:     []prompt.ToolDef{{Name: "read"}},
+		ToolDefs:     []prompt.ToolDef{{Name: "read"}, {Name: "skills"}},
 		SkillsPrompt: `<available_skills><skill><name>x</name></skill></available_skills>`,
 	})
 	msgs := []llm.Message{llm.NewTextMessage("user", "alone")}
@@ -134,7 +134,7 @@ func TestCacheBreakpointBudgetOpenAIWithoutTrailingMarkers(t *testing.T) {
 	// protocol — non-Anthropic providers ignore them on the wire.
 	sysBlocks := prompt.BuildSystemPromptBlocks(prompt.SystemPromptParams{
 		WorkspaceDir: "/tmp",
-		ToolDefs:     []prompt.ToolDef{{Name: "read"}},
+		ToolDefs:     []prompt.ToolDef{{Name: "read"}, {Name: "skills"}},
 	})
 	msgs := []llm.Message{
 		llm.NewTextMessage("user", "u1"),
@@ -157,7 +157,7 @@ func TestCacheBreakpointBudgetWithMultiBlockMessages(t *testing.T) {
 	// LAST block of the LAST 2 non-system messages — total still <= 4.
 	sysBlocks := prompt.BuildSystemPromptBlocks(prompt.SystemPromptParams{
 		WorkspaceDir: "/tmp",
-		ToolDefs:     []prompt.ToolDef{{Name: "read"}},
+		ToolDefs:     []prompt.ToolDef{{Name: "read"}, {Name: "skills"}},
 		SkillsPrompt: `<available_skills><skill><name>x</name></skill></available_skills>`,
 	})
 	msgs := []llm.Message{
@@ -189,7 +189,7 @@ func TestCacheBreakpointBudget_AnthropicWithTopicKnowledge(t *testing.T) {
 	// the marker count is unchanged: Static + Semi + msg×2 = 4.
 	sysBlocks := prompt.BuildSystemPromptBlocks(prompt.SystemPromptParams{
 		WorkspaceDir:   "/tmp",
-		ToolDefs:       []prompt.ToolDef{{Name: "read"}},
+		ToolDefs:       []prompt.ToolDef{{Name: "read"}, {Name: "skills"}},
 		SkillsPrompt:   `<available_skills><skill><name>x</name></skill></available_skills>`,
 		TopicKnowledge: "코딩 토픽: Go 1.24, vLLM on DGX Spark.",
 		TopicCacheKey:  "coding:hashA",
@@ -217,5 +217,38 @@ func TestCacheBreakpointBudget_AnthropicWithTopicKnowledge(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("topic knowledge not present in system blocks")
+	}
+}
+
+// A run whose preset cannot reach the skills tool ships no semi-static block,
+// so it spends one FEWER marker (Static + msg×2 = 3). Under budget is always
+// safe, but pin it: the doctrine's table lists the semi-static slot as normally
+// occupied, and a reader who sees 3 must be able to tell intent from a leak.
+// No cache value is lost either — a run without the tool has no skills prompt
+// to keep warm.
+func TestCacheBreakpointBudgetWithoutSkillsToolSpendsOneFewerMarker(t *testing.T) {
+	sysBlocks := prompt.BuildSystemPromptBlocks(prompt.SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs:     []prompt.ToolDef{{Name: "read"}, {Name: "wiki"}},
+		SkillsPrompt: `<available_skills><skill><name>x</name></skill></available_skills>`,
+	})
+	for _, b := range sysBlocks {
+		if strings.Contains(b.Text, "## Skills") {
+			t.Fatalf("skills block shipped to a run that cannot call the tool:\n%s", b.Text)
+		}
+	}
+	msgs := []llm.Message{
+		llm.NewTextMessage("user", "u1"),
+		llm.NewTextMessage("assistant", "a1"),
+		llm.NewTextMessage("user", "u2"),
+	}
+	msgs = applyTrailingHookOrIdentity(llm.APIModeAnthropic, msgs)
+
+	got := countCacheBreakpoints(sysBlocks, msgs, nil)
+	if got > anthropicMaxBreakpoints {
+		t.Fatalf("breakpoint budget exceeded: got %d, max %d", got, anthropicMaxBreakpoints)
+	}
+	if got != 3 {
+		t.Errorf("expected 3 breakpoints (Static + msg×2) without the skills tool, got %d", got)
 	}
 }

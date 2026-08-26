@@ -96,7 +96,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		Cache.SetStaticPrompt(cacheKey, staticText)
 	}
 
-	semiStaticText = buildSemiStaticPrompt(params)
+	semiStaticText = buildSemiStaticPrompt(params, toolSet)
 
 	var d strings.Builder
 	writeDynamicKnowledge(&d, params, toolSet)
@@ -340,12 +340,27 @@ func buildStaticPrompt(params SystemPromptParams, eagerSet, toolSet toolNameSet)
 
 // buildSemiStaticPrompt renders the semi-static block: the skills prompt,
 // which changes only when skills are added or removed.
-func buildSemiStaticPrompt(params SystemPromptParams) string {
+func buildSemiStaticPrompt(params SystemPromptParams, toolSet toolNameSet) string {
 	// --- Semi-static block (skills — changes only when skills are added/removed) ---
 	var ss strings.Builder
-	if params.DisableSkills {
+	_, hasSkillsTool := toolSet["skills"]
+	switch {
+	case params.DisableSkills:
 		// Deneb-Briefcase has no ambient or discoverable host skills.
-	} else if params.SkillsPrompt != "" {
+	case !hasSkillsTool:
+		// Every line of this block routes through skills(action=read/list) or
+		// fetch_tools(query="skills"), and a restricted preset gates BOTH — the
+		// allow-list decides what fetch_tools may activate, so a run without the
+		// skills tool cannot reach a single instruction here. Sub-agent presets
+		// (researcher/implementer/verifier) and the boot/conversation presets are
+		// all in that position, so every sub-agent turn carried ~1.7K of
+		// procedure it had no way to follow (measured from the puppet seat
+		// 2026-08-26: a researcher child with 10 tools).
+		//
+		// This mirrors what the rest of this file already does — polaris, wiki,
+		// web, calendar, sessions_spawn, workfeed and bridge sections all gate on
+		// toolSet. Skills was the one that gated only on the briefcase flag.
+	case params.SkillsPrompt != "":
 		ss.WriteString("## Skills (specialist procedures)\n\n")
 		ss.WriteString("<available_skills> is a names-only discovery list; descriptions are not injected every turn.\n")
 		ss.WriteString("- If the user message ends with `[관련 스킬]`, read and follow the most specific entry with `skills(action=\"read\", name=...)`. At most two hints are provided.\n")
@@ -360,7 +375,7 @@ func buildSemiStaticPrompt(params SystemPromptParams) string {
 		ss.WriteString("### Propus (skill and self-improvement loop)\n")
 		ss.WriteString("Read and follow `evolution-proposal` SKILL.md only for a self-improvement or skill creation/evolution request, or a reusable work pattern or correction. Reading it also activates the required lifecycle tools.\n")
 		ss.WriteString("Do not run Propus for ordinary coding, one-off notes, or simple commands. `evolution-proposal` is the sole owner of detailed doctrine, routing, validation, the self-correction queue, and rollback rules.\n\n")
-	} else {
+	default:
 		// No always-skills, but discoverable skills may still exist.
 		ss.WriteString("## Skills (specialist procedures)\n\n")
 		ss.WriteString("A skill is a verified procedure for a specific task.\n")

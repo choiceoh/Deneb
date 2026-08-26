@@ -160,7 +160,7 @@ func TestBuildSystemPromptRendersSkillsAndThinPropusRouter(t *testing.T) {
 		SkillsPrompt: "<available_skills>\n- test-skill\n</available_skills>",
 	}
 
-	prompt := buildSemiStaticPrompt(params)
+	prompt := buildSemiStaticPrompt(params, toolNameSet{"skills": {}})
 	if !strings.Contains(prompt, "## Skills") {
 		t.Error("missing skills section")
 	}
@@ -207,8 +207,13 @@ func TestBuildSystemPromptRendersSkillsAndThinPropusRouter(t *testing.T) {
 }
 
 func TestBuildSystemPromptRendersSkillsSectionWithoutSkills(t *testing.T) {
+	// "WithoutSkills" here means without an AMBIENT catalog (SkillsPrompt is
+	// empty), not without the skills tool: the fallback it asserts tells the
+	// model to reach the tool, so the run has to be able to. Declaring it keeps
+	// the original intent while the block now gates on tool availability.
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
+		ToolDefs:     []ToolDef{{Name: "skills"}},
 	}
 
 	prompt := BuildSystemPrompt(params)
@@ -637,5 +642,40 @@ func TestBuildSystemPromptGroupwareTriggers(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "사내 참석자는 `groupware") {
 		t.Error("expected meeting-prep to mention groupware people")
+	}
+}
+
+// Every line of the skills block routes through skills(action=read/list) or
+// fetch_tools(query="skills"), and a restricted preset gates both — the
+// allow-list decides what fetch_tools may activate. A run without the skills
+// tool therefore cannot reach a single instruction there, so the block must not
+// ship. The rest of this file already gates polaris/wiki/web/calendar/
+// sessions_spawn/workfeed/bridge on toolSet; skills gated only on the briefcase
+// flag.
+func TestSemiStaticSkillsBlockGatesOnTheSkillsTool(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		SkillsPrompt: "<available_skills>\n- test-skill\n</available_skills>",
+	}
+
+	if got := buildSemiStaticPrompt(params, toolNameSet{"wiki": {}, "read": {}}); got != "" {
+		t.Errorf("a run without the skills tool still got the skills block:\n%s", got)
+	}
+	// The no-ambient-catalog fallback also tells the model to fetch_tools the
+	// skills tool, so it is just as unreachable.
+	noCatalog := SystemPromptParams{WorkspaceDir: "/tmp"}
+	if got := buildSemiStaticPrompt(noCatalog, toolNameSet{"wiki": {}}); got != "" {
+		t.Errorf("the no-catalog fallback shipped without the skills tool:\n%s", got)
+	}
+	// A run that CAN reach the tool keeps everything.
+	full := buildSemiStaticPrompt(params, toolNameSet{"skills": {}})
+	if !strings.Contains(full, "test-skill") || !strings.Contains(full, "Propus") {
+		t.Errorf("an unrestricted run lost the skills block:\n%s", full)
+	}
+	// Briefcase suppression still wins regardless of the tool set.
+	briefcase := params
+	briefcase.DisableSkills = true
+	if got := buildSemiStaticPrompt(briefcase, toolNameSet{"skills": {}}); got != "" {
+		t.Errorf("briefcase mode leaked the skills block:\n%s", got)
 	}
 }
