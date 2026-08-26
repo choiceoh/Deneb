@@ -30,18 +30,35 @@ import (
 // separately). It is the much smaller question of whether an attribute exists
 // on one specific object whose surface is a closed list.
 
-// bridgeSurface is what code_action's preloaded `deneb` object exposes. Keep in
-// sync with the tool's own description in tools/codeaction/codeaction.go — that
-// text is what the model is shown, and this is what it is held to.
-var bridgeSurface = map[string]struct{}{
-	"calendar":     {},
-	"contacts":     {},
-	"deals":        {},
-	"edit":         {},
-	"mail_archive": {},
-	"read":         {},
-	"wiki":         {},
-	"write":        {},
+// bridgeSurface is injected, never written down here.
+//
+// A checked-in copy is how this vocabulary drifts: the copy and the
+// implementation get edited by different changes, nothing compares them, and a
+// consumer holding the stale copy rejects a correct call or accepts a broken
+// one. The first version of this file hardcoded eight names and had already
+// missed `gmail` on the day it was written — the failure it was built to catch,
+// committed by the guard itself.
+//
+// codeaction.BridgeSurface() derives the list from the EMBEDDED runtime that
+// defines the methods. Wired in at construction; an empty set disables the check
+// rather than asserting an empty surface (which would reject every call).
+var bridgeSurfaceFn func() []string
+
+// SetBridgeSurface wires the authoritative surface accessor.
+func SetBridgeSurface(fn func() []string) { bridgeSurfaceFn = fn }
+
+func bridgeSurfaceSet() map[string]struct{} {
+	if bridgeSurfaceFn == nil {
+		return nil
+	}
+	names := bridgeSurfaceFn()
+	out := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		if n = strings.TrimSpace(n); n != "" {
+			out[n] = struct{}{}
+		}
+	}
+	return out
 }
 
 // bridgeCallPattern matches a `deneb.<name>` reference in skill prose.
@@ -62,10 +79,14 @@ var bridgeSurfaceHint = map[string]string{
 // unknownBridgeCalls returns the `deneb.<fn>` names in body that the bridge does
 // not expose, sorted for a stable message.
 func unknownBridgeCalls(body string) []string {
+	surface := bridgeSurfaceSet()
+	if len(surface) == 0 {
+		return nil // no authority wired — say nothing rather than reject everything
+	}
 	seen := map[string]struct{}{}
 	for _, m := range bridgeCallPattern.FindAllStringSubmatch(body, -1) {
 		name := m[1]
-		if _, ok := bridgeSurface[name]; ok {
+		if _, ok := surface[name]; ok {
 			continue
 		}
 		seen[name] = struct{}{}
