@@ -37,6 +37,10 @@ type Task struct {
 	StateDir string
 	Model    string
 	Logger   *slog.Logger
+	// StartedAt is when this process came up. It is what lets a pass tell a
+	// quiet window apart from a window that did not exist yet: the ring is
+	// in-process, so it can never hold more history than the process has life.
+	StartedAt time.Time
 }
 
 // Name identifies the task in the autonomous scheduler.
@@ -67,15 +71,22 @@ func (t *Task) Run(ctx context.Context) error {
 		lines = t.Lines(now.Add(-defaultWindow).UnixMilli(), maxDigestLines)
 	}
 	digest := BuildDigest(lines)
+	digest.Examined.CoveredMinutes = int(defaultWindow / time.Minute)
+	if !t.StartedAt.IsZero() {
+		if alive := now.Sub(t.StartedAt); alive < defaultWindow {
+			digest.Examined.CoveredMinutes = int(alive / time.Minute)
+			digest.Examined.Partial = true
+		}
+	}
 	findings, gap := Inspect(ctx, t.Judge, digest)
 
 	entry := Entry{
-		At:          now.UTC().Format(time.RFC3339),
-		WindowHours: int(defaultWindow / time.Hour),
-		Examined:    digest.Examined,
-		Findings:    findings,
-		Gap:         gap,
-		Model:       t.Model,
+		At:            now.UTC().Format(time.RFC3339),
+		WindowMinutes: int(defaultWindow / time.Minute),
+		Examined:      digest.Examined,
+		Findings:      findings,
+		Gap:           gap,
+		Model:         t.Model,
 	}
 	if err := Append(t.StateDir, entry, maxLedgerEntries); err != nil {
 		// A pass that cannot be recorded is a pass that did not happen, as far
@@ -90,6 +101,8 @@ func (t *Task) Run(ctx context.Context) error {
 	// providing the assurance it appears to.
 	logger.Info("anomaly-watch: 점검 완료",
 		"examinedLines", digest.Examined.LogLines,
+		"coveredMinutes", digest.Examined.CoveredMinutes,
+		"partial", digest.Examined.Partial,
 		"distinct", digest.Examined.DistinctMessages,
 		"findings", len(findings),
 		"gap", gap)
