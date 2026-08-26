@@ -712,7 +712,7 @@
      "implementer",
      "verifier"
     ],
-    "description": "Tool preset restricting which tools the sub-agent can use. researcher=context gathering (read/grep/web/mail_archive/wiki/knowledge/polaris/contacts/graphify; no shell, no file writes, no Gmail OAuth surface), implementer=researcher+write/edit/exec/process, verifier=read/grep/exec/process only (build/test validation). Omit for the full toolset"
+    "description": "Tool preset restricting which tools the sub-agent can use. researcher=context gathering (read/grep/web/mail_archive/wiki/knowledge/polaris/contacts/graphify; no shell, no filesystem writes, no Gmail OAuth surface — but wiki/knowledge KEEP their write actions, so delegate '조사하고 위키에 남겨' here rather than escalating to implementer), implementer=researcher+write/edit/exec/process, verifier=read/grep/exec/process only (build/test validation). Omit for the full toolset"
    }
   },
   "required": [
