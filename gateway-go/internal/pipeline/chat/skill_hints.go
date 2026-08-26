@@ -79,7 +79,9 @@ func buildSkillHints(
 	if !presetAllowsSkillsTool(sessionToolPreset) {
 		return "", nil, nil
 	}
-	hints := skills.MatchSkillTriggers(params.Message, resolved, maxSkillHints)
+	// Match only what the operator actually asked for — not the payload their
+	// client pasted in with it (skill_hint_scope.go).
+	hints := skills.MatchSkillTriggers(skillTriggerScope(params.Message), resolved, maxSkillHints)
 	if len(hints) == 0 {
 		return "", nil, nil
 	}
