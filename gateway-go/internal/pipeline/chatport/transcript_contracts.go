@@ -1,6 +1,10 @@
 package chatport
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+	"unicode/utf8"
+)
 
 // ChatMessage represents a message in a session transcript. Content remains
 // raw JSON so the stable boundary supports both legacy string content and rich
@@ -67,6 +71,86 @@ func (m *ChatMessage) TextContent() string {
 		}
 	}
 	return string(m.Content)
+}
+
+// SearchableText renders a message for TEXT SEARCH, including the parts
+// TextContent deliberately omits: a tool call's name and (capped) input, a tool
+// result's (capped) content, and thinking prose.
+//
+// TextContent answers "what did this message SAY", which is what display,
+// recall notes and sub-agent last-text want; search asks "does this message
+// MENTION x", where a tool name is a legitimate hit. Before the raw-JSON escape
+// hatch was narrowed, search matched tool names by accident — and also matched
+// inside a thinking block's base64 signature, so a short query hit noise. This
+// restores the signal without the noise.
+//
+// Mirrors the block rendering polaris already uses for its FTS index
+// (pipeline/polaris/store.go): same caps, same shape, so the two search paths
+// cannot disagree about what a transcript contains. The signature is never
+// included — it is provider bookkeeping, not content.
+func (m *ChatMessage) SearchableText() string {
+	if len(m.Content) == 0 {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(m.Content, &text); err == nil {
+		return text
+	}
+	var blocks []struct {
+		Type     string          `json:"type"`
+		Text     string          `json:"text,omitempty"`
+		Thinking string          `json:"thinking,omitempty"`
+		Name     string          `json:"name,omitempty"`
+		Input    json.RawMessage `json:"input,omitempty"`
+		Content  string          `json:"content,omitempty"`
+	}
+	if err := json.Unmarshal(m.Content, &blocks); err != nil {
+		return m.TextContent()
+	}
+	var parts []string
+	for _, b := range blocks {
+		switch b.Type {
+		case "text":
+			if b.Text != "" {
+				parts = append(parts, b.Text)
+			}
+		case "thinking":
+			if b.Thinking != "" {
+				parts = append(parts, b.Thinking)
+			}
+		case "tool_use":
+			if b.Name != "" {
+				parts = append(parts, "[도구 "+b.Name+"] "+truncateForSearch(string(b.Input), searchToolInputCap))
+			}
+		case "tool_result":
+			if b.Content != "" {
+				parts = append(parts, truncateForSearch(b.Content, searchToolResultCap))
+			}
+		}
+	}
+	if len(parts) == 0 {
+		return m.TextContent()
+	}
+	return strings.Join(parts, "\n")
+}
+
+// Caps mirror polaris's FTS index so a raw stdout or file dump cannot bloat the
+// scanned text (and, in polaris's case, the index) — the roomier result cap is
+// the same asymmetry polaris documents.
+const (
+	searchToolInputCap  = 200
+	searchToolResultCap = 2000
+)
+
+func truncateForSearch(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	end := maxBytes
+	for end > 0 && !utf8.RuneStart(s[end]) {
+		end--
+	}
+	return s[:end]
 }
 
 // knownNonTextBlock reports whether a block type is one this codebase emits and

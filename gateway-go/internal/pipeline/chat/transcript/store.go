@@ -282,7 +282,7 @@ func searchMessages(msgs []ChatMessage, queryLower string, remaining *int) []Mat
 		if *remaining <= 0 {
 			break
 		}
-		if strings.Contains(strings.ToLower(msg.TextContent()), queryLower) {
+		if strings.Contains(strings.ToLower(msg.SearchableText()), queryLower) {
 			m := MatchedMsg{Index: i, Message: msg}
 			if i > 0 {
 				m.Context = append(m.Context, msgs[i-1])
