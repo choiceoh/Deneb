@@ -149,8 +149,10 @@ func TestFormatBatchNotification_Multiple(t *testing.T) {
 	}
 	text := formatBatchNotification(items)
 
-	if !strings.Contains(text, "2 subagents completed") {
-		t.Error("batch should use plural header")
+	// Mixed batch: the header must not tell the parent to skip work that never
+	// happened — it says what succeeded and what it has to handle itself.
+	if !strings.Contains(text, "2개 중 1개가 실패") {
+		t.Errorf("mixed batch header should name the failure: %q", text)
 	}
 	if !strings.Contains(text, "worker-1") || !strings.Contains(text, "worker-2") {
 		t.Error("should contain all agent labels")

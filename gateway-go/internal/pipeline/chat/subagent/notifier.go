@@ -396,13 +396,30 @@ func formatBatchNotification(items []notifyItem) string {
 
 	// IMPORTANT: the trailing instruction prevents the LLM from using NO_REPLY
 	// (which would suppress delivery of the synthesized response to the user).
+	//
+	// The header follows the OUTCOMES. "완료됐다 · 다시 하지 마라" was fixed text
+	// regardless of status, so a child that failed still told the parent not to
+	// redo work that never happened — with NO_REPLY also forbidden, the only
+	// exits left were inventing a result or answering the user with nothing.
+	failed := failedItems(items)
 	if len(items) == 1 {
-		sb.WriteString("**System:** subagent completed. Synthesize the result below into your response for the user. Do NOT re-do this work. Do NOT use NO_REPLY — the user is waiting for this answer.\n")
+		if len(failed) == 1 {
+			sb.WriteString("**System:** subagent가 과업을 끝내지 못했다. 아래 실패 내용을 보고 네가 직접 처리하거나, 처리할 수 없으면 사용자에게 실패 사실과 이유를 알려라. Do NOT use NO_REPLY — the user is waiting for this answer.\n")
+		} else {
+			sb.WriteString("**System:** subagent completed. Synthesize the result below into your response for the user. Do NOT re-do this work. Do NOT use NO_REPLY — the user is waiting for this answer.\n")
+		}
 		writeNotifyItem(&sb, items[0])
 		return sb.String()
 	}
 
-	fmt.Fprintf(&sb, "**System:** %d subagents completed. Synthesize the results below into a unified response for the user. Do NOT re-do their work. Do NOT use NO_REPLY — the user is waiting for this answer.\n", len(items))
+	switch {
+	case len(failed) == len(items):
+		fmt.Fprintf(&sb, "**System:** subagent %d개가 모두 과업을 끝내지 못했다. 아래 실패 내용을 보고 네가 직접 처리하거나, 처리할 수 없으면 사용자에게 실패 사실과 이유를 알려라. Do NOT use NO_REPLY — the user is waiting for this answer.\n", len(items))
+	case len(failed) > 0:
+		fmt.Fprintf(&sb, "**System:** subagent %d개 중 %d개가 실패했다. 성공한 결과는 종합하고(다시 하지 마라), 실패한 과업은 네가 직접 처리하거나 사용자에게 실패 사실과 이유를 알려라. Do NOT use NO_REPLY — the user is waiting for this answer.\n", len(items), len(failed))
+	default:
+		fmt.Fprintf(&sb, "**System:** %d subagents completed. Synthesize the results below into a unified response for the user. Do NOT re-do their work. Do NOT use NO_REPLY — the user is waiting for this answer.\n", len(items))
+	}
 
 	// Render up to cap detailed items.
 	rendered := items
@@ -496,4 +513,21 @@ func (sn *SubagentNotifier) refreshOutputs(items []notifyItem) []notifyItem {
 		}
 	}
 	return items
+}
+
+// failedItems returns the children whose run did not reach a done status.
+// Killed and timed-out runs count as failures: their task was not carried out
+// either, and the parent needs the same "do it yourself or say so" instruction.
+func failedItems(items []notifyItem) []notifyItem {
+	var failed []notifyItem
+	for _, item := range items {
+		switch session.RunStatus(item.status) {
+		case session.StatusFailed, session.StatusKilled, session.StatusTimeout:
+			failed = append(failed, item)
+		case session.StatusRunning, session.StatusDone:
+			// Not a failure: done carries a result, and a still-running child is
+			// never queued here (the notifier only fires on terminal statuses).
+		}
+	}
+	return failed
 }
