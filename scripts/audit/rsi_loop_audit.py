@@ -49,9 +49,11 @@ from typing import Any
 # L1 dormancy horizon: with zero evolves/genesis in the 7d window, recent
 # lifecycle activity (reviews, proposals) within this many hours still counts
 # as "alive but dormant" (WARN) instead of dead (FAIL).
-CORPUS_REAL_SHARE_FLOOR = 10.0
-
 DORMANT_HORIZON_HOURS = 48
+
+# Below this share of real-use-derived validation cases the held-out gate is
+# scoring a synthetic pool, where every candidate ties its original.
+CORPUS_REAL_SHARE_FLOOR = 10.0
 
 # Below this many resolved evolves, a rate is reported but never FAILs the
 # audit — a 1/1 rollback must not read as falseAcceptRate=1.0 certainty
@@ -322,6 +324,58 @@ def check_corpus(state_dir: str | None = None) -> Result:
                   detail + " · 실패 케이스를 늘려야 수용이 가능해진다 (exercised=no 캡처, 실패 트레이스 채굴)")
 
 
+REAL_USE_WINDOW_DAYS = 14
+REAL_USE_MIN_IN_WINDOW = 5
+
+
+def check_usage_reality(state_dir: str | None = None, now_ms: int | None = None) -> Result:
+    """Upstream of the corpus: does the agent consult skills in real turns?
+
+    check_corpus reports that the validation pool is synthetic; this says where
+    the synthesis comes from. Real consults (source=real) are the only input
+    that can mint a real-use case — an unexercised or failed real turn. Measured
+    2026-08-26: 2 real records in 25 days against ~20 workout records per day,
+    so 74% of the usage ledger is a synthetic exercise lane and the evolver's
+    success-rate gate reads almost nothing else.
+
+    A skill that is never consulted cannot fail, cannot mint a case, and cannot
+    be improved — the ladder starves at its first rung. Trigger coverage was
+    relaxed on 2026-08-26 to widen this; without this check its effect would go
+    unmeasured for weeks.
+    """
+    root = state_dir or os.path.join(os.path.expanduser("~"), ".deneb")
+    path = os.path.join(root, "data", "skill_usage.jsonl")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            rows = [json.loads(line) for line in fh if line.strip()]
+    except (OSError, json.JSONDecodeError):
+        return Result("usage.reality", Result.SOFT, "스킬 사용 원장을 읽을 수 없음 — 실사용 소비 미측정")
+    if not rows:
+        return Result("usage.reality", Result.SOFT, "스킬 사용 기록 0건 — 소비 자체가 없다")
+
+    now = now_ms if now_ms is not None else int(time.time() * 1000)
+    cutoff = now - REAL_USE_WINDOW_DAYS * 24 * 3600 * 1000
+
+    def used_at(row: dict) -> int:
+        try:
+            return int(row.get("usedAt") or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    window = [r for r in rows if used_at(r) >= cutoff]
+    real = sum(1 for r in window if r.get("source") == "real")
+    synthetic = len(window) - real
+    detail = (f"최근 {REAL_USE_WINDOW_DAYS}일 · 실사용 소비 {real}건 · "
+              f"합성(workout/review-verdict) {synthetic}건")
+    if real >= REAL_USE_MIN_IN_WINDOW:
+        return Result("usage.reality", Result.OK,
+                      f"실사용 소비 {real}건 — 실패 케이스가 나올 입구가 열려 있다", detail)
+    return Result("usage.reality", Result.SOFT,
+                  f"실사용 소비 {real}건뿐 — 스킬이 실제 턴에서 거의 안 쓰인다 (코퍼스 굶는 상류 원인)",
+                  detail + " · 트리거 커버리지·발화 경로를 먼저 볼 것 — 소비가 없으면 실패 케이스도 없다")
+
+
+
 def run_checks(health: dict | None, rsi_status: dict | None, now_ms: int | None = None,
                state_dir: str | None = None) -> list[Result]:
     """All seven audit checks, in report order."""
@@ -329,7 +383,7 @@ def run_checks(health: dict | None, rsi_status: dict | None, now_ms: int | None 
         check_liveness(health, now_ms),
         check_honesty(health),
         check_confirm(health),
-        check_corpus(state_dir),
+        check_corpus(state_dir), check_usage_reality(state_dir, now_ms),
         check_slowloop(rsi_status, health),
         check_labels(rsi_status),
         check_dispatch(rsi_status),
