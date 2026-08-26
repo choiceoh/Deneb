@@ -464,7 +464,39 @@ func writeNotifyItem(sb *strings.Builder, item notifyItem) {
 			output = textutil.TruncateBytes(output, maxOutputLen) + "\n... (truncated)"
 		}
 		fmt.Fprintf(sb, "- Result:\n%s\n", output)
+		return
 	}
+	// A child that finished without leaving text still gets a line. The batch
+	// header tells the parent to "synthesize the result below"; with no Result
+	// line at all the parent's only exits were inventing a summary or dropping
+	// the child's work silently. Naming the absence is the third exit, and the
+	// one the operator can act on.
+	//
+	// The empty case is not hypothetical: LastOutput can be unset, and the
+	// transcript fallback (lastAssistantTextFromTranscript) also returns "" for
+	// a child whose whole run was tool calls with no prose.
+	if !isFailureStatus(item.status) {
+		sb.WriteString("- Result: (없음 — 자식이 텍스트 산출물을 남기지 않았다. 종합할 결과가 없으니 지어내지 말고, 필요하면 네가 직접 처리하거나 사용자에게 그대로 알려라)\n")
+	}
+}
+
+// isFailureStatus reports whether a terminal status is a failure. Failures
+// already carry a Failure line and their own header, so the missing-output
+// notice would only repeat what the parent was told.
+func isFailureStatus(status session.RunStatus) bool {
+	switch status {
+	case session.StatusFailed, session.StatusKilled, session.StatusTimeout:
+		// Killed and timed-out runs count as failures: their task was not
+		// carried out either, and the parent needs the same "do it yourself or
+		// say so" instruction.
+		return true
+	case session.StatusRunning, session.StatusDone:
+		// Done carries a result (or the missing-result notice), and a
+		// still-running child is never queued here — the notifier only fires on
+		// terminal statuses.
+		return false
+	}
+	return false
 }
 
 // isTerminalStatus returns true for session statuses that represent completed runs.
@@ -521,12 +553,12 @@ func (sn *SubagentNotifier) refreshOutputs(items []notifyItem) []notifyItem {
 func failedItems(items []notifyItem) []notifyItem {
 	var failed []notifyItem
 	for _, item := range items {
-		switch session.RunStatus(item.status) {
-		case session.StatusFailed, session.StatusKilled, session.StatusTimeout:
+		// One definition of "failure" for the header and the per-item notice —
+		// a second copy would let the two disagree about the same child.
+		// Running is never queued here (the notifier fires on terminal statuses
+		// only), and done carries a result or the missing-result notice.
+		if isFailureStatus(session.RunStatus(item.status)) {
 			failed = append(failed, item)
-		case session.StatusRunning, session.StatusDone:
-			// Not a failure: done carries a result, and a still-running child is
-			// never queued here (the notifier only fires on terminal statuses).
 		}
 	}
 	return failed
