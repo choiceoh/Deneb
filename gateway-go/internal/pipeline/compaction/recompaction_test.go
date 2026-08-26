@@ -30,12 +30,12 @@ func recompOldMessages() []llm.Message {
 }
 
 func TestSummarizeOldMessages_IncrementalUpdate(t *testing.T) {
-	capt := &recompCapture{out: "UPDATED"}
+	capt := &recompCapture{out: "### 핵심 사실 (Facts)\n- [확실] UPDATED"}
 	cfg := NewConfig(100000)
 	cfg.PreviousSummary = "PREV_SUMMARY_MARKER_XYZ"
 
 	got, covered := summarizeOldMessages(context.Background(), cfg, recompOldMessages(), capt, nil)
-	if got != "UPDATED" {
+	if !strings.Contains(got, "UPDATED") {
 		t.Fatalf("summary = %q, want UPDATED", got)
 	}
 	if covered != len(recompOldMessages()) {
@@ -55,11 +55,11 @@ func TestSummarizeOldMessages_IncrementalUpdate(t *testing.T) {
 }
 
 func TestSummarizeOldMessages_UsesFreshPromptWithoutPreviousSummary(t *testing.T) {
-	capt := &recompCapture{out: "FRESH"}
+	capt := &recompCapture{out: "### 핵심 사실 (Facts)\n- [확실] FRESH"}
 	cfg := NewConfig(100000) // no PreviousSummary
 
 	got, _ := summarizeOldMessages(context.Background(), cfg, recompOldMessages(), capt, nil)
-	if got != "FRESH" {
+	if !strings.Contains(got, "FRESH") {
 		t.Fatalf("summary = %q, want FRESH", got)
 	}
 	if strings.Contains(capt.system, "갱신") {
@@ -79,12 +79,12 @@ func TestLLMCompact_ReturnsSummaryForRecompaction(t *testing.T) {
 		msgs = append(msgs, llm.NewTextMessage("user", strings.Repeat("입력 ", 80)))
 		msgs = append(msgs, llm.NewTextMessage("assistant", strings.Repeat("출력 ", 80)))
 	}
-	capt := &recompCapture{out: "THE_SUMMARY"}
+	capt := &recompCapture{out: "### 핵심 사실 (Facts)\n- [확실] THE_SUMMARY"}
 	_, summary, ok := LLMCompact(context.Background(), NewConfig(100000), msgs, capt, nil)
 	if !ok {
 		t.Fatal("expected LLMCompact to fire")
 	}
-	if summary != "THE_SUMMARY" {
+	if !strings.Contains(summary, "THE_SUMMARY") {
 		t.Fatalf("returned summary = %q, want THE_SUMMARY", summary)
 	}
 }

@@ -139,6 +139,18 @@ func summarizeOldMessages(
 		}
 		return "", 0
 	}
+	if !looksLikeStructuredSummary(summary) {
+		// A non-conforming answer ("죄송합니다, 이해하지 못했습니다") is a summary
+		// only by position. Accepting it replaces the range with noise AND feeds
+		// the next recompaction — the prompt itself warns that one bad line
+		// compounds across passes. Returning "" makes the caller keep the raw
+		// messages and retry on a later pass, exactly like an empty answer.
+		if logger != nil {
+			logger.Warn("polaris: compaction summary ignored (no section structure)",
+				"chars", len(summary))
+		}
+		return "", 0
+	}
 	return summary, len(old)
 }
 
@@ -461,4 +473,30 @@ func compactToolArgs(raw []byte) string {
 		trimmed = string(r[:maxToolArgRunes]) + "..."
 	}
 	return trimmed
+}
+
+// looksLikeStructuredSummary reports whether a summarizer answer carries the
+// mandated skeleton (compactionOutputFormat). Only the section HEADINGS are
+// checked — content quality is not this layer's business, and a model that
+// emitted the structure at all followed the instruction it was given.
+func looksLikeStructuredSummary(summary string) bool {
+	trimmed := strings.TrimSpace(summary)
+	if trimmed == "" {
+		return false
+	}
+	for _, heading := range summarySectionHeadings {
+		if strings.Contains(trimmed, heading) {
+			return true
+		}
+	}
+	return false
+}
+
+// summarySectionHeadings are the headings compactionOutputFormat mandates. Any
+// one of them is enough: a truncated answer can lose the tail sections.
+var summarySectionHeadings = []string{
+	"### 핵심 사실",
+	"### 열린 루프",
+	"### 불확실한 메모",
+	"### 도구 결과",
 }

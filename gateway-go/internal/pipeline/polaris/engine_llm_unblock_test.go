@@ -24,7 +24,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-// seqSummarizer returns "SUM-<n>" per call, recording inputs. Parallel-safe.
+// seqSummarizer returns a structured "SUM-<n>" summary per call, recording
+// inputs. The mandated section heading matters: the compaction layer drops an
+// answer that carries none of them (a non-conforming answer would otherwise be
+// stored as the range's summary and feed the next recompaction). Parallel-safe.
 type seqSummarizer struct {
 	mu    sync.Mutex
 	calls int
@@ -34,7 +37,7 @@ func (s *seqSummarizer) Summarize(_ context.Context, _, _ string, _ int) (string
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
-	return fmt.Sprintf("SUM-%d", s.calls), nil
+	return fmt.Sprintf("### 핵심 사실 (Facts)\n- [확실] SUM-%d", s.calls), nil
 }
 
 func (s *seqSummarizer) callCount() int {
@@ -137,7 +140,7 @@ func TestCompactAndPersistFiresLLMTierAndPreservesExistingFence(t *testing.T) {
 	if newNode.MsgEnd <= newNode.MsgStart || newNode.MsgEnd >= 40 {
 		t.Fatalf("new node range [%d,%d] out of bounds", newNode.MsgStart, newNode.MsgEnd)
 	}
-	if !strings.HasPrefix(newNode.Content, "SUM-") {
+	if !strings.Contains(newNode.Content, "SUM-") {
 		t.Fatalf("new node content = %q, want summarizer output", truncateStr(newNode.Content))
 	}
 
