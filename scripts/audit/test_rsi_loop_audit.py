@@ -16,6 +16,7 @@ import tempfile
 import unittest
 
 from rsi_loop_audit import (
+    check_usage_reality,
     Result,
     check_corpus,
     check_confirm,
@@ -93,6 +94,14 @@ def healthy_corpus_dir() -> str:
             fh.write('{"source":"adversarial-coverage"}\n')
         for _ in range(20):
             fh.write('{"source":"auto-failed-skill-use"}\n')
+    # check_usage_reality reads a second ledger from the same root; a healthy
+    # fixture must supply both or "all healthy" silently means "unmeasured".
+    now = NOW
+    with open(os.path.join(d, "data", "skill_usage.jsonl"), "w", encoding="utf-8") as fh:
+        for _ in range(9):
+            fh.write('{"source":"real","usedAt":%d}\n' % now)
+        for _ in range(30):
+            fh.write('{"source":"workout","usedAt":%d}\n' % now)
     return d
 
 class TestEnvelope(unittest.TestCase):
@@ -251,6 +260,40 @@ class TestOverall(unittest.TestCase):
         results = run_checks(h, rsi_status_fixture(), NOW, healthy_corpus_dir())
         worst, exit_code = overall_status(results)
         self.assertEqual((worst, exit_code), (Result.HARD, 2))
+
+
+
+class UsageRealityTest(unittest.TestCase):
+    """Real consults are the only input that can mint a real-use case."""
+
+    def _dir(self, rows: str) -> str:
+        d = tempfile.mkdtemp()
+        os.makedirs(os.path.join(d, "data"), exist_ok=True)
+        with open(os.path.join(d, "data", "skill_usage.jsonl"), "w", encoding="utf-8") as fh:
+            fh.write(rows)
+        return d
+
+    def test_synthetic_only_ledger_warns(self):
+        rows = "".join('{"source":"workout","usedAt":%d}\n' % NOW for _ in range(40))
+        r = check_usage_reality(self._dir(rows), NOW)
+        self.assertEqual(r.status, Result.SOFT)
+        self.assertIn("실사용 소비 0건", r.diagnosis)
+
+    def test_real_consults_pass(self):
+        rows = "".join('{"source":"real","usedAt":%d}\n' % NOW for _ in range(6))
+        r = check_usage_reality(self._dir(rows), NOW)
+        self.assertEqual(r.status, Result.OK)
+
+    def test_real_consults_outside_window_do_not_count(self):
+        old = NOW - 40 * 24 * 3600 * 1000
+        rows = "".join('{"source":"real","usedAt":%d}\n' % old for _ in range(20))
+        r = check_usage_reality(self._dir(rows), NOW)
+        self.assertEqual(r.status, Result.SOFT)
+
+    def test_missing_ledger_is_unmeasured_not_failure(self):
+        r = check_usage_reality(tempfile.mkdtemp(), NOW)
+        self.assertEqual(r.status, Result.SOFT)
+        self.assertNotEqual(r.status, Result.HARD)
 
 
 if __name__ == "__main__":
