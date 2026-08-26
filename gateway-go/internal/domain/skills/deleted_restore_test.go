@@ -3,6 +3,7 @@ package skills
 import (
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // A bundled-skill deletion must be reversible. It was not: the tombstone
@@ -11,10 +12,10 @@ import (
 func TestUnmarkSkillDeletedRoundTrip(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	if err := MarkSkillDeleted("kb-interview"); err != nil {
+	if err := MarkSkillDeleted("kb-interview", "테스트", time.Now()); err != nil {
 		t.Fatalf("mark: %v", err)
 	}
-	if err := MarkSkillDeleted("evolution-proposal"); err != nil {
+	if err := MarkSkillDeleted("evolution-proposal", "테스트", time.Now()); err != nil {
 		t.Fatalf("mark: %v", err)
 	}
 	if got := DeletedSkillNamesSorted(); len(got) != 2 || got[0] != "evolution-proposal" {
@@ -41,7 +42,7 @@ func TestUnmarkSkillDeletedIsIdempotent(t *testing.T) {
 	if err := UnmarkSkillDeleted("never-deleted"); err != nil {
 		t.Fatalf("unmark of a live skill must be a no-op, got %v", err)
 	}
-	if err := MarkSkillDeleted("fact-check"); err != nil {
+	if err := MarkSkillDeleted("fact-check", "테스트", time.Now()); err != nil {
 		t.Fatalf("mark: %v", err)
 	}
 	for i := 0; i < 2; i++ {
@@ -59,7 +60,7 @@ func TestUnmarkSkillDeletedIsIdempotent(t *testing.T) {
 func TestDeletedSkillNamesSortedEmptyAfterFullRestore(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if err := MarkSkillDeleted("deep-research"); err != nil {
+	if err := MarkSkillDeleted("deep-research", "테스트", time.Now()); err != nil {
 		t.Fatalf("mark: %v", err)
 	}
 	if err := UnmarkSkillDeleted("deep-research"); err != nil {
