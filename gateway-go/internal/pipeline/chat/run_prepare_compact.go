@@ -504,7 +504,7 @@ func finalizePrompt(
 	contextCfg ContextConfig,
 	sessionToolPreset string,
 	message string,
-) json.RawMessage {
+) (json.RawMessage, promptBudgetOutcome) {
 	// Budget-optimize variable prompt additions before appending.
 	if recallAddition != "" {
 		// Current-turn recall evidence is compact and more relevant than
@@ -513,26 +513,35 @@ func finalizePrompt(
 		systemPrompt = json.RawMessage(llm.AppendSystemText(llm.FlexibleFromRaw(systemPrompt), recallAddition).Bytes())
 	}
 
+	// The budget outcome is reported rather than swallowed: dropping tier-1 is
+	// the correct call when the prompt is full, but a silent drop makes a
+	// memory-less turn indistinguishable from a memory-ful one in the journal
+	// (prompt_shape.go).
+	var outcome promptBudgetOutcome
 	if tier1Addition != "" {
 		promptBudget := promptbudget.Budget{Total: contextCfg.SystemPromptBudget}
 		baseTokens := uint64(promptbudget.EstimateTokens(string(systemPrompt)))
+		outcome.Tier1RequestedTokens = promptbudget.EstimateTokens(tier1Addition)
+		outcome.BaseTokens = int(baseTokens)
+		outcome.BudgetTokens = int(promptBudget.Total)
 		var remainingBudget uint64
 		if promptBudget.Total > baseTokens {
 			remainingBudget = promptBudget.Total - baseTokens
 		}
 		if promptBudget.Total > 0 && remainingBudget == 0 {
-			return systemPrompt
+			return systemPrompt, outcome
 		}
 		additionBudget := promptbudget.Budget{Total: remainingBudget}
 
 		additionFragments := []promptbudget.Fragment{promptbudget.NewFragment("memory", tier1Addition)}
 		optimized := additionBudget.Optimize(additionFragments)
 		for _, f := range optimized {
+			outcome.Tier1AdmittedTokens += promptbudget.EstimateTokens(f.Content)
 			systemPrompt = json.RawMessage(llm.AppendSystemText(llm.FlexibleFromRaw(systemPrompt), f.Content).Bytes())
 		}
 	}
 
-	return systemPrompt
+	return systemPrompt, outcome
 }
 
 // agentConfigDeps holds dependencies specifically needed by buildAgentConfig.

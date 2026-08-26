@@ -156,7 +156,8 @@ func executeAgentRun(
 	}
 
 	// Stage 3: Finalize system prompt (budget optimization, coordinator suggestion, tier-1 injection).
-	systemPrompt := finalizePrompt(prep.SystemPrompt, tailForSystem, prep.Tier1Wiki, deps.contextCfg, sessionToolPreset, params.Message)
+	systemPrompt, budgetOutcome := finalizePrompt(prep.SystemPrompt, tailForSystem, prep.Tier1Wiki, deps.contextCfg, sessionToolPreset, params.Message)
+	logPromptShape(logger, budgetOutcome, params.SessionKey)
 	if deps.auditSystemPrompt != nil {
 		deps.auditSystemPrompt(params.SessionKey, append([]byte(nil), systemPrompt...))
 	}
