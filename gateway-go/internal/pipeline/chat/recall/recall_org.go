@@ -247,10 +247,14 @@ func outputOrgMemberEvidence(candidate orgRecallCandidate, personPaths map[strin
 		note += " · " + member.role
 	}
 	return recallEvidence{
-		Kind:   "org",
-		Source: source,
-		Note:   note,
-		Score:  candidate.score,
+		Kind: "org",
+		// A member row exists because the person's full name (3+ runes) appears
+		// literally in the message and that name is in the curated chart. That
+		// is a lookup, not a ranked guess.
+		Confidence: "high",
+		Source:     source,
+		Note:       note,
+		Score:      candidate.score,
 	}
 }
 
@@ -269,10 +273,14 @@ func outputOrgNodeEvidence(candidate orgRecallCandidate) recallEvidence {
 		note += ": " + strings.Join(names, ", ")
 	}
 	return recallEvidence{
-		Kind:   "org",
-		Source: "조직도: " + node.department,
-		Note:   note,
-		Score:  candidate.score,
+		Kind: "org",
+		// A department row needs only a 2-rune name to appear in the message,
+		// which incidental text can satisfy — one step below member rows, the
+		// same step the score anchors already encode.
+		Confidence: "medium",
+		Source:     "조직도: " + node.department,
+		Note:       note,
+		Score:      candidate.score,
 	}
 }
 

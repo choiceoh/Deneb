@@ -45,6 +45,11 @@ type recallEvidence struct {
 	// rows are removed before ranking; the value becomes a deny phrase for
 	// diary/transcript/file evidence gathered in the same recall.
 	StaleValue string
+	// Confidence, when set, is the row's own authority label and overrides the
+	// score table in recallConfidence. Sources whose rows are a deterministic
+	// lookup rather than a ranked guess declare it here — their score is a
+	// fixed rank anchor, so no threshold over it can carry information.
+	Confidence string
 	Score      float64
 	At         int64
 	SubjectID  string // empty/self = operator; used for cross-subject filtering (M6)

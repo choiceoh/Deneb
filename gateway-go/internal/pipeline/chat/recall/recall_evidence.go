@@ -732,6 +732,11 @@ func formatRecallNoEvidence() string {
 }
 
 func recallConfidence(ev recallEvidence) string {
+	// A source that knows its own authority says so; the score table below only
+	// applies to rows whose score actually carries a relevance term.
+	if ev.Confidence != "" {
+		return ev.Confidence
+	}
 	switch ev.Kind {
 	case "wiki":
 		if ev.Score >= 1.10 {
@@ -739,7 +744,18 @@ func recallConfidence(ev recallEvidence) string {
 		}
 		return "medium"
 	case "diary":
-		if ev.Score >= 0.70 && ev.At > 0 {
+		// Score = 0.70 source prior + a 0-1 relevance term (cosine on the
+		// semantic path, normalized BM25 on the lexical one). The bar used to
+		// sit at 0.70 — the prior itself — so every matched diary row was
+		// "high" and the label carried nothing. 1.10 mirrors the band the
+		// sibling sources already justify: wiki asks +0.30 over its 0.80 prior,
+		// files ask +0.40 (the Nemotron relevant band, filestore.minSemanticScore)
+		// over 0.78. The semantic diary path shares that embedding scale, so it
+		// gets the same +0.40. The lexical path is only weakly constrained by
+		// this — normalized BM25 clears 0.40 at a raw score of 0.67, and diary
+		// BM25 commonly runs 3-9 — and tightening it needs a measured
+		// distribution, not a picked number.
+		if ev.Score >= 1.10 && ev.At > 0 {
 			return "high"
 		}
 		return "medium"
@@ -751,6 +767,13 @@ func recallConfidence(ev recallEvidence) string {
 		if ev.Score >= 1.18 {
 			return "high"
 		}
+		return "medium"
+	case "org":
+		// org rows declare their own Confidence at construction, so this arm is
+		// only reached if a row lost its label. There is nothing to threshold —
+		// the score is a fixed rank anchor — so report the cautious half of the
+		// two labels org uses rather than inheriting a bar meant for ranked
+		// sources.
 		return "medium"
 	case "session", "transcript":
 		if ev.Score >= 0.80 {
