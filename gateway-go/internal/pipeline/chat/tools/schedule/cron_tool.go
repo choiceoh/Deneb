@@ -291,6 +291,13 @@ func cronAdd(ctx context.Context, d *tooldeps.ChronoDeps, name, schedule, comman
 	// Apply delivery mode.
 	cronApplyDeliveryMode(ctx, &job, opts.DeliveryMode)
 
+	// The store's AddJob is "replace if exists" (cron/store.go), so an add that
+	// reuses an ID silently discards the operator's existing automation —
+	// schedule, command, delivery mode, retry config, run history — while the
+	// result line still says 추가. Capture what is about to be lost so the
+	// result can say so.
+	replaced := cronReplacedJobNotice(d, job.ID, storeSched, command)
+
 	if err := d.Service.Add(ctx, job); err != nil {
 		return "", fmt.Errorf("크론 작업 추가 실패: %w", err)
 	}
@@ -307,7 +314,46 @@ func cronAdd(ctx context.Context, d *tooldeps.ChronoDeps, name, schedule, comman
 	if payload.RetryCount > 0 {
 		fmt.Fprintf(&sb, "- 재시도: 최대 %d회\n", payload.RetryCount)
 	}
+	sb.WriteString(replaced)
 	return sb.String(), nil
+}
+
+// cronReplacedJobNotice reports the job an add is about to overwrite.
+//
+// cron add is the only write path that can destroy an operator-configured
+// automation without naming it: the store replaces by ID, and the tool answers
+// "추가 완료" either way. calendar create warns about the slot it collides with
+// and wiki write names the sections it dropped; this is the same duty on the
+// higher-stakes surface — a replaced morning-letter or audit job simply stops
+// happening, with nothing in the result to notice.
+//
+// It does not block: the operator asked for the add, and cron update exists for
+// deliberate edits. Empty when the ID is free, so an ordinary add stays quiet.
+func cronReplacedJobNotice(d *tooldeps.ChronoDeps, jobID string, newSched cron.StoreSchedule, newCommand string) string {
+	if d == nil || d.Service == nil {
+		return ""
+	}
+	existing := d.Service.Job(jobID)
+	if existing == nil {
+		return ""
+	}
+	var changes []string
+	if oldSched := cron.FormatHumanSchedule(existing.Schedule); oldSched != cron.FormatHumanSchedule(newSched) {
+		changes = append(changes, fmt.Sprintf("스케줄 %q → %q", oldSched, cron.FormatHumanSchedule(newSched)))
+	}
+	// cronPayloadMsg is the same reader cron list/get use, so the notice cannot
+	// disagree with what the operator saw a moment ago.
+	if oldCommand := strings.TrimSpace(cronPayloadMsg(existing.Payload)); oldCommand != strings.TrimSpace(newCommand) {
+		changes = append(changes, fmt.Sprintf("명령 %q → %q",
+			textutil.TruncateRunesWithin(oldCommand, 60, "…"),
+			textutil.TruncateRunesWithin(strings.TrimSpace(newCommand), 60, "…")))
+	}
+	notice := fmt.Sprintf("\n⚠️ 같은 ID의 기존 작업을 교체했다 (추가가 아니다): %s", existing.Name)
+	if len(changes) > 0 {
+		notice += "\n  " + strings.Join(changes, "\n  ")
+	}
+	notice += "\n의도한 수정이 아니면 cron update로 되돌리고, 새 작업이면 다른 name을 써라.\n"
+	return notice
 }
 
 func cronUpdate(ctx context.Context, d *tooldeps.ChronoDeps, jobID, name, schedule, command string, enabled *bool, opts cronToolOpts) (string, error) {
