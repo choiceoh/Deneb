@@ -97,6 +97,10 @@ type UsageRecord struct {
 	// every record written before attribution existed.
 	Delivery  string `json:"delivery,omitempty"`  // auto-load | model-read
 	Exercised string `json:"exercised,omitempty"` // yes | no | unknown
+	// Evidence records WHICH kind of evidence produced Exercised (ADR 0006):
+	// tools | output | none. Output-derived verdicts are shadowed from the
+	// corpus until observed, so the ledger must keep them distinguishable.
+	Evidence string `json:"evidence,omitempty"`
 }
 
 // UsageFailureTrace is the structured failure evidence carried by a real skill

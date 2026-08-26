@@ -40,7 +40,14 @@ const (
 const (
 	SkillExercisedYes     = "yes"     // a tool the skill requires actually ran
 	SkillExercisedNo      = "no"      // none of its required tools ran
-	SkillExercisedUnknown = "unknown" // the skill declares no tools to check against
+	SkillExercisedUnknown = "unknown" // the skill declares no evidence to check against
+)
+
+// Evidence kinds for SkillUseAttribution.Evidence (ADR 0006).
+const (
+	SkillEvidenceTools  = "tools"  // a declared exercise/requires tool ran
+	SkillEvidenceOutput = "output" // the answer matched a declared output pattern
+	SkillEvidenceNone   = "none"   // the skill declares nothing to observe
 )
 
 // SkillUseAttribution says WHERE in the skill's path a turn's outcome belongs.
@@ -50,6 +57,12 @@ const (
 type SkillUseAttribution struct {
 	Delivery  string
 	Exercised string
+	// Evidence names WHICH kind of evidence decided Exercised. Reasoning-shaped
+	// skills prove their procedure through the answer's shape, not a tool call
+	// (ADR 0006), and output-derived verdicts stay shadowed until their
+	// false-positive rate is observed — so the ledger must record which kind
+	// produced the verdict, not just the verdict.
+	Evidence string
 }
 
 // SkillUsageAttributionRecorder is the optional richer form of

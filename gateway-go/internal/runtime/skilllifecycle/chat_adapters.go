@@ -3,6 +3,7 @@ package skilllifecycle
 import (
 	"errors"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -76,6 +77,7 @@ func (a *chatUsageRecorderAdapter) recordSkillUse(sessionKey, skillName string, 
 		Source:       genesis.UsageSourceReal,
 		Delivery:     attr.Delivery,
 		Exercised:    attr.Exercised,
+		Evidence:     attr.Evidence,
 	}); err != nil && a.logger != nil {
 		// Usage telemetry is best-effort — a write failure must never affect the
 		// chat turn, but log it so a persistently failing tracker is visible.
@@ -89,7 +91,8 @@ func (a *chatUsageRecorderAdapter) recordSkillUse(sessionKey, skillName string, 
 	// held-out gate measures is synthetic — and a synthetic corpus is exactly
 	// the one where every candidate ties the original (2026-08-26 diagnosis:
 	// 118 proposals, 28 rejections, 0 accepted evolves in 30 days).
-	unexercised := success && attr.Exercised == chatport.SkillExercisedNo
+	unexercised := success && attr.Exercised == chatport.SkillExercisedNo &&
+		outputEvidenceArmed(attr.Evidence)
 	switch {
 	case !success:
 		a.spawnCapture("skill-failed-use-validation-case", func() {
@@ -348,4 +351,20 @@ func (a *chatUsageRecorderAdapter) spawnCapture(name string, fn func()) {
 		spawn = safego.GoWithSlog
 	}
 	spawn(a.logger, name, fn)
+}
+
+// outputEvidenceArmed reports whether an unexercised verdict is allowed to mint
+// a validation case. Tool evidence always is — a declared tool either ran or it
+// did not. Answer-shape evidence (ADR 0006) stays SHADOWED behind
+// DENEB_SKILL_OUTPUT_EVIDENCE=1: the verdict is still recorded in the usage
+// ledger so its false-positive rate can be observed, but it writes nothing into
+// the corpus until someone has looked. A pattern declared on a conditional
+// artifact records correct runs as failures, which poisons the corpus in the
+// opposite direction from the starvation it was meant to fix — the same trap
+// that made only 1 of 17 tool declarations honest (2026-08-26).
+func outputEvidenceArmed(evidence string) bool {
+	if evidence != chatport.SkillEvidenceOutput {
+		return true
+	}
+	return strings.TrimSpace(os.Getenv("DENEB_SKILL_OUTPUT_EVIDENCE")) == "1"
 }

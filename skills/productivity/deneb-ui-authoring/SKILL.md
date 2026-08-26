@@ -10,6 +10,7 @@ metadata:
         "emoji": "🪪",
         "tags": ["deneb-ui", "rich-card", "structured-output", "interactive", "dashboard", "briefing"],
         "triggers": ["카드로", "버튼으로", "대시보드로", "선택지로", "표로 보여", "접어서 보여"],
+        "exercise_output": ["fence:deneb-ui"],
       },
   }
 ---

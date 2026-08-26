@@ -34,7 +34,10 @@ type PromptSkill struct {
 	// (chat/tool_skill_required_tools.go).
 	RequiresTools []string `json:"requiresTools,omitempty"`
 	// ExerciseTools feeds usage attribution only (never eligibility).
-	ExerciseTools          []string `json:"exerciseTools,omitempty"`
+	ExerciseTools []string `json:"exerciseTools,omitempty"`
+	// ExerciseOutput feeds usage attribution only (never eligibility) — the
+	// answer-shape counterpart of ExerciseTools (ADR 0006).
+	ExerciseOutput         []string `json:"exerciseOutput,omitempty"`
 	DisableModelInvocation bool     `json:"disableModelInvocation,omitempty"`
 	// Body is retained in the in-memory snapshot for exact-trigger JIT
 	// injection. It is never serialized or rendered in the ambient catalog.
