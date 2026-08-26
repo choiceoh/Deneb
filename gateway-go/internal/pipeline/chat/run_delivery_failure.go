@@ -104,6 +104,13 @@ func fallbackForStopReason(stopReason string) string {
 		// The grace call iteration normally produces a wrap-up text, so this
 		// fallback is only reached when even that turn yielded no output.
 		return "응답이 턴 예산 한도에 도달했지만 마무리 답변을 받지 못했어요. 다시 요청해 주세요."
+	case "max_total_tokens":
+		// The run exhausted MaxTotalOutputTokens (executor_runner.go's
+		// requestTokenBudget). Its siblings max_turns/max_turns_graceful were
+		// here from the start; this one was added later and never joined them,
+		// so a budget-exhausted run that had not yet written prose — the ordinary
+		// shape for a tool-heavy automation turn — delivered nothing at all.
+		return "응답이 출력 토큰 예산을 모두 써서 중단됐어요. 다시 요청해 주세요 — 범위를 좁혀서 물으면 예산 안에 끝납니다."
 	case "timeout":
 		return "응답 생성이 시간 초과로 중단됐어요. 잠시 후에 다시 시도해 주세요."
 	case "aborted":
