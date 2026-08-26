@@ -171,27 +171,8 @@ func DiscoverWorkspaceSkills(cfg DiscoverConfig) []SkillEntry {
 	// Merge by name: extra < bundled < managed (incl. genesis) < personal <
 	// project < workspace
 	merged := make(map[string]discoveredSkill)
-	for _, s := range extraSkills {
-		merged[s.Name] = s
-	}
-	for _, s := range bundledSkills {
-		merged[s.Name] = s
-	}
-	for _, s := range managedSkills {
-		merged[s.Name] = s
-	}
-	for _, s := range genesisSkills {
-		merged[s.Name] = s
-	}
-	for _, s := range personalSkills {
-		merged[s.Name] = s
-	}
-	for _, s := range projectSkills {
-		merged[s.Name] = s
-	}
-	for _, s := range workspaceSkills {
-		merged[s.Name] = s
-	}
+	mergeSkills(merged, log, extraSkills, bundledSkills, managedSkills,
+		genesisSkills, personalSkills, projectSkills, workspaceSkills)
 
 	// Convert to SkillEntry with parsed frontmatter/metadata.
 	entries := make([]SkillEntry, 0, len(merged))
@@ -598,4 +579,28 @@ func fileSize(path string) int64 {
 		return 0
 	}
 	return info.Size()
+}
+
+// mergeSkills folds each source into merged in precedence order (later wins)
+// and NAMES every override in the log.
+//
+// Shadowing is normal — genesis evolves a bundled seed into the managed copy
+// that then wins — but it is invisible, and an invisible override is a trap:
+// the file you edit is not the file that runs. It also hides accidents. On
+// 2026-08-26 a genesis-authored `email-analysis` v0.1.0 (36 lines) was found
+// shadowing the mature bundled v1.3.0 (90 lines), and all 16 of the skill's
+// uses had gone to the thin copy. Nothing reported it; the versions had to be
+// compared by hand to see it.
+func mergeSkills(merged map[string]discoveredSkill, log *slog.Logger, sources ...[]discoveredSkill) {
+	for _, source := range sources {
+		for _, s := range source {
+			if prev, shadowed := merged[s.Name]; shadowed && log != nil {
+				log.Warn("skills: name shadowed by higher-precedence source",
+					"skill", s.Name,
+					"winner", s.Source, "winnerPath", s.FilePath,
+					"shadowed", prev.Source, "shadowedPath", prev.FilePath)
+			}
+			merged[s.Name] = s
+		}
+	}
 }
