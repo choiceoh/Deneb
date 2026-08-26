@@ -685,10 +685,15 @@ const recallSummarySemanticFloor = 0.25
 const recallSummarySemanticQuota = 2
 
 func formatRecallEvidence(evidence []recallEvidence) string {
-	return formatRecallEvidenceAt(evidence, time.Now())
+	block, _ := formatRecallEvidenceAt(evidence, time.Now())
+	return block
 }
 
-func formatRecallEvidenceAt(evidence []recallEvidence, now time.Time) string {
+// formatRecallEvidenceAt renders the evidence block and reports how many rows
+// the character budget cut. The count matters beyond this turn: a snapshot the
+// budget shortened is degraded exactly the way a deadline-cut one is, and
+// ShouldFreeze must not pin it onto every later turn about the same topic.
+func formatRecallEvidenceAt(evidence []recallEvidence, now time.Time) (string, int) {
 	var sb strings.Builder
 	sb.WriteString(recallContextOpenTag)
 	sb.WriteString("\n")
@@ -696,6 +701,7 @@ func formatRecallEvidenceAt(evidence []recallEvidence, now time.Time) string {
 	sb.WriteString("## 회상 근거 (자동 검색)\n\n")
 	sb.WriteString("사용자 메시지가 과거 맥락을 암시해 서버가 위키/일지/파일/세션 이력을 미리 검색했다. 아래 근거만 확실한 과거 맥락으로 사용하고, 근거가 부족하면 부족하다고 말하라. source=file 행은 보관된 파일의 일치 구절이며, 전체 내용은 files 도구나 knowledge(op=\"read\", ref=\"f:<경로>\")로 열어볼 수 있다.\n\n")
 
+	written, dropped := 0, 0
 	for _, ev := range evidence {
 		kind := sanitizeRecallContextText(ev.Kind)
 		source := sanitizeRecallContextText(ev.Source)
@@ -714,12 +720,14 @@ func formatRecallEvidenceAt(evidence []recallEvidence, now time.Time) string {
 		}
 		entry += "\n  " + strings.ReplaceAll(note, "\n", " ") + "\n"
 		if sb.Len()+len(entry)+len(recallContextCloseTag)+1 > recallMaxChars {
+			dropped = len(evidence) - written
 			break
 		}
 		sb.WriteString(entry)
+		written++
 	}
 	sb.WriteString(recallContextCloseTag)
-	return sb.String()
+	return sb.String(), dropped
 }
 
 func formatRecallNoEvidence() string {

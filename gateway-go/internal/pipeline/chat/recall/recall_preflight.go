@@ -291,9 +291,19 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	}
 
 	evidence = rankRecallEvidence(evidence, queries, searchMessage, cue, deps.now())
+	block, budgetDropped := formatRecallEvidenceAt(evidence, deps.now())
+	if budgetDropped > 0 {
+		// The character budget cut rows the ranking chose. That is the same
+		// class of degradation as a deadline cut, so it must reach `truncated`
+		// too — otherwise ShouldFreeze pins a partial snapshot onto every later
+		// turn about this topic (first-write-wins, no expiry).
+		truncated = true
+	}
 	if logger != nil {
 		logger.Info("recall preflight: evidence injected",
-			"session", params.SessionKey, "count", len(evidence), "sources", collection.sourceSummary, "truncated", truncated)
+			"session", params.SessionKey, "count", len(evidence)-budgetDropped,
+			"budgetDropped", budgetDropped,
+			"sources", collection.sourceSummary, "truncated", truncated)
 	}
 	// 효용 접지: record which wiki pages this turn actually pulled into context so
 	// the dream cycle can learn which of its writes earn their keep (recall_hits.go),
@@ -308,7 +318,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	// temporal/graph — recall_route.go): the wiki evidence above usually EXISTS
 	// for these but is the wrong answer surface, so the hint rides along to
 	// nudge the right tool. Outside the fence — server guidance, not recall.
-	return combineCurrentFactContext(currentFacts, appendRoutingHint(formatRecallEvidenceAt(evidence, deps.now()), message, params.SessionKey, logger)), truncated
+	return combineCurrentFactContext(currentFacts, appendRoutingHint(block, message, params.SessionKey, logger)), truncated
 }
 
 // high-risk winner or conflict cannot fall off the fixed live-context budget.
