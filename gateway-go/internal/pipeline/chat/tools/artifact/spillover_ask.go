@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
@@ -20,10 +21,10 @@ import (
 // spilled to protect. So the map stage runs against the local model and only
 // its answer — plus line numbers the root can verify with offset — comes back.
 //
-// The fan-out is deliberately small and sequential. Compaction bounds its own
-// LLM digestion at 4 chunks per pass, and this borrows that ceiling rather than
-// inventing a second cost model: a delegated read sits inside a user's turn, so
-// its cost has to be bounded up front, not discovered.
+// The fan-out is deliberately small. Compaction bounds its own LLM digestion at
+// 4 chunks per pass, and this borrows that ceiling rather than inventing a
+// second cost model: a delegated read sits inside a user's turn, so its cost has
+// to be bounded up front, not discovered.
 const (
 	spillAskMaxChunks     = 4
 	spillAskChunkMaxChars = 12000
@@ -104,15 +105,9 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID, content st
 
 	// One delegated read at a time. read_spillover is classified parallel-safe,
 	// so a single assistant turn can emit several question-bearing calls and the
-	// executor runs them concurrently — each then launching its own four map
-	// requests plus a reduce as critical local-hub work. The four-chunk bound is
-	// per invocation, so the turn's real fan-out would be however many calls the
-	// model happened to make.
-	//
-	// Serialize rather than widen: the local hub is one box, and a queued read
-	// that answers beats two that contend and time out. A call that spends its
-	// whole budget waiting falls back to paging, which is the honest
-	// degradation — the caller says so rather than returning page 1 as an answer.
+	// executor runs them concurrently. The slot below keeps the per-turn fan-out
+	// bounded to one invocation's chunks plus reduce, while the independent map
+	// chunks inside that invocation run together.
 	select {
 	case spillAskSlots <- struct{}{}:
 		defer func() { <-spillAskSlots }()
@@ -126,37 +121,53 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID, content st
 		answer              string
 		cited               bool // carried real citations, vs the no-evidence reply
 	}
+
+	results := make([]partial, len(chunks))
+	usable := make([]bool, len(chunks))
+	var wg sync.WaitGroup
+	for i, c := range chunks {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			user := fmt.Sprintf("## 질문\n%s\n\n## 발췌 (%d–%d줄)\n%s",
+				question, c.firstLine, c.lastLine, c.text)
+			callCtx, cancel := context.WithTimeout(phaseCtx, spillAskCallTimeout)
+			answer, err := ask(callCtx, spillAskSystemPrompt, user, spillAskChunkTokens)
+			// Checked BEFORE cancel(), which would set Err() itself. The local-AI
+			// hub returns whatever text it accumulated with a nil error when the
+			// stream is cut mid-sentence, so a deadline that fired is the only
+			// signal that this answer is a fragment — and a fragment that happens
+			// to carry a citation would otherwise be presented as a grounded,
+			// complete answer.
+			timedOut := callCtx.Err() != nil
+			cancel()
+			if err != nil || timedOut || strings.TrimSpace(answer) == "" {
+				return // one chunk failing must not sink the whole read
+			}
+			// The citation contract is only a prompt instruction, and a local model
+			// is free to ignore it. An answer with no in-range [L<n>] is not
+			// verifiable from the root's seat, which is the whole basis for
+			// returning an answer instead of the text — so drop it exactly like a
+			// failed chunk rather than presenting it as grounded evidence.
+			cited := citationsAllInRanges(answer, [][2]int{{c.firstLine, c.lastLine}})
+			if !cited && !isNoEvidenceAnswer(answer) {
+				return
+			}
+			results[i] = partial{
+				firstLine: c.firstLine, lastLine: c.lastLine,
+				clippedLines: c.clippedLines, answer: strings.TrimSpace(answer),
+				cited: cited,
+			}
+			usable[i] = true
+		}()
+	}
+	wg.Wait()
+
 	var partials []partial
-	for _, c := range chunks {
-		user := fmt.Sprintf("## 질문\n%s\n\n## 발췌 (%d–%d줄)\n%s",
-			question, c.firstLine, c.lastLine, c.text)
-		callCtx, cancel := context.WithTimeout(phaseCtx, spillAskCallTimeout)
-		answer, err := ask(callCtx, spillAskSystemPrompt, user, spillAskChunkTokens)
-		// Checked BEFORE cancel(), which would set Err() itself. The local-AI
-		// hub returns whatever text it accumulated with a nil error when the
-		// stream is cut mid-sentence, so a deadline that fired is the only
-		// signal that this answer is a fragment — and a fragment that happens
-		// to carry a citation would otherwise be presented as a grounded,
-		// complete answer.
-		timedOut := callCtx.Err() != nil
-		cancel()
-		if err != nil || timedOut || strings.TrimSpace(answer) == "" {
-			continue // one chunk failing must not sink the whole read
+	for i, p := range results {
+		if usable[i] {
+			partials = append(partials, p)
 		}
-		// The citation contract is only a prompt instruction, and a local model
-		// is free to ignore it. An answer with no in-range [L<n>] is not
-		// verifiable from the root's seat, which is the whole basis for
-		// returning an answer instead of the text — so drop it exactly like a
-		// failed chunk rather than presenting it as grounded evidence.
-		cited := citationsAllInRanges(answer, [][2]int{{c.firstLine, c.lastLine}})
-		if !cited && !isNoEvidenceAnswer(answer) {
-			continue
-		}
-		partials = append(partials, partial{
-			firstLine: c.firstLine, lastLine: c.lastLine,
-			clippedLines: c.clippedLines, answer: strings.TrimSpace(answer),
-			cited: cited,
-		})
 	}
 	if len(partials) == 0 {
 		return "", false
