@@ -14,8 +14,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/anomalywatch"
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
@@ -560,6 +563,39 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 					},
 					Tracker: s.genesisTracker,
 					Logger:  s.logger,
+				})
+			}
+			// Anomaly watch: hand the recent log window to the LOCAL model and
+			// write down whatever looks wrong. Every other watcher detects what
+			// somebody anticipated — the error miner keys on signatures, lanewatch
+			// on silence budgets someone wrote down. This is the one that does not
+			// need to have anticipated, and the ledger it writes is read later by
+			// whoever is checking the runtime, hours after the window it covers.
+			// Observation-only: it never acts, because the reader is the verifier.
+			if s.logCapture != nil {
+				s.autonomousSvc.RegisterTask(&anomalywatch.Task{
+					Lines: func(sinceMs int64, limit int) []observe.LogLine {
+						r := s.logCapture.Ring()
+						if r == nil {
+							return nil
+						}
+						return r.Query(observe.QueryOpts{
+							MinLevel: slog.LevelWarn,
+							SinceMs:  sinceMs,
+							Limit:    limit,
+						})
+					},
+					// The lightweight role IS the local dsv4 (agents.lightweightModel
+					// = wormhole/deepseek-v4-flash). Deliberately not the main role:
+					// prompts and logs carry the operator's mail, wiki, and contacts,
+					// so this reading must stay on hardware we own, and an hourly
+					// background pass must not compete with interactive turns.
+					Judge: func(ctx context.Context, system, user string, maxTokens int) (string, error) {
+						return pilot.CallLocalLLM(ctx, system, user, maxTokens)
+					},
+					StateDir: config.ResolveStateDir(),
+					Model:    string(modelrole.RoleLightweight),
+					Logger:   s.logger,
 				})
 			}
 			// Curriculum lane (RSI P5-1): coverage-gap demand injection for the

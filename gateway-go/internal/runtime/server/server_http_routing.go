@@ -111,6 +111,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	})
 	// Self-improvement telemetry digest for an agent/puppeteer (loopback-only).
 	mux.HandleFunc("GET /api/observatory", s.handleObservatory)
+	mux.HandleFunc("GET /api/anomalies", s.handleAnomalies)
 
 	// /debug/pprof/* — runtime profiling + goroutine dumps for live diagnosis.
 	// Safe to expose because the gateway binds loopback by default in
