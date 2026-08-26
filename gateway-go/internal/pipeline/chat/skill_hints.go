@@ -89,13 +89,19 @@ func buildSkillHints(
 	autoLoaded := make([]string, 0, len(hints))
 	loadedBytes := 0
 	for _, skill := range hints {
+		names = append(names, skill.Name)
 		// Already on the wire from an earlier turn of this session (the tail
-		// register keeps historical copies attached). A second copy of the same
-		// static document adds bytes, not information.
+		// register keeps historical copies attached): skip the BODY, not the
+		// skill. It still counts as loaded for this turn — its instructions are
+		// in the model's context — so the tools it declares (RequiresTools) keep
+		// getting activated. Skipping the whole skill dropped those activations
+		// and, with the called-only deferred replay, the tool vanished while the
+		// history still told the model to use it (모닝레터 → morning_letter,
+		// caught in puppet mode 2026-08-26).
 		if alreadyInHistory[skill.Name] {
+			autoLoaded = append(autoLoaded, skill.Name)
 			continue
 		}
-		names = append(names, skill.Name)
 		body := strings.TrimSpace(skill.Body)
 		if body != "" && len(body) <= maxAutoLoadedSkillBodyBytes && loadedBytes+len(body) <= maxAutoLoadedSkillTotalBytes {
 			if loaded.Len() == 0 {
