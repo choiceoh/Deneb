@@ -34,10 +34,11 @@ func loadFake(t org.OrgTree) func() (org.OrgTree, error) {
 func TestRecallOrgEvidence_MemberMatchWithDeptPath(t *testing.T) {
 	got := recallOrgEvidence(context.Background(), loadFake(fakeOrg()), nil, "오선택 전무가 요즘 뭐 챙기지?")
 	want := []recallEvidence{{
-		Kind:   "org",
-		Source: "조직도: 오선택",
-		Note:   "탑솔라 · 기획조정실 · 전무 · 기획조정실장",
-		Score:  recallOrgSourcePrior,
+		Kind:       "org",
+		Confidence: "high",
+		Source:     "조직도: 오선택",
+		Note:       "탑솔라 · 기획조정실 · 전무 · 기획조정실장",
+		Score:      recallOrgSourcePrior,
 	}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("recallOrgEvidence() = %+v, want %+v", got, want)
@@ -47,10 +48,11 @@ func TestRecallOrgEvidence_MemberMatchWithDeptPath(t *testing.T) {
 func TestRecallOrgEvidenceReturnsNodeMembersList(t *testing.T) {
 	got := recallOrgEvidence(context.Background(), loadFake(fakeOrg()), nil, "모듈팀은 누구누구야?")
 	want := []recallEvidence{{
-		Kind:   "org",
-		Source: "조직도: 탑솔라 · 기획조정실 · 모듈팀",
-		Note:   "구성원 2명: 차남두 (부장), 김성훈 (이사)",
-		Score:  recallOrgSourcePrior - 0.01,
+		Kind:       "org",
+		Confidence: "medium",
+		Source:     "조직도: 탑솔라 · 기획조정실 · 모듈팀",
+		Note:       "구성원 2명: 차남두 (부장), 김성훈 (이사)",
+		Score:      recallOrgSourcePrior - 0.01,
 	}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("recallOrgEvidence() = %+v, want %+v", got, want)
@@ -103,10 +105,11 @@ func TestRecallOrgEvidenceReturnsFirstUniqueEntityMatch(t *testing.T) {
 
 	got := recallOrgEvidence(context.Background(), loadFake(tree), nil, "팀 이수 이수민 확인")
 	want := []recallEvidence{{
-		Kind:   "org",
-		Source: "조직도: 이수민",
-		Note:   "팀 · 과장",
-		Score:  recallOrgSourcePrior,
+		Kind:       "org",
+		Confidence: "high",
+		Source:     "조직도: 이수민",
+		Note:       "팀 · 과장",
+		Score:      recallOrgSourcePrior,
 	}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("recallOrgEvidence() = %+v, want first unique 3-rune member only: %+v", got, want)
