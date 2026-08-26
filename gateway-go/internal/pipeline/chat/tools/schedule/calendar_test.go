@@ -28,6 +28,48 @@ func (f *fakeCalReader) Get(_ context.Context, id string) (*tooldeps.CalendarEve
 	return f.byID[id], nil
 }
 
+type blockingCalReader struct {
+	started chan struct{}
+	release chan struct{}
+	events  []tooldeps.CalendarEvent
+}
+
+func (f *blockingCalReader) ListUpcoming(ctx context.Context, _, _ time.Time, _ int) ([]tooldeps.CalendarEvent, error) {
+	close(f.started)
+	select {
+	case <-f.release:
+		return f.events, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (f *blockingCalReader) Get(_ context.Context, _ string) (*tooldeps.CalendarEvent, error) {
+	return nil, nil
+}
+
+type observingLocalCal struct {
+	started chan struct{}
+	events  []tooldeps.CalendarEvent
+}
+
+func (l *observingLocalCal) ListRange(_, _ time.Time) []tooldeps.CalendarEvent {
+	close(l.started)
+	return l.events
+}
+
+func (l *observingLocalCal) Get(string) *tooldeps.CalendarEvent { return nil }
+
+func (l *observingLocalCal) Create(tooldeps.CalendarCreateInput) (tooldeps.CalendarEvent, error) {
+	return tooldeps.CalendarEvent{}, errors.New("not implemented")
+}
+
+func (l *observingLocalCal) Update(string, tooldeps.CalendarCreateInput) (*tooldeps.CalendarEvent, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (l *observingLocalCal) Delete(string) error { return errors.New("not implemented") }
+
 func newTestLocalCal(t *testing.T) *localcal.Store {
 	t.Helper()
 	store, err := localcal.New(filepath.Join(t.TempDir(), "calendar.json"))
@@ -88,6 +130,63 @@ func TestCalendarListReturnsMergedEventsSortedByStart(t *testing.T) {
 	// local (T+1h) must sort before google (T+2h).
 	if strings.Index(out, "로컬 통화") > strings.Index(out, "구글 주간회의") {
 		t.Errorf("events not sorted by start time:\n%s", out)
+	}
+}
+
+func TestCalMergedReadsGoogleAndLocalConcurrently(t *testing.T) {
+	now := time.Now()
+	google := &blockingCalReader{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+		events: []tooldeps.CalendarEvent{
+			{ID: "g-event-1", Summary: "구글 주간회의", Start: now.Add(2 * time.Hour)},
+		},
+	}
+	local := &observingLocalCal{
+		started: make(chan struct{}),
+		events: []tooldeps.CalendarEvent{
+			{ID: "local:event-1", Summary: "로컬 통화", Start: now.Add(time.Hour)},
+		},
+	}
+	released := false
+	releaseGoogle := func() {
+		if !released {
+			close(google.release)
+			released = true
+		}
+	}
+	defer releaseGoogle()
+
+	var events []tooldeps.CalendarEvent
+	var warn string
+	done := make(chan struct{})
+	go func() {
+		events, warn = calMerged(context.Background(), depsWith(google, local), now, now.Add(4*time.Hour))
+		close(done)
+	}()
+
+	waitForSignal(t, "google list start", google.started)
+	waitForSignal(t, "local list start while google is still blocked", local.started)
+
+	releaseGoogle()
+	waitForSignal(t, "merged calendar result", done)
+	if warn != "" {
+		t.Fatalf("warn = %q", warn)
+	}
+	if len(events) != 2 {
+		t.Fatalf("events = %+v, want google + local", events)
+	}
+	if events[0].Summary != "로컬 통화" || events[1].Summary != "구글 주간회의" {
+		t.Fatalf("events not merged and sorted: %+v", events)
+	}
+}
+
+func waitForSignal(t *testing.T, name string, ch <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatalf("timed out waiting for %s", name)
 	}
 }
 

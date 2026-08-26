@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -57,6 +58,8 @@ type apiConferenceData struct {
 		URI            string `json:"uri"`
 	} `json:"entryPoints"`
 }
+
+var eventLocationCache sync.Map // map[string]*time.Location
 
 // ListUpcoming returns events from the primary calendar starting between
 // `from` and `to`, sorted by start time. `singleEvents=true` expands
@@ -193,7 +196,7 @@ func parseEventTime(dt apiEventDateTime) (parsed time.Time, allDay bool) {
 			return t, false
 		}
 		if dt.TimeZone != "" {
-			if loc, err := time.LoadLocation(dt.TimeZone); err == nil {
+			if loc, ok := loadEventLocation(dt.TimeZone); ok {
 				// Google sends "2026-05-27T14:00:00" with a separate
 				// timeZone field; try common timezone-naive layouts.
 				for _, layout := range []string{
@@ -213,7 +216,7 @@ func parseEventTime(dt apiEventDateTime) (parsed time.Time, allDay bool) {
 		// local day; fall back to UTC when no tz given.
 		loc := time.UTC
 		if dt.TimeZone != "" {
-			if l, err := time.LoadLocation(dt.TimeZone); err == nil {
+			if l, ok := loadEventLocation(dt.TimeZone); ok {
 				loc = l
 			}
 		}
@@ -223,4 +226,22 @@ func parseEventTime(dt apiEventDateTime) (parsed time.Time, allDay bool) {
 		}
 	}
 	return time.Time{}, false
+}
+
+func loadEventLocation(name string) (*time.Location, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, false
+	}
+	if cached, ok := eventLocationCache.Load(name); ok {
+		loc, ok := cached.(*time.Location)
+		return loc, ok && loc != nil
+	}
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		return nil, false
+	}
+	actual, _ := eventLocationCache.LoadOrStore(name, loc)
+	stored, ok := actual.(*time.Location)
+	return stored, ok && stored != nil
 }
