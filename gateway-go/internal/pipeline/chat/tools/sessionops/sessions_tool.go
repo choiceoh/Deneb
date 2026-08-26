@@ -203,7 +203,13 @@ func toolSessionsHistory(transcript toolport.TranscriptStore) toolport.ToolFunc 
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "Session %q history (%d of %d messages):\n\n", p.SessionKey, len(msgs), total)
 		for i, msg := range msgs {
-			content := msg.TextContent()
+			// History replays what HAPPENED in a session, so a tool call is
+			// content — rendering it through TextContent ("what was said") left
+			// a tool-only turn as an empty "[assistant] " row.
+			content := msg.SearchableText()
+			if strings.TrimSpace(content) == "" {
+				continue
+			}
 			if len(content) > 500 {
 				// Rune-safe cut so a multi-byte char (Korean) never splits into a
 				// U+FFFD replacement char in the history preview.
@@ -283,17 +289,21 @@ func toolSessionsSearch(transcript toolport.TranscriptStore) toolport.ToolFunc {
 				hasBefore := m.Index > 0 && len(m.Context) > 0
 				hasAfter := len(m.Context) > 1 || (len(m.Context) == 1 && !hasBefore)
 
+				// The MATCH is found with SearchableText (transcript/store.go),
+				// so it must be RENDERED with it too — otherwise a hit on a tool
+				// name prints an empty line and the search claims to have found
+				// something it cannot show.
 				if hasBefore {
 					c := m.Context[0]
-					content := Truncate(c.TextContent(), 200)
+					content := Truncate(c.SearchableText(), 200)
 					fmt.Fprintf(&sb, "  [ctx] [%s] %s\n", c.Role, content)
 				}
 
-				fmt.Fprintf(&sb, "  **[%s]** %s\n", m.Message.Role, Truncate(m.Message.TextContent(), 500))
+				fmt.Fprintf(&sb, "  **[%s]** %s\n", m.Message.Role, Truncate(m.Message.SearchableText(), 500))
 
 				if hasAfter {
 					c := m.Context[len(m.Context)-1]
-					content := Truncate(c.TextContent(), 200)
+					content := Truncate(c.SearchableText(), 200)
 					fmt.Fprintf(&sb, "  [ctx] [%s] %s\n", c.Role, content)
 				}
 				sb.WriteString("\n")
