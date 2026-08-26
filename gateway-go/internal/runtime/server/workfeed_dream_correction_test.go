@@ -48,17 +48,38 @@ func TestDreamCardCorrectionFunnelsToDisconfirmingQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := nf.Correct(other.ID, "메일 관련 정정"); err != nil {
+	// The operator corrects mail/meeting/proactive cards, almost never dream
+	// cards: 30 corrections on the live feed (2026-06~08) included 한미 조선→
+	// 한미 전선 and 박암민→박환민, and ZERO came from a dream card. A dream-only
+	// funnel therefore left the 5.7 disconfirming-evidence loop empty, so every
+	// fact-bearing card now feeds it.
+	if _, err := nf.Correct(other.ID, "한미 조선 아니고 한미 전선"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(wikiDir, ".dream-corrections.jsonl")); !os.IsNotExist(err) {
-		t.Fatal("non-dream correction must not enter the queue")
+	queue := filepath.Join(wikiDir, ".dream-corrections.jsonl")
+	raw, err := os.ReadFile(queue)
+	if err != nil || !strings.Contains(string(raw), "한미 전선") {
+		t.Fatalf("fact-bearing card correction did not reach the queue: %v %q", err, raw)
+	}
+
+	// Agent-internal log cards carry instructions, not wiki facts.
+	logCard, err := nf.Append(workfeed.Item{
+		Source: workfeed.SourceSystemLog, Title: "모델 튜너", Status: workfeed.StatusUnread,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nf.Correct(logCard.ID, "이거 그만 모니터링해"); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(queue); strings.Contains(string(raw), "그만 모니터링") {
+		t.Error("log-card instruction must not become disconfirming evidence")
 	}
 
 	if _, err := nf.Correct(dream.ID, "내 출근 시간은 10시다 — 9시로 학습한 건 틀렸다"); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join(wikiDir, ".dream-corrections.jsonl"))
+	raw, err = os.ReadFile(queue)
 	if err != nil {
 		t.Fatal(err)
 	}
