@@ -80,7 +80,9 @@ func TestStaticCacheKeyIgnoresSkills(t *testing.T) {
 func TestSemiStaticBlockPreservesByteStabilityAcrossCalls(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
-		ToolDefs:     []ToolDef{{Name: "read"}, {Name: "exec"}},
+		// The skills tool must be present for the block to render at all — these
+		// cases assert byte stability and block placement, not gating.
+		ToolDefs: []ToolDef{{Name: "read"}, {Name: "exec"}, {Name: "skills"}},
 		SkillsPrompt: `<available_skills>
   <skill>
     <name>deploy</name>
@@ -113,7 +115,7 @@ func TestSkillsRenderOnlyInSemiStaticBlock(t *testing.T) {
 	marker := "DENEB_SKILL_CACHE_SENTINEL_ZZZ"
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
-		ToolDefs:     []ToolDef{{Name: "read"}},
+		ToolDefs:     []ToolDef{{Name: "read"}, {Name: "skills"}},
 		SkillsPrompt: `<available_skills><skill><name>` + marker + `</name></skill></available_skills>`,
 	}
 
