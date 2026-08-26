@@ -15,6 +15,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
@@ -30,7 +32,37 @@ func deletedSkillsPath() string {
 }
 
 type deletedSkillsFile struct {
-	Skills []string `json:"skills"`
+	Skills []DeletedSkill `json:"skills"`
+}
+
+// DeletedSkill is one tombstone. It carries WHY and WHEN, not just the name:
+// the file used to be a bare name list, so a suppression left no trace of its
+// reason and no clock on it. Six skills — including the RSI loop's own
+// evolution-proposal and skill-factory — sat suppressed for five weeks before
+// anyone noticed, and the only way to date it was the file's mtime
+// (2026-08-26).
+type DeletedSkill struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason,omitempty"`
+	At     string `json:"at,omitempty"` // RFC3339
+}
+
+// UnmarshalJSON accepts both shapes: the legacy bare string ("fact-check") and
+// the object form. Old files stay readable — a tombstone that fails to parse
+// would silently un-suppress a skill the operator deliberately hid.
+func (d *DeletedSkill) UnmarshalJSON(data []byte) error {
+	var name string
+	if err := json.Unmarshal(data, &name); err == nil {
+		d.Name = name
+		return nil
+	}
+	type plain DeletedSkill
+	var p plain
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	*d = DeletedSkill(p)
+	return nil
 }
 
 // LoadDeletedSkillNames returns the tombstoned skill names, nil when none.
@@ -53,9 +85,9 @@ func LoadDeletedSkillNames() map[string]struct{} {
 		return nil
 	}
 	names := make(map[string]struct{}, len(f.Skills))
-	for _, n := range f.Skills {
-		if n != "" {
-			names[n] = struct{}{}
+	for _, d := range f.Skills {
+		if d.Name != "" {
+			names[d.Name] = struct{}{}
 		}
 	}
 	if len(names) == 0 {
@@ -64,24 +96,63 @@ func LoadDeletedSkillNames() map[string]struct{} {
 	return names
 }
 
-// MarkSkillDeleted appends name to the tombstone file (idempotent, sorted for
-// stable diffs). Used by the delete RPC for bundled skills.
-func MarkSkillDeleted(name string) error {
+// MarkSkillDeleted appends name to the tombstone file with the operator's
+// reason and the current time (idempotent, sorted for stable diffs). Used by
+// the delete RPC for bundled skills.
+//
+// The reason is recorded even when empty ("사유 미기재") because the alternative
+// — a name with no context — is what made the 2026-08 suppressions
+// unreviewable: nobody could tell whether a skill was hidden on purpose, by
+// which lane, or how long ago.
+func MarkSkillDeleted(name, reason string, now time.Time) error {
 	path := deletedSkillsPath()
 	if path == "" {
 		return os.ErrNotExist
 	}
-	names := LoadDeletedSkillNames()
-	if _, ok := names[name]; ok {
+	existing := LoadDeletedSkills()
+	for _, d := range existing {
+		if d.Name == name {
+			return nil
+		}
+	}
+	entry := DeletedSkill{Name: name, Reason: strings.TrimSpace(reason), At: now.UTC().Format(time.RFC3339)}
+	if entry.Reason == "" {
+		entry.Reason = "사유 미기재"
+	}
+	return writeDeletedSkills(path, append(existing, entry))
+}
+
+// LoadDeletedSkills returns every tombstone with its reason and time, sorted by
+// name. Nil when none.
+func LoadDeletedSkills() []DeletedSkill {
+	path := deletedSkillsPath()
+	if path == "" {
 		return nil
 	}
-	merged := make([]string, 0, len(names)+1)
-	for n := range names {
-		merged = append(merged, n)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
 	}
-	merged = append(merged, name)
-	sort.Strings(merged)
-	data, err := json.MarshalIndent(deletedSkillsFile{Skills: merged}, "", "  ")
+	var f deletedSkillsFile
+	if err := json.Unmarshal(data, &f); err != nil {
+		return nil
+	}
+	out := make([]DeletedSkill, 0, len(f.Skills))
+	for _, d := range f.Skills {
+		if d.Name != "" {
+			out = append(out, d)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+func writeDeletedSkills(path string, entries []DeletedSkill) error {
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	data, err := json.MarshalIndent(deletedSkillsFile{Skills: entries}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -111,24 +182,20 @@ func UnmarkSkillDeleted(name string) error {
 	if path == "" {
 		return os.ErrNotExist
 	}
-	names := LoadDeletedSkillNames()
-	if _, ok := names[name]; !ok {
+	existing := LoadDeletedSkills()
+	kept := make([]DeletedSkill, 0, len(existing))
+	found := false
+	for _, d := range existing {
+		if d.Name == name {
+			found = true
+			continue
+		}
+		kept = append(kept, d)
+	}
+	if !found {
 		return nil
 	}
-	delete(names, name)
-	merged := make([]string, 0, len(names))
-	for n := range names {
-		merged = append(merged, n)
-	}
-	sort.Strings(merged)
-	data, err := json.MarshalIndent(deletedSkillsFile{Skills: merged}, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return atomicfile.WriteFile(path, data, nil)
+	return writeDeletedSkills(path, kept)
 }
 
 // DeletedSkillNamesSorted returns the tombstoned names in stable order, so a

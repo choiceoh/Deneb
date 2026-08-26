@@ -29,6 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
@@ -314,8 +315,12 @@ func skillsUpdate(deps SkillsDeps) rpcutil.HandlerFunc {
 func skillsDelete(deps SkillsDeps) rpcutil.HandlerFunc {
 	return minibind.BindOptional[struct {
 		Name string `json:"name"`
+		// Reason is recorded on the tombstone so a suppression can be reviewed
+		// later. Optional — an unexplained tombstone still records its time.
+		Reason string `json:"reason"`
 	}](func(ctx context.Context, req *protocol.RequestFrame, p struct {
-		Name string `json:"name"`
+		Name   string `json:"name"`
+		Reason string `json:"reason"`
 	},
 	) *protocol.ResponseFrame {
 		p.Name = strings.TrimSpace(p.Name)
@@ -337,7 +342,7 @@ func skillsDelete(deps SkillsDeps) rpcutil.HandlerFunc {
 			// removing files there would dirty the production checkout, so
 			// deletion is a persistent tombstone the catalog filters instead
 			// (skills.LoadDeletedSkillNames via chat.excludedSkillNames).
-			if err := skills.MarkSkillDeleted(entry.Skill.Name); err != nil {
+			if err := skills.MarkSkillDeleted(entry.Skill.Name, p.Reason, time.Now()); err != nil {
 				return rpcerr.WrapUnavailable("failed to record skill deletion", err).Response(req.ID)
 			}
 		default:

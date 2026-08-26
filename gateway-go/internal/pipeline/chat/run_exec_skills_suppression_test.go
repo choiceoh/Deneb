@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 )
@@ -31,7 +32,7 @@ func captureSlog(t *testing.T) *bytes.Buffer {
 func TestLogSuppressedSkillsSeparatesTombstoneFromArchive(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if err := skills.MarkSkillDeleted("kb-interview"); err != nil {
+	if err := skills.MarkSkillDeleted("kb-interview", "테스트", time.Now()); err != nil {
 		t.Fatalf("MarkSkillDeleted: %v", err)
 	}
 
@@ -47,8 +48,9 @@ func TestLogSuppressedSkillsSeparatesTombstoneFromArchive(t *testing.T) {
 	if !strings.Contains(got, "skills suppressed") {
 		t.Fatalf("no suppression line: %q", got)
 	}
-	if !strings.Contains(got, "tombstoned=kb-interview") {
-		t.Errorf("tombstoned skill not attributed: %q", got)
+	// The tombstone now carries its reason and age — "왜 꺼졌는지"는 이름만큼 중요하다.
+	if !strings.Contains(got, "kb-interview(테스트, 0일째)") {
+		t.Errorf("tombstoned skill not attributed with reason/age: %q", got)
 	}
 	if !strings.Contains(got, "curatorArchived=stale-thing") {
 		t.Errorf("archived skill not attributed: %q", got)

@@ -2,12 +2,14 @@ package chat
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 )
@@ -210,15 +212,20 @@ func logSuppressedSkills(discovered, kept []skills.SkillEntry) {
 	for _, e := range kept {
 		live[e.Skill.Name] = struct{}{}
 	}
-	deleted := skills.LoadDeletedSkillNames()
+	// Reason and age come along: "왜 꺼졌는지" is the half that was missing when
+	// six skills sat suppressed for five weeks (deleted.go).
+	deleted := make(map[string]skills.DeletedSkill)
+	for _, d := range skills.LoadDeletedSkills() {
+		deleted[d.Name] = d
+	}
 	var tombstoned, archived []string
 	for _, e := range discovered {
 		name := e.Skill.Name
 		if _, ok := live[name]; ok {
 			continue
 		}
-		if _, ok := deleted[name]; ok {
-			tombstoned = append(tombstoned, name)
+		if d, ok := deleted[name]; ok {
+			tombstoned = append(tombstoned, describeTombstone(d, time.Now()))
 			continue
 		}
 		archived = append(archived, name)
@@ -273,4 +280,23 @@ func loadArchivedCuratorSkillNames() map[string]struct{} {
 		return nil
 	}
 	return archived
+}
+
+// describeTombstone renders one suppression as "name(사유, N일째)". An entry
+// written before tombstones carried metadata has neither — it still names
+// itself, which is the point.
+func describeTombstone(d skills.DeletedSkill, now time.Time) string {
+	parts := make([]string, 0, 2)
+	if d.Reason != "" {
+		parts = append(parts, d.Reason)
+	}
+	if at, err := time.Parse(time.RFC3339, d.At); err == nil {
+		if days := int(now.Sub(at).Hours() / 24); days >= 0 {
+			parts = append(parts, fmt.Sprintf("%d일째", days))
+		}
+	}
+	if len(parts) == 0 {
+		return d.Name + "(기록 없음)"
+	}
+	return d.Name + "(" + strings.Join(parts, ", ") + ")"
 }
