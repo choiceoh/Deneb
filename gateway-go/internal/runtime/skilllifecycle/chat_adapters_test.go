@@ -2,6 +2,7 @@ package skilllifecycle
 
 import (
 	"encoding/json"
+	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -196,5 +197,39 @@ func TestChatUsageRecorderPersistsAttribution(t *testing.T) {
 	}
 	if summary.FailureLayers.UnattributableFailures != 1 {
 		t.Errorf("unattributed record misfiled: %+v", summary.FailureLayers)
+	}
+}
+
+// A skill that was injected and then ignored is a failure of that skill, even
+// when the turn itself errored on nothing — and it is the failure class the
+// corpus was missing (10 real-failure cases against 1,695 total, 2026-08-26).
+func TestRecordSkillUse_UnexercisedSkillCapturesFailureCase(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		success   bool
+		exercised string
+		want      string
+	}{
+		{"턴 오류", false, chatport.SkillExercisedYes, "skill-failed-use-validation-case"},
+		{"주입됐지만 미실행", true, chatport.SkillExercisedNo, "skill-unexercised-validation-case"},
+		{"정상 실행", true, chatport.SkillExercisedYes, "skill-success-use-validation-case"},
+		{"판정 불가는 실패 아님", true, chatport.SkillExercisedUnknown, "skill-success-use-validation-case"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var captured []string
+			a := &chatUsageRecorderAdapter{
+				inner:         newUsageRecorderTracker(t),
+				logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+				replayEnabled: true,
+				spawn: func(_ *slog.Logger, name string, _ func()) {
+					captured = append(captured, name) // body never runs: no transcript IO in this test
+				},
+			}
+			a.recordSkillUse("client:lt-1", "fact-check", tc.success, "", "k3",
+				chatport.SkillUseAttribution{Delivery: chatport.SkillDeliveryAutoLoad, Exercised: tc.exercised})
+			if len(captured) != 1 || captured[0] != tc.want {
+				t.Errorf("capture = %v, want [%s]", captured, tc.want)
+			}
+		})
 	}
 }

@@ -81,11 +81,26 @@ func (a *chatUsageRecorderAdapter) recordSkillUse(sessionKey, skillName string, 
 		// chat turn, but log it so a persistently failing tracker is visible.
 		a.logger.Warn("genesis: skill usage record failed", "skill", skillName, "error", err)
 	}
-	if !success {
+	// A skill whose procedure was DELIVERED and then not followed is a failure
+	// of that skill, even when the turn itself errored on nothing. Without this
+	// the only failures the corpus ever saw were turn-level errors, and skills
+	// error at the turn level almost never: 30 days of the live ledger produced
+	// 10 real-failure validation cases against 1,695 total, so 98% of what the
+	// held-out gate measures is synthetic — and a synthetic corpus is exactly
+	// the one where every candidate ties the original (2026-08-26 diagnosis:
+	// 118 proposals, 28 rejections, 0 accepted evolves in 30 days).
+	unexercised := success && attr.Exercised == chatport.SkillExercisedNo
+	switch {
+	case !success:
 		a.spawnCapture("skill-failed-use-validation-case", func() {
 			a.recordValidationCaseFromFailedUse(sessionKey, skillName, errMsg)
 		})
-	} else if a.replayEnabled {
+	case unexercised:
+		a.spawnCapture("skill-unexercised-validation-case", func() {
+			a.recordValidationCaseFromFailedUse(sessionKey, skillName,
+				"절차가 주입됐지만 선언된 도구가 한 번도 실행되지 않았다 (exercised=no)")
+		})
+	case a.replayEnabled:
 		// Success mirror of the failed-use capture above: record the proven-good
 		// tool-call behavior of a successful run as a held-out replay case so the
 		// behavioral evolve gate (SkillValidationEngine.EvaluateBehavior) has

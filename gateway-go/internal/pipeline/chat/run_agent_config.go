@@ -564,15 +564,28 @@ func skillUseAttribution(name string, autoLoaded map[string]bool, result *agent.
 	return attr
 }
 
-// skillRequiredToolSet reads requires_tools off the frozen snapshot — the same
-// source the auto-activation path uses, so the two never disagree.
+// skillRequiredToolSet reads the tools whose use proves the skill's procedure
+// ran: exercise_tools when declared, else requires_tools.
+//
+// The two are deliberately separate fields. requires_tools ALSO gates
+// activation — a skill declaring it disappears whenever one of those tools is
+// missing from the session — so using it to measure would make every skill we
+// wanted to observe fragile. Only 3 of 32 skills declare requires_tools, which
+// is why Exercised reads "unknown" almost everywhere (2026-08-26 ledger).
 func skillRequiredToolSet(name string) map[string]bool {
 	for _, s := range cachedResolvedSkills() {
-		if s.Name != name || len(s.RequiresTools) == 0 {
+		if s.Name != name {
 			continue
 		}
-		set := make(map[string]bool, len(s.RequiresTools))
-		for _, tool := range s.RequiresTools {
+		tools := s.ExerciseTools
+		if len(tools) == 0 {
+			tools = s.RequiresTools
+		}
+		if len(tools) == 0 {
+			return nil
+		}
+		set := make(map[string]bool, len(tools))
+		for _, tool := range tools {
 			set[tool] = true
 		}
 		return set

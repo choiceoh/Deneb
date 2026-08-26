@@ -44,9 +44,15 @@ type DenebSkillMetadata struct {
 	// instruction context for that skill (chat/skill_hints.go). Precision-curated and
 	// deliberately separate from Tags — tags are broad discovery taxonomy
 	// ("검토", "review") that would over-fire as substring triggers.
-	Triggers         []string           `json:"triggers,omitempty"`
-	RelatedSkills    []string           `json:"related_skills,omitempty"`
-	RequiresTools    []string           `json:"requires_tools,omitempty"`
+	Triggers      []string `json:"triggers,omitempty"`
+	RelatedSkills []string `json:"related_skills,omitempty"`
+	RequiresTools []string `json:"requires_tools,omitempty"`
+	// ExerciseTools names the tools whose use PROVES the skill's procedure was
+	// actually followed. It is measurement only — unlike RequiresTools it never
+	// gates activation, because a skill must not disappear just because someone
+	// wanted to measure it (requires_tools hides a skill when any listed tool is
+	// missing, which is how skills silently die).
+	ExerciseTools    []string           `json:"exercise_tools,omitempty"`
 	FallbackForTools []string           `json:"fallback_for_tools,omitempty"`
 	Requires         *SkillRequires     `json:"requires,omitempty"`
 	Install          []SkillInstallSpec `json:"install,omitempty"`
@@ -265,6 +271,7 @@ func ResolveDenebMetadata(frontmatter ParsedFrontmatter) *DenebSkillMetadata {
 	meta.Triggers = parseJSONStringList(obj, "triggers")
 	meta.RelatedSkills = parseJSONStringList(obj, "related_skills")
 	meta.RequiresTools = parseJSONStringList(obj, "requires_tools")
+	meta.ExerciseTools = parseJSONStringList(obj, "exercise_tools")
 	meta.FallbackForTools = parseJSONStringList(obj, "fallback_for_tools")
 
 	// Parse requires.

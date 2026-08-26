@@ -32,7 +32,9 @@ type PromptSkill struct {
 	// activates its required deferred tools in the same step, so the skill's
 	// instructions and tools arrive as one bundle
 	// (chat/tool_skill_required_tools.go).
-	RequiresTools          []string `json:"requiresTools,omitempty"`
+	RequiresTools []string `json:"requiresTools,omitempty"`
+	// ExerciseTools feeds usage attribution only (never eligibility).
+	ExerciseTools          []string `json:"exerciseTools,omitempty"`
 	DisableModelInvocation bool     `json:"disableModelInvocation,omitempty"`
 	// Body is retained in the in-memory snapshot for exact-trigger JIT
 	// injection. It is never serialized or rendered in the ambient catalog.
