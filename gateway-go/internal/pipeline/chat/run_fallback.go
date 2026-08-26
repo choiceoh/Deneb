@@ -87,19 +87,36 @@ func isStalledResult(r *agent.AgentResult) bool {
 }
 
 // isEmptyFinalResult reports whether a "successful" run is an accidental
-// empty completion: end_turn after tool activity with zero text anywhere —
-// a model emitting stop right after tool results. Distinct from intentional
-// silence, which uses the NO_REPLY token and therefore has non-empty raw
-// text. Delivered as-is it reaches the user as a blank bubble with ok=true
-// (measured from the puppet seat); both delivery paths substitute the
-// fallbackForEmptyFinalReply notice instead. No auto-rerun: the turn already
-// executed tools, and re-running them — unlike the turn-0 stall retry, which
-// fires before any tool ran — can repeat side effects. Turns > 1 pins the
-// tool-activity requirement: the counter increments per LLM round, so a tool
-// round always leaves Turns >= 2, while a plain single-shot answer stays out.
+// empty completion: end_turn with zero text anywhere. Distinct from
+// intentional silence, which uses the NO_REPLY token and therefore has
+// non-empty raw text. Delivered as-is it reaches the user as a blank bubble
+// with ok=true; both delivery paths substitute the fallbackForEmptyFinalReply
+// notice instead.
+//
+// This used to require Turns > 1 — the tool-activity pin — and a test froze
+// that as "single-shot empty left alone". But Turns > 1 was only ever the way
+// to tell that tools had run, which is what forbids an auto-rerun; it was
+// never a reason to hand the user a blank bubble. A plain single-shot answer
+// that comes back empty is the SAME failure with a known cause (a model that
+// ignores a disabled-thinking flag and spends its whole budget before emitting
+// a token), and it is the one shape the turn-0 stall retry misses too:
+// isStalledResult only fires on StopReason "timeout", so an empty "end_turn"
+// at Turns 1 fell between both guards. Measured from the puppet seat
+// 2026-08-26: "오늘 일정 알려줘" answered with whitespace returned reply="",
+// errors=[], ok=true.
+//
+// Still no auto-rerun in either shape: the notice tells the user to ask again
+// rather than risk repeating a committed tool's side effects.
 func isEmptyFinalResult(r *agent.AgentResult) bool {
-	return r != nil && r.StopReason == "end_turn" && r.Turns > 1 &&
+	return r != nil && r.StopReason == "end_turn" && r.Turns >= 1 &&
 		strings.TrimSpace(r.AllText) == ""
+}
+
+// emptyFinalResultRanTools reports whether the empty completion happened after
+// tool rounds. The counter increments per LLM round, so a tool round always
+// leaves Turns >= 2. Only the notice wording depends on it.
+func emptyFinalResultRanTools(r *agent.AgentResult) bool {
+	return r != nil && r.Turns > 1
 }
 
 // Stage 3: runAgentWithFallback — agent loop with compaction retry + model fallback.

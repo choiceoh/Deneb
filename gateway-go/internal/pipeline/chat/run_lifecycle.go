@@ -296,7 +296,7 @@ func deliverEmptyRunReply(params RunParams, deps runDeps, result *agent.AgentRes
 
 	fallbackMsg := enrichStopFallback(fallbackForStopReason(result.StopReason), result.ToolActivities)
 	if fallbackMsg == "" && isEmptyFinalResult(result) {
-		fallbackMsg = fallbackForEmptyFinalReply()
+		fallbackMsg = fallbackForEmptyFinalReply(emptyFinalResultRanTools(result))
 	}
 	if fallbackMsg != "" {
 		persistTimeoutRemnant(deps, params.SessionKey, result, fallbackMsg, logger)
