@@ -58,7 +58,9 @@ func (g *gatedSummarizer) Summarize(ctx context.Context, _, _ string, _ int) (st
 			return "", ctx.Err()
 		}
 	}
-	return fmt.Sprintf("BG-SUM-%d", n), nil
+	// Structured skeleton: the compaction layer drops an answer carrying none of
+	// the mandated headings (llm.go looksLikeStructuredSummary).
+	return fmt.Sprintf("### 핵심 사실 (Facts)\n- [확실] BG-SUM-%d", n), nil
 }
 
 func (g *gatedSummarizer) callCount() int {
