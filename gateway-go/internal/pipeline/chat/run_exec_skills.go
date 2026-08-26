@@ -3,6 +3,7 @@ package chat
 import (
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -21,7 +22,30 @@ var skillsCache struct {
 	prompt   string
 	snapshot *skills.FullSkillSnapshot
 	version  int64
+	// toolsKey fingerprints the registered tool set the cached catalog was
+	// built from. requires_tools / fallback_for_tools eligibility is computed
+	// against that set, so it is a build INPUT — but the cache used to key on
+	// the curator version alone and the tool set provably varies at runtime:
+	// external MCP tools register from a background goroutine after
+	// ListTools returns (runtime/externalmcp), so a first turn that wins the
+	// race bakes an MCP-less catalog in until a skills file change bumps the
+	// curator version. A skill gated on an MCP tool then stays invisible long
+	// after its tool exists.
+	toolsKey uint64
 	built    bool
+}
+
+// skillToolSetKey fingerprints the registered tool names. Order-independent so
+// a registry that returns the same set in a different order does not force a
+// rebuild, and length-mixed so add/remove of a name always moves the key.
+func skillToolSetKey(names []string) uint64 {
+	var sum uint64
+	for _, name := range names {
+		h := fnv.New64a()
+		_, _ = h.Write([]byte(name))
+		sum += h.Sum64()
+	}
+	return sum ^ uint64(len(names))
 }
 
 // loadCachedSkillsPrompt returns the cached skills prompt, rebuilding it when
@@ -29,8 +53,9 @@ var skillsCache struct {
 // availableToolNames is used for conditional activation (requires_tools/fallback_for_tools).
 func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) string {
 	curatorVersion := skillCuratorStateVersion()
+	toolsKey := skillToolSetKey(availableToolNames)
 	skillsCache.mu.RLock()
-	if skillsCache.built && skillsCache.version == curatorVersion {
+	if skillsCache.built && skillsCache.version == curatorVersion && skillsCache.toolsKey == toolsKey {
 		prompt := skillsCache.prompt
 		skillsCache.mu.RUnlock()
 		return prompt
@@ -41,7 +66,7 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 	defer skillsCache.mu.Unlock()
 
 	// Double-check after acquiring write lock.
-	if skillsCache.built && skillsCache.version == curatorVersion {
+	if skillsCache.built && skillsCache.version == curatorVersion && skillsCache.toolsKey == toolsKey {
 		return skillsCache.prompt
 	}
 
@@ -84,6 +109,7 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 	}
 	skillsCache.built = true
 	skillsCache.version = curatorVersion
+	skillsCache.toolsKey = toolsKey
 	return skillsCache.prompt
 }
 
@@ -162,6 +188,7 @@ func InvalidateSkillsCache() {
 	skillsCache.mu.Lock()
 	skillsCache.built = false
 	skillsCache.version = 0
+	skillsCache.toolsKey = 0
 	skillsCache.mu.Unlock()
 }
 
