@@ -32,6 +32,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 const (
@@ -479,8 +480,8 @@ func calActionCreate(ctx context.Context, d *tooldeps.CalendarDeps, p calParams)
 	if err != nil {
 		return "일정 추가 실패: " + err.Error()
 	}
-	calMirrorPush(ctx, d, ev)
-	return "일정을 추가했습니다.\n" + calDetail(ev) + calConflictNotice(ctx, d, ev)
+	mirror := calMirrorPush(ctx, d, ev)
+	return "일정을 추가했습니다.\n" + calDetail(ev) + calConflictNotice(ctx, d, ev) + mirror
 }
 
 func calActionUpdate(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
@@ -505,8 +506,8 @@ func calActionUpdate(ctx context.Context, d *tooldeps.CalendarDeps, p calParams)
 		}
 		return "일정 수정 실패: " + err.Error()
 	}
-	calMirrorPush(ctx, d, *ev)
-	return "일정을 수정했습니다.\n" + calDetail(*ev) + calConflictNotice(ctx, d, *ev)
+	mirror := calMirrorPush(ctx, d, *ev)
+	return "일정을 수정했습니다.\n" + calDetail(*ev) + calConflictNotice(ctx, d, *ev) + mirror
 }
 
 // --- external write mirror (best-effort) ---------------------------------
@@ -528,16 +529,49 @@ func calWriter(d *tooldeps.CalendarDeps) tooldeps.CalendarWriter {
 	return w
 }
 
-func calMirrorPush(ctx context.Context, d *tooldeps.CalendarDeps, ev tooldeps.CalendarEvent) {
-	if w := calWriter(d); w != nil {
-		_ = w.Push(ctx, ev.ID, ev)
+// calMirrorPush mirrors the local write to Google and reports a failure to the
+// model, returning "" when the mirror is off or the push succeeded.
+//
+// The mirror has no retry, no backlog and no reconciliation pass (calwrite's
+// Syncer reports and returns), so a failed push is PERMANENT: the event lives
+// in the local store and never reaches the calendar the operator actually reads
+// on their phone. Discarding the error left the result saying 일정을
+// 추가했습니다 in full detail while only a Warn line in the gateway log knew
+// otherwise — the exact shape a chief-of-staff agent must not have.
+//
+// It does not fail the write: the local store is the source of truth and
+// already holds the event. Nothing is reported when the mirror is deliberately
+// disabled, because calWriter is nil then and a local-only setup is not a
+// failure.
+func calMirrorPush(ctx context.Context, d *tooldeps.CalendarDeps, ev tooldeps.CalendarEvent) string {
+	w := calWriter(d)
+	if w == nil {
+		return ""
 	}
+	if err := w.Push(ctx, ev.ID, ev); err != nil {
+		return calMirrorFailureNotice("반영", err)
+	}
+	return ""
 }
 
-func calMirrorRemove(ctx context.Context, d *tooldeps.CalendarDeps, localID string) {
-	if w := calWriter(d); w != nil {
-		_ = w.Remove(ctx, localID)
+// calMirrorFailureNotice phrases a mirror failure once for push and remove.
+func calMirrorFailureNotice(verb string, err error) string {
+	return fmt.Sprintf(
+		"\n⚠️ 로컬 일정은 처리했지만 구글 캘린더 %s에 실패했다: %s"+
+			"\n동기화 재시도는 없다 — 사용자에게 폰 캘린더에는 반영되지 않았다고 알려라.",
+		verb, textutil.TruncateRunesWithin(err.Error(), 160, "…"),
+	)
+}
+
+func calMirrorRemove(ctx context.Context, d *tooldeps.CalendarDeps, localID string) string {
+	w := calWriter(d)
+	if w == nil {
+		return ""
 	}
+	if err := w.Remove(ctx, localID); err != nil {
+		return calMirrorFailureNotice("삭제", err)
+	}
+	return ""
 }
 
 // calParseInput validates summary+start (required) and parses start/end into a
@@ -589,6 +623,5 @@ func calActionDelete(ctx context.Context, d *tooldeps.CalendarDeps, p calParams)
 		}
 		return "일정 삭제 실패: " + err.Error()
 	}
-	calMirrorRemove(ctx, d, id)
-	return "일정을 삭제했습니다."
+	return "일정을 삭제했습니다." + calMirrorRemove(ctx, d, id)
 }
