@@ -480,7 +480,7 @@ func calActionCreate(ctx context.Context, d *tooldeps.CalendarDeps, p calParams)
 		return "일정 추가 실패: " + err.Error()
 	}
 	calMirrorPush(ctx, d, ev)
-	return "일정을 추가했습니다.\n" + calDetail(ev)
+	return "일정을 추가했습니다.\n" + calDetail(ev) + calConflictNotice(ctx, d, ev)
 }
 
 func calActionUpdate(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
@@ -506,7 +506,7 @@ func calActionUpdate(ctx context.Context, d *tooldeps.CalendarDeps, p calParams)
 		return "일정 수정 실패: " + err.Error()
 	}
 	calMirrorPush(ctx, d, *ev)
-	return "일정을 수정했습니다.\n" + calDetail(*ev)
+	return "일정을 수정했습니다.\n" + calDetail(*ev) + calConflictNotice(ctx, d, *ev)
 }
 
 // --- external write mirror (best-effort) ---------------------------------
