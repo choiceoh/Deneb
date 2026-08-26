@@ -113,6 +113,12 @@ const (
 	FactStatusTombstoned        = wiki.FactStatusTombstoned
 )
 
+// ReplacedBodyNotice re-exports the shared full-body-overwrite notice so every
+// page-writing tool reports the same loss the same way.
+func ReplacedBodyNotice(oldBody, newBody string) string {
+	return wiki.ReplacedBodyNotice(oldBody, newBody)
+}
+
 // ErrFactProjectionAhead re-exports the sentinel so startup can tell the one
 // harmless projection failure apart from a broken fact plane.
 var ErrFactProjectionAhead = wiki.ErrFactProjectionAhead

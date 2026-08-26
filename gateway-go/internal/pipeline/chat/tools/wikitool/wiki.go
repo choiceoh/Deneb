@@ -547,39 +547,10 @@ func persistWikiWrite(store *wiki.Store, path string, req wikiWriteRequest, logA
 // edit that keeps every section, or that extends the previous text, says
 // nothing.
 func wikiReplacedBodyNotice(oldBody string, page *wiki.Page, logAppend bool) string {
-	if logAppend || page == nil || strings.TrimSpace(oldBody) == "" {
+	if logAppend || page == nil {
 		return ""
 	}
-	if strings.Contains(page.Body, strings.TrimSpace(oldBody)) {
-		return "" // the write extended the previous text rather than replacing it
-	}
-	oldPage := &wiki.Page{Body: oldBody}
-	_, oldSections := oldPage.SplitByH2()
-	_, newSections := page.SplitByH2()
-	kept := make(map[string]struct{}, len(newSections))
-	for _, section := range newSections {
-		kept[section.Heading] = struct{}{}
-	}
-	var lost []string
-	for _, section := range oldSections {
-		if _, ok := kept[section.Heading]; !ok {
-			lost = append(lost, section.Heading)
-		}
-	}
-	if len(lost) > 0 {
-		return fmt.Sprintf(
-			"\n⚠️ 이 쓰기로 사라진 기존 섹션: %s — write는 본문을 통째로 교체한다(append 아님). "+
-				"남겨야 할 내용이면 그 섹션까지 포함해 다시 써라.",
-			strings.Join(lost, ", "),
-		)
-	}
-	if len(oldSections) == 0 {
-		return fmt.Sprintf(
-			"\n⚠️ 기존 본문 %d자를 새 내용으로 교체했다 (append 아님). 이전 내용이 필요하면 그 부분까지 포함해 다시 써라.",
-			len([]rune(strings.TrimSpace(oldBody))),
-		)
-	}
-	return ""
+	return wiki.ReplacedBodyNotice(oldBody, page.Body)
 }
 
 func mergeWikiWrite(existing *wiki.Page, req wikiWriteRequest, logAppend bool) (*wiki.Page, bool) {

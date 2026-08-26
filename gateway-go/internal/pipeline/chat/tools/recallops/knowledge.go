@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -268,11 +269,33 @@ func knowledgeRecord(ctx context.Context, router *knowledge.Router, opts knowled
 	if strings.TrimSpace(opts.Page) == "" {
 		return "", fmt.Errorf("page is required for knowledge(op=\"record\")")
 	}
+	// The record path replaces an existing page's body just like the wiki
+	// tool's write action does (knowledge/adapter_wiki.go: page.Body =
+	// opts.Body). Read what is there first so the result can name what the
+	// write destroyed — the wiki tool has said so since #4797, and a page
+	// overwritten through this door was still silent.
+	previous := existingWikiBody(ctx, router, opts.Page)
 	ref, err := router.Record(ctx, opts)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("✏️ 기록됨: `%s`", ref.String()), nil
+	return fmt.Sprintf("✏️ 기록됨: `%s`", ref.String()) +
+		wiki.ReplacedBodyNotice(previous, opts.Body), nil
+}
+
+// existingWikiBody returns the page body a record is about to overwrite, or ""
+// when the page is new or unreadable. Best-effort: a read failure must not stop
+// the write the operator asked for.
+func existingWikiBody(ctx context.Context, router *knowledge.Router, page string) string {
+	page = strings.TrimSpace(page)
+	if router == nil || page == "" {
+		return ""
+	}
+	doc, err := router.Read(ctx, knowledge.Ref{Layer: knowledge.LayerWiki, ID: page})
+	if err != nil || doc == nil {
+		return ""
+	}
+	return doc.Content
 }
 
 // knowledgeAssertFact records a model-supplied claim as evidence, never as an
