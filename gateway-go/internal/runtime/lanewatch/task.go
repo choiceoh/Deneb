@@ -49,10 +49,20 @@ func (t *Task) Run(ctx context.Context) error {
 		logger = slog.Default()
 	}
 	findings := t.Watch.Check(ctx)
+	// Always log the run, even with nothing to report.
+	//
+	// This line started at Debug — "an all-green watch every six hours would
+	// bury the one line that matters" — and that was wrong in the one way this
+	// package exists to prevent: with the run invisible, a watch that never
+	// FIRED looked exactly like a watch reporting all-clear. Verified 2026-08-26
+	// on the first deploy: lane-liveness was registered, no Warn appeared, and
+	// there was no way to tell whether it had run at all.
+	//
+	// One Info line every six hours is cheap. A watchdog that cannot prove it is
+	// awake is not a watchdog.
+	logger.Info("lane-liveness: 점검 완료",
+		"lanes", t.Watch.LaneCount(), "findings", len(findings))
 	if len(findings) == 0 {
-		// Logged at Debug on purpose: an all-green watch every six hours would
-		// bury the one line that matters.
-		logger.Debug("lane-liveness: 모든 레인 정상")
 		return nil
 	}
 	for _, f := range findings {

@@ -114,3 +114,22 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+// A watch that shrank to zero lanes would report "all clear" forever. The run
+// line carries the count so an empty watch is visible instead of reassuring.
+func TestLaneCountReportsWhatIsActuallyWatched(t *testing.T) {
+	now := time.Date(2026, 8, 26, 9, 0, 0, 0, time.UTC)
+	if got := New(slog.New(slog.DiscardHandler), fixedClock(&now)).LaneCount(); got != 0 {
+		t.Fatalf("empty watch LaneCount = %d, want 0", got)
+	}
+	w := New(slog.New(slog.DiscardHandler), fixedClock(&now),
+		lane("a", time.Hour, func() (Reading, error) { return Reading{Worked: 1}, nil }),
+		lane("b", time.Hour, func() (Reading, error) { return Reading{Worked: 1}, nil }))
+	if got := w.LaneCount(); got != 2 {
+		t.Fatalf("LaneCount = %d, want 2", got)
+	}
+	var nilWatch *Watch
+	if got := nilWatch.LaneCount(); got != 0 {
+		t.Fatalf("nil watch LaneCount = %d, want 0", got)
+	}
+}
