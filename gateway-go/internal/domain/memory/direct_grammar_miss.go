@@ -27,8 +27,16 @@ var directMemoryLeads = []struct {
 }{
 	{"remember", regexp.MustCompile(`(?i)^\s*(?:기억\s*(?:해|해줘|해줘요|해\s*둬)|(?:please\s+)?remember\b)`)},
 	{"trailing_remember", regexp.MustCompile(`(?i)기억\s*(?:해|해줘|해줘요|해\s*둬)\s*[.!?。！？]*\s*$`)},
-	{"forward", regexp.MustCompile(`(?i)^\s*(?:앞으로(?:는)?|다음부터|from\s+now\s+on)\b`)},
-	{"correction", regexp.MustCompile(`(?i)^\s*(?:아니(?:야|요)?|아님|정정|수정)\b`)},
+	// No trailing \b on the Korean alternatives: Go's \b is an ASCII word
+	// boundary, and a Hangul syllable is not an ASCII word character, so
+	// "앞으로는 보고서를…" and "아니야, 그건…" never matched while their English
+	// twins did. In a Korean-first product that silently removed the two most
+	// common ways to state a standing preference or a correction from the miss
+	// ledger. \b stays where it belongs — attached to the ASCII alternative.
+	// A looser Korean match is the documented trade above: this is a
+	// diagnostic, and a false positive costs one ledger line.
+	{"forward", regexp.MustCompile(`(?i)^\s*(?:앞으로(?:는)?|다음부터|from\s+now\s+on\b)`)},
+	{"correction", regexp.MustCompile(`(?i)^\s*(?:아니(?:야|요)?|아님|정정|수정)`)},
 	{"forget", regexp.MustCompile(`(?i)(?:기억.{0,20}(?:지워|삭제|잊)|\b(?:forget|delete|remove|erase)\b.{0,40}\b(?:memory|memories|preference|preferences|fact|facts|profile)\b)`)},
 }
 
