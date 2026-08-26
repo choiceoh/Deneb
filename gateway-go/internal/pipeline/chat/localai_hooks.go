@@ -64,16 +64,25 @@ Max 30 lines.`
 
 // compressToolOutput shrinks a large tool output using the local AI model.
 // Returns the original output if compression is not needed or fails.
+//
+// When the caller ASKED for compression and the harness declined for a reason
+// the caller cannot see — this tool is on the skip list, or the local
+// summarizer is down — the original comes back with a one-line notice. The
+// system prompt advertises `compress: true` for "any tool input", so a silent
+// decline reads as "compressed" and the caller keeps a full-size result it
+// believes is small (observed 2026-08-26: wiki/grep/blackboard and four more
+// are on the skip list). A benign decline (output below the threshold, or a
+// summary that saved nothing) stays silent: nothing was lost there.
 func compressToolOutput(ctx context.Context, toolName, output, spillID string, logger *slog.Logger) string {
 	if len(output) < compressThreshold {
 		return output
 	}
 	if _, ok := toolCompressSkipSet[toolName]; ok {
-		return output
+		return output + compressDeclinedNotice(toolName+" 도구는 압축 대상이 아니다", spillID)
 	}
 	// Skip if local AI was recently confirmed down (cached result only, no probe).
 	if pilot.LocalAIRecentlyDown() {
-		return output
+		return output + compressDeclinedNotice("로컬 요약 모델이 응답하지 않는다", spillID)
 	}
 
 	// Concurrency is managed by the centralized local AI hub's token budget.
@@ -122,4 +131,14 @@ func sprintfCompressed(original, spillID, compressed string) string {
 
 func sprintfCompressedPlain(original, compressed string) string {
 	return fmt.Sprintf("[compressed by pilot — original %d chars]\n%s", len(original), compressed)
+}
+
+// compressDeclinedNotice renders the one-line notice appended when a requested
+// compression did not happen. The spill handle rides along when one exists, so
+// the caller can still shrink its own context by reading a slice later.
+func compressDeclinedNotice(reason, spillID string) string {
+	if spillID != "" {
+		return fmt.Sprintf("\n\n[compress 요청됨 · 미적용: %s — 원문 그대로다. 필요하면 read_spillover(spill_id=%q)로 필요한 부분만 읽어라.]", reason, spillID)
+	}
+	return fmt.Sprintf("\n\n[compress 요청됨 · 미적용: %s — 원문 그대로다.]", reason)
 }
