@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
@@ -20,28 +21,48 @@ import (
 // returned warn string is a non-fatal note (e.g. Google fetch failed but local
 // answered) so the agent still gets the events it can.
 func calMerged(ctx context.Context, d *tooldeps.CalendarDeps, from, to time.Time) (merged []tooldeps.CalendarEvent, warn string) {
+	if d == nil {
+		return nil, ""
+	}
+	var wg sync.WaitGroup
+	var googleEvents []tooldeps.CalendarEvent
+	var googleWarn string
+	var localEvents []tooldeps.CalendarEvent
+
 	if d.Client != nil {
-		client, err := d.Client()
-		if err != nil {
-			// Google not configured — silently degrade to local-only (this is
-			// the common case before OAuth is set up).
-			if d.Local == nil {
-				return nil, "구글 캘린더가 연결되지 않았습니다."
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			client, err := d.Client()
+			if err != nil {
+				// Google not configured — silently degrade to local-only (this is
+				// the common case before OAuth is set up).
+				if d.Local == nil {
+					googleWarn = "구글 캘린더가 연결되지 않았습니다."
+				}
+				return
 			}
-		} else {
 			events, err := client.ListUpcoming(ctx, from, to, calMaxResults)
 			if err != nil {
-				warn = "구글 캘린더 조회 실패: " + err.Error()
-			} else {
-				merged = append(merged, events...)
+				googleWarn = "구글 캘린더 조회 실패: " + err.Error()
+				return
 			}
-		}
+			googleEvents = events
+		}()
 	}
 	if d.Local != nil {
-		merged = append(merged, d.Local.ListRange(from, to)...)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			localEvents = d.Local.ListRange(from, to)
+		}()
 	}
+	wg.Wait()
+
+	merged = append(merged, googleEvents...)
+	merged = append(merged, localEvents...)
 	sort.Slice(merged, func(i, j int) bool { return merged[i].Start.Before(merged[j].Start) })
-	return merged, warn
+	return merged, googleWarn
 }
 
 // calTitle returns a non-empty display title.
