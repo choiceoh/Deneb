@@ -1,5 +1,87 @@
 # Changelog
 
+## [5.8.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.7.0...deneb-v5.8.0) (2026-08-26)
+
+
+### ✨ Features
+
+* **chat:** 무시된 도구 인자를 결과에 한 줄로 알린다 ([#4777](https://github.com/choiceoh/Deneb/issues/4777)) ([ab387b5](https://github.com/choiceoh/Deneb/commit/ab387b5c881796f67c0165a40a7c0f4eb292fef2))
+* **chat:** 스키마에 없는 도구 인자를 계측한다 ([#4751](https://github.com/choiceoh/Deneb/issues/4751)) ([d2f3c72](https://github.com/choiceoh/Deneb/commit/d2f3c7249a18d187ef02a58122efa5d3faa9833d))
+* **chat:** 프롬프트 평면의 조용한 예산 누락을 관측 가능하게 ([#4785](https://github.com/choiceoh/Deneb/issues/4785)) ([fa1b042](https://github.com/choiceoh/Deneb/commit/fa1b042b17b15b14548a4d3ae81b435e2eb58ee2))
+* **genesis:** 벤치가 순위를 못 매긴 개정안을 LLM이 판정한다 ([#4754](https://github.com/choiceoh/Deneb/issues/4754)) ([7e2aaa3](https://github.com/choiceoh/Deneb/commit/7e2aaa3324b9068480a79e871f6da936819de59a))
+* **runtime:** 레인이 조용해지면 그렇다고 말하게 한다 ([#4765](https://github.com/choiceoh/Deneb/issues/4765)) ([c080c54](https://github.com/choiceoh/Deneb/commit/c080c540413ec1e290dd315132867bb8afe30c40))
+* **skills:** 절차를 밟지 않은 스킬 사용을 실패로 잡는다 ([#4783](https://github.com/choiceoh/Deneb/issues/4783)) ([a2b95d1](https://github.com/choiceoh/Deneb/commit/a2b95d1d4c8dc12b6cf6387d7e86cfd176b07807))
+* **wiki:** 현장 페이지를 프로젝트 문서로 접는다 (지도 제거 후속) ([#4745](https://github.com/choiceoh/Deneb/issues/4745)) ([670c277](https://github.com/choiceoh/Deneb/commit/670c27785356a3d945f4eb58ff4d7363070266bd))
+
+
+### 🐛 Bug Fixes
+
+* **agent:** 도구 루프 경고를 로그에만 남기지 말고 모델에게 전달한다 ([#4757](https://github.com/choiceoh/Deneb/issues/4757)) ([8abe075](https://github.com/choiceoh/Deneb/commit/8abe075d0db5e1685672f71aeaa2fe0b3d4256a7))
+* **audit:** 게이트웨이가 안 읽는 subagents 모델 핀을 토폴로지 역할 바인딩에서 뺀다 ([#4736](https://github.com/choiceoh/Deneb/issues/4736)) ([ea15214](https://github.com/choiceoh/Deneb/commit/ea152142e106b33dc32ed47ef6b6859a34a656f1))
+* **calendar:** 이미 찬 시간에 일정을 넣으면 겹침을 알린다 ([#4796](https://github.com/choiceoh/Deneb/issues/4796)) ([10ae998](https://github.com/choiceoh/Deneb/commit/10ae998868530a86d4fad936b42d36c4f5d7cf94))
+* **chat:** fetch_tools 스키마 중복 전송을 막고 퍼펫 게이트웨이를 기본 재빌드로 바꾼다 ([#4746](https://github.com/choiceoh/Deneb/issues/4746)) ([a27f04e](https://github.com/choiceoh/Deneb/commit/a27f04e52f288cd834ed17d4fe6aa71bcc4f201f))
+* **chat:** 거부된 deneb-ui 카드의 이유를 다음 턴 모델에게 돌려준다 ([#4753](https://github.com/choiceoh/Deneb/issues/4753)) ([6259ca4](https://github.com/choiceoh/Deneb/commit/6259ca40242ea65ed521daef0d5af56869736ca7))
+* **chat:** 도구 없이 빈 응답으로 끝난 턴도 빈 말풍선으로 내보내지 않는다 ([#4798](https://github.com/choiceoh/Deneb/issues/4798)) ([f4a00fa](https://github.com/choiceoh/Deneb/commit/f4a00fa60d871696c9c14238b748f2255b735d35))
+* **chat:** 스킬 본문 중복 제거가 그 스킬의 도구 활성화까지 끄지 않게 한다 ([#4773](https://github.com/choiceoh/Deneb/issues/4773)) ([0228fe3](https://github.com/choiceoh/Deneb/commit/0228fe3a533844ca8acc0774170dcd201899f1ac))
+* **chat:** 압축된 도구 결과에 원문 복구 핸들을 남긴다 ([#4766](https://github.com/choiceoh/Deneb/issues/4766)) ([9bc379e](https://github.com/choiceoh/Deneb/commit/9bc379ef1718d358a831256bb43c7ba66131d74a))
+* **chat:** 요청된 압축이 정책상 적용되지 않았음을 결과에 알린다 ([#4781](https://github.com/choiceoh/Deneb/issues/4781)) ([384dfa5](https://github.com/choiceoh/Deneb/commit/384dfa554cb9a6e68c7e2d24af638439c9733076))
+* **chat:** 이 런이 못 쓰는 도구를 요구하는 스킬은 주입하지 않는다 ([#4789](https://github.com/choiceoh/Deneb/issues/4789)) ([3375415](https://github.com/choiceoh/Deneb/commit/33754159b6ea4137c18fa2d05344d50c39d9327d))
+* **chat:** 지속성 플래그가 회상까지 끄던 것을 분리한다 ([#4727](https://github.com/choiceoh/Deneb/issues/4727)) ([e3581ea](https://github.com/choiceoh/Deneb/commit/e3581ea5be85e35ca96a9f5e2abe18ebe0a47109))
+* **chat:** 카드 거부 사유를 영문 enum 대신 고칠 수 있는 문장으로 돌려준다 ([#4764](https://github.com/choiceoh/Deneb/issues/4764)) ([45a6fd6](https://github.com/choiceoh/Deneb/commit/45a6fd67943f04f5c52b4017409b47d8165f1fe9))
+* **chat:** 코드블록으로 강등된 deneb-html 페이지도 모델에게 이유를 알린다 ([#4779](https://github.com/choiceoh/Deneb/issues/4779)) ([1687d1b](https://github.com/choiceoh/Deneb/commit/1687d1b64fb95125d79a2da60faa9c8c63690248))
+* **client-android:** 대기 상태 줄의 경과 시간을 상태 문구와 같은 줄에 맞춘다 ([#4787](https://github.com/choiceoh/Deneb/issues/4787)) ([c57bd6e](https://github.com/choiceoh/Deneb/commit/c57bd6e6e0cd2c1a77045baf4c529d50fdacf2df))
+* **client:** 피드에서 처리한 카드의 알림을 함께 내린다 ([#4738](https://github.com/choiceoh/Deneb/issues/4738)) ([7fd64bd](https://github.com/choiceoh/Deneb/commit/7fd64bd515bd15a8ac080a08af09acdf85dfad70))
+* **compaction:** 요약 입력에 도구 호출 인자를 남긴다 ([#4768](https://github.com/choiceoh/Deneb/issues/4768)) ([31681ee](https://github.com/choiceoh/Deneb/commit/31681ee649304bd16c9a8ae5e78bf25d5ed6369f))
+* **compaction:** 형식을 안 갖춘 요약을 저장하지 않고 다음 패스로 미룬다 ([#4784](https://github.com/choiceoh/Deneb/issues/4784)) ([573c99e](https://github.com/choiceoh/Deneb/commit/573c99e8c8fa8e458ba019805cf721440889ab4d))
+* **genesis:** 못 쓰는 검증 케이스 하나가 스킬 게이트를 통째로 끄지 않게 한다 ([#4759](https://github.com/choiceoh/Deneb/issues/4759)) ([3832f25](https://github.com/choiceoh/Deneb/commit/3832f258c3054d5fa101ce639226273ba9ac233c))
+* **genesis:** 브리지에 없는 deneb.&lt;함수&gt; 호출을 스킬 게이트에서 막는다 ([#4769](https://github.com/choiceoh/Deneb/issues/4769)) ([a806f3f](https://github.com/choiceoh/Deneb/commit/a806f3f7120c94cc1427d95b55811e23274bfb86))
+* **genesis:** 이미 종결된 후보 리뷰를 턴 실패가 아니라 답으로 돌려준다 ([#4778](https://github.com/choiceoh/Deneb/issues/4778)) ([b12b1ab](https://github.com/choiceoh/Deneb/commit/b12b1ab773c57a22064ed89f3f431cb48fd9065d))
+* **genesis:** 커버리지 생성기가 파라미터 이름을 도구로 착각하지 않게 한다 ([#4763](https://github.com/choiceoh/Deneb/issues/4763)) ([21deaf9](https://github.com/choiceoh/Deneb/commit/21deaf9d870bc56fc5c8a6c7f2ea2e61512d66d6))
+* **genesis:** 커버리지 케이스가 실행 불가한 입력을 지어내지 않게 한다 ([#4761](https://github.com/choiceoh/Deneb/issues/4761)) ([49253a6](https://github.com/choiceoh/Deneb/commit/49253a6d58f3085fcb74db1011f020ab7f5721ce))
+* **genesis:** 테스트가 프로덕션 원장을 여는 것을 막는다 ([#4792](https://github.com/choiceoh/Deneb/issues/4792)) ([3eee265](https://github.com/choiceoh/Deneb/commit/3eee2654824d3db292727ea1127c36e2ff39dbab))
+* **genesis:** 판정자에게 실재하는 도구 목록을 준다 (낡은 스킬 수리가 날조로 기각되던 것) ([#4767](https://github.com/choiceoh/Deneb/issues/4767)) ([0a7b303](https://github.com/choiceoh/Deneb/commit/0a7b303836a8bdcbf24ff39e9c925ccc6b332976))
+* **phone:** 알림 판정기가 현행 사실을 보게 한다 ([#4790](https://github.com/choiceoh/Deneb/issues/4790)) ([dc2adf1](https://github.com/choiceoh/Deneb/commit/dc2adf1f0f958acbd157f598ab9409cafd7e7b0d))
+* **proactive:** 행동을 요구하는 카드만 알림으로 방해한다 ([#4795](https://github.com/choiceoh/Deneb/issues/4795)) ([0ff6a94](https://github.com/choiceoh/Deneb/commit/0ff6a94fad2dfdb0edfc61a87c4163326cf2b117))
+* **recall:** 상수 라벨이던 회상 신뢰도에 판별력을 돌려준다 ([#4794](https://github.com/choiceoh/Deneb/issues/4794)) ([dcc20e1](https://github.com/choiceoh/Deneb/commit/dcc20e196a148e4d0eb100f5085306907d54e642))
+* **runtime:** 라이브니스 워치가 자기 실행을 증명하게 한다 ([#4782](https://github.com/choiceoh/Deneb/issues/4782)) ([78f916c](https://github.com/choiceoh/Deneb/commit/78f916c9ae49903ae18fe68c145bb042314ff221))
+* **skills:** ASCII 트리거가 단어 안쪽에 걸리지 않게 한다 ([#4770](https://github.com/choiceoh/Deneb/issues/4770)) ([2b45ca0](https://github.com/choiceoh/Deneb/commit/2b45ca03055bd99df4e76a880fe78dfda849cb10))
+* **skills:** 번들 스킬 삭제를 되돌릴 수 있게 한다 ([#4756](https://github.com/choiceoh/Deneb/issues/4756)) ([e294b13](https://github.com/choiceoh/Deneb/commit/e294b1348820cf79222e32433648e26a56e332f3))
+* **skills:** 붙여넣은 payload가 아니라 사용자가 물은 것에만 트리거를 건다 ([#4776](https://github.com/choiceoh/Deneb/issues/4776)) ([0e951b4](https://github.com/choiceoh/Deneb/commit/0e951b449eab697c91bac620bd4dc45d874c5d6a))
+* **skills:** 스킬 툼스톤에 사유와 시각을 남긴다 ([#4780](https://github.com/choiceoh/Deneb/issues/4780)) ([2b415b8](https://github.com/choiceoh/Deneb/commit/2b415b8dacf9fe146c3315533763c5382eda9c64))
+* **skills:** 이름이 가려진 스킬을 부팅 로그에 드러낸다 ([#4774](https://github.com/choiceoh/Deneb/issues/4774)) ([6b7cfd0](https://github.com/choiceoh/Deneb/commit/6b7cfd0661d6f0e4352aa21522a1cd706c9e0b75))
+* **subagent:** 실패한 자식에게 '다시 하지 마라'고 말하지 않는다 ([#4786](https://github.com/choiceoh/Deneb/issues/4786)) ([a4789c8](https://github.com/choiceoh/Deneb/commit/a4789c848edd223def86c5723543ace099490548))
+* **subagent:** 완료 알림에 자식의 결과 본문을 실어 보낸다 ([#4771](https://github.com/choiceoh/Deneb/issues/4771)) ([708508a](https://github.com/choiceoh/Deneb/commit/708508add1a1e4eb4ede64b5cf6fec52dfb92707))
+* **wiki:** wikirepair가 자기 작업량을 잘못 세던 것을 고친다 ([#4728](https://github.com/choiceoh/Deneb/issues/4728)) ([3cbf627](https://github.com/choiceoh/Deneb/commit/3cbf627d20dfa5a92da973beed0e4856920216f0))
+* **wiki:** 근종할→주시할(운영자 판정), 자모 부패는 생성 결함임을 명시한다 ([#4740](https://github.com/choiceoh/Deneb/issues/4740)) ([2e08626](https://github.com/choiceoh/Deneb/commit/2e086268c796a1f192315debe726e5d6e85e0e0e))
+* **wiki:** 매실농원 이름을 다른 오타가 아니라 정본으로 고친다 ([#4731](https://github.com/choiceoh/Deneb/issues/4731)) ([93ea276](https://github.com/choiceoh/Deneb/commit/93ea2764e359cfaf9bfe36433d9fb53e1ac4713f))
+* **wiki:** 모든 사실 카드의 정정을 반증 증거로 받는다 ([#4788](https://github.com/choiceoh/Deneb/issues/4788)) ([c0b4d56](https://github.com/choiceoh/Deneb/commit/c0b4d56d75ab3fc078647307b602c4a3b71a0d8c))
+* **wiki:** 본문을 통째로 교체한 쓰기가 무엇을 지웠는지 알린다 ([#4797](https://github.com/choiceoh/Deneb/issues/4797)) ([c605a7d](https://github.com/choiceoh/Deneb/commit/c605a7da781adbca441561b0a832b7e62cd3f671))
+* **wiki:** 사실 투영이 뒤로 가지 못하게 막고 테스트가 프로덕션 워크스페이스를 덮어쓰던 경로를 끊는다 ([#4748](https://github.com/choiceoh/Deneb/issues/4748)) ([14aaa46](https://github.com/choiceoh/Deneb/commit/14aaa465fcbea5f89b38cb9b26e59b172d59d14a))
+* **wiki:** 앞서간 프로젝션 때문에 게이트웨이가 위키를 끄지 않는다 ([#4793](https://github.com/choiceoh/Deneb/issues/4793)) ([3b2ff3d](https://github.com/choiceoh/Deneb/commit/3b2ff3d55064263c53ec9a2e008926683339fe53))
+* **wiki:** 연락처 불일치 판정을 발신자 근거로 좁히고 종결 가능하게 한다 ([#4734](https://github.com/choiceoh/Deneb/issues/4734)) ([eb0303d](https://github.com/choiceoh/Deneb/commit/eb0303d26177153b0d082a185cb240e99e96d734))
+* **wiki:** 운영자 확정 치환 반영 + 문맥이 못 정하는 건 적용하지 않는다 ([#4735](https://github.com/choiceoh/Deneb/issues/4735)) ([0d9b3ed](https://github.com/choiceoh/Deneb/commit/0d9b3ed700a74f22f5c389c0ba82e41d33aa179e))
+* **wiki:** 위키링크 파일명을 회사 도메인으로 세지 않는다 ([#4730](https://github.com/choiceoh/Deneb/issues/4730)) ([9a397db](https://github.com/choiceoh/Deneb/commit/9a397db3c46ffbf8d935e4095b35609aaf8974f0))
+* **wiki:** 이름 치환의 대상이 정본인지 도구가 스스로 검사한다 ([#4732](https://github.com/choiceoh/Deneb/issues/4732)) ([5376a03](https://github.com/choiceoh/Deneb/commit/5376a03ec7cdbf5cbd85bc188ebc72fed2a11092))
+* **wiki:** 인물 퍼지가 운영자 판단을 지우지 않게 하고 삭제를 보고한다 ([#4739](https://github.com/choiceoh/Deneb/issues/4739)) ([e22abde](https://github.com/choiceoh/Deneb/commit/e22abdea67a7f45326c828f16c8536782c26368d))
+* **wiki:** 학습된 요약이 있는 인물 페이지를 퍼지에서 지킨다 ([#4742](https://github.com/choiceoh/Deneb/issues/4742)) ([243ff0e](https://github.com/choiceoh/Deneb/commit/243ff0e106a2b8265e4287a2ee82008153669190))
+* **wiki:** 해소된 정비 카드를 회수하고 매 사이클 재적재를 막는다 ([#4733](https://github.com/choiceoh/Deneb/issues/4733)) ([f8ffd0a](https://github.com/choiceoh/Deneb/commit/f8ffd0afd9d9237d047d00583d26fa6ab018db66))
+
+
+### ⚡ Performance
+
+* **chat:** 시스템 프롬프트에서 중복된 USER.md 사실 투영을 뺀다 ([#4750](https://github.com/choiceoh/Deneb/issues/4750)) ([ca64325](https://github.com/choiceoh/Deneb/commit/ca64325ab9df6d3933dc6d7d262dd607d3289463))
+* **chat:** 실제로 호출된 deferred 도구만 다음 턴에 재활성화한다 ([#4762](https://github.com/choiceoh/Deneb/issues/4762)) ([52c93d3](https://github.com/choiceoh/Deneb/commit/52c93d3ce1d03abec2f1349968f30b35ab9b0d89))
+* **chat:** 이미 히스토리에 실린 스킬 본문을 다시 주입하지 않는다 ([#4760](https://github.com/choiceoh/Deneb/issues/4760)) ([c281d6b](https://github.com/choiceoh/Deneb/commit/c281d6bbc70b47a3c4d499b9863639728d34f708))
+* **prompt:** 서브에이전트에게 카드 문법 대신 부모 보고 규칙을 준다 ([#4758](https://github.com/choiceoh/Deneb/issues/4758)) ([2d6a385](https://github.com/choiceoh/Deneb/commit/2d6a385d04c2c4455e947f3e75e26d13b73f0db4))
+* **recall:** 시스템 프롬프트가 이미 실은 self 사실을 턴별 블록에서 뺀다 ([#4752](https://github.com/choiceoh/Deneb/issues/4752)) ([7f96a0f](https://github.com/choiceoh/Deneb/commit/7f96a0f535b40daaffb86ed94b8a641aaf38202a))
+
+
+### 🔧 Internal
+
+* **chat:** 아무도 만들지 않고 아무도 읽지 않는 $ref 도구 체이닝을 걷어낸다 ([#4755](https://github.com/choiceoh/Deneb/issues/4755)) ([a09c255](https://github.com/choiceoh/Deneb/commit/a09c255641296bba671e87c332ea995a39682f9b))
+* **genesis:** 브리지 어휘를 구현에서 유도해 중복을 없앤다 ([#4775](https://github.com/choiceoh/Deneb/issues/4775)) ([15b9eaa](https://github.com/choiceoh/Deneb/commit/15b9eaa798eb5b3d368e542d226c740f5aaa3c77))
+* **wiki:** 현장 페이지 저작 경로를 제거한다 (지도 폐지 마무리) ([#4747](https://github.com/choiceoh/Deneb/issues/4747)) ([bae2ea1](https://github.com/choiceoh/Deneb/commit/bae2ea1a338391d0cc1f3aeb6083efe4917262d9))
+
 ## [5.7.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.6.0...deneb-v5.7.0) (2026-08-25)
 
 
