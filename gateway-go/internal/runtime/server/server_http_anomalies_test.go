@@ -82,3 +82,48 @@ func TestAnomalyDigestFlagsTruncatedWindows(t *testing.T) {
 		t.Errorf("per-pass coverage must be explicit:\n%s", out)
 	}
 }
+
+// TestCollapseFindingsGroupsAcrossPassesDespiteRewording: an hourly lane
+// re-reports a standing problem every hour and rewrites the summary each time,
+// so grouping must key on the verbatim evidence, not the prose.
+func TestCollapseFindingsGroupsAcrossPassesDespiteRewording(t *testing.T) {
+	ev := "[WARN] mcp server sent unparseable line | bytes=18 error=invalid character 'C'"
+	entries := []anomalywatch.Entry{
+		{At: "2026-08-26T22:00:00Z", Findings: []anomalywatch.Finding{
+			{Severity: "medium", Summary: "MCP 서버가 파싱 불가능한 라인을 보낸다", Evidence: ev},
+		}},
+		{At: "2026-08-26T08:00:00Z", Findings: []anomalywatch.Finding{
+			{Severity: "low", Summary: "MCP 서버가 JSON이 아닌 줄을 보냈다", Evidence: ev},
+		}},
+		{At: "2026-08-26T12:00:00Z", Findings: []anomalywatch.Finding{
+			{Severity: "low", Summary: "genesis 드레이너 실패", Evidence: "[WARN] genesis-backlog-drain: generate failed"},
+		}},
+	}
+	got := collapseFindings(entries)
+	if len(got) != 2 {
+		t.Fatalf("collapsed to %d groups, want 2: %+v", len(got), got)
+	}
+	top := got[0]
+	if top.count != 2 {
+		t.Errorf("repeat count = %d, want 2 — differently-worded summaries of one line are one problem", top.count)
+	}
+	if top.severity != "medium" {
+		t.Errorf("severity = %q, want the highest any pass assigned", top.severity)
+	}
+	if top.first != "2026-08-26T08:00:00Z" || top.last != "2026-08-26T22:00:00Z" {
+		t.Errorf("standing window = %s ~ %s, want the full span", top.first, top.last)
+	}
+	if top.summary != "MCP 서버가 파싱 불가능한 라인을 보낸다" {
+		t.Errorf("summary = %q, want the newest wording", top.summary)
+	}
+}
+
+// TestEvidenceKeyFoldsVolatileNumbersButNotDistinctLines.
+func TestEvidenceKeyFoldsVolatileNumbersButNotDistinctLines(t *testing.T) {
+	if evidenceKey("mcp unparseable | bytes=18") != evidenceKey("mcp unparseable | bytes=24") {
+		t.Error("volatile counts must not split one problem into many")
+	}
+	if evidenceKey("mcp unparseable line") == evidenceKey("genesis parse failed") {
+		t.Error("genuinely different lines must not merge")
+	}
+}

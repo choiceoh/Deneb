@@ -255,3 +255,37 @@ func TestRunReportsFullCoverageOnceAlivePastTheWindow(t *testing.T) {
 		t.Errorf("coveredMinutes = %d, want the full 90", got[0].Examined.CoveredMinutes)
 	}
 }
+
+// TestDigestExcludesTheLanesOwnOutput is the self-contamination gate.
+//
+// Findings are logged at Warn so they reach the journal, and the window is Warn
+// and above — so without the filter every finding becomes evidence for the next
+// pass, which reports and logs it again. Observed live on the first full day:
+// a genesis parse failure was re-reported three hours running, the third time
+// quoting this lane's own earlier report instead of the original error.
+func TestDigestExcludesTheLanesOwnOutput(t *testing.T) {
+	d := BuildDigest([]observe.LogLine{
+		{Level: "warn", Msg: "anomaly-watch: 이상 관측", Attrs: map[string]string{"evidence": "genesis-backlog-drain: generate failed"}},
+		{Level: "info", Msg: "anomaly-watch: 점검 완료"},
+		{Level: "warn", Msg: "genesis-backlog-drain: generate failed"},
+	})
+	if strings.Contains(d.Text, "anomaly-watch") {
+		t.Errorf("the lane must not read its own output back in:\n%s", d.Text)
+	}
+	if !strings.Contains(d.Text, "genesis-backlog-drain") {
+		t.Errorf("real lines must survive the filter:\n%s", d.Text)
+	}
+	if d.Examined.LogLines != 1 {
+		t.Errorf("examined = %d, want 1 — self-lines must not inflate the count either", d.Examined.LogLines)
+	}
+}
+
+// TestSelfFilterUsesTheSameNameTheLoggerWrites: the filter and the log messages
+// must come from one constant, since the moment they diverge the lane silently
+// resumes eating its own output.
+func TestSelfFilterUsesTheSameNameTheLoggerWrites(t *testing.T) {
+	task := &Task{}
+	if !strings.HasPrefix(selfLogPrefix, task.Name()) {
+		t.Errorf("task name %q and self-log prefix %q must share one source", task.Name(), selfLogPrefix)
+	}
+}
