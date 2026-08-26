@@ -642,13 +642,35 @@ func TestRelayCollapsedPreservesProseAndAppliesSuppressionGates(t *testing.T) {
 			t.Errorf("work-feed title = %q", feed.items[0].Title)
 		}
 
+		// An informational card no longer interrupts the phone: the feed is pull,
+		// and 66% of such cards got no response at all while question cards ran
+		// 15% (2026-08-26 실측). The card itself is unchanged above.
+		select {
+		case ev := <-events:
+			t.Errorf("informational card must not push, got %q", ev.Body)
+		default:
+		}
+	})
+
+	t.Run("actionable card still pushes, without leaking fence JSON", func(t *testing.T) {
+		store := newRecordingTranscriptStore()
+		feed := &recordingWorkFeed{}
+		hub := nativepush.NewHub()
+		events, unsub := hub.Subscribe(nativepush.KindMobile)
+		defer unsub()
+		d := proactiveRelayDeps{transcriptStore: store, workFeed: feed, pushHub: hub}
+
+		delivered, err := d.relayNativeToOptions("", body, proactiveRelayOptions{forceQuestion: true})
+		if err != nil || !delivered {
+			t.Fatalf("relayNativeToOptions: delivered=%v err=%v", delivered, err)
+		}
 		select {
 		case ev := <-events:
 			if strings.Contains(ev.Body, "deneb-ui") || strings.Contains(ev.Body, `"accordion"`) {
 				t.Errorf("push preview leaked fence JSON: %q", ev.Body)
 			}
 		default:
-			t.Error("expected a live push event, got none")
+			t.Error("행동을 요구하는 카드는 푸시해야 한다")
 		}
 	})
 
@@ -780,5 +802,33 @@ func TestStartsWithDenebUIFence(t *testing.T) {
 		if startsWithDenebUIFence(no) {
 			t.Fatalf("false positive: %q", no)
 		}
+	}
+}
+
+// The gate is the action requirement, not a severity guess: priority 1→4 ran
+// 74/66/69/61% ignored and urgency markers 62% vs 67%, so neither can decide
+// who gets interrupted (2026-08-26 실측).
+func TestShouldPushCard(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		kind     string
+		question bool
+		want     bool
+	}{
+		{"행동 요구 카드는 푸시", nativepush.PushKindWorkfeed, true, true},
+		{"정보 카드는 푸시 안 함", nativepush.PushKindWorkfeed, false, false},
+		{"카드가 없으면 푸시가 유일한 전달 경로", "", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldPushCard(tc.kind, tc.question); got != tc.want {
+				t.Errorf("shouldPushCard(%q, %v) = %v, want %v", tc.kind, tc.question, got, tc.want)
+			}
+		})
+	}
+
+	// The kill switch restores the old push-everything behavior.
+	t.Setenv("DENEB_PUSH_ALL_CARDS", "1")
+	if !shouldPushCard(nativepush.PushKindWorkfeed, false) {
+		t.Error("킬스위치가 동작하지 않음")
 	}
 }
