@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/codeaction"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/lanewatch"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
@@ -443,6 +444,15 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 				s.genesisEvolver.JudgeModel(),
 				s.genesisEvolver.ThinkingOff,
 			),
+		})
+		// Lane liveness: ask every watched lane whether it did any work, and say
+		// so out loud when one has been quiet longer than it ever should be.
+		// Advisory — it never blocks or mutates a lane. See lane_liveness.go for
+		// why each lane is on the list (each one HAD gone silent unnoticed).
+		s.autonomousSvc.RegisterTask(&lanewatch.Task{
+			Watch:      s.laneLivenessWatch(),
+			Logger:     s.logger,
+			OnFindings: s.postLaneLivenessCard,
 		})
 		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{
 			Tracker: s.genesisTracker,
