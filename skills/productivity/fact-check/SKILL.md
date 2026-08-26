@@ -10,6 +10,7 @@ metadata:
         "emoji": "🔎",
         "tags": ["factcheck", "검증", "사실확인", "근거", "팩트체크", "verify"],
         "triggers": ["팩트체크", "팩트 체크", "사실 확인", "사실인지", "근거 있어", "근거 확인", "검증해", "확실해?", "진짜야?", "맞는 정보"],
+        "exercise_tools": ["web"],
         "related_skills": ["email-analysis", "contract-review", "decision-premortem"],
       },
   }
