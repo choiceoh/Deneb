@@ -1111,16 +1111,8 @@ const (
 	// At 20 hit@8 equals pool exactly: ranking now loses nothing the retrieval
 	// stage found.
 	//
-	// 50 was measured too and NOT taken. It buys +1.3pp of hit@8 and nothing at
-	// the 4-row budget, while the cross-encoder call grows (280-char snippets,
-	// 12 samples against xprovence: median 16.8/43.1/64.9ms and p90
-	// 38.9/46.1/95.0ms at 10/20/50 docs). The absolute numbers sit far under
-	// polarisRerankTimeout, but the cost that matters is the tail under load —
-	// a saturated sidecar pushes calls past the timeout and drops reranking
-	// entirely for that turn, silently (observed while benchmarking
-	// concurrently). Widening the window widens that tail for a gain confined to
-	// cue turns. Raise it with DENEB_POLARIS_RERANK_WINDOW if the sidecar ever
-	// gets headroom to spare.
+	// This is the NO-CUE window; cue turns take a wider one — see
+	// polarisRerankWindow for why the choice is routed rather than global.
 	defaultPolarisRerankCandidates = 20
 	// polarisRerankTimeout is tighter than the wiki plane's 800ms because the
 	// documents are 280-char snippets rather than 600-char page heads, and the
@@ -1133,6 +1125,42 @@ const (
 // past this window never meets the reranker at all, so widening reach without
 // widening the window measures a candidate that cannot win.
 var polarisRerankCandidates = polarisRerankWindowFromEnv()
+
+// polarisRerankWindow routes the cross-encoder window the same way
+// polarisCrossHits routes reach: by the budget the turn will actually spend.
+//
+// Routing is what makes the wide window affordable. Judged as one global number
+// it loses — 50 buys +1.3pp of hit@8, nothing at the 4-row budget, and costs
+// every turn a bigger cross-encoder batch (280-char snippets, 12 samples:
+// median 16.8/43.1/64.9ms and p90 38.9/46.1/95.0ms at 10/20/50 docs). The tail
+// is the real cost, since a saturated sidecar pushes calls past
+// polarisRerankTimeout and drops reranking for that turn silently.
+//
+// Per-turn, the ledger is different: a no-cue turn searches with reach 2, so its
+// pool rarely reaches 20 rows and a wider window changes nothing it would pay
+// for. The gain and the latency both land on cue turns — the ones where the
+// operator explicitly asked to remember — so they are the ones that should pay.
+func polarisRerankWindow(cue bool) int {
+	if cue {
+		return polarisRerankCandidatesCue
+	}
+	return polarisRerankCandidates
+}
+
+// polarisRerankCandidatesCue is the cue-turn window, overridable via
+// DENEB_POLARIS_RERANK_WINDOW_CUE.
+var polarisRerankCandidatesCue = polarisRerankWindowCueFromEnv()
+
+func polarisRerankWindowCueFromEnv() int {
+	if raw := strings.TrimSpace(os.Getenv("DENEB_POLARIS_RERANK_WINDOW_CUE")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v >= 2 && v <= 100 {
+			return v
+		}
+	}
+	return defaultPolarisRerankCandidatesCue
+}
+
+const defaultPolarisRerankCandidatesCue = 50
 
 func polarisRerankWindowFromEnv() int {
 	if raw := strings.TrimSpace(os.Getenv("DENEB_POLARIS_RERANK_WINDOW")); raw != "" {
@@ -1155,12 +1183,12 @@ func polarisRerankWindowFromEnv() int {
 //
 // Failure is always silent and lossless: a nil reranker, a short candidate list,
 // a timeout, a service error, or a length mismatch all return the input order.
-func rerankPolarisEvidence(ctx context.Context, reranker Reranker, message string, rows []recallEvidence) []recallEvidence {
+func rerankPolarisEvidence(ctx context.Context, reranker Reranker, message string, cue bool, rows []recallEvidence) []recallEvidence {
 	message = strings.TrimSpace(message)
 	if reranker == nil || message == "" || len(rows) < 2 {
 		return rows
 	}
-	count := minInt(len(rows), polarisRerankCandidates)
+	count := minInt(len(rows), polarisRerankWindow(cue))
 	documents := make([]string, count)
 	for i := range documents {
 		// Source carries the session/message identity the snippet itself omits,

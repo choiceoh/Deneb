@@ -294,11 +294,11 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			// budgets need their own candidate pools — reusing one would score the
 			// cue budget against the no-cue turn's narrower reach.
 			candidates := rerankPolarisEvidence(
-				context.Background(), reranker, q.Question,
+				context.Background(), reranker, q.Question, false,
 				recallPolarisEvidence(context.Background(), bridge, questionKey, queries, false),
 			)
 			cueCandidates := rerankPolarisEvidence(
-				context.Background(), reranker, q.Question,
+				context.Background(), reranker, q.Question, true,
 				recallPolarisEvidence(context.Background(), bridge, questionKey, queries, true),
 			)
 			// Ceiling probe: what FTS could reach at limit 10, ignoring the per-query

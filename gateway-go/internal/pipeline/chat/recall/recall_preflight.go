@@ -371,7 +371,7 @@ func buildRecallSources(params Params, deps Deps, queries []string, message stri
 		reranker := deps.Reranker
 		sources = append(sources, recallSource{name: "polaris", run: func(ctx context.Context) []recallEvidence {
 			return rerankPolarisEvidence(
-				ctx, reranker, message,
+				ctx, reranker, message, hasCue(message),
 				recallPolarisEvidence(ctx, bridge, params.SessionKey, queries, hasCue(message)),
 			)
 		}})
