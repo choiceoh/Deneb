@@ -71,25 +71,111 @@ def file_claims_path():
     return os.path.join(os.path.expanduser("~"), ".claude", "deneb-file-claims.json")
 
 
-def repo_relative(real_path):
-    """Path relative to its git checkout root, or None when outside one.
+def claim_key(real_path):
+    """Ledger key for a file: "<repo identity>:<repo-relative path>", or None
+    outside a checkout.
 
-    Keying on the REPO-RELATIVE path is the whole mechanism: two agents editing
+    The RELATIVE half is the whole mechanism: two agents editing
     gateway-go/internal/foo.go in two different worktrees are editing the same
     file as far as the eventual merge is concerned, and absolute paths would
     make those two look unrelated.
 
-    Walks up for .git (a directory in the main checkout, a file in a worktree)
-    rather than shelling out to git — this runs before every edit.
+    The IDENTITY half is what keeps that from over-matching: a bare relative
+    path made Deneb's README.md collide with SolarFlow's README.md — two repos
+    that share nothing but a filename convention (caught in review 2026-08-27).
+    Identity is the origin URL when the repo has one, because that is the
+    literal definition of "meets at the same merge": worktrees AND separate
+    clones (~/deneb-dev) of one origin share it, while different projects never
+    do. A local-only repo falls back to its resolved common .git path.
+
+    Walks the filesystem rather than shelling out to git — this runs before
+    every edit.
     """
     directory = os.path.dirname(real_path)
     while True:
         if _is_checkout_root(directory):
-            return os.path.relpath(real_path, directory)
+            rel = os.path.relpath(real_path, directory)
+            return _repo_identity(directory) + ":" + rel, rel
         parent = os.path.dirname(directory)
         if parent == directory:
             return None
         directory = parent
+
+
+def _repo_identity(checkout_root):
+    common = _common_git_dir(checkout_root)
+    url = _origin_url(os.path.join(common, "config"))
+    if url:
+        return _normalize_origin(url)
+    return common
+
+
+def _normalize_origin(url):
+    """One spelling per origin.
+
+    Clones of one repo routinely disagree about the URL: the fleet's prod
+    checkout says https://github.com/choiceoh/deneb while ~/deneb-dev says
+    https://github.com/choiceoh/Deneb.git — same repo, and a byte-compared
+    identity split them (caught live 2026-08-27, key check across all three
+    checkouts). Scheme, ssh form, case, .git suffix, and trailing slash all
+    fold; GitHub paths are case-insensitive in practice, and a rare
+    case-sensitive host would only make two sessions warn each other slightly
+    too often — the cheap direction to be wrong in.
+    """
+    u = url.strip().lower().rstrip("/")
+    for prefix in ("https://", "http://", "ssh://", "git://"):
+        if u.startswith(prefix):
+            u = u[len(prefix):]
+            break
+    if u.startswith("git@"):
+        u = u[len("git@"):].replace(":", "/", 1)
+    if u.endswith(".git"):
+        u = u[: -len(".git")]
+    return u
+
+
+def _common_git_dir(checkout_root):
+    """The shared .git directory behind a checkout (worktrees resolve to their
+    parent repository's)."""
+    marker = os.path.join(checkout_root, ".git")
+    if os.path.isdir(marker):
+        return os.path.realpath(marker)
+    try:
+        with open(marker, encoding="utf-8") as fh:
+            first = fh.readline().strip()
+    except OSError:
+        return os.path.realpath(marker)
+    if not first.startswith("gitdir:"):
+        return os.path.realpath(marker)
+    gitdir = first[len("gitdir:"):].strip()
+    if not os.path.isabs(gitdir):
+        gitdir = os.path.join(checkout_root, gitdir)
+    gitdir = os.path.realpath(gitdir)
+    # A linked worktree's gitdir is <common>/worktrees/<name>; the identity is
+    # the common half.
+    head, tail = os.path.split(gitdir)
+    if os.path.basename(head) == "worktrees":
+        return os.path.dirname(head)
+    return gitdir
+
+
+def _origin_url(config_path):
+    """The [remote "origin"] url from a git config, by line scan — no git
+    subprocess in a hook that fires on every edit."""
+    try:
+        with open(config_path, encoding="utf-8") as fh:
+            in_origin = False
+            for line in fh:
+                stripped = line.strip()
+                if stripped.startswith("["):
+                    in_origin = stripped.replace(" ", "") in ('[remote"origin"]',)
+                    continue
+                if in_origin and stripped.startswith("url"):
+                    _, _, value = stripped.partition("=")
+                    return value.strip() or None
+    except OSError:
+        pass
+    return None
 
 
 def _is_checkout_root(directory):
@@ -154,7 +240,7 @@ def check_file_claim(tool, tool_input, cwd, session_id):
     return claim_for_path(os.path.realpath(file_path), cwd, session_id)
 
 
-def claim_or_warn(rel, cwd, session_id):
+def claim_or_warn(key, rel, cwd, session_id):
     """Register this session's claim on rel, or warn once if another holds it.
 
     Warning ONCE is the point of the warned list. A held file that re-asked on
@@ -165,7 +251,7 @@ def claim_or_warn(rel, cwd, session_id):
     """
     now = time.time()
     claims = load_claims(now)
-    held = claims.get(rel)
+    held = claims.get(key)
     holder = str(held.get("session_id") or "") if held else ""
     if held and holder not in ("", session_id):
         warned = held.get("warned")
@@ -186,7 +272,7 @@ def claim_or_warn(rel, cwd, session_id):
             + f"\n  (클레임 리셋: rm {file_claims_path()})"
         ))
 
-    claims[rel] = {
+    claims[key] = {
         "session_id": session_id, "ts": now, "cwd": cwd or "",
         # Carry the warned list across refreshes so a holder's own edits do not
         # reset who has already been told.
@@ -270,10 +356,11 @@ def claim_for_path(real, cwd, session_id):
         return None
     # Being inside a git checkout IS the scratch filter: a temp file, a
     # generated artifact, anything outside a repo has no merge to collide at.
-    rel = repo_relative(real)
-    if rel is None:
+    keyed = claim_key(real)
+    if keyed is None:
         return None
-    return claim_or_warn(rel, cwd, session_id)
+    key, rel = keyed
+    return claim_or_warn(key, rel, cwd, session_id)
 
 
 def _ago(seconds):
