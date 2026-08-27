@@ -6,6 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
@@ -260,6 +261,35 @@ func TestBoundaryFormatTier1TotalBudgetStopsBeforeOverflow(t *testing.T) {
 	}
 }
 
+func TestBoundaryFormatTier1TokenBudgetStopsBeforeOverflow(t *testing.T) {
+	store := newKnowledgeBoundaryStore(t)
+	for i := 0; i < tier1MaxPages; i++ {
+		writeKnowledgeBoundaryPage(
+			t,
+			store,
+			fmt.Sprintf("기타/token-budget-%02d.md", i),
+			fmt.Sprintf("토큰 예산 페이지 %02d", i),
+			strings.Repeat("요약", 120),
+			strings.Repeat("본문", tier1MaxBodyRunes),
+			1.0-float64(i)/100,
+			false,
+		)
+	}
+	got := FormatTier1(store, 0)
+	if tokens := tokenest.Estimate(got); tokens > tier1MaxTokens {
+		t.Fatalf("output tokens = %d, budget = %d", tokens, tier1MaxTokens)
+	}
+	if !strings.Contains(got, "토큰 예산 페이지 00") {
+		t.Fatal("token budget guard omitted first entry")
+	}
+	if strings.Count(got, "### ") >= tier1MaxPages {
+		t.Fatalf("fixture failed to exercise token budget:\n%s", got)
+	}
+	if !strings.HasSuffix(got, "\n\n") {
+		t.Fatal("budgeted output ended with a partial entry")
+	}
+}
+
 func TestBoundaryFormatTier1FirstOversizedEntryYieldsHeaderOnly(t *testing.T) {
 	store := newKnowledgeBoundaryStore(t)
 	writeKnowledgeBoundaryPage(
@@ -320,6 +350,9 @@ func TestBoundaryTier1ConstantsRemainProtective(t *testing.T) {
 	}
 	if tier1MaxTotalChar != 20000 {
 		t.Fatalf("tier1MaxTotalChar = %d", tier1MaxTotalChar)
+	}
+	if tier1MaxTokens != 8000 {
+		t.Fatalf("tier1MaxTokens = %d", tier1MaxTokens)
 	}
 	if tier1MaxBodyRunes*tier1MaxPages >= tier1MaxTotalChar {
 		t.Fatalf("page bodies alone can exhaust total budget: %d >= %d", tier1MaxBodyRunes*tier1MaxPages, tier1MaxTotalChar)
