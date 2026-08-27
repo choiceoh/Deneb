@@ -313,3 +313,38 @@ class RunKindCohortTest(unittest.TestCase):
         self.assertEqual(turn.extra["timeout_runs"], 2)
         self.assertEqual(turn.extra["by_kind"], {"skill-review": 2})
         self.assertTrue(any("skill-review 2/2" in line for line in turn.detail))
+
+
+class FaultReportExclusionTests(unittest.TestCase):
+    """A line that REPORTS a fault must not be booked as one.
+
+    Both cases below were live on 2026-08-27, and between them they dominated
+    the error-rate pillar (score 0.0/100, 123 hard faults over 448 runs).
+    """
+
+    def test_mcp_unparseable_line_is_not_an_llm_fault(self) -> None:
+        line = "mcp server sent unparseable line error=invalid character 'C' bytes=18"
+        # It DOES match the LLM pattern — on the bare word "unparseable" — which
+        # is exactly why the report filter has to be checked first.
+        self.assertTrue(health.LLM_HARD_RE.search(line))
+        self.assertTrue(health.FAULT_REPORT_RE.search(line))
+
+    def test_watcher_findings_are_not_faults(self) -> None:
+        for line in (
+            "anomaly-watch: 이상 관측 severity=high summary=x",
+            "lane-liveness: 점검 완료 lanes=2 findings=0",
+        ):
+            self.assertTrue(health.FAULT_REPORT_RE.search(line), line)
+
+    def test_genuine_faults_still_count(self) -> None:
+        """The filter must not swallow the faults it sits next to."""
+        real = "wiki-review: verdict call failed error=context deadline exceeded"
+        self.assertFalse(health.FAULT_REPORT_RE.search(real))
+        self.assertTrue(health.LLM_HARD_RE.search(real))
+
+    def test_excluded_lines_are_counted_not_silently_dropped(self) -> None:
+        """A silent filter is indistinguishable from a pattern that stopped
+        matching, so the exclusion has to show up in the readout."""
+        stats = health.Signals()
+        self.assertTrue(hasattr(stats, "fault_report_lines"))
+        self.assertEqual(stats.fault_report_lines, 0)
