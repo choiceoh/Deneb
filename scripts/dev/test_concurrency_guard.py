@@ -315,24 +315,30 @@ class FileClaimShellTests(GuardTestCase):
         return self.decision(payload("Bash", {"command": command}, str(self.wt_b), session_id))
 
     def test_every_shell_write_form_reaches_the_claim_check(self) -> None:
-        target = str(self.wt_b / "gateway-go/foo.go")
+        # Built as lambdas because each subTest re-runs setUp for a fresh
+        # ledger, which mints a new temp home — a path captured before the loop
+        # would point at the previous, deleted one.
         forms = {
-            "sed -i": f"sed -i 's/a/b/' {target}",
-            "redirect": f"echo x > {target}",
-            "append": f"printf y >> {target}",
-            "heredoc": f"cat > {target} <<'EOF'\nx\nEOF",
-            "tee": f"echo x | tee {target}",
-            "cp dest": f"cp /etc/hostname {target}",
-            # The one a shell parser cannot see: the write lives inside a script
-            # fed to an interpreter on stdin.
-            "python heredoc": "python3 - <<'PY'\nopen('gateway-go/foo.go','w').write('x')\nPY",
-            "relative path": "sed -i 's/a/b/' gateway-go/foo.go",
+            "sed -i": lambda t: f"sed -i 's/a/b/' {t}",
+            "redirect": lambda t: f"echo x > {t}",
+            "append": lambda t: f"printf y >> {t}",
+            "heredoc": lambda t: f"cat > {t} <<'EOF'\nx\nEOF",
+            "tee": lambda t: f"echo x | tee {t}",
+            "cp dest": lambda t: f"cp /etc/hostname {t}",
+            # The one a shell parser cannot see: the write lives inside a
+            # script fed to an interpreter on stdin.
+            "python heredoc": lambda t: "python3 - <<'PY'\nopen('gateway-go/foo.go','w').write('x')\nPY",
+            "relative path": lambda t: "sed -i 's/a/b/' gateway-go/foo.go",
         }
-        for label, command in forms.items():
+        for label, make_command in forms.items():
             with self.subTest(form=label):
                 self.setUp()  # fresh ledger per form
+                target = self.wt_b / "gateway-go/foo.go"
+                # sed -i only edits files that exist; the claim path uses that
+                # to tell a sed expression from a filename.
+                target.write_text("x\n", encoding="utf-8")
                 self.hold_with_session_a()
-                self.assertEqual(self.bash_decision(command), "deny", label)
+                self.assertEqual(self.bash_decision(make_command(str(target))), "deny", label)
 
     def test_read_only_commands_never_register_a_claim(self) -> None:
         """A mention is not an edit. Registering claims from greps would warn
@@ -554,3 +560,45 @@ class LedgerConcurrencyTests(unittest.TestCase):
         # Without the flock, concurrent read-modify-write loses claims — the
         # slower writer clobbers the faster one's entry, i.e. a lost warning.
         self.assertEqual(len(ledger), 12, sorted(ledger.keys()))
+
+
+class WriteTargetSanitizerTests(unittest.TestCase):
+    """The redirect scan is deliberately loose, and its garbage reached
+    production on 2026-08-27: the live ledger held `&1`, `$SP/q38conc.py`, `1`.
+
+    `&1` was the dangerous one. `2>&1` appears in nearly every command run
+    here, so two sessions in one directory both claimed it and blocked each
+    other over a redirect — a guard that fires on everything gets approved
+    reflexively and stops meaning anything.
+    """
+
+    def targets(self, command, cwd=None):
+        return guard.bash_write_targets(command, cwd, precise=True)
+
+    def test_fd_duplication_is_not_a_file(self) -> None:
+        for command in ("go build ./... 2>&1 | head -20", "make check 2>&1 | tail -4", "cmd >&2"):
+            self.assertEqual(self.targets(command), [], command)
+
+    def test_unexpanded_variables_are_not_paths(self) -> None:
+        """The hook sees command TEXT, not the shell's expansion, so the path
+        is unknown — and an unknown path must not be guessed at."""
+        for command in ("python3 x.py > $SP/out.py", "echo x > ${DIR}/f", "echo x > `pwd`/f"):
+            self.assertEqual(self.targets(command), [], command)
+
+    def test_device_files_are_not_claimed(self) -> None:
+        self.assertEqual(self.targets("grep -rn foo bar.go 2>/dev/null"), [])
+
+    def test_real_redirect_targets_survive(self) -> None:
+        self.assertEqual(self.targets("echo x > gateway-go/foo.go"), ["gateway-go/foo.go"])
+        self.assertEqual(self.targets("cat > out.txt <<'EOF'\nx\nEOF"), ["out.txt"])
+
+    def test_sed_expression_is_not_mistaken_for_a_file(self) -> None:
+        """`s/a/b/` joined to cwd resolves to a plausible in-repo path. sed -i
+        can only edit files that already exist, so existence separates the
+        expression from the file exactly — no expression parsing to get wrong."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        (Path(tmp.name) / "foo.go").write_text("x", encoding="utf-8")
+        self.assertEqual(self.targets("sed -i 's/a/b/' foo.go", tmp.name), ["foo.go"])
+        self.assertEqual(
+            self.targets("sed -i -e 's/a/b/' -e 's/c/d/' foo.go", tmp.name), ["foo.go"])

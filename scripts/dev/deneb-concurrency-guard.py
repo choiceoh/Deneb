@@ -136,7 +136,7 @@ def check_bash_file_claim(command, cwd, session_id):
     Uses the same target parser as check 1b, so the two cannot disagree about
     what counts as a write.
     """
-    for target in bash_write_targets(command) + interpreter_write_targets(command):
+    for target in bash_write_targets(command, cwd, precise=True) + interpreter_write_targets(command):
         path = os.path.expanduser(target)
         if not os.path.isabs(path):
             path = os.path.join(cwd or os.getcwd(), path)
@@ -226,12 +226,25 @@ WRITE_DEST_LAST = {"cp", "install", "rsync"}
 WRITE_ANY_ARG = {"rm", "mv", "tee", "touch", "mkdir", "truncate", "ln", "chmod", "chown"}
 
 
-def bash_write_targets(command):
-    """Every path this shell command writes to, across all its segments.
+def _exists_from(cwd, token):
+    path = os.path.expanduser(token)
+    if not os.path.isabs(path):
+        path = os.path.join(cwd or os.getcwd(), path)
+    return os.path.exists(path)
 
-    One parser, two consumers: check 1b (is it the prod tree?) and check 4 (is
-    another session holding it?). Written once because a target the two
-    disagree about is a hole in whichever check has the narrower list.
+
+def bash_write_targets(command, cwd=None, precise=False):
+    """Paths this shell command writes to. One parser, two consumers, so a
+    target they disagree about cannot become a hole in the narrower one.
+
+    precise=False (check 1b, the prod guard): keep every candidate. Over-asking
+    about a prod write is safe; missing one is not, so a sed operand that might
+    be a path stays in.
+
+    precise=True (check 4, file claims): drop sed operands that do not exist.
+    sed -i can only edit existing files, and treating `s/a/b/` as a path filled
+    the live ledger with junk. Here a false positive is a spurious BLOCK, so
+    precision is what matters.
     """
     found = []
     for segment in command_segments(command):
@@ -246,7 +259,12 @@ def bash_write_targets(command):
         elif name in WRITE_ANY_ARG:
             targets.extend(args)
         elif name == "sed" and any(t == "-i" or t.startswith("-i") for t in segment[1:]):
-            targets.extend(args)
+            # args is [expression…, file…] and the two are not distinguishable
+            # by shape — `s/a/b/` joined to cwd resolves to a plausible path
+            # inside the repo and was polluting the ledger. sed -i can only
+            # edit files that already exist, so existence separates them
+            # exactly, with no expression-parsing heuristic to get wrong.
+            targets.extend(a for a in args if not precise or _exists_from(cwd, a))
         for i, tok in enumerate(segment):
             bare = tok.lstrip("0123456789&")  # 2>, &>, 2>>… down to the > core
             if bare in (">", ">>"):
@@ -254,14 +272,48 @@ def bash_write_targets(command):
                     targets.append(segment[i + 1])
             elif bare.startswith(">") and bare.lstrip(">"):
                 targets.append(bare.lstrip(">"))
-        found.extend(targets)
+        found.extend(t for t in targets if _is_real_write_target(t))
     return found
 
 
-def check_prod_write_bash(command):
+def _is_real_write_target(token):
+    """Whether a parsed token names a FILE this command writes.
+
+    The redirect scan is deliberately loose (it has to catch `2>`, `&>`, `>>`,
+    and glued `>file`), and that looseness produced live garbage on 2026-08-27
+    — the ledger filled with entries like `&1`, `$SP/q38conc.py`, and `1`:
+
+      - `2>&1` is fd duplication, not a file. It appears in nearly every
+        command run here, so two sessions in one directory both claimed `&1`
+        and BLOCKED EACH OTHER over a redirect. That is the worst possible
+        failure for this feature: a guard that fires on everything gets
+        approved reflexively and stops meaning anything.
+      - `$SP/x.py` is an unexpanded shell variable. The hook sees the command
+        text, not the shell's expansion, so the path is simply unknown — and
+        an unknown path must not be guessed at.
+      - /dev/null and friends are writes, but nothing merges there.
+
+    Anything that survives is a plain path; the claim layer still filters it
+    down to files that live inside a git checkout.
+    """
+    token = token.strip()
+    if not token:
+        return False
+    if token.startswith("&"):          # 2>&1, >&2 — fd duplication
+        return False
+    if "$" in token or "`" in token:   # unexpanded expansion; path unknown
+        return False
+    if any(ch in token for ch in "|<>"):  # metacharacter leaked through
+        return False
+    if token.startswith("/dev/") or token.startswith("/proc/"):
+        return False
+    return True
+
+
+def check_prod_write_bash(command, cwd=None):
     """Check 1b: ask on Bash writes into the prod tree (check 1 sees only tool
     file_path). Targets: write-command args, sed -i files, >/>> redirects."""
-    for target in bash_write_targets(command):
+    for target in bash_write_targets(command, cwd):
         hit = prod_target(target)
         if hit:
             return decide("ask", (
@@ -377,7 +429,7 @@ def main():
         command = tool_input.get("command") or ""
         if not is_deneb_context(cwd, command):
             return 0
-        result = check_prod_write_bash(command)
+        result = check_prod_write_bash(command, cwd)
         if result is not None:
             return result
         result = check_bash_file_claim(command, cwd, session_id)
