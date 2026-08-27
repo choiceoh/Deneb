@@ -133,6 +133,7 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 	overall := &bucket{}
 	abstention := 0
 	poolSize, rankedSize, dedupHits, filterHits := 0, 0, 0, 0
+	charCutNoCue, charCutCue, charCutCueTurns := 0, 0, 0
 
 	// Questions are independent — each builds its own store — and the run is
 	// dominated by round-trips to the embedding sidecar, not by GPU throughput
@@ -346,12 +347,22 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			if hitIn(afterFilter) {
 				filterHits++
 			}
-			block, _ := formatRecallEvidenceAt(evidence, questionAt, true)
+			block, cutNoCue := formatRecallEvidenceAt(evidence, questionAt, true)
+			// Does the CHARACTER budget bind before the row budget does? The row
+			// budget is conditional (4/8) but recallMaxChars is not, so a cue turn
+			// can be allowed eight rows and then lose some to the char cap —
+			// which would make the reach and window routing partly wasted.
+			_, cutCue := formatRecallEvidenceAt(cueRanked, questionAt, true)
 
 			rendered := renderedSources(block)
 			// Aggregation is the only shared state; everything above is per-question.
 			mu.Lock()
 			defer mu.Unlock()
+			charCutNoCue += cutNoCue
+			charCutCue += cutCue
+			if cutCue > 0 {
+				charCutCueTurns++
+			}
 			poolSize += len(candidates)
 			rankedSize += len(cueRanked)
 			b := buckets[q.QuestionType]
@@ -413,6 +424,8 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 	t.Logf("== LongMemEval_s retrieval-only (polaris arm) ==")
 	for _, k := range types {
 		b := buckets[k]
+		t.Logf("CHARBUDGET  rows dropped by recallMaxChars: no-cue=%d  cue=%d (on %d/%d cue-budget turns)",
+			charCutNoCue, charCutCue, charCutCueTurns, overall.total)
 		t.Logf("STAGE  pool=%s  after-dedup=%s  after-filter=%s  | avg pool=%.1f ranked(cue8)=%.1f",
 			pct(overall.poolHit, overall.total), pct(dedupHits, overall.total), pct(filterHits, overall.total),
 			float64(poolSize)/float64(maxInt(overall.total, 1)), float64(rankedSize)/float64(maxInt(overall.total, 1)))

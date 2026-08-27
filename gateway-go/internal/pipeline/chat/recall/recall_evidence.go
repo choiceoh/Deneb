@@ -857,7 +857,7 @@ func appendPolarisCrossSessionHits(ctx context.Context, store *polaris.Store, se
 func appendPolarisSummaryHits(ctx context.Context, store *polaris.Store, sessionKey string, queries []string, evidence []recallEvidence) []recallEvidence {
 	seenSummarySession := make(map[string]struct{})
 	summaryAdded := 0
-	for i, hits := range store.SearchSummariesSemantic(ctx, sessionKey, queries, 2) {
+	for i, hits := range store.SearchSummariesSemantic(ctx, sessionKey, queries, recallSummarySemanticQuotaValue()) {
 		for _, h := range hits {
 			if h.Score < recallSummarySemanticFloor {
 				continue
@@ -879,11 +879,11 @@ func appendPolarisSummaryHits(ctx context.Context, store *polaris.Store, session
 				At:     h.CreatedAt,
 			})
 			summaryAdded++
-			if summaryAdded >= recallSummarySemanticQuota {
+			if summaryAdded >= recallSummarySemanticQuotaValue() {
 				break
 			}
 		}
-		if summaryAdded >= recallSummarySemanticQuota {
+		if summaryAdded >= recallSummarySemanticQuotaValue() {
 			break
 		}
 	}
@@ -901,6 +901,16 @@ const recallSummarySemanticFloor = 0.25
 // gists (0.55+cosine) don't crowd out the sharper current-session message hits
 // (0.65+score) in the merged window.
 const recallSummarySemanticQuota = 2
+
+// recallSummarySemanticQuotaValue honors DENEB_RECALL_SUMMARY_QUOTA for sweeps.
+func recallSummarySemanticQuotaValue() int {
+	if raw := strings.TrimSpace(os.Getenv("DENEB_RECALL_SUMMARY_QUOTA")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v > 0 && v <= 20 {
+			return v
+		}
+	}
+	return recallSummarySemanticQuota
+}
 
 func formatRecallEvidence(evidence []recallEvidence) string {
 	block, _ := formatRecallEvidenceAt(evidence, time.Now(), true)
