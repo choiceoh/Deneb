@@ -259,12 +259,39 @@ class ExploreReroute:
         return [self._finish(restore_id(msg, pending["client_id"]), pending["symbol"])], []
 
 
-def encode_message(msg: dict) -> bytes:
+def encode_message(msg: dict, framing: str = "ndjson") -> bytes:
+    """Encode one JSON-RPC message.
+
+    The MCP stdio transport is newline-delimited JSON; Content-Length framing
+    is LSP's, and the two are not interchangeable. This encoder used to emit
+    Content-Length unconditionally, which broke BOTH peers at once — the proxy
+    sat between an NDJSON client and an NDJSON server and inserted a dialect
+    neither spoke.
+
+    Measured on 2026-08-27 against codegraph 1.5.0: an NDJSON initialize gets a
+    normal result, the identical request wrapped in Content-Length gets
+    {"code":-32700,"message":"Parse error: invalid JSON"}. On the client side
+    Deneb's gateway reads stdout with a bufio.Scanner (NDJSON only) and logged
+    79 "tool discovery failed ... server=codegraph" over two days, each paired
+    with "mcp server sent unparseable line | bytes=18 invalid character 'C'" —
+    18 bytes starting with C is exactly "Content-Length: 89".
+
+    NDJSON is therefore the default in both directions, and Content-Length is
+    used only when a peer demonstrably spoke it first.
+    """
     body = json.dumps(msg, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    return f"Content-Length: {len(body)}\r\n\r\n".encode("ascii") + body
+    if framing == "content-length":
+        return f"Content-Length: {len(body)}\r\n\r\n".encode("ascii") + body
+    return body + b"\n"
 
 
-def read_message(stream) -> dict | None:
+def read_message(stream, observed: list[str] | None = None) -> dict | None:
+    """Read one message, optionally recording which framing the peer used.
+
+    observed is a one-element list used as an out-param so the caller can reply
+    in the SAME dialect the peer spoke. Mirroring is what makes the proxy
+    correct for both kinds of client without a flag anyone has to set.
+    """
     header = b""
     while True:
         chunk = stream.read(1)
@@ -274,10 +301,16 @@ def read_message(stream) -> dict | None:
         if header.endswith(b"\r\n\r\n") or header.endswith(b"\n\n"):
             break
         if header.startswith(b"{") and header.endswith(b"\n") and b"Content-Length" not in header:
+            if observed is not None:
+                observed[0] = "ndjson"
             return json.loads(header.decode("utf-8"))
     match = re.search(br"Content-Length:\s*(\d+)", header, re.I)
     if not match:
+        if observed is not None:
+            observed[0] = "ndjson"
         return _parse_loose(header)
+    if observed is not None:
+        observed[0] = "content-length"
     raw = stream.read(int(match.group(1)))
     if not raw:
         return None
@@ -313,16 +346,24 @@ def serve(child_argv: list[str]) -> int:
     hub = ExploreReroute(root=serve_root_from_argv(child_argv))
     hub_lock = threading.Lock()
     stdin_lock = threading.Lock()
+    # Framing the CLIENT speaks, learned from its first message and mirrored in
+    # every reply. Defaults to content-length so behavior is unchanged for the
+    # LSP-framed clients this proxy already served; an NDJSON client flips it on
+    # its first request, which is always initialize.
+    client_framing = ["ndjson"]
+    # The CHILD's framing is tracked separately — the two peers need not agree,
+    # and assuming they do is how the original bug read as "works for me".
+    child_framing = ["ndjson"]
 
     def write_child(msg: dict) -> None:
         with stdin_lock:
-            proc.stdin.write(encode_message(msg))
+            proc.stdin.write(encode_message(msg, child_framing[0]))
             proc.stdin.flush()
 
     def client_to_server() -> None:
         try:
             while True:
-                msg = read_message(sys.stdin.buffer)
+                msg = read_message(sys.stdin.buffer, client_framing)
                 if msg is None:
                     break
                 with hub_lock:
@@ -337,7 +378,7 @@ def serve(child_argv: list[str]) -> int:
 
     def server_to_client() -> None:
         while True:
-            msg = read_message(proc.stdout)
+            msg = read_message(proc.stdout, child_framing)
             if msg is None:
                 break
             with hub_lock:
@@ -345,7 +386,7 @@ def serve(child_argv: list[str]) -> int:
             for extra in to_server:
                 write_child(extra)
             for item in to_client:
-                sys.stdout.buffer.write(encode_message(item))
+                sys.stdout.buffer.write(encode_message(item, client_framing[0]))
                 sys.stdout.buffer.flush()
 
     reader = threading.Thread(target=server_to_client, daemon=True)
