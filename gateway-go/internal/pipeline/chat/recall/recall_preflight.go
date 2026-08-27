@@ -93,7 +93,29 @@ var recallStopWords = map[string]struct{}{
 	"말했던": {}, "말한": {}, "했던": {}, "해둔": {}, "정리했던": {}, "논의했던": {}, "이어": {}, "이어서": {}, "계속": {},
 	"문맥": {}, "컨텍스트": {}, "뭐였": {}, "뭐더라": {}, "그거": {}, "그": {}, "이": {}, "저": {}, "것": {}, "거": {},
 	"좀": {}, "다시": {}, "관련": {}, "쪽": {}, "걸": {}, "를": {}, "을": {}, "은": {}, "는": {}, "이랑": {}, "하고": {},
-	"the": {}, "and": {}, "for": {}, "with": {}, "about": {}, "that": {}, "this": {}, "what": {}, "when": {},
+	// English function words. The list used to hold nine of these, which left
+	// "did", "where", "how" and "was" firing as standalone queries — on
+	// LongMemEval roughly half of every question's derived queries were function
+	// words, and completing the list moved evidence-hit from 64.7% to 76.4%
+	// (longmemeval_bench_test.go). Korean-first does not make them harmless:
+	// operator messages quote English prose (shared article titles, extracted
+	// document text) often enough to matter.
+	//
+	// These apply unconditionally, which was a measured choice, not a default.
+	// The obvious worry is a Korean message where an English keyword IS the
+	// subject ("for 루프", "where 절") — dropping it would delete the question.
+	// Across 2,081 real Korean operator messages that shape appears 4 times
+	// (0.2%), and none of the four are genuine keyword use, while incidental
+	// quoted English appears in 4.1%. Gating the list on "message has no
+	// Hangul" was built and rejected: it costs the common case to protect a
+	// case the corpus does not contain.
+	"the": {}, "and": {}, "for": {}, "with": {}, "about": {}, "that": {}, "this": {},
+	"what": {}, "when": {}, "where": {}, "which": {}, "who": {}, "whom": {}, "whose": {},
+	"how": {}, "why": {}, "did": {}, "does": {}, "was": {}, "were": {}, "are": {},
+	"has": {}, "have": {}, "had": {}, "been": {}, "will": {}, "would": {}, "should": {},
+	"could": {}, "can": {}, "from": {}, "into": {}, "than": {}, "then": {}, "there": {},
+	"their": {}, "some": {}, "any": {}, "all": {}, "get": {}, "got": {},
+	"hello": {}, "thanks": {}, "thank": {}, "please": {}, "today": {}, "tomorrow": {}, "yesterday": {},
 	// Generic request/action verbs (stems after suffix-strip). The recall
 	// subject is the nouns, never the imperative — left in, these fire as
 	// standalone single-term queries that match unrelated entries by a common
@@ -116,7 +138,6 @@ var recallStopWords = map[string]struct{}{
 	"뭐": {}, "무엇": {}, "어떻게": {}, "어때": {}, "왜": {}, "언제": {}, "어디": {}, "누구": {}, "얼마": {}, "몇": {},
 	"도와": {}, "도와줘": {}, "도와줄": {}, "있어": {}, "있어요": {}, "있나": {}, "있는": {}, "없어": {}, "없어요": {}, "없는": {},
 	"할까": {}, "할래": {}, "될까": {}, "되나": {}, "알아": {}, "몰라": {}, "궁금": {},
-	"hello": {}, "thanks": {}, "thank": {}, "please": {}, "today": {}, "tomorrow": {}, "yesterday": {},
 }
 
 var recallFenceTagPattern = regexp.MustCompile(`(?i)</?\s*recall-context\b[^>]*>`)
