@@ -124,6 +124,14 @@ func selfCorrectionCardBody(record genesis.SelfCorrectionCandidateRecord, brief 
 // handleSelfCorrectionCardAction durably records the operator's ledger
 // review. An error keeps the card unsettled so the decision can be retried;
 // the ledger review itself is idempotent on a repeated status.
+//
+// "Already settled elsewhere" is the one outcome that must NOT be an error.
+// Retry-on-error is right for a transient failure and exactly wrong for a
+// candidate that has reached a terminal state: the transition can never
+// succeed, so the card can never clear, and the operator taps it forever. One
+// id was retried five times that way before the anomaly ledger surfaced the
+// pattern on 2026-08-27 (an applied -> accepted attempt from operator-feed).
+// The card's job is done in that case — settle it and say why.
 func (s *Server) handleSelfCorrectionCardAction(item workfeed.Item, actionID, comment string) error {
 	if s.genesisTracker == nil {
 		return errors.New("genesis tracker unavailable")
@@ -147,6 +155,16 @@ func (s *Server) handleSelfCorrectionCardAction(item workfeed.Item, actionID, co
 		Reviewer:   "operator-feed",
 		ReviewNote: strings.TrimSpace(comment),
 	}); err != nil {
+		if errors.Is(err, genesis.ErrSelfCorrectionTransition) {
+			// Not a failure: the candidate left the reviewable states through
+			// another path (coding-dispatch applied it, or a heartbeat review
+			// settled it). Info, not Warn — a Warn here also feeds the runtime
+			// error miner, which would mine a code candidate out of a path that
+			// is working exactly as designed.
+			s.logger.Info("self-correction card already settled elsewhere",
+				"id", id, "attemptedStatus", status, "detail", err)
+			return nil
+		}
 		s.logger.Warn("self-correction review record failed", "id", id, "error", err)
 		return fmt.Errorf("record self-correction review %s: %w", id, err)
 	}
