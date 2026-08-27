@@ -373,10 +373,36 @@ func TestSpilloverRef_ParsesSpillIDFromText(t *testing.T) {
 		{"plain output, no spill", ""},
 		{`read_spillover("sp_deadbeef")`, "sp_deadbeef"},
 		{`read_spillover(sp_noquotes)`, ""}, // the embedded marker always quotes the id
+		{`[compressed by pilot — original 32089 chars; 원문: read_spillover(spill_id="sp_cafebabe")]`, "sp_cafebabe"},
 	}
 	for _, c := range cases {
 		if got := spilloverRef(c.in); got != c.want {
 			t.Errorf("spilloverRef(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+// TestTruncateOldToolResults_PreservesCompressedSpillHandle: pilot-compressed
+// results name the spill as read_spillover(spill_id="sp_…"). Tier 2b must keep
+// that pointer — otherwise the summary survives but the full output is stranded.
+func TestTruncateOldToolResults_PreservesCompressedSpillHandle(t *testing.T) {
+	compressed := strings.Repeat("요약 줄\n", 40) +
+		`[compressed by pilot — original 32089 chars; 원문: read_spillover(spill_id="sp_cafebabe")]
+` + strings.Repeat("요약 줄\n", 10)
+	messages := []llm.Message{
+		assistantMsg(t, "a1"),
+		toolResultMsg(compressed),
+		assistantMsg(t, "a2"),
+		assistantMsg(t, "a3"),
+		assistantMsg(t, "a4"),
+		assistantMsg(t, "a5"),
+	}
+	out, stubbed := TruncateOldToolResults(messages, 4, 256)
+	if stubbed != 1 {
+		t.Fatalf("expected 1 stub, got %d", stubbed)
+	}
+	got := firstToolResultContent(t, json.RawMessage(out[1].Content.Bytes()))
+	if !strings.Contains(got, `read_spillover("sp_cafebabe")`) {
+		t.Fatalf("compressed spill handle stripped from stub: %q", got)
 	}
 }

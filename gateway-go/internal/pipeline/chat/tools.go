@@ -130,7 +130,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input rawJSON) 
 	var cacheKey string
 	if cacheable {
 		cacheKey = BuildCacheKey(name, input)
-		if cached, ok := cachedToolResult(ctx, rc, cacheKey, name, wantCompress); ok {
+		if cached, ok := cachedToolResult(ctx, rc, cacheKey, name, wantCompress, r.spillStore); ok {
 			return cached, nil
 		}
 	}
@@ -294,7 +294,7 @@ func toolRunCache(ctx context.Context, name string) (*RunCache, bool) {
 
 // cachedToolResult returns the run-cached result for cacheKey, applying
 // requested compression. ok=false means a cache miss.
-func cachedToolResult(ctx context.Context, rc *RunCache, cacheKey, name string, wantCompress bool) (string, bool) {
+func cachedToolResult(ctx context.Context, rc *RunCache, cacheKey, name string, wantCompress bool, spillStore tooldeps.SpilloverStore) (string, bool) {
 	cached, ok := rc.Get(cacheKey)
 	if !ok {
 		return "", false
@@ -303,7 +303,14 @@ func cachedToolResult(ctx context.Context, rc *RunCache, cacheKey, name string, 
 	// never runs (see ToolExecStats).
 	toolport.ToolExecStatsFromContext(ctx).RecordCacheHit(name)
 	if wantCompress && cached != "" {
-		return compressToolOutput(ctx, name, cached, "", slog.Default()), true
+		// Cache stores pre-compression output (see finalizeToolOutput). A
+		// compressed result replaces the output with a summary — spill first,
+		// same as the cold path, or the repeat call loses its recovery handle.
+		spillID := ""
+		if spillStore != nil {
+			spillID, _ = spillStore.Store(toolport.SessionKeyFromContext(ctx), name, cached)
+		}
+		return compressToolOutput(ctx, name, cached, spillID, slog.Default()), true
 	}
 	return cached, true
 }
