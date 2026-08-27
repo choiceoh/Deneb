@@ -1109,8 +1109,18 @@ const (
 	//	20      83.8%   83.8%   81.7%   60.4%   <- current
 	//
 	// At 20 hit@8 equals pool exactly: ranking now loses nothing the retrieval
-	// stage found. Latency is unchanged (120 questions: 50.2s vs 49.9s) — twenty
-	// 280-char snippets are the same single batch as ten.
+	// stage found.
+	//
+	// 50 was measured too and NOT taken. It buys +1.3pp of hit@8 and nothing at
+	// the 4-row budget, while the cross-encoder call grows (280-char snippets,
+	// 12 samples against xprovence: median 16.8/43.1/64.9ms and p90
+	// 38.9/46.1/95.0ms at 10/20/50 docs). The absolute numbers sit far under
+	// polarisRerankTimeout, but the cost that matters is the tail under load —
+	// a saturated sidecar pushes calls past the timeout and drops reranking
+	// entirely for that turn, silently (observed while benchmarking
+	// concurrently). Widening the window widens that tail for a gain confined to
+	// cue turns. Raise it with DENEB_POLARIS_RERANK_WINDOW if the sidecar ever
+	// gets headroom to spare.
 	defaultPolarisRerankCandidates = 20
 	// polarisRerankTimeout is tighter than the wiki plane's 800ms because the
 	// documents are 280-char snippets rather than 600-char page heads, and the
