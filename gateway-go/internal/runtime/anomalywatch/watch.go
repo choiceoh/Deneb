@@ -29,9 +29,26 @@ const systemPrompt = `너는 Deneb 게이트웨이의 런타임 관측자다. �
 // lightweight role, which is the local dsv4).
 type Judge func(ctx context.Context, system, user string, maxTokens int) (string, error)
 
-// maxJudgeTokens bounds the reply. Findings are one-liners with a quote; a
-// larger budget buys only a longer essay about the same window.
-const maxJudgeTokens = 1500
+// maxJudgeTokens bounds the reply.
+//
+// It started at 1500 on the reasoning that "findings are one-liners with a
+// quote; a larger budget buys only a longer essay". Production showed that
+// wrong: 9 of 22 overnight passes returned "판정 응답 해석 실패: unexpected end
+// of JSON input", and the reproduction is exact — a real 37-message window
+// (2026-08-27) comes back finish_reason=length, completion_tokens=1500,
+// content_len=0. The model reasons before answering; on a busy window the
+// reasoning alone spends the ceiling and the JSON never starts.
+//
+// Measured against the live lightweight model (dsv4) on that window: 4000
+// finishes at 2672 tokens with parseable JSON. 6000 leaves headroom for a
+// window at maxDigestLines without inviting an essay — the reply shape is
+// still capped by the schema.
+//
+// Disabling thinking does NOT substitute for the budget: sending
+// chat_template_kwargs {"thinking": false} to this serving still returned
+// reasoning=True and the same length-truncated empty content. The ceiling is
+// the lever that works here.
+const maxJudgeTokens = 6000
 
 // Inspect runs one pass over the digest and returns the findings it can stand
 // behind, plus a gap string when it could not reach a verdict at all.
@@ -52,6 +69,15 @@ func Inspect(ctx context.Context, judge Judge, d Digest) (findings []Finding, ga
 	}
 	parsed, err := parseFindings(reply)
 	if err != nil {
+		// Name the budget case specifically. "해석 실패" pointed the first
+		// reading of this at the parser and the prompt; the actual cause was
+		// the reply never being emitted, and the ledger should say which.
+		if strings.TrimSpace(reply) == "" {
+			return nil, fmt.Sprintf(
+				"판정 응답이 비었음 (출력 예산 %d 소진 의심 — 창 %d자)",
+				maxJudgeTokens, len([]rune(d.Text)),
+			)
+		}
 		return nil, fmt.Sprintf("판정 응답 해석 실패: %v", err)
 	}
 	return keepGrounded(parsed, d.Text), ""
