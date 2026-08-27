@@ -50,7 +50,10 @@ type Deps struct {
 	Transcript toolport.TranscriptStore
 	FileRecall FileRecallFunc
 	Org        OrgLoader
-	Briefcase  bool
+	// Reranker reorders polaris candidates against the raw message. nil keeps
+	// the fused order — recall stays fully functional without it.
+	Reranker  Reranker
+	Briefcase bool
 	// SelfFactsInSystemPrompt reports that this turn's system prompt already
 	// carries the generated self-fact projection (workspace MEMORY.md). When it
 	// does, repeating self claims in the per-turn <current-facts> block is pure
