@@ -265,7 +265,47 @@ func GenerateSessionTitle(ctx context.Context, userMsg, reply string) string {
 	}
 	// Lightweight model down or output empty/garbage → heuristic fallback so the
 	// session still gets a usable title (graceful degradation, like OCR→tesseract).
-	return cleanSessionTitle(firstLine(userMsg))
+	return cleanSessionTitle(titleSourceLine(userMsg))
+}
+
+// titleSourceLine returns the first line worth naming a session after, skipping
+// the machine-inserted wrapper a native-client message usually opens with.
+//
+// firstLine alone named sessions after boilerplate: an attachment share became
+// "📎 첨부 파일을 저장했습니다. 분석에 필요한 파일은 원문을 열어서 읽어라", a
+// work-item open became "이 업무 항목을 열었어. 아래 내용을 기준으로…", and a
+// share WITH the operator's own question became "📲 공유 맥락:" — the label line,
+// with their actual words on the next one. These are session names in the app's
+// list.
+//
+// The wrapper openings are the same ones skill-trigger scoping already
+// enumerates (skill_hint_scope.go); reusing that list keeps one definition of
+// "this part is machine-inserted".
+func titleSourceLine(message string) string {
+	for _, line := range strings.Split(message, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || isWrapperTitleLine(line) {
+			continue
+		}
+		return line
+	}
+	return firstLine(message)
+}
+
+// shareCaptionLabel opens the block carrying the operator's own note on a share
+// (miniapp_bridge.go). The label is not the note — the note is the next line.
+const shareCaptionLabel = "📲 공유 맥락"
+
+func isWrapperTitleLine(line string) bool {
+	if strings.HasPrefix(line, shareCaptionLabel) {
+		return true
+	}
+	for _, marker := range skillHintPayloadMarkers {
+		if strings.HasPrefix(line, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // cleanSessionTitle normalizes a model/heuristic title to a single tidy line.
