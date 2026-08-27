@@ -36,9 +36,9 @@ func TestCompressedOutputNamesTheSpillHandle(t *testing.T) {
 // so the formatting itself is asserted here.
 func compressMarkerFor(original, spillID, compressed string) string {
 	if spillID != "" {
-		return sprintfCompressed(original, spillID, compressed)
+		return sprintfCompressed(original, spillID, compressed, false)
 	}
-	return sprintfCompressedPlain(original, compressed)
+	return sprintfCompressedPlain(original, compressed, false)
 }
 
 // TestCachedToolResult_CompressSpillsOnCacheHit: run cache stores pre-compression
@@ -65,5 +65,32 @@ func TestCachedToolResult_CompressSpillsOnCacheHit(t *testing.T) {
 	}
 	if strings.Contains(got, "compressed by pilot") && !strings.Contains(got, "read_spillover") {
 		t.Fatalf("compressed cache hit lost recovery handle: %q", got[:min(240, len(got))])
+	}
+}
+
+// The compressor sees at most compressPromptMaxBytes. On a large output that is
+// a small fraction of it, so the marker must say the summary covers only the
+// head — otherwise "original 204800 bytes" over a 32KB-derived summary reads as
+// a summary of the whole.
+func TestCompressMarkerDeclaresPartialCoverage(t *testing.T) {
+	full := sprintfCompressed("original", "sp_dead", "요약", false)
+	if strings.Contains(full, "앞") {
+		t.Errorf("a complete summary claimed partial coverage:\n%s", full)
+	}
+
+	partial := sprintfCompressed("original", "sp_dead", "요약", true)
+	if !strings.Contains(partial, "만 요약됨") {
+		t.Errorf("a head-only summary did not declare it:\n%s", partial)
+	}
+	// The spill handle must survive — compaction parses it out of this marker
+	// (compaction/protected.go spilloverRefCompressPattern).
+	if !strings.Contains(partial, `read_spillover(spill_id="sp_dead")`) {
+		t.Errorf("partial marker broke the spill handle compaction parses:\n%s", partial)
+	}
+
+	// The no-handle form carries the same declaration.
+	plain := sprintfCompressedPlain("original", "요약", true)
+	if !strings.Contains(plain, "만 요약됨") {
+		t.Errorf("plain partial marker did not declare coverage:\n%s", plain)
 	}
 }
