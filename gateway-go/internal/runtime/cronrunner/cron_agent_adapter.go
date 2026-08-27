@@ -232,7 +232,11 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 		logger = slog.Default()
 	}
 	logger.Info("cron agent output chosen",
-		"jobId", params.AgentID,
+		// The job id comes from the session key: AgentTurnParams carries an
+		// optional AgentID (which job) — not the job id — and no production job
+		// sets it, so this field read jobId="" on every postmortem line.
+		"jobId", session.CronJobID(params.SessionKey),
+		"agentId", params.AgentID,
 		"sessionKey", params.SessionKey,
 		"source", source,
 		"textLen", len(text),
