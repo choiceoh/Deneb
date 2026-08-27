@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -431,3 +432,76 @@ class ClaimKeyIdentityTests(GuardTestCase):
         a = self.make_repo("local-a")
         b = self.make_repo("local-b")
         self.assertNotEqual(self.key_for(a), self.key_for(b))
+
+
+class CursorBridgeClaimModeTests(unittest.TestCase):
+    """The cross-harness half: Cursor edits must feed the same ledger and
+    receive the same warnings, through cursor-hook-bridge.sh's claim mode.
+
+    Exercised as a real subprocess because the value under test IS the
+    protocol translation — StrReplace→Edit, path→file_path, Claude ask JSON →
+    Cursor allow+agent_message. Mocking any of that would test the mock.
+    """
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.home = Path(tmp.name)
+        (self.home / ".claude").mkdir()
+        for wt in ("wt1", "wt2"):
+            d = self.home / "deneb/.claude/worktrees" / wt
+            (d / "gateway-go").mkdir(parents=True)
+            (d / ".git").write_text("gitdir: /elsewhere\n", encoding="utf-8")
+
+    def bridge(self, payload_json, session_env):
+        env = dict(os.environ)
+        env["HOME"] = str(self.home)
+        env.update(session_env)
+        proc = subprocess.run(
+            ["bash", str(REPO_ROOT / "scripts/dev/cursor-hook-bridge.sh"),
+             str(REPO_ROOT / "scripts/dev/deneb-concurrency-guard.py"), "claim"],
+            input=payload_json, capture_output=True, text=True, env=env, timeout=30,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return json.loads(proc.stdout) if proc.stdout.strip() else None
+
+    def claim_as_claude(self, session_id="claude-a") -> None:
+        env = dict(os.environ)
+        env["HOME"] = str(self.home)
+        wt = self.home / "deneb/.claude/worktrees/wt1"
+        subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts/dev/deneb-concurrency-guard.py")],
+            input=json.dumps({
+                "tool_name": "Edit",
+                "tool_input": {"file_path": str(wt / "gateway-go/foo.go")},
+                "cwd": str(wt), "session_id": session_id,
+            }), capture_output=True, text=True, env=env, timeout=30,
+        )
+
+    def test_strreplace_on_a_claimed_file_gets_the_warning_as_agent_message(self) -> None:
+        self.claim_as_claude()
+        wt2 = self.home / "deneb/.claude/worktrees/wt2"
+        out = self.bridge(json.dumps({
+            "tool_name": "StrReplace",
+            "tool_input": {"path": str(wt2 / "gateway-go/foo.go")},
+            "cwd": str(wt2),
+        }), {"CURSOR_SESSION_ID": "cursor-b"})
+        self.assertIsNotNone(out, "bridge produced no decision")
+        # Cursor has no verified "ask": the warning degrades to allow + message
+        # so the agent is told without being blocked.
+        self.assertEqual(out["permission"], "allow")
+        self.assertIn("gateway-go/foo.go", out["agent_message"])
+        self.assertIn("claude-a", out["agent_message"])
+
+    def test_cursor_edit_registers_a_claim_other_harnesses_can_see(self) -> None:
+        wt2 = self.home / "deneb/.claude/worktrees/wt2"
+        self.bridge(json.dumps({
+            "tool_name": "StrReplace",
+            "tool_input": {"path": str(wt2 / "gateway-go/foo.go")},
+            "cwd": str(wt2),
+        }), {"CURSOR_SESSION_ID": "cursor-b"})
+        ledger = json.loads((self.home / ".claude/deneb-file-claims.json").read_text())
+        keys = list(ledger.keys())
+        self.assertEqual(len(keys), 1, keys)
+        self.assertTrue(keys[0].endswith(":gateway-go/foo.go"), keys)
+        self.assertEqual(ledger[keys[0]]["session_id"], "cursor-b")
