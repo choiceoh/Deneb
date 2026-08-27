@@ -46,9 +46,14 @@ func deferredSubagentNotifications(subagentCh <-chan string) func() []string {
 // Called in the agent loop after tool execution, before feeding results back to LLM.
 
 const (
-	compressThreshold = 16000 // chars — only compress very large outputs (saves local AI calls)
+	compressThreshold = 16000 // bytes — only compress very large outputs (saves local AI calls)
 	compressMaxTokens = 1024
 	compressTimeout   = 20 * time.Second
+	// compressPromptMaxBytes caps what the compressor SEES. Beyond it the
+	// summary covers only the head of the output, which the result marker
+	// declares (partialCoverageNote) so the model does not mistake a partial
+	// summary for a complete one.
+	compressPromptMaxBytes = 32000
 	// Tools whose output should never be compressed (they're already structured/small).
 )
 
@@ -90,8 +95,13 @@ func compressToolOutput(ctx context.Context, toolName, output, spillID string, l
 	defer cancel()
 
 	prompt := fmt.Sprintf("Tool: %s\nOutput (%d chars):\n%s", toolName, len(output), output)
-	if len(prompt) > 32000 {
-		prompt = textutil.TruncateBytes(prompt, 32000) + "\n[... truncated]"
+	// The compressor sees at most this much. On a large output that is a small
+	// FRACTION of it, and the result marker below must say so — otherwise the
+	// model reads "compressed — original 204800 chars" over a summary that only
+	// covers the first 32KB and treats it as a summary of the whole.
+	partial := len(prompt) > compressPromptMaxBytes
+	if partial {
+		prompt = textutil.TruncateBytes(prompt, compressPromptMaxBytes) + "\n[... truncated]"
 	}
 
 	// Tiny role (2026-07-21 helper eval): bounded 30-line compression is easy
@@ -116,21 +126,31 @@ func compressToolOutput(ctx context.Context, toolName, output, spillID string, l
 	)
 
 	if spillID != "" {
-		return sprintfCompressed(output, spillID, compressed)
+		return sprintfCompressed(output, spillID, compressed, partial)
 	}
-	return sprintfCompressedPlain(output, compressed)
+	return sprintfCompressedPlain(output, compressed, partial)
 }
 
 // sprintfCompressed renders the compressed result with the spill handle so the
 // model can recover the full output; sprintfCompressedPlain is the no-handle
 // form (nothing was stored).
-func sprintfCompressed(original, spillID, compressed string) string {
-	return fmt.Sprintf("[compressed by pilot — original %d chars; 원문: read_spillover(spill_id=%q)]\n%s",
-		len(original), spillID, compressed)
+func sprintfCompressed(original, spillID, compressed string, partial bool) string {
+	return fmt.Sprintf("[compressed by pilot — original %d bytes%s; 원문: read_spillover(spill_id=%q)]\n%s",
+		len(original), partialCoverageNote(partial), spillID, compressed)
 }
 
-func sprintfCompressedPlain(original, compressed string) string {
-	return fmt.Sprintf("[compressed by pilot — original %d chars]\n%s", len(original), compressed)
+func sprintfCompressedPlain(original, compressed string, partial bool) string {
+	return fmt.Sprintf("[compressed by pilot — original %d bytes%s]\n%s",
+		len(original), partialCoverageNote(partial), compressed)
+}
+
+// partialCoverageNote states that the summary covers only the head of the
+// output. Silence here let a 16%-coverage summary read as a complete one.
+func partialCoverageNote(partial bool) string {
+	if !partial {
+		return ""
+	}
+	return fmt.Sprintf(", 앞 %dKB만 요약됨 — 나머지가 필요하면 원문을 읽어라", compressPromptMaxBytes/1000)
 }
 
 // compressDeclinedNotice renders the one-line notice appended when a requested
