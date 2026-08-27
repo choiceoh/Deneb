@@ -132,6 +132,9 @@ type MemoryDeps struct {
 	// Embedding is the embedding sidecar client for the MMR compaction
 	// fallback tier.
 	Embedding compact.Embedder
+	// Reranker is the cross-encoder sidecar, shared with wiki recall. Injected
+	// by the server; nil leaves transcript recall on its fused order.
+	Reranker chatrecall.Reranker
 }
 
 // SkillDeps groups the Propus/genesis skill-loop hooks, injected via

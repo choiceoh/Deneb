@@ -368,8 +368,12 @@ func buildRecallSources(params Params, deps Deps, queries []string, message stri
 	}
 
 	if bridge, ok := deps.Transcript.(*polaris.Bridge); ok {
+		reranker := deps.Reranker
 		sources = append(sources, recallSource{name: "polaris", run: func(ctx context.Context) []recallEvidence {
-			return recallPolarisEvidence(ctx, bridge, params.SessionKey, queries)
+			return rerankPolarisEvidence(
+				ctx, reranker, message,
+				recallPolarisEvidence(ctx, bridge, params.SessionKey, queries),
+			)
 		}})
 	} else {
 		sources = append(sources, recallSource{name: "transcript", run: func(ctx context.Context) []recallEvidence {

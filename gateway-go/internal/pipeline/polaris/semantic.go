@@ -21,6 +21,7 @@ package polaris
 
 import (
 	"context"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -55,6 +56,15 @@ func (s *Store) closeSummarySem() {
 	if s != nil && s.summarySem != nil {
 		s.summarySem.Close()
 	}
+}
+
+// WarmSemanticIndex synchronously embeds the resident sessions' semantic nodes.
+// Polaris was the only semantic index with no warm target registered beside
+// mail/workfeed/wiki, so its first search after a session loads returned nothing
+// while RefreshAsync was still filling. Named to match the other stores so the
+// server's warmer list reads uniformly.
+func (s *Store) WarmSemanticIndex(ctx context.Context) error {
+	return s.warmSummarySem(ctx)
 }
 
 // warmSummarySem synchronously embeds resident sessions' summaries. Not called at
@@ -119,8 +129,17 @@ func (s *Store) summaryItems() []embedindex.Item {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var items []embedindex.Item
-	for key, sd := range s.sessions {
-		for _, n := range sd.summaries {
+	// Deterministic key order: the index and its callers tie-break on arrival
+	// order, so map iteration would make identical corpora rank differently
+	// between runs.
+	keys := make([]string, 0, len(s.sessions))
+	for key := range s.sessions {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		sd := s.sessions[key]
+		for _, n := range sd.semanticNodes() {
 			for _, representation := range nodeSemanticRepresentations(key, n) {
 				items = append(items, embedindex.Item{
 					ID: representation.id, Hash: embedindex.ContentHash(representation.text), Text: representation.text,
@@ -155,7 +174,7 @@ func (s *Store) SearchSummariesSemantic(ctx context.Context, excludeKey string, 
 		if key == excludeKey {
 			continue
 		}
-		for _, n := range sd.summaries {
+		for _, n := range sd.semanticNodes() {
 			for _, representation := range nodeSemanticRepresentations(key, n) {
 				lookup[representation.id] = SummaryHit{
 					SessionKey: key, Content: representation.content, CreatedAt: n.CreatedAt,
@@ -178,4 +197,70 @@ func (s *Store) SearchSummariesSemantic(ctx context.Context, excludeKey string, 
 		}
 	}
 	return out
+}
+
+// unsummarizedTailNodeID is the synthetic node id for a session's tail
+// representations. Real summary ids come from nextSumID and start at 1, so a
+// negative id cannot collide.
+const unsummarizedTailNodeID = -1
+
+// unsummarizedTailNode synthesizes a summary node over the messages no summary
+// covers yet, so they get the SAME deterministic burst treatment real summaries
+// get. Without it, semantic recall reaches only what DAG compaction has already
+// condensed — a session that has not been compacted (a young one, or every
+// session in a fresh store) is semantically invisible no matter how much it
+// contains, and cross-session recall silently falls back to keyword overlap.
+//
+// This is not the per-message vector index the file header rejects. The bounds
+// are exactly the ones the artifact design already accepted: artifactBursts
+// admits only consecutive same-role runs scoring >= 2 and caps the count at
+// artifactMaxBursts, so a chatty tail contributes a handful of vectors, not one
+// per message. Content (not the id) carries the hash, so a growing tail
+// re-embeds only the burst it actually changed.
+func (sd *sessionData) unsummarizedTailNode() (SummaryNode, bool) {
+	if sd == nil || len(sd.messages) == 0 {
+		return SummaryNode{}, false
+	}
+	start := 0
+	for _, n := range sd.summaries {
+		if n.MsgEnd+1 > start {
+			start = n.MsgEnd + 1
+		}
+	}
+	tail := make([]messageRecord, 0, len(sd.messages))
+	for _, m := range sd.messages {
+		if m.MsgIndex >= start {
+			tail = append(tail, m)
+		}
+	}
+	if len(tail) == 0 {
+		return SummaryNode{}, false
+	}
+	node := SummaryNode{
+		ID:       unsummarizedTailNodeID,
+		Level:    1,
+		MsgStart: tail[0].MsgIndex,
+		MsgEnd:   tail[len(tail)-1].MsgIndex,
+	}
+	// Content stays empty: there is no summary text for an uncompacted span, and
+	// deriveConversationArtifact must not invent one. Question and Bursts come
+	// from the raw messages, which is the whole point.
+	node.Artifact = deriveConversationArtifact(node, tail)
+	if node.Artifact == nil || len(node.Artifact.Bursts) == 0 {
+		// No admitted burst means nothing cleared the signal gate. Indexing the
+		// bare artifact then would embed exactly the low-signal chatter the
+		// design excludes.
+		return SummaryNode{}, false
+	}
+	return node, true
+}
+
+// semanticNodes returns the summary nodes a session contributes to the semantic
+// index: its real summaries plus the synthetic uncompacted tail.
+func (sd *sessionData) semanticNodes() []SummaryNode {
+	nodes := sd.summaries
+	if tail, ok := sd.unsummarizedTailNode(); ok {
+		nodes = append(append([]SummaryNode(nil), nodes...), tail)
+	}
+	return nodes
 }

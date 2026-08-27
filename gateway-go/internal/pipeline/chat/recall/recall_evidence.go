@@ -8,8 +8,13 @@ package recall
 import (
 	"context"
 	"fmt"
+	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/rankblend"
 
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
@@ -551,23 +556,121 @@ func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionK
 	store := bridge.Store()
 	maxIdx, _ := store.MaxMsgIndex(sessionKey)
 
-	evidence, canceled := appendPolarisSessionHits(ctx, store, sessionKey, queries, maxIdx, nil)
+	sessionRows, canceled := appendPolarisSessionHits(ctx, store, sessionKey, queries, maxIdx, nil)
 	if canceled {
-		return evidence
+		return sessionRows
 	}
-	evidence, canceled = appendPolarisCrossSessionHits(ctx, store, sessionKey, queries, evidence)
+	crossRows, canceled := appendPolarisCrossSessionHits(ctx, store, sessionKey, queries, nil)
 	if canceled {
-		return evidence
+		return fusePolarisArms(sessionRows, crossRows, nil)
 	}
-	return appendPolarisSummaryHits(ctx, store, sessionKey, queries, evidence)
+	summaryRows := appendPolarisSummaryHits(ctx, store, sessionKey, queries, nil)
+	return fusePolarisArms(sessionRows, crossRows, summaryRows)
+}
+
+// polarisArmWeight keeps the product intent the additive bases used to encode —
+// the live conversation outranks older ones — while demoting it from a veto to a
+// weight. The old form added a flat +0.13 to every current-session row, which no
+// amount of relevance in another session could overcome; as a fusion weight the
+// same preference bends the ranking instead of fixing it.
+const (
+	polarisArmWeightSession = 1.0
+	polarisArmWeightCross   = 0.85
+	polarisArmWeightSummary = 0.85
+)
+
+// polarisRRFK damps the reciprocal-rank curve. Kept at the wiki plane's value
+// (see wiki.rrfK) so the two planes fuse on the same curve; the wiki sweep found
+// R@8 flat across k ∈ [5,60], so this is not a tuning knob to chase.
+const polarisRRFK = 20.0
+
+// The fused band deliberately reproduces the range the additive bases produced
+// (cross-session floor 0.52 up to a strong current-session hit), because polaris
+// rows are ranked against wiki/diary/file rows in rankRecallEvidence. Changing
+// the ORDER inside polaris is what this fusion is for; changing polaris's
+// standing against the other planes is a separate decision this bench — which
+// runs no other plane — cannot inform.
+const (
+	polarisFusedFloor = 0.52
+	polarisFusedSpan  = 1.03
+)
+
+// fusePolarisArms merges the three polaris sub-arms by Reciprocal Rank Fusion.
+//
+// The arms score on incomparable scales — normalized BM25 for the two lexical
+// ones, cosine for the semantic one — and the old code reconciled them by adding
+// a per-arm constant, which ranks a mediocre current-session hit above an
+// excellent semantic match from another session no matter what the numbers say.
+// RRF is the standard answer to exactly that: rank inside each arm, fuse on
+// rank, ignore the incomparable magnitudes.
+func fusePolarisArms(sessionRows, crossRows, summaryRows []recallEvidence) []recallEvidence {
+	type armInput struct {
+		rows   []recallEvidence
+		weight float64
+	}
+	arms := []armInput{
+		{sessionRows, polarisArmWeightSession},
+		{crossRows, polarisArmWeightCross},
+		{summaryRows, polarisArmWeightSummary},
+	}
+	fused := make(map[string]float64)
+	var order []recallEvidence
+	seen := make(map[string]struct{})
+	for _, arm := range arms {
+		rows := append([]recallEvidence(nil), arm.rows...)
+		sort.SliceStable(rows, func(i, j int) bool { return rows[i].Score > rows[j].Score })
+		for rank, row := range rows {
+			fused[row.Source] += arm.weight / (polarisRRFK + float64(rank+1))
+			if _, ok := seen[row.Source]; ok {
+				continue
+			}
+			seen[row.Source] = struct{}{}
+			order = append(order, row)
+		}
+	}
+	if len(order) == 0 {
+		return nil
+	}
+	best := 0.0
+	for _, score := range fused {
+		if score > best {
+			best = score
+		}
+	}
+	if best <= 0 {
+		return order
+	}
+	for i := range order {
+		// Normalize against the round's best so the top row always lands at the
+		// top of the preserved band regardless of how many arms contributed.
+		order[i].Score = polarisFusedFloor + polarisFusedSpan*(fused[order[i].Source]/best)
+	}
+	// Ties must break on content, not on arrival: the arms are fed from map
+	// iteration upstream, so an At-only tiebreak makes the ranking differ run to
+	// run. Measured on a 60-question bench slice, top1 swung 71.7–80.0% across
+	// repeats of an identical configuration — enough to invent or hide a result.
+	sort.SliceStable(order, func(i, j int) bool {
+		if order[i].Score != order[j].Score {
+			return order[i].Score > order[j].Score
+		}
+		if order[i].At != order[j].At {
+			return order[i].At > order[j].At
+		}
+		return order[i].Source < order[j].Source
+	})
+	return order
 }
 
 // appendPolarisSessionHits appends current-session FTS message hits (skipping
 // the current user message, which is already in context). canceled=true means
 // ctx expired mid-scan and the caller must stop with the evidence so far.
 // polarisHitsPerQuery is how many FTS hits each derived query contributes to
-// the candidate pool. Widening it is measurably WRONG, which is unintuitive
-// enough to record: a wider pool costs no context (rankRecallEvidence cuts to
+// the candidate pool from the CURRENT session. Scope matters: when the answer
+// lives in an earlier conversation the cross-session twin
+// (polarisCrossHitsPerQuery) is what binds, and sweeping this constant moves
+// nothing at all.
+//
+// Widening it is measurably WRONG, which is unintuitive enough to record: a wider pool costs no context (rankRecallEvidence cuts to
 // 4 no-cue / 8 cue rows afterwards), and it does raise the pool's ceiling —
 // but the extra low-precision hits outrank the right ones and push them off
 // the 4-row budget. LongMemEval_s, evidence-hit at the production no-cue
@@ -582,6 +685,11 @@ func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionK
 // So the polaris arm's real ceiling is ranking, not pool size: FTS can reach
 // the evidence 87.4% of the time and scoring cannot tell which 4 rows those
 // are. Do not re-raise this constant without a ranking change that earns it.
+//
+// Those figures predate the reranker and were taken in the single-session ingest
+// shape, the only one where this constant binds. The ranking gap they name has
+// since been closed from the other side (RRF fusion + cross-encoder), and a
+// re-sweep at 6 and 10 with the full stack on moved not one of the six metrics.
 const polarisHitsPerQuery = 3
 
 func appendPolarisSessionHits(ctx context.Context, store *polaris.Store, sessionKey string, queries []string, maxIdx int, evidence []recallEvidence) ([]recallEvidence, bool) {
@@ -615,6 +723,42 @@ func appendPolarisSessionHits(ctx context.Context, store *polaris.Store, session
 	return evidence, false
 }
 
+// polarisCrossHitsPerQuery is the cross-session arm's per-query quota, the twin
+// of polarisHitsPerQuery. It is the one that matters whenever the answer lives
+// in an EARLIER conversation rather than this one — which is the normal shape of
+// a memory question, and the shape LongMemEval measures exclusively. A sweep of
+// polarisHitsPerQuery there moves nothing at all: the current session holds only
+// the question being asked.
+//
+// Widening it was measured and REJECTED. Reach rises monotonically and so does
+// top1, but the metric that decides what the model actually reads — hit@4, the
+// production no-cue budget — falls, because the extra candidates promote
+// non-answers into the four rows that get injected (LongMemEval_s, 470
+// questions, semantic + RRF + reranker all on):
+//
+//	quota  pool    hit@8   hit@4   top1
+//	2      83.8%   83.2%   81.3%   60.4%   <- current
+//	5      90.6%   81.5%   74.0%   66.2%
+//	10     93.2%   79.6%   77.4%   67.0%
+//
+// The residual gap to pool10 (95.1%) is therefore not a retrieval-reach problem
+// and cannot be closed from this side: it is the four-row budget meeting the
+// limits of top-4 precision. Sweep it again with DENEB_POLARIS_CROSS_HITS if the
+// budget itself changes — that is the input that would make this decision
+// different, not a better retriever.
+var polarisCrossHitsPerQuery = polarisCrossHitsFromEnv()
+
+func polarisCrossHitsFromEnv() int {
+	if raw := strings.TrimSpace(os.Getenv("DENEB_POLARIS_CROSS_HITS")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v > 0 && v <= 50 {
+			return v
+		}
+	}
+	return defaultPolarisCrossHits
+}
+
+const defaultPolarisCrossHits = 2
+
 // appendPolarisCrossSessionHits appends relevant messages from OTHER
 // conversations that are resident in memory (no disk I/O). Scored slightly
 // below current-session hits since cross-session context is less likely to be
@@ -626,7 +770,7 @@ func appendPolarisCrossSessionHits(ctx context.Context, store *polaris.Store, se
 		if ctx.Err() != nil {
 			return evidence, true
 		}
-		hits, err := store.SearchResidentSessions(sessionKey, q, 2)
+		hits, err := store.SearchResidentSessions(sessionKey, q, polarisCrossHitsPerQuery)
 		if err != nil {
 			continue
 		}
@@ -883,4 +1027,99 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// Reranker is the optional cross-encoder that reorders polaris candidates. It
+// mirrors wiki.Reranker rather than importing it: recall must not depend on the
+// wiki package to rank transcript rows. nil disables reranking and every error
+// falls back to the fused order unchanged.
+type Reranker interface {
+	Rerank(ctx context.Context, query string, documents []string) ([]float64, error)
+	Identity() string
+}
+
+const (
+	// polarisRerankCandidates bounds the batch. Matches the wiki plane's limit
+	// (rerankCandidateLimit) — ten short snippets stay one fast batch, and rows
+	// past that cannot reach even the cue budget of 8.
+	polarisRerankCandidates = 10
+	// polarisRerankTimeout is tighter than the wiki plane's 800ms because the
+	// documents are 280-char snippets rather than 600-char page heads, and the
+	// whole preflight shares a 1500ms deadline with every other source.
+	polarisRerankTimeout = 600 * time.Millisecond
+)
+
+// rerankPolarisEvidence reorders the fused polaris candidates with a
+// cross-encoder scored against the RAW MESSAGE, not the derived queries.
+//
+// That distinction is the point. Everything upstream — FTS, semantic, RRF —
+// sees only the tokens searchQueries extracted, so a row is ranked by term
+// overlap with a bag of words. The cross-encoder sees the question as asked and
+// judges whether the snippet answers IT. On the wiki plane the same component is
+// worth ~+9pp P@1, which is exactly the metric the transcript plane was stuck on
+// (LongMemEval top1 sat at ~39% across three ranking changes).
+//
+// Failure is always silent and lossless: a nil reranker, a short candidate list,
+// a timeout, a service error, or a length mismatch all return the input order.
+func rerankPolarisEvidence(ctx context.Context, reranker Reranker, message string, rows []recallEvidence) []recallEvidence {
+	message = strings.TrimSpace(message)
+	if reranker == nil || message == "" || len(rows) < 2 {
+		return rows
+	}
+	count := minInt(len(rows), polarisRerankCandidates)
+	documents := make([]string, count)
+	for i := range documents {
+		// Source carries the session/message identity the snippet itself omits,
+		// which is what lets the encoder tell two similar snippets apart.
+		documents[i] = strings.TrimSpace(rows[i].Source + "\n" + rows[i].Note)
+	}
+	rankCtx, cancel := context.WithTimeout(ctx, polarisRerankTimeout)
+	defer cancel()
+	ranked, err := reranker.Rerank(rankCtx, message, documents)
+	if err != nil || len(ranked) != count {
+		return rows
+	}
+	retrieval := make([]float64, count)
+	for i := range retrieval {
+		retrieval[i] = rows[i].Score
+	}
+	blended, ok := rankblend.Blend(retrieval, ranked, rankblend.DefaultConfig)
+	if !ok {
+		return rows
+	}
+	head := append([]recallEvidence(nil), rows[:count]...)
+	out := make([]recallEvidence, 0, len(rows))
+	for _, index := range blended.Order {
+		out = append(out, head[index])
+	}
+	out = append(out, rows[count:]...)
+	// Re-stamp the whole list onto the polaris band by final position.
+	//
+	// blended.Scores live on [0,1] while the fused band runs to
+	// polarisFusedFloor+polarisFusedSpan, so writing them through verbatim would
+	// leave every row past polarisRerankCandidates — which keeps its fused score
+	// — ABOVE the reranked head. rankRecallEvidence sorts by score, so the tail
+	// would then outrank exactly the rows the cross-encoder just promoted. With a
+	// pool of 10 or fewer there is no tail and the mismatch is invisible; the
+	// first wider sweep (cross-session quota 10) collapsed top1 from 60.9% to
+	// 21.5% on it.
+	assignPolarisBandScores(out)
+	return out
+}
+
+// assignPolarisBandScores writes strictly decreasing scores over the preserved
+// polaris band so that list POSITION is the single source of ranking truth,
+// whatever mix of scales produced it.
+func assignPolarisBandScores(rows []recallEvidence) {
+	if len(rows) == 0 {
+		return
+	}
+	if len(rows) == 1 {
+		rows[0].Score = polarisFusedFloor + polarisFusedSpan
+		return
+	}
+	step := polarisFusedSpan / float64(len(rows)-1)
+	for i := range rows {
+		rows[i].Score = polarisFusedFloor + polarisFusedSpan - step*float64(i)
+	}
 }

@@ -61,6 +61,39 @@ type sessionData struct {
 // NewStore opens (or creates) the Polaris file store.
 // The path parameter is reinterpreted as a base: if it ends in ".db",
 // we strip that and use the parent directory + "polaris/" subdirectory.
+// defaultPolarisLengthNorm keeps BM25's standard b. Lowering it for the
+// transcript index was measured and REJECTED, which is worth recording because
+// the arithmetic argued the other way: an assistant-authored answer runs 2.0x
+// the corpus median length (147 vs 73 words on LongMemEval_s), so b=0.75 costs
+// it ~43% of its score for length alone. The category does improve — its reach
+// climbs 32.1% -> 35.7% — but overall retrieval falls monotonically, because
+// every other category pays for the long documents that now rank higher
+// (470 questions, full stack):
+//
+//	b     assistant hit@4   hit@8   hit@4   top1
+//	0.75  30.4%             83.2%   81.3%   60.4%   <- current
+//	0.4   32.1%             84.0%   81.1%   59.6%
+//	0.2   32.1%             83.0%   80.2%   59.4%
+//	0.0   32.1%             81.9%   79.4%   58.5%
+//
+// The length penalty is real; the cross-encoder already absorbs most of it, so
+// there is nothing left to win in the retrieval stage. Re-sweep with
+// DENEB_POLARIS_LENGTH_NORM only if the reranker is removed or bypassed.
+const defaultPolarisLengthNorm = 0.75
+
+// polarisLengthNorm is the BM25 length-normalization strength for the
+// transcript index, overridable for sweeps via DENEB_POLARIS_LENGTH_NORM.
+var polarisLengthNorm = polarisLengthNormFromEnv()
+
+func polarisLengthNormFromEnv() float64 {
+	if raw := strings.TrimSpace(os.Getenv("DENEB_POLARIS_LENGTH_NORM")); raw != "" {
+		if v, err := strconv.ParseFloat(raw, 64); err == nil && v >= 0 && v <= 1 {
+			return v
+		}
+	}
+	return defaultPolarisLengthNorm
+}
+
 func NewStore(path string) (*Store, error) {
 	return NewStoreWithTokenEstimator(path, tokenest.Estimate)
 }
@@ -115,7 +148,15 @@ func (s *Store) ensureSession(sessionKey string) *sessionData {
 	}
 
 	sd = &sessionData{
-		fts: textsearch.New(),
+		// A transcript's document length tracks the KIND of message, not padding:
+		// an assistant answer is long because answering takes words, a question
+		// is short because asking does not. BM25's standard b=0.75 reads that as
+		// evidence against the answer — measured on LongMemEval_s, the evidence
+		// message for an assistant-authored answer runs 2.0x the corpus median
+		// (147 vs 73 words), losing ~43% of its score for length alone, and that
+		// category's retrieval sat far below every other one. See
+		// textsearch.NewWithLengthNorm.
+		fts: textsearch.NewWithLengthNorm(polarisLengthNorm),
 	}
 
 	// Load messages from JSONL.

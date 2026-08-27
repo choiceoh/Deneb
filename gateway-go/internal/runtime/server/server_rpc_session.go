@@ -249,6 +249,9 @@ func (s *Server) initSessionAI(chatCfg *chat.HandlerConfig, registry *modelrole.
 	s.embeddingClient = embedding.New("", s.logger)
 	s.rerankerClient = airerank.NewFromEnv()
 	chatCfg.Memory.Embedding = s.embeddingClient
+	if s.rerankerClient != nil {
+		chatCfg.Memory.Reranker = s.rerankerClient
+	}
 	var warmers []semanticWarmTarget
 	if s.mailStore != nil {
 		s.mailStore.SetEmbedder(s.embeddingClient)
@@ -267,6 +270,8 @@ func (s *Server) initSessionAI(chatCfg *chat.HandlerConfig, registry *modelrole.
 	}
 	if s.polarisStore != nil {
 		s.polarisStore.SetSummaryEmbedder(s.embeddingClient)
+		store := s.polarisStore
+		warmers = append(warmers, semanticWarmTarget{name: "polaris", warm: store.WarmSemanticIndex})
 	}
 	if s.wikiStore != nil {
 		s.wikiStore.SetEmbedder(s.embeddingClient)

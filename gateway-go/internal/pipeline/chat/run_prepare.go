@@ -201,6 +201,7 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, se
 			Transcript:   deps.transcript,
 			FileRecall:   deps.memory.FileRecall,
 			Org:          deps.memory.Org,
+			Reranker:     deps.memory.Reranker,
 			Briefcase:    deps.briefcaseMode,
 			StrictErrors: deps.strictErrors,
 			Now:          deps.now,
