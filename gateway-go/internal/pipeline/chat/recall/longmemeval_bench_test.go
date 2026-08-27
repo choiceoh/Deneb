@@ -85,10 +85,11 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	storeDir := t.TempDir()
 
-	type bucket struct{ total, anyHit, top1Hit, renderedSum, emptySum int }
+	type bucket struct{ total, anyHit, top1Hit, poolHit, pool10, hit8, renderedSum, emptySum int }
 	buckets := map[string]*bucket{}
 	overall := &bucket{}
 	abstention := 0
+	poolSize, rankedSize, dedupHits, filterHits := 0, 0, 0, 0
 
 	for qi, q := range questions {
 		// Abstention questions have no evidence to retrieve; a retrieval metric
@@ -139,8 +140,61 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 		// The production path, verbatim: query derivation → polaris source →
 		// ranking → budget-cut rendering.
 		queries := searchQueries(q.Question)
-		evidence := recallPolarisEvidence(context.Background(), bridge, sessionKey, queries)
-		evidence = rankRecallEvidence(evidence, queries, q.Question, hasCue(q.Question), questionAt)
+		candidates := recallPolarisEvidence(context.Background(), bridge, sessionKey, queries)
+		// Third diagnostic: is the 3-hits-per-query quota the ceiling, or FTS
+		// itself? Same store, same queries, limit 10 — a measurement-only call,
+		// not a production path.
+		pool10Hit := false
+		for _, query := range queries {
+			hits, err := store.SearchMessages(sessionKey, query, 10)
+			if err != nil {
+				continue
+			}
+			for _, h := range hits {
+				if h.MsgIndex < len(msgSession) && evidenceSessions[msgSession[h.MsgIndex]] {
+					pool10Hit = true
+					break
+				}
+			}
+			if pool10Hit {
+				break
+			}
+		}
+		// Diagnostic split: was the evidence IN THE CANDIDATE POOL at all
+		// (finding problem), and where does the no-cue budget of 4 rows cut it
+		// (ranking/budget problem)? The two need different fixes.
+		poolHit := false
+		for _, ev := range candidates {
+			if idx, ok := polarisMsgIndex(ev.Source); ok && idx < len(msgSession) && evidenceSessions[msgSession[idx]] {
+				poolHit = true
+				break
+			}
+		}
+		evidence := rankRecallEvidence(append([]recallEvidence(nil), candidates...), queries, q.Question, hasCue(q.Question), questionAt)
+		// rankRecallEvidence cuts to recallEvidenceBudget(cue) internally, so the
+		// budget-8 number needs its own ranking pass with cue=true — slicing the
+		// returned rows to 8 would silently re-measure the same 4.
+		cueRanked := rankRecallEvidence(append([]recallEvidence(nil), candidates...), queries, q.Question, true, questionAt)
+		// Stage isolation: where does a pooled hit die — dedup or cross-subject filter?
+		afterDedup := dedupRecallEvidence(append([]recallEvidence(nil), candidates...))
+		afterFilter := filterCrossSubjectEvidence(append([]recallEvidence(nil), afterDedup...), q.Question)
+		hitIn := func(rows []recallEvidence) bool {
+			for _, ev := range rows {
+				if idx, ok := polarisMsgIndex(ev.Source); ok && idx < len(msgSession) && evidenceSessions[msgSession[idx]] {
+					return true
+				}
+			}
+			return false
+		}
+		hitAt8 := hitIn(cueRanked)
+		if hitIn(afterDedup) {
+			dedupHits++
+		}
+		if hitIn(afterFilter) {
+			filterHits++
+		}
+		poolSize += len(candidates)
+		rankedSize += len(cueRanked)
 		block, _ := formatRecallEvidenceAt(evidence, questionAt, true)
 
 		rendered := renderedMsgIndices(block)
@@ -154,6 +208,15 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			tgt.renderedSum += len(rendered)
 			if len(rendered) == 0 {
 				tgt.emptySum++
+			}
+			if poolHit {
+				tgt.poolHit++
+			}
+			if pool10Hit {
+				tgt.pool10++
+			}
+			if hitAt8 {
+				tgt.hit8++
 			}
 		}
 		for rank, idx := range rendered {
@@ -189,13 +252,30 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 	t.Logf("== LongMemEval_s retrieval-only (polaris arm) ==")
 	for _, k := range types {
 		b := buckets[k]
-		t.Logf("%-28s n=%-3d evidence-hit=%-7s top1=%-7s avg-rows=%.1f empty=%s",
-			k, b.total, pct(b.anyHit, b.total), pct(b.top1Hit, b.total),
-			float64(b.renderedSum)/float64(maxInt(b.total, 1)), pct(b.emptySum, b.total))
+		t.Logf("STAGE  pool=%s  after-dedup=%s  after-filter=%s  | avg pool=%.1f ranked(cue8)=%.1f",
+			pct(overall.poolHit, overall.total), pct(dedupHits, overall.total), pct(filterHits, overall.total),
+			float64(poolSize)/float64(maxInt(overall.total, 1)), float64(rankedSize)/float64(maxInt(overall.total, 1)))
+		t.Logf("%-28s n=%-3d pool10=%-7s pool=%-7s hit@8=%-7s hit@4=%-7s top1=%-7s",
+			k, b.total, pct(b.pool10, b.total), pct(b.poolHit, b.total), pct(b.hit8, b.total),
+			pct(b.anyHit, b.total), pct(b.top1Hit, b.total))
 	}
-	t.Logf("%-28s n=%-3d evidence-hit=%-7s top1=%-7s avg-rows=%.1f empty=%s (abstention excluded: %d)",
-		"OVERALL", overall.total, pct(overall.anyHit, overall.total), pct(overall.top1Hit, overall.total),
-		float64(overall.renderedSum)/float64(maxInt(overall.total, 1)), pct(overall.emptySum, overall.total), abstention)
+	t.Logf("%-28s n=%-3d pool10=%-7s pool=%-7s hit@8=%-7s hit@4=%-7s top1=%-7s (abstention excluded: %d)",
+		"OVERALL", overall.total, pct(overall.pool10, overall.total), pct(overall.poolHit, overall.total), pct(overall.hit8, overall.total),
+		pct(overall.anyHit, overall.total), pct(overall.top1Hit, overall.total), abstention)
+}
+
+// polarisMsgIndex parses the message index out of a polaris evidence Source
+// ("msg#<idx>/<role>").
+func polarisMsgIndex(source string) (int, bool) {
+	if !strings.HasPrefix(source, "msg#") {
+		return 0, false
+	}
+	rest := source[len("msg#"):]
+	if j := strings.IndexByte(rest, '/'); j > 0 {
+		rest = rest[:j]
+	}
+	n, err := strconv.Atoi(rest)
+	return n, err == nil
 }
 
 // renderedMsgIndices parses the polaris row refs ("msg#<idx>/<role>") out of a

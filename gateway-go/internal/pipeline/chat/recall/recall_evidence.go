@@ -565,13 +565,32 @@ func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionK
 // appendPolarisSessionHits appends current-session FTS message hits (skipping
 // the current user message, which is already in context). canceled=true means
 // ctx expired mid-scan and the caller must stop with the evidence so far.
+// polarisHitsPerQuery is how many FTS hits each derived query contributes to
+// the candidate pool. Widening it is measurably WRONG, which is unintuitive
+// enough to record: a wider pool costs no context (rankRecallEvidence cuts to
+// 4 no-cue / 8 cue rows afterwards), and it does raise the pool's ceiling —
+// but the extra low-precision hits outrank the right ones and push them off
+// the 4-row budget. LongMemEval_s, evidence-hit at the production no-cue
+// budget (longmemeval_bench_test.go):
+//
+//	quota  pool    hit@8   hit@4   top1
+//	3      75.5%   71.9%   64.7%   41.1%   <- current
+//	5      83.2%   73.0%   61.9%   40.0%
+//	6      83.8%   73.0%   61.9%   40.0%
+//	10     87.4%   73.0%   61.7%   40.0%
+//
+// So the polaris arm's real ceiling is ranking, not pool size: FTS can reach
+// the evidence 87.4% of the time and scoring cannot tell which 4 rows those
+// are. Do not re-raise this constant without a ranking change that earns it.
+const polarisHitsPerQuery = 3
+
 func appendPolarisSessionHits(ctx context.Context, store *polaris.Store, sessionKey string, queries []string, maxIdx int, evidence []recallEvidence) ([]recallEvidence, bool) {
 	seen := make(map[int]struct{})
 	for _, q := range queries {
 		if ctx.Err() != nil {
 			return evidence, true
 		}
-		hits, err := store.SearchMessages(sessionKey, q, 3)
+		hits, err := store.SearchMessages(sessionKey, q, polarisHitsPerQuery)
 		if err != nil {
 			continue
 		}
