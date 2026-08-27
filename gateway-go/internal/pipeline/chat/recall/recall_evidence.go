@@ -547,7 +547,7 @@ func formatRecallTranscriptNote(match toolport.MatchedMsg) string {
 	return truncateRecallText(text+" | context: "+strings.Join(contextParts, " / "), 420)
 }
 
-func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionKey string, queries []string) []recallEvidence {
+func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionKey string, queries []string, cue bool) []recallEvidence {
 	if bridge == nil || sessionKey == "" || len(queries) == 0 {
 		return nil
 	}
@@ -560,7 +560,7 @@ func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionK
 	if canceled {
 		return sessionRows
 	}
-	crossRows, canceled := appendPolarisCrossSessionHits(ctx, store, sessionKey, queries, nil)
+	crossRows, canceled := appendPolarisCrossSessionHits(ctx, store, sessionKey, queries, cue, nil)
 	if canceled {
 		return fusePolarisArms(sessionRows, crossRows, nil)
 	}
@@ -741,12 +741,67 @@ func appendPolarisSessionHits(ctx context.Context, store *polaris.Store, session
 //	5      90.6%   81.5%   74.0%   66.2%
 //	10     93.2%   79.6%   77.4%   67.0%
 //
+// The obvious objection — that the rerank window (10 at the time) was hiding the
+// benefit, since a row past it never meets the cross-encoder — was tested and
+// does not hold. Widening both together still loses on hit@4, even when the
+// window covers the entire pool:
+//
+//	cross  window  pool    hit@8   hit@4   top1
+//	2      20      83.8%   83.8%   81.7%   60.4%   <- current
+//	5      20      90.6%   87.4%   76.8%   65.5%
+//	10     30      93.2%   83.4%   77.7%   65.7%
+//	10     50      93.2%   84.9%   77.7%   66.0%
+//
+// At cross=10/window=50 every candidate is reranked and hit@4 is still 4pp below
+// baseline, so this is top-4 precision, not a windowing artifact. top1 does climb
+// to 66.0% — the reranker gets better at picking the single best row — but the
+// model reads all four, so that is not the objective.
+//
 // The residual gap to pool10 (95.1%) is therefore not a retrieval-reach problem
 // and cannot be closed from this side: it is the four-row budget meeting the
 // limits of top-4 precision. Sweep it again with DENEB_POLARIS_CROSS_HITS if the
 // budget itself changes — that is the input that would make this decision
 // different, not a better retriever.
 var polarisCrossHitsPerQuery = polarisCrossHitsFromEnv()
+
+// polarisCrossHits scales reach to the budget that will consume it.
+//
+// The evidence budget is not fixed — recallEvidenceBudget gives a cue turn 8
+// rows and a no-cue turn 4 — but the cross-session quota used to be 2 for both,
+// so a turn allowed twice the context searched with the same narrow reach. The
+// two budgets want opposite things and the sweep shows it cleanly (window held
+// at 50 so every candidate is reranked; 470 questions):
+//
+//	quota  pool    hit@8   hit@4
+//	2      83.8%   83.8%   81.7%   <- best at the 4-row budget
+//	3      88.5%   87.2%   81.5%
+//	4      89.6%   88.3%   80.4%
+//	5      90.6%   88.7%   77.2%   <- best at the 8-row budget
+//
+// Reading one column and calling it the answer is what makes this look like a
+// trade. Matched to its own budget it is not: the 4-row turn keeps 81.7% and the
+// 8-row turn gains 4.9pp it was leaving on the table.
+func polarisCrossHits(cue bool) int {
+	if cue {
+		return polarisCrossHitsCue
+	}
+	return polarisCrossHitsPerQuery
+}
+
+// polarisCrossHitsCue is the cue-turn quota, overridable via
+// DENEB_POLARIS_CROSS_HITS_CUE.
+var polarisCrossHitsCue = polarisCrossHitsCueFromEnv()
+
+func polarisCrossHitsCueFromEnv() int {
+	if raw := strings.TrimSpace(os.Getenv("DENEB_POLARIS_CROSS_HITS_CUE")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v > 0 && v <= 50 {
+			return v
+		}
+	}
+	return defaultPolarisCrossHitsCue
+}
+
+const defaultPolarisCrossHitsCue = 5
 
 func polarisCrossHitsFromEnv() int {
 	if raw := strings.TrimSpace(os.Getenv("DENEB_POLARIS_CROSS_HITS")); raw != "" {
@@ -764,13 +819,13 @@ const defaultPolarisCrossHits = 2
 // below current-session hits since cross-session context is less likely to be
 // what the user means, but it closes the "recall only sees this session" gap.
 // See Store.SearchResidentSessions.
-func appendPolarisCrossSessionHits(ctx context.Context, store *polaris.Store, sessionKey string, queries []string, evidence []recallEvidence) ([]recallEvidence, bool) {
+func appendPolarisCrossSessionHits(ctx context.Context, store *polaris.Store, sessionKey string, queries []string, cue bool, evidence []recallEvidence) ([]recallEvidence, bool) {
 	seenCross := make(map[string]struct{})
 	for _, q := range queries {
 		if ctx.Err() != nil {
 			return evidence, true
 		}
-		hits, err := store.SearchResidentSessions(sessionKey, q, polarisCrossHitsPerQuery)
+		hits, err := store.SearchResidentSessions(sessionKey, q, polarisCrossHits(cue))
 		if err != nil {
 			continue
 		}
@@ -802,7 +857,7 @@ func appendPolarisCrossSessionHits(ctx context.Context, store *polaris.Store, se
 func appendPolarisSummaryHits(ctx context.Context, store *polaris.Store, sessionKey string, queries []string, evidence []recallEvidence) []recallEvidence {
 	seenSummarySession := make(map[string]struct{})
 	summaryAdded := 0
-	for i, hits := range store.SearchSummariesSemantic(ctx, sessionKey, queries, 2) {
+	for i, hits := range store.SearchSummariesSemantic(ctx, sessionKey, queries, recallSummarySemanticQuotaValue()) {
 		for _, h := range hits {
 			if h.Score < recallSummarySemanticFloor {
 				continue
@@ -824,11 +879,11 @@ func appendPolarisSummaryHits(ctx context.Context, store *polaris.Store, session
 				At:     h.CreatedAt,
 			})
 			summaryAdded++
-			if summaryAdded >= recallSummarySemanticQuota {
+			if summaryAdded >= recallSummarySemanticQuotaValue() {
 				break
 			}
 		}
-		if summaryAdded >= recallSummarySemanticQuota {
+		if summaryAdded >= recallSummarySemanticQuotaValue() {
 			break
 		}
 	}
@@ -846,6 +901,16 @@ const recallSummarySemanticFloor = 0.25
 // gists (0.55+cosine) don't crowd out the sharper current-session message hits
 // (0.65+score) in the merged window.
 const recallSummarySemanticQuota = 2
+
+// recallSummarySemanticQuotaValue honors DENEB_RECALL_SUMMARY_QUOTA for sweeps.
+func recallSummarySemanticQuotaValue() int {
+	if raw := strings.TrimSpace(os.Getenv("DENEB_RECALL_SUMMARY_QUOTA")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v > 0 && v <= 20 {
+			return v
+		}
+	}
+	return recallSummarySemanticQuota
+}
 
 func formatRecallEvidence(evidence []recallEvidence) string {
 	block, _ := formatRecallEvidenceAt(evidence, time.Now(), true)
@@ -1039,15 +1104,82 @@ type Reranker interface {
 }
 
 const (
-	// polarisRerankCandidates bounds the batch. Matches the wiki plane's limit
-	// (rerankCandidateLimit) — ten short snippets stay one fast batch, and rows
-	// past that cannot reach even the cue budget of 8.
-	polarisRerankCandidates = 10
+	// defaultPolarisRerankCandidates bounds the cross-encoder batch. It is
+	// deliberately twice the wiki plane's limit (rerankCandidateLimit = 10),
+	// because the two planes rank different things: a wiki row is one page, so
+	// ten candidates already cover the plausible answers, while a transcript row
+	// is one message and the same topic spreads across many of them.
+	//
+	// A row past this window never meets the reranker at all, and at 10 that was
+	// costing real hits — every metric improves at 20 with nothing traded away
+	// (LongMemEval_s, 470 questions, cross-session quota unchanged):
+	//
+	//	window  pool    hit@8   hit@4   top1
+	//	10      83.8%   83.2%   81.3%   60.4%
+	//	20      83.8%   83.8%   81.7%   60.4%   <- current
+	//
+	// At 20 hit@8 equals pool exactly: ranking now loses nothing the retrieval
+	// stage found.
+	//
+	// This is the NO-CUE window; cue turns take a wider one — see
+	// polarisRerankWindow for why the choice is routed rather than global.
+	defaultPolarisRerankCandidates = 20
 	// polarisRerankTimeout is tighter than the wiki plane's 800ms because the
 	// documents are 280-char snippets rather than 600-char page heads, and the
 	// whole preflight shares a 1500ms deadline with every other source.
 	polarisRerankTimeout = 600 * time.Millisecond
 )
+
+// polarisRerankCandidates is the cross-encoder window, overridable for sweeps
+// via DENEB_POLARIS_RERANK_WINDOW. It pairs with polarisCrossHitsPerQuery: a row
+// past this window never meets the reranker at all, so widening reach without
+// widening the window measures a candidate that cannot win.
+var polarisRerankCandidates = polarisRerankWindowFromEnv()
+
+// polarisRerankWindow routes the cross-encoder window the same way
+// polarisCrossHits routes reach: by the budget the turn will actually spend.
+//
+// Routing is what makes the wide window affordable. Judged as one global number
+// it loses — 50 buys +1.3pp of hit@8, nothing at the 4-row budget, and costs
+// every turn a bigger cross-encoder batch (280-char snippets, 12 samples:
+// median 16.8/43.1/64.9ms and p90 38.9/46.1/95.0ms at 10/20/50 docs). The tail
+// is the real cost, since a saturated sidecar pushes calls past
+// polarisRerankTimeout and drops reranking for that turn silently.
+//
+// Per-turn, the ledger is different: a no-cue turn searches with reach 2, so its
+// pool rarely reaches 20 rows and a wider window changes nothing it would pay
+// for. The gain and the latency both land on cue turns — the ones where the
+// operator explicitly asked to remember — so they are the ones that should pay.
+func polarisRerankWindow(cue bool) int {
+	if cue {
+		return polarisRerankCandidatesCue
+	}
+	return polarisRerankCandidates
+}
+
+// polarisRerankCandidatesCue is the cue-turn window, overridable via
+// DENEB_POLARIS_RERANK_WINDOW_CUE.
+var polarisRerankCandidatesCue = polarisRerankWindowCueFromEnv()
+
+func polarisRerankWindowCueFromEnv() int {
+	if raw := strings.TrimSpace(os.Getenv("DENEB_POLARIS_RERANK_WINDOW_CUE")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v >= 2 && v <= 100 {
+			return v
+		}
+	}
+	return defaultPolarisRerankCandidatesCue
+}
+
+const defaultPolarisRerankCandidatesCue = 50
+
+func polarisRerankWindowFromEnv() int {
+	if raw := strings.TrimSpace(os.Getenv("DENEB_POLARIS_RERANK_WINDOW")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v >= 2 && v <= 100 {
+			return v
+		}
+	}
+	return defaultPolarisRerankCandidates
+}
 
 // rerankPolarisEvidence reorders the fused polaris candidates with a
 // cross-encoder scored against the RAW MESSAGE, not the derived queries.
@@ -1061,12 +1193,12 @@ const (
 //
 // Failure is always silent and lossless: a nil reranker, a short candidate list,
 // a timeout, a service error, or a length mismatch all return the input order.
-func rerankPolarisEvidence(ctx context.Context, reranker Reranker, message string, rows []recallEvidence) []recallEvidence {
+func rerankPolarisEvidence(ctx context.Context, reranker Reranker, message string, cue bool, rows []recallEvidence) []recallEvidence {
 	message = strings.TrimSpace(message)
 	if reranker == nil || message == "" || len(rows) < 2 {
 		return rows
 	}
-	count := minInt(len(rows), polarisRerankCandidates)
+	count := minInt(len(rows), polarisRerankWindow(cue))
 	documents := make([]string, count)
 	for i := range documents {
 		// Source carries the session/message identity the snippet itself omits,

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -19,7 +21,6 @@ import (
 
 const (
 	recallPreflightTimeout = 1500 * time.Millisecond
-	recallMaxQueries       = 6
 	// recallMaxEvidence is the evidence budget for an explicit recall cue;
 	// silent every-turn auto-recall gets the tighter recallAutoMaxEvidence.
 	recallMaxEvidence     = 8
@@ -371,8 +372,8 @@ func buildRecallSources(params Params, deps Deps, queries []string, message stri
 		reranker := deps.Reranker
 		sources = append(sources, recallSource{name: "polaris", run: func(ctx context.Context) []recallEvidence {
 			return rerankPolarisEvidence(
-				ctx, reranker, message,
-				recallPolarisEvidence(ctx, bridge, params.SessionKey, queries),
+				ctx, reranker, message, hasCue(message),
+				recallPolarisEvidence(ctx, bridge, params.SessionKey, queries, hasCue(message)),
 			)
 		}})
 	} else {
@@ -594,6 +595,39 @@ func hasCue(message string) bool {
 }
 
 // searchQueries derives bounded evidence-search queries from a user message.
+// recallMaxQueries bounds how many derived queries a turn issues — the single
+// largest retrieval lever measured in this pipeline, and for a long time the one
+// nobody was looking at. Every source shares this list, so a term cut here is a
+// term that is never searched anywhere.
+//
+// LongMemEval_s (470 questions) against the Korean gold probe (198 cases,
+// recall.Build end to end, which is the only harness that exercises this
+// constant — cmd/recall-bench feeds gold questions straight to the wiki store
+// and never derives queries at all):
+//
+//	queries  EN hit@4   EN hit@8   KO gold-in-block   KO p90   KO max
+//	6        81.7%      88.7%      93.9%              644ms    840ms
+//	7        87.9%      93.2%      94.4%              671ms    854ms
+//	8        90.9%      94.0%      94.4%              665ms    840ms   <- current
+//	10       91.9%      95.3%      94.4%              712ms    1554ms
+//
+// 8 takes 91% of what 10 offers at no measurable Korean cost — its tail matches
+// the old default exactly. 10 is where the tail breaks: 1554ms exceeds
+// recallPreflightTimeout, and a turn that trips the shared deadline loses whole
+// sources and must not freeze its snapshot. Unlike the cross-session quota and
+// the rerank window this is NOT cue-routed: the gain lands on the 4-row budget
+// too, so routing it would forfeit exactly what it buys.
+const recallMaxQueries = 8
+
+func recallMaxQueriesValue() int {
+	if raw := strings.TrimSpace(os.Getenv("DENEB_RECALL_MAX_QUERIES")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v > 0 && v <= 30 {
+			return v
+		}
+	}
+	return recallMaxQueries
+}
+
 func searchQueries(message string) []string {
 	terms := recallSignalTerms(message)
 	var queries []string
@@ -602,7 +636,7 @@ func searchQueries(message string) []string {
 	}
 	for _, term := range terms {
 		queries = append(queries, term)
-		if len(queries) >= recallMaxQueries {
+		if len(queries) >= recallMaxQueriesValue() {
 			break
 		}
 	}

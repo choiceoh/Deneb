@@ -133,6 +133,7 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 	overall := &bucket{}
 	abstention := 0
 	poolSize, rankedSize, dedupHits, filterHits := 0, 0, 0, 0
+	charCutNoCue, charCutCue, charCutCueTurns := 0, 0, 0
 
 	// Questions are independent — each builds its own store — and the run is
 	// dominated by round-trips to the embedding sidecar, not by GPU throughput
@@ -290,9 +291,16 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			// The production path, verbatim: query derivation → polaris source →
 			// ranking → budget-cut rendering.
 			queries := searchQueries(q.Question)
+			// Reach now scales with the budget (polarisCrossHits), so the two
+			// budgets need their own candidate pools — reusing one would score the
+			// cue budget against the no-cue turn's narrower reach.
 			candidates := rerankPolarisEvidence(
-				context.Background(), reranker, q.Question,
-				recallPolarisEvidence(context.Background(), bridge, questionKey, queries),
+				context.Background(), reranker, q.Question, false,
+				recallPolarisEvidence(context.Background(), bridge, questionKey, queries, false),
+			)
+			cueCandidates := rerankPolarisEvidence(
+				context.Background(), reranker, q.Question, true,
+				recallPolarisEvidence(context.Background(), bridge, questionKey, queries, true),
 			)
 			// Ceiling probe: what FTS could reach at limit 10, ignoring the per-query
 			// quota. Measurement-only — not a production call.
@@ -328,7 +336,7 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			// rankRecallEvidence cuts to recallEvidenceBudget(cue) internally, so the
 			// budget-8 number needs its own ranking pass with cue=true — slicing the
 			// returned rows to 8 would silently re-measure the same 4.
-			cueRanked := rankRecallEvidence(append([]recallEvidence(nil), candidates...), queries, q.Question, true, questionAt)
+			cueRanked := rankRecallEvidence(append([]recallEvidence(nil), cueCandidates...), queries, q.Question, true, questionAt)
 			// Stage isolation: where does a pooled hit die — dedup or cross-subject filter?
 			afterDedup := dedupRecallEvidence(append([]recallEvidence(nil), candidates...))
 			afterFilter := filterCrossSubjectEvidence(append([]recallEvidence(nil), afterDedup...), q.Question)
@@ -339,12 +347,22 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			if hitIn(afterFilter) {
 				filterHits++
 			}
-			block, _ := formatRecallEvidenceAt(evidence, questionAt, true)
+			block, cutNoCue := formatRecallEvidenceAt(evidence, questionAt, true)
+			// Does the CHARACTER budget bind before the row budget does? The row
+			// budget is conditional (4/8) but recallMaxChars is not, so a cue turn
+			// can be allowed eight rows and then lose some to the char cap —
+			// which would make the reach and window routing partly wasted.
+			_, cutCue := formatRecallEvidenceAt(cueRanked, questionAt, true)
 
 			rendered := renderedSources(block)
 			// Aggregation is the only shared state; everything above is per-question.
 			mu.Lock()
 			defer mu.Unlock()
+			charCutNoCue += cutNoCue
+			charCutCue += cutCue
+			if cutCue > 0 {
+				charCutCueTurns++
+			}
 			poolSize += len(candidates)
 			rankedSize += len(cueRanked)
 			b := buckets[q.QuestionType]
@@ -406,6 +424,8 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 	t.Logf("== LongMemEval_s retrieval-only (polaris arm) ==")
 	for _, k := range types {
 		b := buckets[k]
+		t.Logf("CHARBUDGET  rows dropped by recallMaxChars: no-cue=%d  cue=%d (on %d/%d cue-budget turns)",
+			charCutNoCue, charCutCue, charCutCueTurns, overall.total)
 		t.Logf("STAGE  pool=%s  after-dedup=%s  after-filter=%s  | avg pool=%.1f ranked(cue8)=%.1f",
 			pct(overall.poolHit, overall.total), pct(dedupHits, overall.total), pct(filterHits, overall.total),
 			float64(poolSize)/float64(maxInt(overall.total, 1)), float64(rankedSize)/float64(maxInt(overall.total, 1)))
