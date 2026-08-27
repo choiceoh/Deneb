@@ -376,3 +376,58 @@ class FileClaimWarnOnceTests(GuardTestCase):
         self.assertEqual(self.edit(self.wt_b, "sess-b"), "ask")
         self.edit(self.wt_a, "sess-a")  # holder keeps working
         self.assertEqual(self.edit(self.wt_b, "sess-b"), "allow")
+
+
+class ClaimKeyIdentityTests(GuardTestCase):
+    """The key's identity half: same origin unifies, different repos separate.
+
+    Both directions were caught live on 2026-08-27: a bare relative path made
+    Deneb's README collide with SolarFlow's, and a byte-compared origin split
+    ~/deneb (…/deneb) from ~/deneb-dev (…/Deneb.git) — one repo, two spellings.
+    """
+
+    def make_repo(self, name, origin=None, worktree_of=None):
+        root = self.home / name
+        root.mkdir(parents=True, exist_ok=True)
+        if worktree_of is not None:
+            gitdir = self.home / worktree_of / f".git/worktrees/{name}"
+            gitdir.mkdir(parents=True, exist_ok=True)
+            (root / ".git").write_text(f"gitdir: {gitdir}\n", encoding="utf-8")
+        else:
+            (root / ".git").mkdir(exist_ok=True)
+            (root / ".git/HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+            if origin:
+                (root / ".git/config").write_text(
+                    f'[remote "origin"]\n\turl = {origin}\n', encoding="utf-8")
+        return root
+
+    def key_for(self, repo_root):
+        keyed = guard.claim_key(str(repo_root / "README.md"))
+        self.assertIsNotNone(keyed)
+        return keyed[0]
+
+    def test_different_repos_never_share_a_key(self) -> None:
+        a = self.make_repo("deneb-x", origin="https://github.com/choiceoh/deneb")
+        b = self.make_repo("solarflow", origin="https://github.com/choiceoh/solarflow")
+        self.assertNotEqual(self.key_for(a), self.key_for(b))
+
+    def test_origin_spellings_unify(self) -> None:
+        spellings = (
+            "https://github.com/choiceoh/deneb",
+            "https://github.com/choiceoh/Deneb.git",
+            "git@github.com:choiceoh/Deneb.git",
+        )
+        keys = set()
+        for i, url in enumerate(spellings):
+            keys.add(self.key_for(self.make_repo(f"clone{i}", origin=url)))
+        self.assertEqual(len(keys), 1, keys)
+
+    def test_worktree_shares_its_parent_repos_identity(self) -> None:
+        main = self.make_repo("mainrepo", origin="https://github.com/choiceoh/deneb")
+        wt = self.make_repo("wt-branch", worktree_of="mainrepo")
+        self.assertEqual(self.key_for(main), self.key_for(wt))
+
+    def test_local_only_repo_still_gets_a_stable_identity(self) -> None:
+        a = self.make_repo("local-a")
+        b = self.make_repo("local-b")
+        self.assertNotEqual(self.key_for(a), self.key_for(b))
