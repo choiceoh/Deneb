@@ -206,7 +206,15 @@ func TestAgentLogSourceContract(t *testing.T) {
 		t.Fatalf("nil logs = %+v", got)
 	}
 	logs := &fakeAgentStats{stats: []agentlog.ModelStat{
-		{Model: "m", Runs: 10, Errors: 2, TimeoutRuns: 1, MaxTokensRecoveries: 3, P95Ms: 1234, ToolCalls: 4, ToolErrors: 1},
+		// P95Ms is the mixed-population figure and P95MsInteractive the
+		// user-facing one; the latency signal must carry the latter. A window
+		// with no interactive runs emits no latency signal at all, which is why
+		// InteractiveRuns is part of the fixture rather than implied.
+		{
+			Model: "m", Runs: 10, Errors: 2, TimeoutRuns: 1, MaxTokensRecoveries: 3,
+			P95Ms: 9999, P95MsInteractive: 1234, InteractiveRuns: 6,
+			ToolCalls: 4, ToolErrors: 1,
+		},
 		{Model: "empty"},
 	}}
 	before := time.Now().Add(-2 * time.Hour).UnixMilli()
@@ -214,6 +222,17 @@ func TestAgentLogSourceContract(t *testing.T) {
 	after := time.Now().Add(-2 * time.Hour).UnixMilli()
 	if logs.since < before || logs.since > after || len(got) != 5 {
 		t.Fatalf("since=%d range=%d..%d signals=%+v", logs.since, before, after, got)
+	}
+	for _, sig := range got {
+		if sig.Key != "agentlog.p95_ms" {
+			continue
+		}
+		if sig.Value != 1234 {
+			t.Errorf("latency value = %v, want the interactive p95 (1234), not the mixed 9999", sig.Value)
+		}
+		if sig.Sample != 6 {
+			t.Errorf("latency sample = %d, want the interactive run count", sig.Sample)
+		}
 	}
 	wantKeys := []string{"agentlog.error_rate@m", "agentlog.timeout_rate@m", "agentlog.max_tokens_rate@m", "agentlog.p95_ms@m", "agentlog.tool_error_rate@m"}
 	for i, key := range wantKeys {

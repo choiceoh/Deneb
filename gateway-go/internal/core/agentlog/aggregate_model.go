@@ -20,6 +20,20 @@ type ModelStat struct {
 
 	AvgMs int64 `json:"avgMs"` // mean run wall time
 	P95Ms int64 `json:"p95Ms"` // 95th percentile run wall time
+	// P95MsInteractive is the same percentile over USER-FACING runs only, and
+	// InteractiveRuns is how many fed it.
+	//
+	// A p95 taken across a mixed population measures the largest budget cap in
+	// the window, not how long anyone waited: a four-hour research cron and a
+	// chat turn become one number. runtime_health.py hit this and fixed it by
+	// splitting the populations ("what made the latency pillar score 0.0 on
+	// every window"); regression-watch kept using the mixed figure and reported
+	// p95@k3 = 836s on 2026-08-27 while user-facing p95 was 114s.
+	//
+	// Zero when no interactive filter is installed, so a caller that has not
+	// wired one reads no signal rather than a wrong one.
+	P95MsInteractive int64 `json:"p95MsInteractive,omitempty"`
+	InteractiveRuns  int   `json:"interactiveRuns,omitempty"`
 
 	InputTokens         int64 `json:"inputTokens"`
 	OutputTokens        int64 `json:"outputTokens"`
@@ -49,6 +63,22 @@ type ModelStat struct {
 // before its run.end/run.error/turn.* lines in the same file, so a single
 // chronological pass per file suffices. Entries older than sinceMs (when
 // > 0) are skipped. Results are sorted by run count descending.
+// SetInteractiveSessionFilter installs the classifier that decides which
+// sessions are user-facing, enabling the P95MsInteractive figure.
+//
+// Injected rather than implemented here because the run-kind vocabulary belongs
+// to domain/session and this is a core package. Copying the rule would give the
+// codebase two answers to "is this a user turn", and the copy is the one that
+// goes stale.
+func (w *Writer) SetInteractiveSessionFilter(fn func(sessionKey string) bool) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	w.interactive = fn
+	w.mu.Unlock()
+}
+
 func (w *Writer) AggregateByModel(sinceMs int64) []ModelStat {
 	if w == nil {
 		return nil
@@ -56,7 +86,7 @@ func (w *Writer) AggregateByModel(sinceMs int64) []ModelStat {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	accumulator := newModelAggregateAccumulator()
+	accumulator := newModelAggregateAccumulator(w.interactive)
 	paths, _ := filepath.Glob(filepath.Join(w.baseDir, "*.jsonl"))
 	for _, path := range paths {
 		accumulator.foldFile(readAllEntries(path), sinceMs)
@@ -67,6 +97,10 @@ func (w *Writer) AggregateByModel(sinceMs int64) []ModelStat {
 type modelAggregateAccumulator struct {
 	stats     map[string]*ModelStat
 	durations map[string][]int64
+	// interactiveDurations is the user-facing subset, accumulated in the same
+	// single pass so the split costs no extra file scan.
+	interactiveDurations map[string][]int64
+	interactive          func(sessionKey string) bool
 }
 
 type modelRunScope struct {
@@ -74,10 +108,12 @@ type modelRunScope struct {
 	thinking  map[string]bool
 }
 
-func newModelAggregateAccumulator() *modelAggregateAccumulator {
+func newModelAggregateAccumulator(interactive func(string) bool) *modelAggregateAccumulator {
 	return &modelAggregateAccumulator{
-		stats:     map[string]*ModelStat{},
-		durations: map[string][]int64{},
+		stats:                map[string]*ModelStat{},
+		durations:            map[string][]int64{},
+		interactiveDurations: map[string][]int64{},
+		interactive:          interactive,
 	}
 }
 
@@ -159,6 +195,12 @@ func (a *modelAggregateAccumulator) foldModelRunEnd(entry LogEntry, scope *model
 	}
 	key := scope.modelKeys[entry.RunID]
 	a.durations[key] = append(a.durations[key], data.TotalMs)
+	// The run record carries its own session key, so classification needs no
+	// new field and no file-name parsing. An entry with no session stays out of
+	// the interactive population — unattributed is not user-facing.
+	if a.interactive != nil && entry.Session != "" && a.interactive(entry.Session) {
+		a.interactiveDurations[key] = append(a.interactiveDurations[key], data.TotalMs)
+	}
 }
 
 func (a *modelAggregateAccumulator) foldModelRunError(entry LogEntry, scope *modelRunScope) {
@@ -208,6 +250,7 @@ func (a *modelAggregateAccumulator) finish() []ModelStat {
 			continue
 		}
 		finalizeModelLatency(stat, a.durations[key])
+		finalizeInteractiveLatency(stat, a.interactiveDurations[key])
 		out = append(out, *stat)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -230,4 +273,16 @@ func finalizeModelLatency(stat *ModelStat, durations []int64) {
 	stat.AvgMs = total / int64(len(durations))
 	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
 	stat.P95Ms = durations[(len(durations)*95)/100]
+}
+
+// finalizeInteractiveLatency fills the user-facing percentile, leaving it zero
+// when nothing interactive was seen — so a consumer can tell "no user turns in
+// this window" from "user turns were fast".
+func finalizeInteractiveLatency(stat *ModelStat, durations []int64) {
+	if len(durations) == 0 {
+		return
+	}
+	stat.InteractiveRuns = len(durations)
+	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
+	stat.P95MsInteractive = durations[(len(durations)*95)/100]
 }

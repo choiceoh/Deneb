@@ -214,6 +214,29 @@ func HeartbeatTargetSession(lastSessionKey string) string {
 // encodes the work type by prefix; this is the single source of truth for that
 // mapping so callers don't re-implement scattered prefix switches. Returns a
 // stable English slug the UI localizes; unrecognized keys fold into "other".
+// interactiveWorkTypes are the work types a PERSON is waiting on. Everything
+// else is automation running under its own budget cap, and the distinction is
+// load-bearing for any latency measurement: mixing the two makes a percentile
+// report the largest cap in the window instead of how long anyone waited.
+//
+// scripts/audit/runtime_health.py keeps the same set (INTERACTIVE_KINDS) and
+// already names this function as the source of the slugs. Changing one without
+// the other splits the two readings apart.
+var interactiveWorkTypes = map[string]struct{}{
+	"chat": {}, "phone-event": {}, "glasses": {}, "subagent": {},
+}
+
+// IsInteractiveWorkType reports whether a WorkTypeForKey slug is user-facing.
+func IsInteractiveWorkType(workType string) bool {
+	_, ok := interactiveWorkTypes[workType]
+	return ok
+}
+
+// IsInteractiveSessionKey is the same question asked of a raw session key.
+func IsInteractiveSessionKey(sessionKey string) bool {
+	return IsInteractiveWorkType(WorkTypeForKey(sessionKey))
+}
+
 func WorkTypeForKey(sessionKey string) string {
 	switch {
 	case sessionKey == HeartbeatWorkSessionKey || strings.HasPrefix(sessionKey, "submain:heartbeat"):

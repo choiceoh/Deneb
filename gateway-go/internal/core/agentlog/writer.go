@@ -22,6 +22,10 @@ const (
 type Writer struct {
 	mu      sync.Mutex
 	baseDir string
+	// interactive classifies a session key as user-facing. Injected via
+	// SetInteractiveSessionFilter; nil until a caller that owns the run-kind
+	// vocabulary wires it (see aggregate_model.go).
+	interactive func(sessionKey string) bool
 }
 
 // NewWriter creates a Writer that stores logs under baseDir.

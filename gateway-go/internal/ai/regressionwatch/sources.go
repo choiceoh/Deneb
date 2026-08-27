@@ -47,8 +47,26 @@ func (s AgentLogSource) Sample() []Signal {
 			Signal{Key: "agentlog.error_rate", Scope: m.Model, Value: rate(m.Errors, total), Sample: total, HigherWorse: true, Kind: KindRate},
 			Signal{Key: "agentlog.timeout_rate", Scope: m.Model, Value: rate(m.TimeoutRuns, m.Runs), Sample: m.Runs, HigherWorse: true, Kind: KindRate},
 			Signal{Key: "agentlog.max_tokens_rate", Scope: m.Model, Value: rate(m.MaxTokensRecoveries, m.Runs), Sample: m.Runs, HigherWorse: true, Kind: KindRate},
-			Signal{Key: "agentlog.p95_ms", Scope: m.Model, Value: float64(m.P95Ms), Sample: m.Runs, HigherWorse: true, Kind: KindScalar},
 		)
+		// Latency rides the USER-FACING population only.
+		//
+		// A p95 over every run measures the largest budget cap in the window
+		// rather than how long anyone waited — a four-hour research cron and a
+		// chat turn land in one percentile. That produced p95@k3 = 836s on
+		// 2026-08-27 (reported as a regression, and escalated all the way into
+		// the anomaly ledger) while the user-facing p95 for the same window was
+		// 114s. runtime_health.py already split these populations for exactly
+		// this reason; this source had not.
+		//
+		// No interactive runs in the window means no latency signal, not a
+		// zero: silence is correct when nobody was waiting on anything.
+		if m.InteractiveRuns > 0 {
+			out = append(out, Signal{
+				Key: "agentlog.p95_ms", Scope: m.Model,
+				Value: float64(m.P95MsInteractive), Sample: m.InteractiveRuns,
+				HigherWorse: true, Kind: KindScalar,
+			})
+		}
 		if m.ToolCalls > 0 {
 			out = append(out, Signal{
 				Key: "agentlog.tool_error_rate", Scope: m.Model,
