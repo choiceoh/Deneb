@@ -62,6 +62,28 @@ LLM_RETRY_RE = re.compile(r"retrying LLM request|API error 429")
 # blames Deneb for another process's logging. MCP failures that actually cost
 # work still land in tool-reliability as `tool complete … isError=true`.
 MCP_STDERR_RE = re.compile(r"mcp server stderr\b")
+# Lines that REPORT a fault are not themselves faults.
+#
+# Two of them were being counted, and together they dominated the error-rate
+# pillar on 2026-08-27 (score 0.0/100, 123 hard faults over 448 runs):
+#
+#   114x "mcp server sent unparseable line" — matched LLM_HARD_RE on the bare
+#        word "unparseable" and was booked as an LLM fault. It is not an LLM
+#        line at all: it is the MCP stdio reader rejecting a Content-Length
+#        header (fixed in the proxy, but the mis-classification would outlive
+#        any single cause). MCP breakage that actually costs work still lands
+#        in tool-reliability, exactly as the MCP_STDERR_RE note above says.
+#
+#     7x "anomaly-watch: 이상 관측" — the anomaly watcher's own findings. The
+#        error it quotes is already counted from its original line, so booking
+#        the report too double-counts, and it means a watcher that notices more
+#        problems makes the health score look worse.
+#
+# The shared shape is an observation being mistaken for the thing observed,
+# which is why they are one pattern rather than two special cases.
+FAULT_REPORT_RE = re.compile(
+    r"mcp server sent unparseable line|anomaly-watch:|lane-liveness:"
+)
 ERR_LINE_RE = re.compile(r'''error=(?!<nil>|null|"")|\bfailed\b(?!=)''')
 
 ISO_DAY_RE = re.compile(r"^\s*(\d{4})-(\d{2})-(\d{2})(?:[T\s]|$)")
@@ -123,6 +145,10 @@ class Signals:
     llm_retries: int = 0
     other_errors: int = 0
     mcp_stderr_lines: int = 0
+    # Lines that report a fault rather than being one. Counted so the exclusion
+    # is visible in the readout — a silent filter is indistinguishable from a
+    # pattern that stopped matching.
+    fault_report_lines: int = 0
     days: float = 7.0
     err_examples: dict = field(default_factory=dict)
     llm_examples: dict = field(default_factory=dict)
@@ -249,6 +275,12 @@ def parse(lines: Iterable[str]) -> Signals:
         if MCP_STDERR_RE.search(line):
             s.mcp_stderr_lines += 1
             continue
+        # Before any fault branch: a report ABOUT a fault must not be booked as
+        # one. Placed here so it beats LLM_HARD_RE, which matched "mcp server
+        # sent unparseable line" on the word "unparseable" alone.
+        if FAULT_REPORT_RE.search(line):
+            s.fault_report_lines += 1
+            continue
         if TOOLERR_RE.search(line):
             s.tool_errors += 1
             continue
@@ -343,11 +375,20 @@ def compute(s: Signals) -> tuple[float, list[DimResult]]:
                 ]
                 if s.mcp_stderr_lines
                 else []
+            )
+            + (
+                [
+                    f"{s.fault_report_lines} fault-report lines excluded "
+                    "(a watcher naming a problem is not a second problem)"
+                ]
+                if s.fault_report_lines
+                else []
             ),
             {
                 "errors": s.other_errors,
                 "per_run": round(err_per_run, 3),
                 "mcp_stderr_lines": s.mcp_stderr_lines,
+                "fault_report_lines": s.fault_report_lines,
             },
         ),
         DimResult(
