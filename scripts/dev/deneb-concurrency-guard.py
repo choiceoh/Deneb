@@ -19,17 +19,26 @@ Checks 1-3 are the original 2026-07-09 spec; 1b and 4 were added later:
                    gateway / genesis / wiki state). Own lock or stale → pass.
 
   4. file claim  — a write to a repo file another LIVE session wrote within
-                   DENEB_FILE_CLAIM_TTL (6h) → ask, ONCE per (session, file).
-                   Keyed by REPO-RELATIVE path, so two worktrees editing the
-                   same file collide even though their absolute paths differ.
-                   Worktree isolation already prevents corruption; this covers
-                   the part it cannot — the two branches meeting at merge time.
+                   DENEB_FILE_CLAIM_TTL (6h) → BLOCK ONCE with the full story
+                   (who, where, how long ago); the same session's retry passes.
+                   Engine (keying, TTL, warn-once, flock) lives in
+                   deneb_file_claims.py — one implementation shared with the
+                   Cursor and ZCode bridges and the `status` CLI. Keyed by
+                   "<origin identity>:<repo-relative path>", so two worktrees
+                   (or clones) of one repo collide while different repos never
+                   do. Worktree isolation already prevents corruption; this
+                   covers the part it cannot — two branches meeting at merge.
   4b. same, for writes made from the SHELL rather than the edit tools: sed -i,
                    redirects, heredocs, tee/cp destinations, and writes inside
                    a heredoc-fed interpreter (`python3 - <<PY … open(p,"w")`).
                    Not an edge case: on a real session nearly every edit took
                    one of these forms, so a tool-only check would have watched
                    the minority path.
+
+Cross-harness: Claude runs this guard natively; Cursor via cursor-hook-bridge
+(claim mode, StrReplace→Edit normalized); ZCode via zcode-hook-bridge (claim
+mode, deny → exit 2 + stderr — its one feedback channel). Codex has no hook
+mechanism and stays uncovered. Live claims: `python3 deneb_file_claims.py status`.
 
 Self-gate: only acts when the touched path / cwd / command is Deneb-related, so
 the global wiring is a no-op in unrelated projects. Fail-open by design: any
@@ -49,17 +58,13 @@ import shlex
 import sys
 import time
 
-LIVETEST_LOCK_TTL = 600  # seconds; matches the original 10-minute lock
+# The claims engine lives in its own module so every consumer — this guard, the
+# harness bridges, the status CLI — shares one implementation of keying, TTL,
+# warn-once, and locking.
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import deneb_file_claims  # noqa: E402
 
-# How long one session's claim on a file keeps warning other sessions.
-#
-# Longer than the live-test lock because an editing session spans hours, not
-# minutes. The asymmetry decides the number: a false ask costs one keystroke, a
-# missed collision costs a merge conflict or lost work in another worktree.
-# Tunable so a quiet week can shorten it without a redeploy.
-FILE_CLAIM_TTL = int(os.environ.get("DENEB_FILE_CLAIM_TTL", "21600"))  # 6h
-# Bounded so one busy session cannot grow the ledger without limit.
-FILE_CLAIM_MAX = 400
+LIVETEST_LOCK_TTL = 600  # seconds; matches the original 10-minute lock
 
 
 def prod_root():
@@ -67,169 +72,10 @@ def prod_root():
     return os.path.realpath(os.path.expanduser("~/deneb"))
 
 
-def file_claims_path():
-    return os.path.join(os.path.expanduser("~"), ".claude", "deneb-file-claims.json")
-
-
-def claim_key(real_path):
-    """Ledger key for a file: "<repo identity>:<repo-relative path>", or None
-    outside a checkout.
-
-    The RELATIVE half is the whole mechanism: two agents editing
-    gateway-go/internal/foo.go in two different worktrees are editing the same
-    file as far as the eventual merge is concerned, and absolute paths would
-    make those two look unrelated.
-
-    The IDENTITY half is what keeps that from over-matching: a bare relative
-    path made Deneb's README.md collide with SolarFlow's README.md — two repos
-    that share nothing but a filename convention (caught in review 2026-08-27).
-    Identity is the origin URL when the repo has one, because that is the
-    literal definition of "meets at the same merge": worktrees AND separate
-    clones (~/deneb-dev) of one origin share it, while different projects never
-    do. A local-only repo falls back to its resolved common .git path.
-
-    Walks the filesystem rather than shelling out to git — this runs before
-    every edit.
-    """
-    directory = os.path.dirname(real_path)
-    while True:
-        if _is_checkout_root(directory):
-            rel = os.path.relpath(real_path, directory)
-            return _repo_identity(directory) + ":" + rel, rel
-        parent = os.path.dirname(directory)
-        if parent == directory:
-            return None
-        directory = parent
-
-
-def _repo_identity(checkout_root):
-    common = _common_git_dir(checkout_root)
-    url = _origin_url(os.path.join(common, "config"))
-    if url:
-        return _normalize_origin(url)
-    return common
-
-
-def _normalize_origin(url):
-    """One spelling per origin.
-
-    Clones of one repo routinely disagree about the URL: the fleet's prod
-    checkout says https://github.com/choiceoh/deneb while ~/deneb-dev says
-    https://github.com/choiceoh/Deneb.git — same repo, and a byte-compared
-    identity split them (caught live 2026-08-27, key check across all three
-    checkouts). Scheme, ssh form, case, .git suffix, and trailing slash all
-    fold; GitHub paths are case-insensitive in practice, and a rare
-    case-sensitive host would only make two sessions warn each other slightly
-    too often — the cheap direction to be wrong in.
-    """
-    u = url.strip().lower().rstrip("/")
-    for prefix in ("https://", "http://", "ssh://", "git://"):
-        if u.startswith(prefix):
-            u = u[len(prefix):]
-            break
-    if u.startswith("git@"):
-        u = u[len("git@"):].replace(":", "/", 1)
-    if u.endswith(".git"):
-        u = u[: -len(".git")]
-    return u
-
-
-def _common_git_dir(checkout_root):
-    """The shared .git directory behind a checkout (worktrees resolve to their
-    parent repository's)."""
-    marker = os.path.join(checkout_root, ".git")
-    if os.path.isdir(marker):
-        return os.path.realpath(marker)
-    try:
-        with open(marker, encoding="utf-8") as fh:
-            first = fh.readline().strip()
-    except OSError:
-        return os.path.realpath(marker)
-    if not first.startswith("gitdir:"):
-        return os.path.realpath(marker)
-    gitdir = first[len("gitdir:"):].strip()
-    if not os.path.isabs(gitdir):
-        gitdir = os.path.join(checkout_root, gitdir)
-    gitdir = os.path.realpath(gitdir)
-    # A linked worktree's gitdir is <common>/worktrees/<name>; the identity is
-    # the common half.
-    head, tail = os.path.split(gitdir)
-    if os.path.basename(head) == "worktrees":
-        return os.path.dirname(head)
-    return gitdir
-
-
-def _origin_url(config_path):
-    """The [remote "origin"] url from a git config, by line scan — no git
-    subprocess in a hook that fires on every edit."""
-    try:
-        with open(config_path, encoding="utf-8") as fh:
-            in_origin = False
-            for line in fh:
-                stripped = line.strip()
-                if stripped.startswith("["):
-                    in_origin = stripped.replace(" ", "") in ('[remote"origin"]',)
-                    continue
-                if in_origin and stripped.startswith("url"):
-                    _, _, value = stripped.partition("=")
-                    return value.strip() or None
-    except OSError:
-        pass
-    return None
-
-
-def _is_checkout_root(directory):
-    """Whether .git here is a REAL checkout marker.
-
-    A bare os.path.exists(".git") is too weak: an empty .git directory is
-    enough to satisfy it, and one exists at /tmp/.git on this fleet (created
-    2026-08-11, empty). That would make every temp file look like it lived in a
-    repo rooted at /tmp and share a key space with real work.
-
-    A checkout has .git/HEAD; a linked worktree has .git as a file holding a
-    gitdir: pointer.
-    """
-    marker = os.path.join(directory, ".git")
-    if os.path.isfile(marker):
-        return True
-    return os.path.isfile(os.path.join(marker, "HEAD"))
-
-
-def load_claims(now):
-    """Read the claim ledger, dropping expired entries."""
-    try:
-        with open(file_claims_path(), encoding="utf-8") as fh:
-            raw = json.load(fh)
-    except (OSError, ValueError):
-        return {}
-    if not isinstance(raw, dict):
-        return {}
-    return {
-        key: value
-        for key, value in raw.items()
-        if isinstance(value, dict) and now - float(value.get("ts") or 0) < FILE_CLAIM_TTL
-    }
-
-
 def check_file_claim(tool, tool_input, cwd, session_id):
-    """Check 6: ask when another live session is editing the same repo file.
-
-    Worktree isolation stops two agents from corrupting each other's checkout;
-    it does NOT stop them from editing the same file on two branches and
-    discovering it at merge time. That gap is real and routine here — four
-    coding harnesses (ZCode, Cursor, Codex, Claude) run against this repo
-    concurrently, and CLAUDE.md's multi-agent rules are discipline, not
-    enforcement.
-
-    Claims are OBSERVED, not declared. A ticket system can ask for a `touches`
-    list up front; an exploratory coding session cannot know what it will edit
-    until it edits it. So the first write registers the claim and later writers
-    are the ones warned.
-
-    ask, never deny: two agents touching one file is often legitimate (different
-    functions, different sections), and only the operator can tell that apart
-    from a real collision.
-    """
+    """Check 4: block-once when another live session is editing the same repo
+    file. Semantics, keying, TTL, and locking live in deneb_file_claims; this
+    is only the tool-payload adapter."""
     if tool not in ("Write", "Edit", "MultiEdit"):
         return None
     file_path = (tool_input.get("file_path") or "").strip()
@@ -240,61 +86,16 @@ def check_file_claim(tool, tool_input, cwd, session_id):
     return claim_for_path(os.path.realpath(file_path), cwd, session_id)
 
 
-def claim_or_warn(key, rel, cwd, session_id):
-    """Register this session's claim on rel, or warn once if another holds it.
-
-    Warning ONCE is the point of the warned list. A held file that re-asked on
-    every write would fire twenty times while one function is being edited, and
-    a guard that cries that often gets approved reflexively — which is worse
-    than not having it. The holder keeps the claim (so a THIRD session is still
-    warned); only the asking pair is recorded as settled.
-    """
-    now = time.time()
-    claims = load_claims(now)
-    held = claims.get(key)
-    holder = str(held.get("session_id") or "") if held else ""
-    if held and holder not in ("", session_id):
-        warned = held.get("warned")
-        warned = list(warned) if isinstance(warned, list) else []
-        if session_id in warned:
-            return None  # already told this session about this file
-        warned.append(session_id)
-        held["warned"] = warned
-        save_claims(claims)
-        age = int(now - float(held.get("ts") or 0))
-        where = str(held.get("cwd") or "")
-        return decide("ask", (
-            f"다른 세션({str(held.get('session_id'))[:12]}…)이 {_ago(age)} 전 같은 파일을 "
-            f"편집했습니다: {rel}"
-            + (f"\n  그쪽 작업 위치: {where}" if where else "")
-            + "\n  워크트리가 달라 덮어쓰기는 안 나지만, 머지 때 충돌하거나 서로의 수정을 "
-              "무효화할 수 있습니다. 같은 파일의 다른 부분이면 계속하세요."
-            + f"\n  (클레임 리셋: rm {file_claims_path()})"
-        ))
-
-    claims[key] = {
-        "session_id": session_id, "ts": now, "cwd": cwd or "",
-        # Carry the warned list across refreshes so a holder's own edits do not
-        # reset who has already been told.
-        "warned": (held or {}).get("warned") or [],
-    }
-    save_claims(claims)
-    return None
-
-
-def save_claims(claims):
-    """Persist the ledger, bounded. Best-effort: a ledger that cannot be
-    written must never block an edit."""
-    if len(claims) > FILE_CLAIM_MAX:
-        oldest = sorted(claims.items(), key=lambda kv: float(kv[1].get("ts") or 0))
-        for key, _ in oldest[: len(claims) - FILE_CLAIM_MAX]:
-            claims.pop(key, None)
-    try:
-        os.makedirs(os.path.dirname(file_claims_path()), exist_ok=True)
-        with open(file_claims_path(), "w", encoding="utf-8") as fh:
-            json.dump(claims, fh)
-    except OSError:
-        pass
+def claim_for_path(real, cwd, session_id):
+    warning = deneb_file_claims.observe_write(real, cwd, session_id)
+    if warning is None:
+        return None
+    # deny, once: the message tells the agent to simply retry if intentional.
+    # This is the one delivery channel every harness shares (Claude
+    # permissionDecision, Cursor permission JSON via the bridge, ZCode exit-2
+    # via its bridge), and it keeps the decision with the AGENT instead of
+    # raising an operator dialog for something only the agent can judge.
+    return decide("deny", deneb_file_claims.warning_text(warning))
 
 
 # Writes performed INSIDE a heredoc-fed interpreter, which the shell parser
@@ -343,32 +144,6 @@ def check_bash_file_claim(command, cwd, session_id):
         if result is not None:
             return result
     return None
-
-
-def claim_for_path(real, cwd, session_id):
-    """Shared body of checks 4 and 4b: filter, key, then claim-or-warn."""
-    # Hook-local state is not shared work. Matched against ~/.claude
-    # specifically, NOT any path containing ".claude" — Claude Code's own
-    # worktrees live at <repo>/.claude/worktrees/, so a substring test would
-    # exclude the very sessions this check exists for.
-    hook_state = os.path.join(os.path.expanduser("~"), ".claude") + os.sep
-    if real.startswith(hook_state):
-        return None
-    # Being inside a git checkout IS the scratch filter: a temp file, a
-    # generated artifact, anything outside a repo has no merge to collide at.
-    keyed = claim_key(real)
-    if keyed is None:
-        return None
-    key, rel = keyed
-    return claim_or_warn(key, rel, cwd, session_id)
-
-
-def _ago(seconds):
-    if seconds < 90:
-        return f"{seconds}초"
-    if seconds < 5400:
-        return f"{seconds // 60}분"
-    return f"{seconds // 3600}시간"
 
 
 def livetest_lock_path():
