@@ -525,6 +525,17 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 				Tracker: s.genesisTracker,
 				Logger:  s.logger,
 				OnNew:   s.postSelfCorrectionCard,
+				// Operator directive: judge these with an LLM instead of asking
+				// a person. Same client the low-confidence tie-break judge uses
+				// — the evolver's judge seat, which is main-tier; the
+				// lightweight role returns prose where a verdict is needed.
+				// A nil judge (unconfigured seat) leaves the card path exactly
+				// as it was.
+				Judge: genesis.NewSelfCorrectionJudge(
+					s.genesisEvolver.JudgeClient(),
+					s.genesisEvolver.JudgeModel(),
+					s.genesisEvolver.ThinkingOff,
+				),
 			})
 			// Adversarial coverage: deterministically mutate each skill body
 			// (section drops, tool-reference drops) and author the held-out

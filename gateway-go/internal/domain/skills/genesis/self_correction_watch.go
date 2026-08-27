@@ -38,6 +38,56 @@ type SelfCorrectionWatchTask struct {
 	// OnNew surfaces one unseen proposed candidate. An error leaves the
 	// candidate unseen so the next run retries.
 	OnNew func(SelfCorrectionCandidateRecord) error
+	// Judge rules on a candidate so the operator is never asked. It is triage,
+	// not a landing gate: "accepted" means only "approved to try", and a
+	// scope=code candidate still faces coding-dispatch, CI, and the deploy and
+	// rollback watches.
+	//
+	// Every way of NOT getting a verdict — nil judge, call error, explicit
+	// abstain — falls through to OnNew. The card is the fallback, never the
+	// default, so a judge outage degrades to the old behavior instead of
+	// silently swallowing candidates.
+	Judge func(context.Context, SelfCorrectionCandidateRecord) (SelfCorrectionVerdict, error)
+}
+
+// judged asks the judge and records its verdict, reporting whether the
+// candidate was settled without the operator.
+//
+// A recording failure deliberately returns false: the candidate then takes the
+// card path, so a verdict that could not be persisted still reaches somebody
+// rather than vanishing between the two paths.
+func (t *SelfCorrectionWatchTask) judged(ctx context.Context, c SelfCorrectionCandidateRecord, logger *slog.Logger) bool {
+	if t.Judge == nil {
+		return false
+	}
+	verdict, err := t.Judge(ctx, c)
+	if err != nil {
+		logger.Warn("self-correction-watch: 판정 실패 — 운영자 카드로 넘긴다", "id", c.ID, "error", err)
+		return false
+	}
+	if !verdict.Decided {
+		logger.Info("self-correction-watch: 판정 기권 — 운영자 카드로 넘긴다", "id", c.ID)
+		return false
+	}
+	status := SelfCorrectionStatusRejected
+	if verdict.Accept {
+		status = SelfCorrectionStatusAccepted
+	}
+	if _, rerr := t.Tracker.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
+		ID:     c.ID,
+		Status: status,
+		// Provenance is explicit so the ledger never reads as if a person
+		// approved this.
+		Reviewer:   "llm-judge",
+		ReviewNote: verdict.Rationale,
+	}); rerr != nil {
+		logger.Warn("self-correction-watch: 판정 기록 실패 — 운영자 카드로 넘긴다",
+			"id", c.ID, "status", status, "error", rerr)
+		return false
+	}
+	logger.Info("self-correction-watch: LLM이 판정함",
+		"id", c.ID, "status", status, "rationale", verdict.Rationale)
+	return true
 }
 
 // Name identifies the task in the autonomous scheduler.
@@ -60,7 +110,7 @@ func (t *SelfCorrectionWatchTask) selfCorrectionWatchStatePath() string {
 
 // Run surfaces unseen proposed candidates, then persists the seen-id snapshot
 // (tmp+rename) so restarts never re-fire.
-func (t *SelfCorrectionWatchTask) Run(_ context.Context) error {
+func (t *SelfCorrectionWatchTask) Run(ctx context.Context) error {
 	if t.Tracker == nil {
 		return nil
 	}
@@ -81,7 +131,13 @@ func (t *SelfCorrectionWatchTask) Run(_ context.Context) error {
 	next := make(map[string]bool, len(cands))
 	for _, c := range cands {
 		next[c.ID] = true
-		if firstRun || prev[c.ID] || t.OnNew == nil {
+		if firstRun || prev[c.ID] {
+			continue
+		}
+		if t.judged(ctx, c, logger) {
+			continue
+		}
+		if t.OnNew == nil {
 			continue
 		}
 		if err := t.OnNew(c); err != nil {
