@@ -134,6 +134,7 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 	abstention := 0
 	poolSize, rankedSize, dedupHits, filterHits := 0, 0, 0, 0
 	charCutNoCue, charCutCue, charCutCueTurns := 0, 0, 0
+	evidenceTotal, recalledNoCue, recalledCue := 0, 0, 0
 
 	// Questions are independent — each builds its own store — and the run is
 	// dominated by round-trips to the embedding sidecar, not by GPU throughput
@@ -386,6 +387,33 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 					tgt.hit8++
 				}
 			}
+			// Strict recall@k — the metric the LongMemEval paper reports. Of THIS
+			// question's evidence sessions, how many did the rendered rows cover?
+			//
+			// The hit counters above are success@k ("at least one"), and 63.8% of
+			// scored questions carry more than one evidence session
+			// (knowledge-update and multi-session: 100%), so the two diverge
+			// widely and only this one may be set beside a published number.
+			// Measured 2026-08-28: success@4 90.9% but recall@4 70.9%.
+			coveredNoCue := map[string]struct{}{}
+			for _, source := range rendered {
+				if key, _, kind := parseRecallSource(source, questionKey); kind != sourceKindOther {
+					if ids := msgSession[key]; len(ids) > 0 && evidenceSessions[ids[0]] {
+						coveredNoCue[ids[0]] = struct{}{}
+					}
+				}
+			}
+			coveredCue := map[string]struct{}{}
+			for _, ev := range cueRanked {
+				if key, _, kind := parseRecallSource(ev.Source, questionKey); kind != sourceKindOther {
+					if ids := msgSession[key]; len(ids) > 0 && evidenceSessions[ids[0]] {
+						coveredCue[ids[0]] = struct{}{}
+					}
+				}
+			}
+			evidenceTotal += len(evidenceSessions)
+			recalledNoCue += len(coveredNoCue)
+			recalledCue += len(coveredCue)
 			for rank, source := range rendered {
 				if rowIsEvidence(source) {
 					b.anyHit++
@@ -424,6 +452,13 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 	t.Logf("== LongMemEval_s retrieval-only (polaris arm) ==")
 	for _, k := range types {
 		b := buckets[k]
+		// Published LongMemEval retrieval baselines (arXiv 2410.10813, Stella V5
+		// 1.5B dense) for the row below: round-level Recall@5 58.2%, +fact expansion
+		// 64.4%; session-level Recall@5 70.6%, +expansion 73.2%. Ours is round-level
+		// at K=4 (tighter) but includes a cross-encoder the baselines do not — so the
+		// honest claim is about the pipeline, not a like-for-like retriever win.
+		t.Logf("STRICT-RECALL  recall@4=%s  recall@8=%s  (%d evidence sessions over %d questions — the paper's metric; compare to 58.2%%/64.4%% round-level)",
+			pct(recalledNoCue, evidenceTotal), pct(recalledCue, evidenceTotal), evidenceTotal, overall.total)
 		t.Logf("CHARBUDGET  rows dropped by recallMaxChars: no-cue=%d  cue=%d (on %d/%d cue-budget turns)",
 			charCutNoCue, charCutCue, charCutCueTurns, overall.total)
 		t.Logf("STAGE  pool=%s  after-dedup=%s  after-filter=%s  | avg pool=%.1f ranked(cue8)=%.1f",
