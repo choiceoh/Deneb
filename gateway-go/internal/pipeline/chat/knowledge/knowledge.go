@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
@@ -14,6 +15,7 @@ const (
 	tier1MaxPages     = 10    // max pages to inject
 	tier1MaxBodyRunes = 1000  // truncate each page body
 	tier1MaxTotalChar = 20000 // total budget for tier-1 section
+	tier1MaxTokens    = 8000  // token budget for ambient tier-1 system memory
 )
 
 // FormatTier1 builds a "## 핵심 지식" section from high-importance wiki pages.
@@ -43,6 +45,9 @@ func FormatTier1(store *wiki.Store, minImportance float64) string {
 		entry := header + body + "\n\n"
 
 		if sb.Len()+len(entry) > tier1MaxTotalChar {
+			break
+		}
+		if tokenest.Estimate(sb.String()+entry) > tier1MaxTokens {
 			break
 		}
 		sb.WriteString(entry)

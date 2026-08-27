@@ -18,7 +18,7 @@ func TestDefaultContextConfigBudgetOverrideFallsBackOnInvalid(t *testing.T) {
 		{"non-numeric ignored", "fast", defaultMemoryTokenBudget},
 		{"negative ignored", "-1", defaultMemoryTokenBudget},
 		{"below system+headroom ignored", "30001", defaultMemoryTokenBudget},
-		{"exactly system+headroom applies", "34096", 34_096},
+		{"exactly system+headroom applies", "49096", 49_096},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

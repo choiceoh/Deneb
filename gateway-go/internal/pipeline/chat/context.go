@@ -14,7 +14,7 @@ import (
 // Context assembly defaults.
 const (
 	defaultMemoryTokenBudget  = 170_000
-	defaultSystemPromptBudget = 30_000
+	defaultSystemPromptBudget = 45_000
 	defaultFreshTailCount     = 24
 
 	// minMemoryBudgetHeadroom is the smallest history allowance a
@@ -48,8 +48,11 @@ type ContextConfig struct {
 // (measured on step3p7/GB10: ~20 tok/s under 60K input vs ~5 tok/s at 110K+),
 // so a deployment that prefers latency over raw in-context history sets a
 // smaller budget here and lets Polaris compaction + recall preflight carry
-// the long tail. An override that leaves no real history headroom above the
-// system-prompt budget is ignored (see minMemoryBudgetHeadroom).
+// the long tail. The system-prompt share includes the ambient tier-1 wiki
+// memory block, so it must leave enough room above the static prompt for that
+// block to arrive intact instead of being trimmed away after assembly. An
+// override that leaves no real history headroom above the system-prompt budget
+// is ignored (see minMemoryBudgetHeadroom).
 func DefaultContextConfig() ContextConfig {
 	cfg := ContextConfig{
 		MemoryTokenBudget:  defaultMemoryTokenBudget,
