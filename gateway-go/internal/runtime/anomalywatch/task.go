@@ -44,7 +44,7 @@ type Task struct {
 }
 
 // Name identifies the task in the autonomous scheduler.
-func (t *Task) Name() string { return "anomaly-watch" }
+func (t *Task) Name() string { return strings.TrimSuffix(selfLogPrefix, ":") }
 
 // Interval honors DENEB_ANOMALY_WATCH_INTERVAL_MINUTES as a calibration knob.
 func (t *Task) Interval() time.Duration {
@@ -92,14 +92,14 @@ func (t *Task) Run(ctx context.Context) error {
 		// A pass that cannot be recorded is a pass that did not happen, as far
 		// as the reader is concerned, so this is the one condition worth an
 		// error return.
-		logger.Error("anomaly-watch: 원장 기록 실패", "err", err)
+		logger.Error(selfLogPrefix+" 원장 기록 실패", "err", err)
 		return err
 	}
 
 	// Every pass logs, findings or not — the same reason lanewatch does. A
 	// watcher whose silence is indistinguishable from its absence is not
 	// providing the assurance it appears to.
-	logger.Info("anomaly-watch: 점검 완료",
+	logger.Info(selfLogPrefix+" 점검 완료",
 		"examinedLines", digest.Examined.LogLines,
 		"coveredMinutes", digest.Examined.CoveredMinutes,
 		"partial", digest.Examined.Partial,
@@ -109,7 +109,7 @@ func (t *Task) Run(ctx context.Context) error {
 	for _, f := range findings {
 		// Findings also reach the journal so the ledger is a convenience rather
 		// than the only copy.
-		logger.Warn("anomaly-watch: 이상 관측",
+		logger.Warn(selfLogPrefix+" 이상 관측",
 			"severity", f.Severity, "summary", f.Summary, "evidence", f.Evidence)
 	}
 	return nil

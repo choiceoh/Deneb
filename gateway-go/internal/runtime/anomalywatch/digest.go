@@ -8,6 +8,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 )
 
+// selfLogPrefix is how this lane names itself in the journal, and is the single
+// source for BOTH the log messages it writes and the filter that keeps them out
+// of its own window. Written in one place on purpose: the moment the two
+// diverge, the lane starts eating its own output again.
+const selfLogPrefix = "anomaly-watch:"
+
 // maxDigestLines bounds what one pass hands the model. The window is Warn and
 // above, so a healthy gateway produces far fewer than this; the cap exists for
 // the unhealthy case, where an error storm would otherwise push the prompt past
@@ -40,6 +46,17 @@ type Digest struct {
 // separating a transient blip from a defect, and it is exactly the distinction
 // a flat log dump destroys.
 func BuildDigest(lines []observe.LogLine) Digest {
+	// Drop this lane's own journal lines before anything else.
+	//
+	// Findings are logged at Warn so they reach the journal, and the window is
+	// Warn and above — so without this filter every finding becomes evidence
+	// for the next pass, which logs it again. Observed on the first full day:
+	// a genesis parse failure was re-reported three hours running, the third
+	// time quoting the lane's own earlier report rather than the original
+	// error. That is output becoming its own input, and it inflates recurrence
+	// counts, which is exactly the signal this digest leans on hardest.
+	lines = dropSelfLines(lines)
+
 	d := Digest{}
 	if len(lines) == 0 {
 		// An empty window is a real reading, not a missing one, and the model
@@ -97,6 +114,18 @@ func BuildDigest(lines []observe.LogLine) Digest {
 	}
 	d.Text = truncate(b.String(), maxDigestLines*maxEvidenceChars)
 	return d
+}
+
+// dropSelfLines removes the lane's own log output from a window.
+func dropSelfLines(lines []observe.LogLine) []observe.LogLine {
+	kept := lines[:0:0]
+	for _, l := range lines {
+		if strings.HasPrefix(l.Msg, selfLogPrefix) {
+			continue
+		}
+		kept = append(kept, l)
+	}
+	return kept
 }
 
 // renderAttrs flattens a line's structured attributes in a stable order, so the
