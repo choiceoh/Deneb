@@ -201,3 +201,178 @@ class DecisionMessageTests(GuardTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FileClaimTests(GuardTestCase):
+    """Check 6: two agents editing the same repo file from different worktrees.
+
+    Worktree isolation prevents corruption, not collision — the two branches
+    meet at merge time. Four coding harnesses run against this repo
+    concurrently, so this is routine, not hypothetical.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Two worktrees, each a git checkout, holding the SAME repo-relative file.
+        self.wt_a = self.home / "deneb/.claude/worktrees/wt1"
+        self.wt_b = self.home / "deneb/.claude/worktrees/wt2"
+        for wt in (self.wt_a, self.wt_b):
+            wt.mkdir(parents=True, exist_ok=True)
+            (wt / ".git").write_text("gitdir: /elsewhere\n", encoding="utf-8")
+            (wt / "gateway-go/internal").mkdir(parents=True, exist_ok=True)
+            (wt / "gateway-go/internal/foo.go").write_text("package foo\n", encoding="utf-8")
+
+    def edit(self, worktree, session_id):
+        return payload(
+            "Edit",
+            {"file_path": str(worktree / "gateway-go/internal/foo.go")},
+            str(worktree),
+            session_id=session_id,
+        )
+
+    def test_second_session_editing_the_same_repo_file_asks(self) -> None:
+        self.assertEqual(self.decision(self.edit(self.wt_a, "sess-a")), "allow")
+        # Different worktree, different branch, SAME repo-relative path.
+        result = self.run_guard(self.edit(self.wt_b, "sess-b"))
+        self.assertEqual(result["permissionDecision"], "ask")
+        reason = result["permissionDecisionReason"]
+        self.assertIn("gateway-go/internal/foo.go", reason)
+        self.assertIn("sess-a", reason)
+
+    def test_same_session_never_blocks_itself(self) -> None:
+        """A session edits its own files repeatedly; self-blocking would make
+        the guard unusable."""
+        for _ in range(3):
+            self.assertEqual(self.decision(self.edit(self.wt_a, "sess-a")), "allow")
+        # Even from a second worktree, one session is not competing with itself.
+        self.assertEqual(self.decision(self.edit(self.wt_b, "sess-a")), "allow")
+
+    def test_different_files_do_not_collide(self) -> None:
+        other = self.wt_b / "gateway-go/internal/bar.go"
+        other.write_text("package foo\n", encoding="utf-8")
+        self.assertEqual(self.decision(self.edit(self.wt_a, "sess-a")), "allow")
+        self.assertEqual(
+            self.decision(payload("Edit", {"file_path": str(other)}, str(self.wt_b), "sess-b")),
+            "allow",
+        )
+
+    def test_expired_claim_stops_warning(self) -> None:
+        """A dead session must not hold a file forever."""
+        claims = self.home / ".claude/deneb-file-claims.json"
+        claims.write_text(json.dumps({
+            "gateway-go/internal/foo.go": {
+                "session_id": "sess-ghost",
+                "ts": time.time() - 999_999,
+                "cwd": "/gone",
+            }
+        }), encoding="utf-8")
+        self.assertEqual(self.decision(self.edit(self.wt_b, "sess-b")), "allow")
+
+    def test_files_outside_a_checkout_are_not_claimed(self) -> None:
+        loose = self.home / "notes.md"
+        loose.write_text("x\n", encoding="utf-8")
+        stdin = payload("Edit", {"file_path": str(loose)}, str(self.home), "sess-a")
+        self.assertEqual(self.decision(stdin), "allow")
+        self.assertFalse((self.home / ".claude/deneb-file-claims.json").exists())
+
+    def test_corrupt_ledger_does_not_block_edits(self) -> None:
+        """The guard is fail-open everywhere else; the ledger is no exception."""
+        (self.home / ".claude/deneb-file-claims.json").write_text("{not json", encoding="utf-8")
+        self.assertEqual(self.decision(self.edit(self.wt_a, "sess-a")), "allow")
+
+
+class FileClaimShellTests(GuardTestCase):
+    """Check 4b: shell writes, which are the MAJORITY of real edits.
+
+    A claim check that watches only Write/Edit/MultiEdit misses `sed -i`,
+    redirects, heredocs, and heredoc-fed interpreters — measured on a real
+    session, nearly every edit was one of those.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.wt_a = self.home / "deneb/.claude/worktrees/wt1"
+        self.wt_b = self.home / "deneb/.claude/worktrees/wt2"
+        for wt in (self.wt_a, self.wt_b):
+            wt.mkdir(parents=True, exist_ok=True)
+            (wt / ".git").write_text("gitdir: /elsewhere\n", encoding="utf-8")
+            (wt / "gateway-go").mkdir(parents=True, exist_ok=True)
+
+    def hold_with_session_a(self) -> None:
+        self.decision(payload(
+            "Edit", {"file_path": str(self.wt_a / "gateway-go/foo.go")},
+            str(self.wt_a), "sess-a",
+        ))
+
+    def bash_decision(self, command, session_id="sess-b"):
+        return self.decision(payload("Bash", {"command": command}, str(self.wt_b), session_id))
+
+    def test_every_shell_write_form_reaches_the_claim_check(self) -> None:
+        target = str(self.wt_b / "gateway-go/foo.go")
+        forms = {
+            "sed -i": f"sed -i 's/a/b/' {target}",
+            "redirect": f"echo x > {target}",
+            "append": f"printf y >> {target}",
+            "heredoc": f"cat > {target} <<'EOF'\nx\nEOF",
+            "tee": f"echo x | tee {target}",
+            "cp dest": f"cp /etc/hostname {target}",
+            # The one a shell parser cannot see: the write lives inside a script
+            # fed to an interpreter on stdin.
+            "python heredoc": "python3 - <<'PY'\nopen('gateway-go/foo.go','w').write('x')\nPY",
+            "relative path": "sed -i 's/a/b/' gateway-go/foo.go",
+        }
+        for label, command in forms.items():
+            with self.subTest(form=label):
+                self.setUp()  # fresh ledger per form
+                self.hold_with_session_a()
+                self.assertEqual(self.bash_decision(command), "ask", label)
+
+    def test_read_only_commands_never_register_a_claim(self) -> None:
+        """A mention is not an edit. Registering claims from greps would warn
+        other sessions about files nobody is touching."""
+        for command in (
+            "grep -rn foo gateway-go/foo.go",
+            "cat gateway-go/foo.go",
+            "python3 -c \"print(open('gateway-go/foo.go').read())\"",
+            "git diff gateway-go/foo.go",
+        ):
+            self.bash_decision(command, "sess-a")
+        self.assertFalse((self.home / ".claude/deneb-file-claims.json").exists(), "read-only commands claimed files")
+
+
+class FileClaimWarnOnceTests(GuardTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.wt_a = self.home / "deneb/.claude/worktrees/wt1"
+        self.wt_b = self.home / "deneb/.claude/worktrees/wt2"
+        for wt in (self.wt_a, self.wt_b):
+            wt.mkdir(parents=True, exist_ok=True)
+            (wt / ".git").write_text("gitdir: /elsewhere\n", encoding="utf-8")
+            (wt / "gateway-go").mkdir(parents=True, exist_ok=True)
+
+    def edit(self, wt, session_id):
+        return self.decision(payload(
+            "Edit", {"file_path": str(wt / "gateway-go/foo.go")}, str(wt), session_id))
+
+    def test_a_warned_session_is_not_asked_again(self) -> None:
+        """Re-asking on every write would fire dozens of times while one
+        function is edited, and a guard that cries that often gets approved
+        reflexively — worse than not having it."""
+        self.edit(self.wt_a, "sess-a")
+        self.assertEqual(self.edit(self.wt_b, "sess-b"), "ask")
+        for _ in range(5):
+            self.assertEqual(self.edit(self.wt_b, "sess-b"), "allow")
+
+    def test_a_third_session_is_still_warned(self) -> None:
+        """Settling with one asker must not disarm the file for everyone."""
+        self.edit(self.wt_a, "sess-a")
+        self.assertEqual(self.edit(self.wt_b, "sess-b"), "ask")
+        self.assertEqual(self.edit(self.wt_b, "sess-c"), "ask")
+
+    def test_holder_edits_do_not_reset_the_warned_list(self) -> None:
+        """The holder refreshing its claim must not make an already-warned
+        session start asking again."""
+        self.edit(self.wt_a, "sess-a")
+        self.assertEqual(self.edit(self.wt_b, "sess-b"), "ask")
+        self.edit(self.wt_a, "sess-a")  # holder keeps working
+        self.assertEqual(self.edit(self.wt_b, "sess-b"), "allow")
