@@ -161,6 +161,26 @@ func IsCronSession(sessionKey string) bool {
 	return strings.HasPrefix(sessionKey, "cron:")
 }
 
+// CronJobID extracts the job id from a cron session key, or "" when the key is
+// not a cron key. The key is minted as "cron:<jobID>:<startedAtMs>"
+// (platform/cron/service_job_run.go).
+//
+// This exists because the run-scoped params handed to the agent adapter carry
+// an optional AgentID — which agent to run as, not which job — and a log line
+// labelled "jobId" printed that instead. No production job sets agentId, so
+// every cron postmortem line read jobId="" while the session key beside it held
+// the answer.
+func CronJobID(sessionKey string) string {
+	if !IsCronSession(sessionKey) {
+		return ""
+	}
+	rest := strings.TrimPrefix(sessionKey, "cron:")
+	if i := strings.LastIndex(rest, ":"); i > 0 {
+		return rest[:i]
+	}
+	return rest
+}
+
 // IsLiveTestSession reports whether a run came from the live-test harness
 // rather than from real use. The harness mints `client:lt-<pid>[-<n>]`
 // (scripts/dev/mock_native_client.py) and ad-hoc probes use bare `lt-` /
