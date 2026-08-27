@@ -741,6 +741,22 @@ func appendPolarisSessionHits(ctx context.Context, store *polaris.Store, session
 //	5      90.6%   81.5%   74.0%   66.2%
 //	10     93.2%   79.6%   77.4%   67.0%
 //
+// The obvious objection — that the rerank window (10 at the time) was hiding the
+// benefit, since a row past it never meets the cross-encoder — was tested and
+// does not hold. Widening both together still loses on hit@4, even when the
+// window covers the entire pool:
+//
+//	cross  window  pool    hit@8   hit@4   top1
+//	2      20      83.8%   83.8%   81.7%   60.4%   <- current
+//	5      20      90.6%   87.4%   76.8%   65.5%
+//	10     30      93.2%   83.4%   77.7%   65.7%
+//	10     50      93.2%   84.9%   77.7%   66.0%
+//
+// At cross=10/window=50 every candidate is reranked and hit@4 is still 4pp below
+// baseline, so this is top-4 precision, not a windowing artifact. top1 does climb
+// to 66.0% — the reranker gets better at picking the single best row — but the
+// model reads all four, so that is not the objective.
+//
 // The residual gap to pool10 (95.1%) is therefore not a retrieval-reach problem
 // and cannot be closed from this side: it is the four-row budget meeting the
 // limits of top-4 precision. Sweep it again with DENEB_POLARIS_CROSS_HITS if the
@@ -1039,15 +1055,44 @@ type Reranker interface {
 }
 
 const (
-	// polarisRerankCandidates bounds the batch. Matches the wiki plane's limit
-	// (rerankCandidateLimit) — ten short snippets stay one fast batch, and rows
-	// past that cannot reach even the cue budget of 8.
-	polarisRerankCandidates = 10
+	// defaultPolarisRerankCandidates bounds the cross-encoder batch. It is
+	// deliberately twice the wiki plane's limit (rerankCandidateLimit = 10),
+	// because the two planes rank different things: a wiki row is one page, so
+	// ten candidates already cover the plausible answers, while a transcript row
+	// is one message and the same topic spreads across many of them.
+	//
+	// A row past this window never meets the reranker at all, and at 10 that was
+	// costing real hits — every metric improves at 20 with nothing traded away
+	// (LongMemEval_s, 470 questions, cross-session quota unchanged):
+	//
+	//	window  pool    hit@8   hit@4   top1
+	//	10      83.8%   83.2%   81.3%   60.4%
+	//	20      83.8%   83.8%   81.7%   60.4%   <- current
+	//
+	// At 20 hit@8 equals pool exactly: ranking now loses nothing the retrieval
+	// stage found. Latency is unchanged (120 questions: 50.2s vs 49.9s) — twenty
+	// 280-char snippets are the same single batch as ten.
+	defaultPolarisRerankCandidates = 20
 	// polarisRerankTimeout is tighter than the wiki plane's 800ms because the
 	// documents are 280-char snippets rather than 600-char page heads, and the
 	// whole preflight shares a 1500ms deadline with every other source.
 	polarisRerankTimeout = 600 * time.Millisecond
 )
+
+// polarisRerankCandidates is the cross-encoder window, overridable for sweeps
+// via DENEB_POLARIS_RERANK_WINDOW. It pairs with polarisCrossHitsPerQuery: a row
+// past this window never meets the reranker at all, so widening reach without
+// widening the window measures a candidate that cannot win.
+var polarisRerankCandidates = polarisRerankWindowFromEnv()
+
+func polarisRerankWindowFromEnv() int {
+	if raw := strings.TrimSpace(os.Getenv("DENEB_POLARIS_RERANK_WINDOW")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v >= 2 && v <= 100 {
+			return v
+		}
+	}
+	return defaultPolarisRerankCandidates
+}
 
 // rerankPolarisEvidence reorders the fused polaris candidates with a
 // cross-encoder scored against the RAW MESSAGE, not the derived queries.
