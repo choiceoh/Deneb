@@ -25,6 +25,10 @@ case "$(basename "$0")" in
     exec bash "$ROOT/scripts/dev/cursor-hook-bridge.sh" \
       "$ROOT/scripts/dev/claude-rules-gate.py" gate
     ;;
+  concurrency-claim.sh)
+    exec bash "$ROOT/scripts/dev/cursor-hook-bridge.sh" \
+      "$ROOT/scripts/dev/deneb-concurrency-guard.py" claim
+    ;;
   *)
     exit 0
     ;;
