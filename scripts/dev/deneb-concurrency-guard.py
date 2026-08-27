@@ -7,7 +7,7 @@ checkout's copy of THIS file — so the guard's logic ships through the normal
 merge → auto-deploy pipeline instead of living as an unversioned home-dir file
 (the 2026-07-18 incident: the only copy was overwritten with a stub and lost).
 
-Three checks, per the original 2026-07-09 spec:
+Checks 1-3 are the original 2026-07-09 spec; 1b and 4 were added later:
   1. prod tree   — Write/Edit/MultiEdit under ~/deneb/ (main-only, auto-deploy)
                    → deny. Worktrees (~/deneb/.claude/worktrees/*) and
                    ~/deneb-dev pass.
@@ -17,6 +17,13 @@ Three checks, per the original 2026-07-09 spec:
   3. live-test   — `live-test.sh restart` while another session holds a fresh
                    (<10 min) ~/.claude/deneb-livetest.lock → ask (shared dev
                    gateway / genesis / wiki state). Own lock or stale → pass.
+
+  4. file claim  — Write/Edit/MultiEdit on a repo file another LIVE session
+                   edited within DENEB_FILE_CLAIM_TTL (6h) → ask. Keyed by
+                   REPO-RELATIVE path, so two worktrees editing the same file
+                   collide even though their absolute paths differ. Worktree
+                   isolation already prevents corruption; this covers the part
+                   it cannot — the two branches meeting at merge time.
 
 Self-gate: only acts when the touched path / cwd / command is Deneb-related, so
 the global wiring is a no-op in unrelated projects. Fail-open by design: any
@@ -37,10 +44,157 @@ import time
 
 LIVETEST_LOCK_TTL = 600  # seconds; matches the original 10-minute lock
 
+# How long one session's claim on a file keeps warning other sessions.
+#
+# Longer than the live-test lock because an editing session spans hours, not
+# minutes. The asymmetry decides the number: a false ask costs one keystroke, a
+# missed collision costs a merge conflict or lost work in another worktree.
+# Tunable so a quiet week can shorten it without a redeploy.
+FILE_CLAIM_TTL = int(os.environ.get("DENEB_FILE_CLAIM_TTL", "21600"))  # 6h
+# Bounded so one busy session cannot grow the ledger without limit.
+FILE_CLAIM_MAX = 400
+
 
 def prod_root():
     """The production checkout (main-only, auto-deploy owns it)."""
     return os.path.realpath(os.path.expanduser("~/deneb"))
+
+
+def file_claims_path():
+    return os.path.join(os.path.expanduser("~"), ".claude", "deneb-file-claims.json")
+
+
+def repo_relative(real_path):
+    """Path relative to its git checkout root, or None when outside one.
+
+    Keying on the REPO-RELATIVE path is the whole mechanism: two agents editing
+    gateway-go/internal/foo.go in two different worktrees are editing the same
+    file as far as the eventual merge is concerned, and absolute paths would
+    make those two look unrelated.
+
+    Walks up for .git (a directory in the main checkout, a file in a worktree)
+    rather than shelling out to git — this runs before every edit.
+    """
+    directory = os.path.dirname(real_path)
+    while True:
+        if _is_checkout_root(directory):
+            return os.path.relpath(real_path, directory)
+        parent = os.path.dirname(directory)
+        if parent == directory:
+            return None
+        directory = parent
+
+
+def _is_checkout_root(directory):
+    """Whether .git here is a REAL checkout marker.
+
+    A bare os.path.exists(".git") is too weak: an empty .git directory is
+    enough to satisfy it, and one exists at /tmp/.git on this fleet (created
+    2026-08-11, empty). That would make every temp file look like it lived in a
+    repo rooted at /tmp and share a key space with real work.
+
+    A checkout has .git/HEAD; a linked worktree has .git as a file holding a
+    gitdir: pointer.
+    """
+    marker = os.path.join(directory, ".git")
+    if os.path.isfile(marker):
+        return True
+    return os.path.isfile(os.path.join(marker, "HEAD"))
+
+
+def load_claims(now):
+    """Read the claim ledger, dropping expired entries."""
+    try:
+        with open(file_claims_path(), encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        key: value
+        for key, value in raw.items()
+        if isinstance(value, dict) and now - float(value.get("ts") or 0) < FILE_CLAIM_TTL
+    }
+
+
+def check_file_claim(tool, tool_input, cwd, session_id):
+    """Check 6: ask when another live session is editing the same repo file.
+
+    Worktree isolation stops two agents from corrupting each other's checkout;
+    it does NOT stop them from editing the same file on two branches and
+    discovering it at merge time. That gap is real and routine here — four
+    coding harnesses (ZCode, Cursor, Codex, Claude) run against this repo
+    concurrently, and CLAUDE.md's multi-agent rules are discipline, not
+    enforcement.
+
+    Claims are OBSERVED, not declared. A ticket system can ask for a `touches`
+    list up front; an exploratory coding session cannot know what it will edit
+    until it edits it. So the first write registers the claim and later writers
+    are the ones warned.
+
+    ask, never deny: two agents touching one file is often legitimate (different
+    functions, different sections), and only the operator can tell that apart
+    from a real collision.
+    """
+    if tool not in ("Write", "Edit", "MultiEdit"):
+        return None
+    file_path = (tool_input.get("file_path") or "").strip()
+    if not file_path:
+        return None
+    if not os.path.isabs(file_path):
+        file_path = os.path.join(cwd or os.getcwd(), file_path)
+    real = os.path.realpath(file_path)
+    # Hook-local state is not shared work. Matched against ~/.claude
+    # specifically, NOT any path containing ".claude" — Claude Code's own
+    # worktrees live at <repo>/.claude/worktrees/, so a substring test would
+    # exclude the very sessions this check exists for.
+    hook_state = os.path.join(os.path.expanduser("~"), ".claude") + os.sep
+    if real.startswith(hook_state):
+        return None
+    # Being inside a git checkout IS the scratch filter: a temp file, a
+    # generated artifact, anything outside a repo has no merge to collide at.
+    # An explicit /tmp/ exclusion on top of this would be redundant and would
+    # also make the check untestable, since fixtures live there.
+    rel = repo_relative(real)
+    if rel is None:
+        return None
+
+    now = time.time()
+    claims = load_claims(now)
+    held = claims.get(rel)
+    if held and str(held.get("session_id") or "") not in ("", session_id):
+        age = int(now - float(held.get("ts") or 0))
+        where = str(held.get("cwd") or "")
+        return decide("ask", (
+            f"다른 세션({str(held.get('session_id'))[:12]}…)이 {_ago(age)} 전 같은 파일을 "
+            f"편집했습니다: {rel}"
+            + (f"\n  그쪽 작업 위치: {where}" if where else "")
+            + "\n  워크트리가 달라 덮어쓰기는 안 나지만, 머지 때 충돌하거나 서로의 수정을 "
+              "무효화할 수 있습니다. 같은 파일의 다른 부분이면 계속하세요."
+            + f"\n  (클레임 리셋: rm {file_claims_path()})"
+        ))
+
+    claims[rel] = {"session_id": session_id, "ts": now, "cwd": cwd or ""}
+    if len(claims) > FILE_CLAIM_MAX:
+        oldest = sorted(claims.items(), key=lambda kv: float(kv[1].get("ts") or 0))
+        for key, _ in oldest[: len(claims) - FILE_CLAIM_MAX]:
+            claims.pop(key, None)
+    try:  # best-effort; a ledger that cannot be written must not block an edit
+        os.makedirs(os.path.dirname(file_claims_path()), exist_ok=True)
+        with open(file_claims_path(), "w", encoding="utf-8") as fh:
+            json.dump(claims, fh)
+    except OSError:
+        pass
+    return None
+
+
+def _ago(seconds):
+    if seconds < 90:
+        return f"{seconds}초"
+    if seconds < 5400:
+        return f"{seconds // 60}분"
+    return f"{seconds // 3600}시간"
 
 
 def livetest_lock_path():
@@ -251,6 +405,10 @@ def main():
     session_id = str(payload.get("session_id") or "nosession")
 
     result = check_prod_edit(tool, tool_input, cwd)
+    if result is not None:
+        return result
+
+    result = check_file_claim(tool, tool_input, cwd, session_id)
     if result is not None:
         return result
 

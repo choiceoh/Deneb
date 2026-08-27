@@ -201,3 +201,81 @@ class DecisionMessageTests(GuardTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FileClaimTests(GuardTestCase):
+    """Check 6: two agents editing the same repo file from different worktrees.
+
+    Worktree isolation prevents corruption, not collision — the two branches
+    meet at merge time. Four coding harnesses run against this repo
+    concurrently, so this is routine, not hypothetical.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Two worktrees, each a git checkout, holding the SAME repo-relative file.
+        self.wt_a = self.home / "deneb/.claude/worktrees/wt1"
+        self.wt_b = self.home / "deneb/.claude/worktrees/wt2"
+        for wt in (self.wt_a, self.wt_b):
+            wt.mkdir(parents=True, exist_ok=True)
+            (wt / ".git").write_text("gitdir: /elsewhere\n", encoding="utf-8")
+            (wt / "gateway-go/internal").mkdir(parents=True, exist_ok=True)
+            (wt / "gateway-go/internal/foo.go").write_text("package foo\n", encoding="utf-8")
+
+    def edit(self, worktree, session_id):
+        return payload(
+            "Edit",
+            {"file_path": str(worktree / "gateway-go/internal/foo.go")},
+            str(worktree),
+            session_id=session_id,
+        )
+
+    def test_second_session_editing_the_same_repo_file_asks(self) -> None:
+        self.assertEqual(self.decision(self.edit(self.wt_a, "sess-a")), "allow")
+        # Different worktree, different branch, SAME repo-relative path.
+        result = self.run_guard(self.edit(self.wt_b, "sess-b"))
+        self.assertEqual(result["permissionDecision"], "ask")
+        reason = result["permissionDecisionReason"]
+        self.assertIn("gateway-go/internal/foo.go", reason)
+        self.assertIn("sess-a", reason)
+
+    def test_same_session_never_blocks_itself(self) -> None:
+        """A session edits its own files repeatedly; self-blocking would make
+        the guard unusable."""
+        for _ in range(3):
+            self.assertEqual(self.decision(self.edit(self.wt_a, "sess-a")), "allow")
+        # Even from a second worktree, one session is not competing with itself.
+        self.assertEqual(self.decision(self.edit(self.wt_b, "sess-a")), "allow")
+
+    def test_different_files_do_not_collide(self) -> None:
+        other = self.wt_b / "gateway-go/internal/bar.go"
+        other.write_text("package foo\n", encoding="utf-8")
+        self.assertEqual(self.decision(self.edit(self.wt_a, "sess-a")), "allow")
+        self.assertEqual(
+            self.decision(payload("Edit", {"file_path": str(other)}, str(self.wt_b), "sess-b")),
+            "allow",
+        )
+
+    def test_expired_claim_stops_warning(self) -> None:
+        """A dead session must not hold a file forever."""
+        claims = self.home / ".claude/deneb-file-claims.json"
+        claims.write_text(json.dumps({
+            "gateway-go/internal/foo.go": {
+                "session_id": "sess-ghost",
+                "ts": time.time() - 999_999,
+                "cwd": "/gone",
+            }
+        }), encoding="utf-8")
+        self.assertEqual(self.decision(self.edit(self.wt_b, "sess-b")), "allow")
+
+    def test_files_outside_a_checkout_are_not_claimed(self) -> None:
+        loose = self.home / "notes.md"
+        loose.write_text("x\n", encoding="utf-8")
+        stdin = payload("Edit", {"file_path": str(loose)}, str(self.home), "sess-a")
+        self.assertEqual(self.decision(stdin), "allow")
+        self.assertFalse((self.home / ".claude/deneb-file-claims.json").exists())
+
+    def test_corrupt_ledger_does_not_block_edits(self) -> None:
+        """The guard is fail-open everywhere else; the ledger is no exception."""
+        (self.home / ".claude/deneb-file-claims.json").write_text("{not json", encoding="utf-8")
+        self.assertEqual(self.decision(self.edit(self.wt_a, "sess-a")), "allow")
