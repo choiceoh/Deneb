@@ -10,11 +10,17 @@
 # stdin JSON payload may not carry cwd/session_id keys.  This bridge ensures
 # both are present so the Claude scripts work unmodified under ZCode.
 #
-# Usage:  bash zcode-hook-bridge.sh <script.py>
+# Usage:  bash zcode-hook-bridge.sh <script.py> [mode]
 # stdin:  the ZCode hook payload JSON (passed through, enriched)
+# mode "claim": translate a Claude permissionDecision=deny JSON into ZCode's
+#   one feedback channel — exit 2 with the reason on stderr. Together with the
+#   guard's warn-once ledger this is block-once: the denial carries the story
+#   and the session's retry passes (the same conversation the codegraph nudge
+#   and the rules-gate already have with agents here).
 set -uo pipefail
 
 TARGET="${1:-}"
+MODE="${2:-passthrough}"
 [[ -n "$TARGET" && -f "$TARGET" ]] || exit 0
 
 # Read stdin once, enrich, re-emit to the target script.
@@ -35,5 +41,17 @@ ENRICHED=$(echo "$INPUT" | jq -c \
   '.cwd = (.cwd // $cwd) | .session_id = (.session_id // $sid)' 2>/dev/null \
 ) || ENRICHED="$INPUT"
 
-# Run the target script with the enriched payload.  Propagate exit code.
+# Run the target script with the enriched payload.
+if [[ "$MODE" == "claim" ]]; then
+  OUT=$(echo "$ENRICHED" | python3 "$TARGET" 2>/dev/null) || exit 0  # fail-open
+  if [[ -n "$OUT" ]]; then
+    DECISION=$(echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null || true)
+    if [[ "$DECISION" == "deny" ]]; then
+      echo "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason // "blocked"' >&2 2>/dev/null         || echo "blocked by concurrency guard" >&2
+      exit 2
+    fi
+  fi
+  exit 0
+fi
+# Propagate exit code (passthrough).
 echo "$ENRICHED" | python3 "$TARGET"

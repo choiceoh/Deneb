@@ -51,11 +51,10 @@ set -e
 
 case "$MODE" in
   claim)
-    # Concurrency-guard adapter. Claude's "ask" has no Cursor equivalent the
-    # fleet has verified, so it degrades to allow + agent_message: the agent is
-    # TOLD about the collision and keeps going. The claim itself was already
-    # registered as a side effect of running the guard, which is the half that
-    # matters cross-harness — it is what makes Claude sessions see Cursor's
+    # Concurrency-guard adapter: the guard's block-once deny maps to Cursor's
+    # native deny, message intact — the warn-once ledger makes the retry pass.
+    # Registering the claim is a side effect of running the guard at all, which
+    # is the half that matters cross-harness: Claude sessions see Cursor's
     # edits and vice versa.
     if [[ "$RC" -eq 2 ]]; then
       MSG=$(cat "$ERR"); [[ -n "$MSG" ]] || MSG="blocked by hook"
@@ -71,12 +70,6 @@ case "$MODE" in
         MSG_JSON=$(printf '%s' "$REASON" | jq -Rs .)
         printf '{"permission":"deny","agent_message":%s,"user_message":%s}
 ' "$MSG_JSON" "$MSG_JSON"
-        exit 0
-      fi
-      if [[ "$DECISION" == "ask" && -n "$REASON" ]]; then
-        MSG_JSON=$(printf '%s' "$REASON" | jq -Rs .)
-        printf '{"permission":"allow","agent_message":%s}
-' "$MSG_JSON"
         exit 0
       fi
     fi
