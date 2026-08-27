@@ -684,8 +684,14 @@ func TestSendFailureAlertHandoffAndCooldownPersistence(t *testing.T) {
 }
 
 func TestStoreDefaultPathCloneAndCorruptLoad(t *testing.T) {
-	if got := DefaultCronStorePath("/home/user"); got != filepath.Join("/home/user", ".deneb/cron/jobs.json") {
+	// The argument is a resolved STATE dir, not a home dir: production passes
+	// $HOME/.deneb and gets the same path as before, while DENEB_STATE_DIR keeps
+	// a dev gateway off the operator's real schedule.
+	if got := DefaultCronStorePath("/home/user/.deneb"); got != filepath.Join("/home/user/.deneb", "cron", "jobs.json") {
 		t.Fatalf("default path = %q", got)
+	}
+	if got := DefaultCronStorePath("/tmp/deneb-dev-state"); got != filepath.Join("/tmp/deneb-dev-state", "cron", "jobs.json") {
+		t.Fatalf("dev state path = %q", got)
 	}
 	if cloneStoreFile(nil) != nil {
 		t.Fatal("nil clone nonnil")

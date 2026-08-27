@@ -424,7 +424,11 @@ func newWithDirectGrammarCatalogValidator(addr string, validateDirectGrammarCata
 	s.publisher = events.NewPublisher(s.broadcaster, &sessionSnapshotProvider{sessions: s.sessions}, s.logger)
 	s.gatewaySubs.SetPublisher(s.publisher)
 	s.processes = process.NewManager(s.logger)
-	if homeDir, err := os.UserHomeDir(); err == nil {
+	{
+		// No home-directory lookup here any more: the cron store path resolves
+		// from the STATE dir (which honors DENEB_STATE_DIR), and that resolver
+		// owns its own fallbacks. Gating cron wiring on os.UserHomeDir was only
+		// ever a side effect of building the path from $HOME.
 		cronEnabled := true
 		// Load config early just to honor a cron-disabled setting. The cron
 		// delivery default (DefaultChannel/DefaultTo below) no longer depends on
@@ -435,7 +439,10 @@ func newWithDirectGrammarCatalogValidator(addr string, validateDirectGrammarCata
 				cronEnabled = false
 			}
 		}
-		storePath := cron.DefaultCronStorePath(homeDir)
+		// State dir, not home: DENEB_STATE_DIR keeps a dev/live-test gateway off
+		// the operator's real schedule (cron/store.go). Resolves to the same
+		// $HOME/.deneb/cron/jobs.json in production.
+		storePath := cron.DefaultCronStorePath(config.ResolveStateDir())
 		s.cronRunLog = cron.NewPersistentRunLog(storePath)
 		// Cron delivery defaults: every report routes to the native client's
 		// 업무 chat (client:main) via MainSessionHandoff regardless of the
