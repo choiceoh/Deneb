@@ -131,13 +131,19 @@ func (t *SelfCorrectionWatchTask) Run(ctx context.Context) error {
 	next := make(map[string]bool, len(cands))
 	for _, c := range cands {
 		next[c.ID] = true
-		if firstRun || prev[c.ID] {
-			continue
-		}
+		// The judge sees every still-proposed candidate, not just unseen ones.
+		//
+		// Gating it on "new" left the existing backlog stranded: those ids are
+		// already in the snapshot, so a judge added later would never look at
+		// them and their cards would sit in the feed forever. On 2026-08-27
+		// that was 13 candidates, the oldest from 07-26. Draining them is the
+		// whole point of having a judge.
 		if t.judged(ctx, c, logger) {
 			continue
 		}
-		if t.OnNew == nil {
+		// Carding, by contrast, stays first-sight-only — re-posting a card the
+		// operator already has is how a feed becomes unreadable.
+		if firstRun || prev[c.ID] || t.OnNew == nil {
 			continue
 		}
 		if err := t.OnNew(c); err != nil {
