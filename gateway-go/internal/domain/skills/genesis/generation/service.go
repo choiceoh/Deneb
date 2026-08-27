@@ -144,6 +144,14 @@ type Service struct {
 	judgeClient   *llm.Client
 	judgeModel    string
 	judgeThinking *llm.ThinkingConfig
+	// thinkingOff disables reasoning on dual-mode models for the GENERATION
+	// calls. The judge got this treatment; generation did not, and the gap was
+	// silent until the backlog drainer's failures reached the anomaly ledger —
+	// four straight passes returning "1.  **Analyze the Request**:" instead of
+	// JSON, which is chain-of-thought spent in the content channel until the
+	// 8192-token budget ran out. Nil means "send no directive", which is the
+	// correct behavior for single-mode models.
+	thinkingOff func(model string) *llm.ThinkingConfig
 
 	mu             sync.Mutex
 	recentSkills   map[string]time.Time // skill name → last generated
@@ -201,6 +209,26 @@ func (s *Service) metaLoad(name, fallback string) string {
 }
 
 // SetJudge configures the client, model, and thinking policy used to judge candidates.
+// SetGenerationThinking installs the per-model thinking-disable resolver used
+// by every generation call. It takes a func rather than a config because the
+// generation model is resolved per call (a session may pin its own).
+func (s *Service) SetGenerationThinking(fn func(model string) *llm.ThinkingConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.thinkingOff = fn
+}
+
+// thinkingFor resolves the directive for one model, or nil when none applies.
+func (s *Service) thinkingFor(model string) *llm.ThinkingConfig {
+	s.mu.Lock()
+	fn := s.thinkingOff
+	s.mu.Unlock()
+	if fn == nil {
+		return nil
+	}
+	return fn(model)
+}
+
 func (s *Service) SetJudge(client *llm.Client, model string, thinking *llm.ThinkingConfig) {
 	s.judgeClient = client
 	s.judgeModel = model
@@ -364,6 +392,7 @@ func (s *Service) Generate(ctx context.Context, sctx SessionContext) (*Generated
 
 	events, err := s.llmClient.StreamChat(ctx, llm.ChatRequest{
 		Model:          s.resolveModel(sctx.Model),
+		Thinking:       s.thinkingFor(s.resolveModel(sctx.Model)),
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:         llm.SystemString(s.metaLoad(MetaGenesisSystemPrompt, genesisSystemPrompt)),
 		MaxTokens:      generationMaxTokens,
@@ -399,6 +428,7 @@ func (s *Service) GenerateFromDream(ctx context.Context, summaryContent string) 
 
 	events, err := s.llmClient.StreamChat(ctx, llm.ChatRequest{
 		Model:          s.cfg.Model,
+		Thinking:       s.thinkingFor(s.cfg.Model),
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:         llm.SystemString(s.metaLoad(MetaGenesisSystemPrompt, genesisSystemPrompt)),
 		MaxTokens:      generationMaxTokens,
@@ -437,6 +467,7 @@ func (s *Service) GenerateFromBacklog(ctx context.Context, brief string) (*Gener
 
 	events, err := s.llmClient.StreamChat(ctx, llm.ChatRequest{
 		Model:          s.cfg.Model,
+		Thinking:       s.thinkingFor(s.cfg.Model),
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:         llm.SystemString(s.metaLoad(MetaGenesisSystemPrompt, genesisSystemPrompt)),
 		MaxTokens:      generationMaxTokens,
