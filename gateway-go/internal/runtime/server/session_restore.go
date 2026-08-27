@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,12 +15,11 @@ import (
 //
 // Called once at startup after all channel plugins have had a chance to start.
 func (s *Server) restoreAndWakeSessions(_ context.Context) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		s.logger.Warn("session restore: cannot determine home dir", "error", err)
+	transcriptDir := transcriptBaseDir()
+	if transcriptDir == "" {
+		s.logger.Warn("session restore: cannot resolve the transcript dir")
 		return
 	}
-	transcriptDir := filepath.Join(home, ".deneb", "transcripts")
 
 	entries, err := os.ReadDir(transcriptDir)
 	if err != nil {

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
@@ -133,10 +135,7 @@ func (s *Server) broadcastSessionEvent(event string, payload events.EventPayload
 }
 
 func (s *Server) openSessionTranscriptStore() (chat.TranscriptStore, string, *polaris.Store) {
-	transcriptDir := ""
-	if home, err := os.UserHomeDir(); err == nil {
-		transcriptDir = home + "/.deneb/transcripts"
-	}
+	transcriptDir := transcriptBaseDir()
 	if transcriptDir == "" {
 		return nil, "", nil
 	}
@@ -151,12 +150,10 @@ func (s *Server) openSessionTranscriptStore() (chat.TranscriptStore, string, *po
 }
 
 func (s *Server) openPolarisTranscriptBridge(cached chat.TranscriptStore) (chat.TranscriptStore, *polaris.Store) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		s.logger.Error("polaris: cannot determine home directory", "error", err)
-		return nil, nil
-	}
-	polarisStore, err := polaris.NewStore(home + "/.deneb/polaris.db")
+	// Polaris indexes the transcripts above, so it must live beside them: a dev
+	// gateway writing its probes into the operator's conversation index is the
+	// same leak, one layer down.
+	polarisStore, err := polaris.NewStore(filepath.Join(config.ResolveStateDir(), "polaris.db"))
 	if err != nil {
 		s.logger.Error("polaris: failed to open store", "error", err)
 		return nil, nil
