@@ -36,6 +36,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
@@ -549,12 +550,22 @@ func (s *Server) dispatchResumeMessage(ctx context.Context, sessionKey, channel,
 // transcriptBaseDir returns the directory where session transcripts live.
 // Matches the path used by restoreAndWakeSessions so the two subsystems
 // always agree on which files to inspect.
+// transcriptBaseDir is the one place the transcript directory is resolved.
+//
+// It follows the STATE dir (DENEB_STATE_DIR), not $HOME — the same boundary the
+// workspace, wiki and cron store use. Anchoring on $HOME meant every dev,
+// live-test and puppet gateway appended its probe conversations to the
+// operator's real transcripts; the skill-review candidate pool measured 142
+// harness transcripts against 58 real client ones (domain/session/native_keys.go)
+// and IsLiveTestSession exists to filter that pollution at READ time. This
+// removes it at the source. Production is unchanged: the default state dir is
+// $HOME/.deneb.
 func transcriptBaseDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
+	stateDir := strings.TrimSpace(config.ResolveStateDir())
+	if stateDir == "" {
 		return ""
 	}
-	return filepath.Join(home, ".deneb", "transcripts")
+	return filepath.Join(stateDir, "transcripts")
 }
 
 // tailShapeString renders the enum for structured logs.

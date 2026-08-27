@@ -47,6 +47,9 @@ func TestRestoreAndWakeSessions_RestoresNativeSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", tmpHome)
+	// Transcripts follow the STATE dir (auto_resume.go transcriptBaseDir); pin
+	// it to this test's home so the fixtures land where the server looks.
+	t.Setenv("DENEB_STATE_DIR", filepath.Join(tmpHome, ".deneb"))
 
 	// Live native sessions (client:main and client:main:<id>) restore. Retired
 	// shapes must NOT: the topic sessions removed in #1963 (client:coding,
@@ -108,6 +111,9 @@ func TestRestoreAndWakeSessions_RestoresSessionModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", tmpHome)
+	// Transcripts follow the STATE dir (auto_resume.go transcriptBaseDir); pin
+	// it to this test's home so the fixtures land where the server looks.
+	t.Setenv("DENEB_STATE_DIR", filepath.Join(tmpHome, ".deneb"))
 	makeSessionTranscript(t, transcriptDir, "client:main:alpha")
 	modelsPath := filepath.Join(tmpHome, ".deneb", "session-models.json")
 	if err := os.WriteFile(modelsPath, []byte(`{"client:main:alpha":"kimi/kimi-k2.5"}`), 0o600); err != nil {
@@ -134,6 +140,9 @@ func TestRestoreAndWakeSessions_RestoresListPinAndFocus(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", tmpHome)
+	// Transcripts follow the STATE dir (auto_resume.go transcriptBaseDir); pin
+	// it to this test's home so the fixtures land where the server looks.
+	t.Setenv("DENEB_STATE_DIR", filepath.Join(tmpHome, ".deneb"))
 	makeSessionTranscript(t, transcriptDir, "client:main:pinned")
 	if err := os.WriteFile(filepath.Join(tmpHome, ".deneb", "session-list-pins.json"), []byte(`["client:main:pinned"]`), 0o600); err != nil {
 		t.Fatal(err)
@@ -164,6 +173,9 @@ func TestForgetSessionExtrasDropsSidecars(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", tmpHome)
+	// Transcripts follow the STATE dir (auto_resume.go transcriptBaseDir); pin
+	// it to this test's home so the fixtures land where the server looks.
+	t.Setenv("DENEB_STATE_DIR", filepath.Join(tmpHome, ".deneb"))
 	if err := os.WriteFile(filepath.Join(tmpHome, ".deneb", "session-models.json"), []byte(`{"client:main:gone":"kimi/kimi-k2.5"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}

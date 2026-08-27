@@ -272,6 +272,12 @@ func newAutoResumeTestServer(t *testing.T, tmpHome string) *Server {
 	// t.Setenv requires the test not be marked t.Parallel() — callers of
 	// this helper must omit t.Parallel().
 	t.Setenv("HOME", tmpHome)
+	// The transcript dir follows the STATE dir (auto_resume.go's
+	// transcriptBaseDir), and TestMain points that at one process-wide temp dir
+	// shared by the whole package. Pin it to this test's own home so the
+	// fixtures below land where the server will look AND stay isolated from
+	// sibling tests.
+	t.Setenv("DENEB_STATE_DIR", filepath.Join(tmpHome, ".deneb"))
 
 	denebDir := filepath.Join(tmpHome, ".deneb")
 	_ = os.MkdirAll(denebDir, 0o755)

@@ -157,6 +157,9 @@ func TestRestoreAppliesStoredLabels(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", tmpHome)
+	// Transcripts follow the STATE dir; pin it to this test's home so the
+	// fixtures land where restoreAndWakeSessions looks (see auto_resume.go).
+	t.Setenv("DENEB_STATE_DIR", filepath.Join(tmpHome, ".deneb"))
 
 	makeSessionTranscript(t, transcriptDir, "client:main:labeled")
 	storePath := filepath.Join(tmpHome, ".deneb", "session-labels.json")
@@ -184,6 +187,9 @@ func TestRestoreAppliesStoredPins(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", tmpHome)
+	// Transcripts follow the STATE dir; pin it to this test's home so the
+	// fixtures land where restoreAndWakeSessions looks (see auto_resume.go).
+	t.Setenv("DENEB_STATE_DIR", filepath.Join(tmpHome, ".deneb"))
 
 	makeSessionTranscript(t, transcriptDir, "client:main:pinned")
 	labelPath := filepath.Join(tmpHome, ".deneb", "session-labels.json")
