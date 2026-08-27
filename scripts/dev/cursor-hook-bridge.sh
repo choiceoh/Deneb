@@ -30,6 +30,11 @@ ENRICHED=$(echo "$INPUT" | jq -c \
     .cwd = (.cwd // $cwd)
     | .session_id = (.session_id // $sid)
     | if .tool_name == "Shell" then .tool_name = "Bash" else . end
+    # Cursor file tools → the names Claude-oriented scripts key on. Without
+    # this, StrReplace edits walk straight past any tool-list check (the
+    # concurrency guard included) while looking wired.
+    | if .tool_name == "StrReplace" or .tool_name == "EditNotebook" then .tool_name = "Edit" else . end
+    | if .tool_name == "Delete" then .tool_name = "Write" else . end
     | if (.tool_input.path != null) and (.tool_input.file_path == null) then
         .tool_input.file_path = .tool_input.path
       else . end
@@ -45,6 +50,31 @@ RC=$?
 set -e
 
 case "$MODE" in
+  claim)
+    # Concurrency-guard adapter: the guard's block-once deny maps to Cursor's
+    # native deny, message intact — the warn-once ledger makes the retry pass.
+    # Registering the claim is a side effect of running the guard at all, which
+    # is the half that matters cross-harness: Claude sessions see Cursor's
+    # edits and vice versa.
+    if [[ "$RC" -eq 2 ]]; then
+      MSG=$(cat "$ERR"); [[ -n "$MSG" ]] || MSG="blocked by hook"
+      MSG_JSON=$(printf '%s' "$MSG" | jq -Rs .)
+      printf '{"permission":"deny","agent_message":%s,"user_message":%s}
+' "$MSG_JSON" "$MSG_JSON"
+      exit 0
+    fi
+    if [[ -s "$OUT" ]]; then
+      DECISION=$(jq -r '.hookSpecificOutput.permissionDecision // empty' "$OUT" 2>/dev/null || true)
+      REASON=$(jq -r '.hookSpecificOutput.permissionDecisionReason // empty' "$OUT" 2>/dev/null || true)
+      if [[ "$DECISION" == "deny" ]]; then
+        MSG_JSON=$(printf '%s' "$REASON" | jq -Rs .)
+        printf '{"permission":"deny","agent_message":%s,"user_message":%s}
+' "$MSG_JSON" "$MSG_JSON"
+        exit 0
+      fi
+    fi
+    exit 0
+    ;;
   nudge|gate)
     if [[ "$RC" -eq 2 ]]; then
       MSG=$(cat "$ERR")

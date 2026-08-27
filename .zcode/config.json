@@ -91,6 +91,17 @@
               "statusMessage": "pre-commit: committer 호출 시 go-fmt/vet 게이트"
             }
           ]
+        },
+        {
+          "matcher": "^(Write|Edit|MultiEdit|Bash)$",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "bash \"${ZCODE_PROJECT_DIR}/scripts/dev/zcode-hook-bridge.sh\" \"${ZCODE_PROJECT_DIR}/scripts/dev/deneb-concurrency-guard.py\" claim",
+              "timeout": 10,
+              "statusMessage": "concurrency: 동시 세션 파일 클레임 확인"
+            }
+          ]
         }
       ],
       "PostToolUse": [

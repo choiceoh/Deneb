@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -11,6 +12,8 @@ import unittest
 from pathlib import Path
 
 from test_support import REPO_ROOT, invoke_main, load_script
+
+claims_module = load_script("scripts/dev/deneb_file_claims.py")
 
 guard = load_script("scripts/dev/deneb-concurrency-guard.py")
 
@@ -230,14 +233,18 @@ class FileClaimTests(GuardTestCase):
             session_id=session_id,
         )
 
-    def test_second_session_editing_the_same_repo_file_asks(self) -> None:
+    def test_second_session_editing_the_same_repo_file_is_blocked_once(self) -> None:
         self.assertEqual(self.decision(self.edit(self.wt_a, "sess-a")), "allow")
-        # Different worktree, different branch, SAME repo-relative path.
+        # Different worktree, different branch, SAME repo-relative path. Deny —
+        # not ask — because block-once-with-context is the one channel every
+        # harness shares, and it leaves the judgment with the agent instead of
+        # raising an operator dialog.
         result = self.run_guard(self.edit(self.wt_b, "sess-b"))
-        self.assertEqual(result["permissionDecision"], "ask")
+        self.assertEqual(result["permissionDecision"], "deny")
         reason = result["permissionDecisionReason"]
         self.assertIn("gateway-go/internal/foo.go", reason)
         self.assertIn("sess-a", reason)
+        self.assertIn("다시 시도", reason)  # the message must SAY retry passes
 
     def test_same_session_never_blocks_itself(self) -> None:
         """A session edits its own files repeatedly; self-blocking would make
@@ -325,7 +332,7 @@ class FileClaimShellTests(GuardTestCase):
             with self.subTest(form=label):
                 self.setUp()  # fresh ledger per form
                 self.hold_with_session_a()
-                self.assertEqual(self.bash_decision(command), "ask", label)
+                self.assertEqual(self.bash_decision(command), "deny", label)
 
     def test_read_only_commands_never_register_a_claim(self) -> None:
         """A mention is not an edit. Registering claims from greps would warn
@@ -354,25 +361,196 @@ class FileClaimWarnOnceTests(GuardTestCase):
         return self.decision(payload(
             "Edit", {"file_path": str(wt / "gateway-go/foo.go")}, str(wt), session_id))
 
-    def test_a_warned_session_is_not_asked_again(self) -> None:
-        """Re-asking on every write would fire dozens of times while one
-        function is edited, and a guard that cries that often gets approved
-        reflexively — worse than not having it."""
+    def test_a_warned_session_is_blocked_once_then_passes(self) -> None:
+        """Block-once IS the delivery mechanism: the denial carries the story,
+        and the retry goes through. Re-blocking every write would fire dozens
+        of times while one function is edited — worse than not having it."""
         self.edit(self.wt_a, "sess-a")
-        self.assertEqual(self.edit(self.wt_b, "sess-b"), "ask")
+        self.assertEqual(self.edit(self.wt_b, "sess-b"), "deny")
         for _ in range(5):
             self.assertEqual(self.edit(self.wt_b, "sess-b"), "allow")
 
     def test_a_third_session_is_still_warned(self) -> None:
         """Settling with one asker must not disarm the file for everyone."""
         self.edit(self.wt_a, "sess-a")
-        self.assertEqual(self.edit(self.wt_b, "sess-b"), "ask")
-        self.assertEqual(self.edit(self.wt_b, "sess-c"), "ask")
+        self.assertEqual(self.edit(self.wt_b, "sess-b"), "deny")
+        self.assertEqual(self.edit(self.wt_b, "sess-c"), "deny")
 
     def test_holder_edits_do_not_reset_the_warned_list(self) -> None:
         """The holder refreshing its claim must not make an already-warned
         session start asking again."""
         self.edit(self.wt_a, "sess-a")
-        self.assertEqual(self.edit(self.wt_b, "sess-b"), "ask")
+        self.assertEqual(self.edit(self.wt_b, "sess-b"), "deny")
         self.edit(self.wt_a, "sess-a")  # holder keeps working
         self.assertEqual(self.edit(self.wt_b, "sess-b"), "allow")
+
+
+class ClaimKeyIdentityTests(GuardTestCase):
+    """The key's identity half: same origin unifies, different repos separate.
+
+    Both directions were caught live on 2026-08-27: a bare relative path made
+    Deneb's README collide with SolarFlow's, and a byte-compared origin split
+    ~/deneb (…/deneb) from ~/deneb-dev (…/Deneb.git) — one repo, two spellings.
+    """
+
+    def make_repo(self, name, origin=None, worktree_of=None):
+        root = self.home / name
+        root.mkdir(parents=True, exist_ok=True)
+        if worktree_of is not None:
+            gitdir = self.home / worktree_of / f".git/worktrees/{name}"
+            gitdir.mkdir(parents=True, exist_ok=True)
+            (root / ".git").write_text(f"gitdir: {gitdir}\n", encoding="utf-8")
+        else:
+            (root / ".git").mkdir(exist_ok=True)
+            (root / ".git/HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+            if origin:
+                (root / ".git/config").write_text(
+                    f'[remote "origin"]\n\turl = {origin}\n', encoding="utf-8")
+        return root
+
+    def key_for(self, repo_root):
+        keyed = claims_module.claim_key(str(repo_root / "README.md"))
+        self.assertIsNotNone(keyed)
+        return keyed[0]
+
+    def test_different_repos_never_share_a_key(self) -> None:
+        a = self.make_repo("deneb-x", origin="https://github.com/choiceoh/deneb")
+        b = self.make_repo("solarflow", origin="https://github.com/choiceoh/solarflow")
+        self.assertNotEqual(self.key_for(a), self.key_for(b))
+
+    def test_origin_spellings_unify(self) -> None:
+        spellings = (
+            "https://github.com/choiceoh/deneb",
+            "https://github.com/choiceoh/Deneb.git",
+            "git@github.com:choiceoh/Deneb.git",
+        )
+        keys = set()
+        for i, url in enumerate(spellings):
+            keys.add(self.key_for(self.make_repo(f"clone{i}", origin=url)))
+        self.assertEqual(len(keys), 1, keys)
+
+    def test_worktree_shares_its_parent_repos_identity(self) -> None:
+        main = self.make_repo("mainrepo", origin="https://github.com/choiceoh/deneb")
+        wt = self.make_repo("wt-branch", worktree_of="mainrepo")
+        self.assertEqual(self.key_for(main), self.key_for(wt))
+
+    def test_local_only_repo_still_gets_a_stable_identity(self) -> None:
+        a = self.make_repo("local-a")
+        b = self.make_repo("local-b")
+        self.assertNotEqual(self.key_for(a), self.key_for(b))
+
+
+class CursorBridgeClaimModeTests(unittest.TestCase):
+    """The cross-harness half: Cursor edits must feed the same ledger and
+    receive the same warnings, through cursor-hook-bridge.sh's claim mode.
+
+    Exercised as a real subprocess because the value under test IS the
+    protocol translation — StrReplace→Edit, path→file_path, Claude ask JSON →
+    Cursor allow+agent_message. Mocking any of that would test the mock.
+    """
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.home = Path(tmp.name)
+        (self.home / ".claude").mkdir()
+        for wt in ("wt1", "wt2"):
+            d = self.home / "deneb/.claude/worktrees" / wt
+            (d / "gateway-go").mkdir(parents=True)
+            (d / ".git").write_text("gitdir: /elsewhere\n", encoding="utf-8")
+
+    def bridge(self, payload_json, session_env):
+        env = dict(os.environ)
+        env["HOME"] = str(self.home)
+        env.update(session_env)
+        proc = subprocess.run(
+            ["bash", str(REPO_ROOT / "scripts/dev/cursor-hook-bridge.sh"),
+             str(REPO_ROOT / "scripts/dev/deneb-concurrency-guard.py"), "claim"],
+            input=payload_json, capture_output=True, text=True, env=env, timeout=30,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return json.loads(proc.stdout) if proc.stdout.strip() else None
+
+    def claim_as_claude(self, session_id="claude-a") -> None:
+        env = dict(os.environ)
+        env["HOME"] = str(self.home)
+        wt = self.home / "deneb/.claude/worktrees/wt1"
+        subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts/dev/deneb-concurrency-guard.py")],
+            input=json.dumps({
+                "tool_name": "Edit",
+                "tool_input": {"file_path": str(wt / "gateway-go/foo.go")},
+                "cwd": str(wt), "session_id": session_id,
+            }), capture_output=True, text=True, env=env, timeout=30,
+        )
+
+    def test_strreplace_on_a_claimed_file_is_blocked_once_with_the_story(self) -> None:
+        self.claim_as_claude()
+        wt2 = self.home / "deneb/.claude/worktrees/wt2"
+        payload_json = json.dumps({
+            "tool_name": "StrReplace",
+            "tool_input": {"path": str(wt2 / "gateway-go/foo.go")},
+            "cwd": str(wt2),
+        })
+        out = self.bridge(payload_json, {"CURSOR_SESSION_ID": "cursor-b"})
+        self.assertIsNotNone(out, "bridge produced no decision")
+        self.assertEqual(out["permission"], "deny")
+        self.assertIn("gateway-go/foo.go", out["agent_message"])
+        self.assertIn("claude-a", out["agent_message"])
+        # The retry is the other half of the contract: warned once, then through.
+        retry = self.bridge(payload_json, {"CURSOR_SESSION_ID": "cursor-b"})
+        self.assertTrue(retry is None or retry.get("permission") != "deny",
+                        f"retry must pass, got {retry}")
+
+    def test_cursor_edit_registers_a_claim_other_harnesses_can_see(self) -> None:
+        wt2 = self.home / "deneb/.claude/worktrees/wt2"
+        self.bridge(json.dumps({
+            "tool_name": "StrReplace",
+            "tool_input": {"path": str(wt2 / "gateway-go/foo.go")},
+            "cwd": str(wt2),
+        }), {"CURSOR_SESSION_ID": "cursor-b"})
+        ledger = json.loads((self.home / ".claude/deneb-file-claims.json").read_text())
+        keys = list(ledger.keys())
+        self.assertEqual(len(keys), 1, keys)
+        self.assertTrue(keys[0].endswith(":gateway-go/foo.go"), keys)
+        self.assertEqual(ledger[keys[0]]["session_id"], "cursor-b")
+
+
+class LedgerConcurrencyTests(unittest.TestCase):
+    """The flock contract: simultaneous hooks are the PREMISE of this feature,
+    so the ledger must survive them. Exercised with real concurrent processes —
+    an in-process test of a file lock proves nothing."""
+
+    def test_parallel_claims_are_not_lost(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        home = Path(tmp.name)
+        (home / ".claude").mkdir()
+        repo = home / "deneb/.claude/worktrees/wt1"
+        (repo / "gateway-go").mkdir(parents=True)
+        (repo / ".git").write_text("gitdir: /elsewhere\n", encoding="utf-8")
+
+        env = dict(os.environ)
+        env["HOME"] = str(home)
+        procs = []
+        for i in range(12):
+            payload_json = json.dumps({
+                "tool_name": "Edit",
+                "tool_input": {"file_path": str(repo / f"gateway-go/file{i}.go")},
+                "cwd": str(repo), "session_id": f"sess-{i}",
+            })
+            procs.append(subprocess.Popen(
+                [sys.executable, str(REPO_ROOT / "scripts/dev/deneb-concurrency-guard.py")],
+                stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, env=env, text=True,
+            ))
+            procs[-1].stdin.write(payload_json)
+        for p in procs:
+            p.stdin.close()
+        for p in procs:
+            self.assertEqual(p.wait(timeout=30), 0)
+
+        ledger = json.loads((home / ".claude/deneb-file-claims.json").read_text())
+        # Without the flock, concurrent read-modify-write loses claims — the
+        # slower writer clobbers the faster one's entry, i.e. a lost warning.
+        self.assertEqual(len(ledger), 12, sorted(ledger.keys()))

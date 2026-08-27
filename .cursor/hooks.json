@@ -20,9 +20,19 @@
         "timeout": 10
       },
       {
+        "matcher": "Write|StrReplace|Delete|EditNotebook",
+        "command": ".cursor/hooks/concurrency-claim.sh",
+        "timeout": 10
+      },
+      {
         "matcher": "Grep|Shell",
         "command": ".cursor/hooks/codegraph-nudge.sh",
         "timeout": 12
+      },
+      {
+        "matcher": "Shell",
+        "command": ".cursor/hooks/concurrency-claim.sh",
+        "timeout": 10
       }
     ],
     "postToolUse": [
