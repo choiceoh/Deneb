@@ -20,6 +20,15 @@ type Params struct {
 	// runstate.RunParams.AllowRecall for why the two are separate.
 	AllowRecall bool
 	SkipRecall  bool
+	// FilesToolReachable says the run may actually call the `files` tool. The
+	// evidence header points at it for opening a source=file row in full, and a
+	// restricted preset (researcher/implementer/verifier — none of which allow
+	// `files`) cannot: the allow-list gates fetch_tools activation too, so the
+	// pointer is unreachable, not merely deferred. Measured from the puppet seat
+	// 2026-08-27 on an implementer sub-agent. The knowledge(op="read") route is
+	// named unconditionally because it rides the same allow-lists as the wiki
+	// surfaces those presets keep.
+	FilesToolReachable bool
 }
 
 // recallSuppressed reports whether this turn must not run the preflight.

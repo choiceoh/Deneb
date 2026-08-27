@@ -68,7 +68,7 @@ func prepareContextAndPrompt(
 	prepWg.Add(1)
 	safego.GoWithSlog(logger, "prep-recall", func() {
 		defer prepWg.Done()
-		recall := buildRecallSnapshot(ctx, params, deps, logger)
+		recall := buildRecallSnapshot(ctx, params, deps, sessionToolPreset, logger)
 		resultMu.Lock()
 		result.RecallMemory = recall
 		resultMu.Unlock()
@@ -137,7 +137,7 @@ func buildTier1WikiSnapshot(params RunParams, deps runDeps) string {
 // buildRecallSnapshot runs the recall preflight for the turn: profile/toggle
 // gates, per-cue caching, and the multi-source search. Returns the wire-ready
 // recall block ("" when gated or no evidence).
-func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, logger *slog.Logger) string {
+func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, sessionToolPreset string, logger *slog.Logger) string {
 	// Ephemeral turns (autonomous heartbeat self-triggers) never run
 	// recall — there is no real user message to recall against. SkipRecall
 	// is the user's "focused chat / memory off" toggle: skip the whole
@@ -190,6 +190,11 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, lo
 			EphemeralUser: params.EphemeralUser,
 			AllowRecall:   params.AllowRecall,
 			SkipRecall:    params.SkipRecall,
+			// The evidence header points at `files` for opening a source=file
+			// row; a restricted preset cannot reach it (the allow-list gates
+			// fetch_tools activation too), so the caller — which knows the
+			// preset — decides whether that route may be named.
+			FilesToolReachable: toolAllowedUnderPreset("files", sessionToolPreset),
 		},
 		chatrecall.Deps{
 			Wiki:         deps.memory.Wiki,

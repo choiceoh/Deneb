@@ -255,3 +255,14 @@ func skillsRunnableUnderPreset(hints []skills.PromptSkill, sessionToolPreset str
 	}
 	return runnable
 }
+
+// toolAllowedUnderPreset reports whether a run with this preset may call the
+// named tool. A nil allow-list means the preset is unrestricted.
+func toolAllowedUnderPreset(name, sessionToolPreset string) bool {
+	allowed := toolwire.AllowedTools(sessionToolPreset)
+	if allowed == nil {
+		return true
+	}
+	_, ok := allowed[name]
+	return ok
+}
