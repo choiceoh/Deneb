@@ -11,12 +11,26 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
-// DefaultCronDir is the default directory for cron data.
-const DefaultCronDir = ".deneb/cron"
+// CronDirname is the cron data directory, relative to the resolved state dir.
+const CronDirname = "cron"
 
-// DefaultCronStorePath returns the default path for the cron job store.
-func DefaultCronStorePath(homeDir string) string {
-	return filepath.Join(homeDir, DefaultCronDir, "jobs.json")
+// DefaultCronStorePath returns the cron job store path under a resolved STATE
+// directory — not the raw home directory.
+//
+// The distinction is the whole point: the state dir honors DENEB_STATE_DIR, so
+// a dev or live-test gateway keeps its own jobs.json. Anchoring on $HOME meant
+// every non-production gateway read and WROTE the operator's real schedule.
+// Measured 2026-08-26: a puppet-mode `cron add` test replaced the production
+// morning-letter job (08:00 `/morning` → 22:00 with a test command) and the
+// letter fired that night at 22:00; jobs.json.bak had already rolled over to
+// the damaged copy, so the original had to be recovered from a past run's
+// transcript. The workspace was isolated for the same reason (#4693).
+//
+// Production is unchanged byte-for-byte: the default state dir IS
+// $HOME/.deneb, so this still resolves to $HOME/.deneb/cron/jobs.json. Nothing
+// to migrate.
+func DefaultCronStorePath(stateDir string) string {
+	return filepath.Join(stateDir, CronDirname, "jobs.json")
 }
 
 // CronStoreFile is the on-disk format for the cron job store.
