@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	airerank "github.com/choiceoh/deneb/gateway-go/internal/ai/rerank"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -181,6 +182,10 @@ func (s *Server) newSessionAgentLogWriter() *agentlog.Writer {
 		return nil
 	}
 	writer := agentlog.NewWriter(home + "/.deneb/agent-logs")
+	// Teach the aggregator which sessions a person was waiting on. agentlog is
+	// a core package and cannot reach the run-kind vocabulary in domain/session,
+	// so the classifier is injected here rather than copied there.
+	writer.SetInteractiveSessionFilter(session.IsInteractiveSessionKey)
 	// Retention runs once per process start, off the startup path: the sweep
 	// stats one directory entry per session ever logged, which had grown to
 	// 5K+ files with no other bound.
