@@ -271,6 +271,13 @@ func (s *Service) sendFailureAlert(ctx context.Context, job StoreJob, outcome Ru
 	if err != nil || !handled {
 		s.logger.Error("failure alert delivery failed",
 			"jobID", job.ID, "handled", handled, "error", err)
+		// Do NOT start the cooldown on an alert the operator never received.
+		// The cooldown exists to stop DUPLICATE alerts; arming it after a failed
+		// delivery converts a broken handoff into total silence — the job keeps
+		// failing, every later alert is suppressed by a window opened for a
+		// message nobody got, and the only trace is this log line. The next
+		// failed run retries the alert instead.
+		return
 	}
 
 	// Update last failure alert timestamp so the cooldown window works.

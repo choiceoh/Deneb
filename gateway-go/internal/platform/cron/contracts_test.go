@@ -3,6 +3,7 @@ package cron
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"math"
@@ -776,5 +777,58 @@ func TestCompareInt64Contract(t *testing.T) {
 		if got := compareInt64(tt.a, tt.b); got != tt.want {
 			t.Errorf("compareInt64(%d,%d) = %d", tt.a, tt.b, got)
 		}
+	}
+}
+
+// The cooldown exists to stop DUPLICATE alerts. Arming it after a delivery that
+// FAILED turns a broken handoff into total silence: the job keeps failing and
+// every later alert is suppressed by a window opened for a message nobody got.
+// The nil-handoff case already returned early; an erroring or unhandled handoff
+// did not.
+func TestSendFailureAlertDoesNotArmCooldownOnFailedDelivery(t *testing.T) {
+	cases := map[string]func(context.Context, string, string, string, string) (bool, error){
+		"handoff error": func(context.Context, string, string, string, string) (bool, error) {
+			return false, errors.New("native client unreachable")
+		},
+		"handoff not handled": func(context.Context, string, string, string, string) (bool, error) {
+			return false, nil
+		},
+	}
+	for name, handoff := range cases {
+		svc := NewService(ServiceConfig{
+			StorePath: filepath.Join(t.TempDir(), "jobs.json"), DefaultChannel: "native", DefaultTo: "main",
+			MainSessionHandoff: handoff,
+		}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		job := contractCronJob("failed", "Failure", true, 0)
+		job.FailureAlert = &CronFailureAlert{}
+		job.State.ConsecutiveErrors = 3
+		if err := svc.store.AddJob(job); err != nil {
+			t.Fatal(err)
+		}
+		svc.sendFailureAlert(context.Background(), job, RunOutcome{Status: "error", Error: "timeout"})
+		if got := svc.store.Job(job.ID); got.State.LastFailureAlertAtMs != 0 {
+			t.Errorf("%s: undelivered alert armed the cooldown: %+v", name, got.State)
+		}
+	}
+}
+
+// A delivered alert still arms the cooldown — the fix must not reopen the
+// duplicate-alert spam it was written to prevent.
+func TestSendFailureAlertArmsCooldownOnDeliveredAlert(t *testing.T) {
+	svc := NewService(ServiceConfig{
+		StorePath: filepath.Join(t.TempDir(), "jobs.json"), DefaultChannel: "native", DefaultTo: "main",
+		MainSessionHandoff: func(context.Context, string, string, string, string) (bool, error) {
+			return true, nil
+		},
+	}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	job := contractCronJob("failed", "Failure", true, 0)
+	job.FailureAlert = &CronFailureAlert{}
+	job.State.ConsecutiveErrors = 3
+	if err := svc.store.AddJob(job); err != nil {
+		t.Fatal(err)
+	}
+	svc.sendFailureAlert(context.Background(), job, RunOutcome{Status: "error", Error: "timeout"})
+	if got := svc.store.Job(job.ID); got.State.LastFailureAlertAtMs == 0 {
+		t.Fatalf("delivered alert did not arm the cooldown: %+v", got.State)
 	}
 }
