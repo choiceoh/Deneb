@@ -51,14 +51,14 @@ func TestBuildRecallSnapshotDoesNotReuseEllipticalFactAcrossPriorSubjects(t *tes
 
 	appendUser("alpha 프로젝트 견적을 확인해줘", 1000)
 	appendUser(followup, 2000)
-	first := buildRecallSnapshot(context.Background(), RunParams{SessionKey: session, Message: followup}, deps, deps.logger)
+	first := buildRecallSnapshot(context.Background(), RunParams{SessionKey: session, Message: followup}, deps, "", deps.logger)
 	if !strings.Contains(first, alphaValue) || strings.Contains(first, betaValue) {
 		t.Fatalf("alpha contextual recall mismatch: %q", first)
 	}
 
 	appendUser("beta 프로젝트 견적을 확인해줘", 3000)
 	appendUser(followup, 4000)
-	second := buildRecallSnapshot(context.Background(), RunParams{SessionKey: session, Message: followup}, deps, deps.logger)
+	second := buildRecallSnapshot(context.Background(), RunParams{SessionKey: session, Message: followup}, deps, "", deps.logger)
 	if !strings.Contains(second, betaValue) || strings.Contains(second, alphaValue) {
 		t.Fatalf("elliptical cache reused alpha in beta context: %q", second)
 	}

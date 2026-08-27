@@ -291,7 +291,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	}
 
 	evidence = rankRecallEvidence(evidence, queries, searchMessage, cue, deps.now())
-	block, budgetDropped := formatRecallEvidenceAt(evidence, deps.now())
+	block, budgetDropped := formatRecallEvidenceAt(evidence, deps.now(), params.FilesToolReachable)
 	if budgetDropped > 0 {
 		// The character budget cut rows the ranking chose. That is the same
 		// class of degradation as a deadline cut, so it must reach `truncated`

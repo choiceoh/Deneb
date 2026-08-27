@@ -26,13 +26,13 @@ func budgetEvidence(n int) []recallEvidence {
 func TestFormatRecallEvidenceReportsBudgetDrops(t *testing.T) {
 	now := time.Now()
 
-	block, dropped := formatRecallEvidenceAt(budgetEvidence(3), now)
+	block, dropped := formatRecallEvidenceAt(budgetEvidence(3), now, true)
 	if dropped != 0 {
 		t.Errorf("a set that fits reported %d drops:\n%s", dropped, block)
 	}
 
 	many := budgetEvidence(40)
-	block, dropped = formatRecallEvidenceAt(many, now)
+	block, dropped = formatRecallEvidenceAt(many, now, true)
 	if dropped <= 0 {
 		t.Fatalf("40 rows of 320 runes did not exceed the %d-char budget (len=%d)", recallMaxChars, len(block))
 	}
@@ -53,7 +53,7 @@ func TestFormatRecallEvidenceReportsBudgetDrops(t *testing.T) {
 // so it must not be frozen: the snapshot store is first-write-wins with no
 // expiry, and freezing would pin the gap onto every later turn about the topic.
 func TestBudgetTruncatedSnapshotIsNotFrozen(t *testing.T) {
-	block, dropped := formatRecallEvidenceAt(budgetEvidence(40), time.Now())
+	block, dropped := formatRecallEvidenceAt(budgetEvidence(40), time.Now(), true)
 	if dropped == 0 {
 		t.Fatal("probe did not truncate")
 	}
@@ -65,11 +65,40 @@ func TestBudgetTruncatedSnapshotIsNotFrozen(t *testing.T) {
 		t.Error("a budget-truncated snapshot was accepted for freezing")
 	}
 	// A complete snapshot still freezes — the guard must not swallow the good case.
-	full, dropped := formatRecallEvidenceAt(budgetEvidence(3), time.Now())
+	full, dropped := formatRecallEvidenceAt(budgetEvidence(3), time.Now(), true)
 	if dropped != 0 {
 		t.Fatalf("control set truncated unexpectedly: %d", dropped)
 	}
 	if !ShouldFreeze(true, false, full) {
 		t.Error("a complete snapshot was refused for freezing")
+	}
+}
+
+// The evidence header points at a tool for opening a source=file row in full.
+// A restricted preset cannot reach `files` — none of researcher/implementer/
+// verifier allow it, and the allow-list gates fetch_tools activation too — so
+// naming it there is an instruction the run cannot follow, the same shape the
+// skills block used to carry. knowledge(op="read") rides the same allow-lists
+// as the wiki surfaces those presets keep, so it is named either way.
+func TestRecallHeaderNamesOnlyReachableFileRoutes(t *testing.T) {
+	ev := budgetEvidence(1)
+
+	reachable, _ := formatRecallEvidenceAt(ev, time.Now(), true)
+	if !strings.Contains(reachable, "files 도구") {
+		t.Errorf("unrestricted run lost the files pointer:\n%s", reachable)
+	}
+
+	restricted, _ := formatRecallEvidenceAt(ev, time.Now(), false)
+	if strings.Contains(restricted, "files 도구") {
+		t.Errorf("restricted run was told to use a tool it cannot reach:\n%s", restricted)
+	}
+	if !strings.Contains(restricted, `knowledge(op="read"`) {
+		t.Errorf("restricted run lost the route it CAN take:\n%s", restricted)
+	}
+	// The rest of the header is unchanged — this is a pointer fix, not a rewrite.
+	for _, phrase := range []string{"근거가 부족하면 부족하다고 말하라", "보관된 파일의 일치 구절"} {
+		if !strings.Contains(restricted, phrase) {
+			t.Errorf("header lost %q:\n%s", phrase, restricted)
+		}
 	}
 }
