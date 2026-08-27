@@ -547,7 +547,7 @@ func formatRecallTranscriptNote(match toolport.MatchedMsg) string {
 	return truncateRecallText(text+" | context: "+strings.Join(contextParts, " / "), 420)
 }
 
-func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionKey string, queries []string) []recallEvidence {
+func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionKey string, queries []string, cue bool) []recallEvidence {
 	if bridge == nil || sessionKey == "" || len(queries) == 0 {
 		return nil
 	}
@@ -560,7 +560,7 @@ func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionK
 	if canceled {
 		return sessionRows
 	}
-	crossRows, canceled := appendPolarisCrossSessionHits(ctx, store, sessionKey, queries, nil)
+	crossRows, canceled := appendPolarisCrossSessionHits(ctx, store, sessionKey, queries, cue, nil)
 	if canceled {
 		return fusePolarisArms(sessionRows, crossRows, nil)
 	}
@@ -764,6 +764,45 @@ func appendPolarisSessionHits(ctx context.Context, store *polaris.Store, session
 // different, not a better retriever.
 var polarisCrossHitsPerQuery = polarisCrossHitsFromEnv()
 
+// polarisCrossHits scales reach to the budget that will consume it.
+//
+// The evidence budget is not fixed — recallEvidenceBudget gives a cue turn 8
+// rows and a no-cue turn 4 — but the cross-session quota used to be 2 for both,
+// so a turn allowed twice the context searched with the same narrow reach. The
+// two budgets want opposite things and the sweep shows it cleanly (window held
+// at 50 so every candidate is reranked; 470 questions):
+//
+//	quota  pool    hit@8   hit@4
+//	2      83.8%   83.8%   81.7%   <- best at the 4-row budget
+//	3      88.5%   87.2%   81.5%
+//	4      89.6%   88.3%   80.4%
+//	5      90.6%   88.7%   77.2%   <- best at the 8-row budget
+//
+// Reading one column and calling it the answer is what makes this look like a
+// trade. Matched to its own budget it is not: the 4-row turn keeps 81.7% and the
+// 8-row turn gains 4.9pp it was leaving on the table.
+func polarisCrossHits(cue bool) int {
+	if cue {
+		return polarisCrossHitsCue
+	}
+	return polarisCrossHitsPerQuery
+}
+
+// polarisCrossHitsCue is the cue-turn quota, overridable via
+// DENEB_POLARIS_CROSS_HITS_CUE.
+var polarisCrossHitsCue = polarisCrossHitsCueFromEnv()
+
+func polarisCrossHitsCueFromEnv() int {
+	if raw := strings.TrimSpace(os.Getenv("DENEB_POLARIS_CROSS_HITS_CUE")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v > 0 && v <= 50 {
+			return v
+		}
+	}
+	return defaultPolarisCrossHitsCue
+}
+
+const defaultPolarisCrossHitsCue = 5
+
 func polarisCrossHitsFromEnv() int {
 	if raw := strings.TrimSpace(os.Getenv("DENEB_POLARIS_CROSS_HITS")); raw != "" {
 		if v, err := strconv.Atoi(raw); err == nil && v > 0 && v <= 50 {
@@ -780,13 +819,13 @@ const defaultPolarisCrossHits = 2
 // below current-session hits since cross-session context is less likely to be
 // what the user means, but it closes the "recall only sees this session" gap.
 // See Store.SearchResidentSessions.
-func appendPolarisCrossSessionHits(ctx context.Context, store *polaris.Store, sessionKey string, queries []string, evidence []recallEvidence) ([]recallEvidence, bool) {
+func appendPolarisCrossSessionHits(ctx context.Context, store *polaris.Store, sessionKey string, queries []string, cue bool, evidence []recallEvidence) ([]recallEvidence, bool) {
 	seenCross := make(map[string]struct{})
 	for _, q := range queries {
 		if ctx.Err() != nil {
 			return evidence, true
 		}
-		hits, err := store.SearchResidentSessions(sessionKey, q, polarisCrossHitsPerQuery)
+		hits, err := store.SearchResidentSessions(sessionKey, q, polarisCrossHits(cue))
 		if err != nil {
 			continue
 		}

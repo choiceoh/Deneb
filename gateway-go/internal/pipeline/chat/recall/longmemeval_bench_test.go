@@ -290,9 +290,16 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			// The production path, verbatim: query derivation → polaris source →
 			// ranking → budget-cut rendering.
 			queries := searchQueries(q.Question)
+			// Reach now scales with the budget (polarisCrossHits), so the two
+			// budgets need their own candidate pools — reusing one would score the
+			// cue budget against the no-cue turn's narrower reach.
 			candidates := rerankPolarisEvidence(
 				context.Background(), reranker, q.Question,
-				recallPolarisEvidence(context.Background(), bridge, questionKey, queries),
+				recallPolarisEvidence(context.Background(), bridge, questionKey, queries, false),
+			)
+			cueCandidates := rerankPolarisEvidence(
+				context.Background(), reranker, q.Question,
+				recallPolarisEvidence(context.Background(), bridge, questionKey, queries, true),
 			)
 			// Ceiling probe: what FTS could reach at limit 10, ignoring the per-query
 			// quota. Measurement-only — not a production call.
@@ -328,7 +335,7 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			// rankRecallEvidence cuts to recallEvidenceBudget(cue) internally, so the
 			// budget-8 number needs its own ranking pass with cue=true — slicing the
 			// returned rows to 8 would silently re-measure the same 4.
-			cueRanked := rankRecallEvidence(append([]recallEvidence(nil), candidates...), queries, q.Question, true, questionAt)
+			cueRanked := rankRecallEvidence(append([]recallEvidence(nil), cueCandidates...), queries, q.Question, true, questionAt)
 			// Stage isolation: where does a pooled hit die — dedup or cross-subject filter?
 			afterDedup := dedupRecallEvidence(append([]recallEvidence(nil), candidates...))
 			afterFilter := filterCrossSubjectEvidence(append([]recallEvidence(nil), afterDedup...), q.Question)
