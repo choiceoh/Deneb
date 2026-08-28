@@ -68,6 +68,43 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
 }
 
+// Cygnus — the summonable agent companion window (tray menu + global shortcut).
+// Same Vite bundle as the workstation; the init script flags which UI mounts
+// (src/cygnus/windowKind.ts). Created lazily on first summon; afterwards the
+// shortcut toggles hide/show, and window-close hides like the main window.
+#[cfg(desktop)]
+fn toggle_cygnus_window(app: &tauri::AppHandle) {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    if let Some(w) = app.get_webview_window("cygnus") {
+        let visible = w.is_visible().unwrap_or(false);
+        let focused = w.is_focused().unwrap_or(false);
+        if visible && focused {
+            let _ = w.hide();
+        } else {
+            let _ = w.show();
+            let _ = w.unminimize();
+            let _ = w.set_focus();
+        }
+        return;
+    }
+    let built = WebviewWindowBuilder::new(app, "cygnus", WebviewUrl::App("index.html".into()))
+        .initialization_script("window.__CYGNUS__ = true;")
+        .title("Cygnus")
+        .inner_size(480.0, 700.0)
+        .min_inner_size(380.0, 520.0)
+        .decorations(false)
+        .transparent(true)
+        // Match the main window: let the webview own drag-drop (HTML5 file drop).
+        .disable_drag_drop_handler()
+        .build();
+    match built {
+        Ok(w) => {
+            let _ = w.set_focus();
+        }
+        Err(e) => eprintln!("cygnus window create failed: {e}"),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
@@ -101,14 +138,16 @@ pub fn run() {
                 use tauri::menu::{Menu, MenuItem};
                 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
                 let show = MenuItem::with_id(app, "show", "열기", true, None::<&str>)?;
+                let cygnus = MenuItem::with_id(app, "cygnus", "Cygnus", true, None::<&str>)?;
                 let quit = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
-                let menu = Menu::with_items(app, &[&show, &quit])?;
+                let menu = Menu::with_items(app, &[&show, &cygnus, &quit])?;
                 let mut tray = TrayIconBuilder::with_id("andromeda-tray")
                     .menu(&menu)
                     .show_menu_on_left_click(false)
                     .tooltip("Andromeda")
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "show" => show_main_window(app),
+                        "cygnus" => toggle_cygnus_window(app),
                         "quit" => app.exit(0),
                         _ => {}
                     })
@@ -126,6 +165,25 @@ pub fn run() {
                     tray = tray.icon(icon.clone());
                 }
                 tray.build(app)?;
+
+                // Global summon for the Cygnus companion — works while the app
+                // is in the tray. Registration is best-effort: another app
+                // holding the chord must not break startup.
+                use tauri_plugin_global_shortcut::ShortcutState;
+                const CYGNUS_SUMMON: &str = "CmdOrCtrl+Shift+Space";
+                app.handle().plugin(
+                    tauri_plugin_global_shortcut::Builder::new()
+                        .with_handler(|app, _shortcut, event| {
+                            if event.state == ShortcutState::Pressed {
+                                toggle_cygnus_window(app);
+                            }
+                        })
+                        .build(),
+                )?;
+                use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                if let Err(e) = app.handle().global_shortcut().register(CYGNUS_SUMMON) {
+                    eprintln!("cygnus summon shortcut unavailable ({CYGNUS_SUMMON}): {e}");
+                }
             }
             #[cfg(not(desktop))]
             let _ = app;

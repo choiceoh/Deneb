@@ -27,6 +27,7 @@ dirs = "6"
 tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
 # Computer use (src/computer.rs): synthetic mouse/keyboard + screenshot
 # encode/downscale. image is png-only to keep the build lean.
 enigo = "0.6"
