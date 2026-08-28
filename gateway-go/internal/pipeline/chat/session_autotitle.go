@@ -40,12 +40,14 @@ const (
 )
 
 // nativeChatSessionPrefixes scopes auto-titling to per-conversation native
-// chats: the 업무 home's children ("client:main:<uuid>") plus the legacy chat:
-// namespace (the retired 챗봇 workspace — no new chat: sessions are minted, but
-// an old conversation continued from the drawer still deserves a title). The
-// 업무 proactive-report home ("client:main", no trailing ":") and an empty key
+// chats: the 업무 home's children ("client:main:<uuid>"), the Cygnus companion
+// window's conversations ("client:cygnus:<uuid>" — its session drawer names
+// rows by this title, session/native_keys.go), plus the legacy chat: namespace
+// (the retired 챗봇 workspace — no new chat: sessions are minted, but an old
+// conversation continued from the drawer still deserves a title). The 업무
+// proactive-report home ("client:main", no trailing ":") and an empty key
 // are excluded by the non-empty-suffix check in isAutoTitleSession.
-var nativeChatSessionPrefixes = []string{"client:main:", "chat:"}
+var nativeChatSessionPrefixes = []string{"client:main:", session.CompanionWorkSessionPrefix, "chat:"}
 
 // isAutoTitleSession reports whether a session key is an eligible per-conversation
 // native chat that should receive an auto-derived title. The suffix after the

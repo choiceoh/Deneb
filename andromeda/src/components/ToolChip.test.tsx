@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { ToolChip } from "./ToolChip";
+import { ToolChip, previewLineClass } from "./ToolChip";
 
 describe("ToolChip", () => {
   it("humanizes the tool id and displays its detail", () => {
@@ -34,5 +34,30 @@ describe("ToolChip", () => {
     // Closed by default — the preview is opt-in, not noise in the transcript.
     expect(details).not.toHaveAttribute("open");
     expect(screen.getByText(/a\.ts/)).toBeInTheDocument();
+  });
+
+  it("tints diff lines and offers copy in the expanded body", () => {
+    const part = {
+      kind: "tool",
+      id: "t1",
+      tool: "apply_patch",
+      state: "completed",
+      resultPreview: "@@ -1,2 +1,2 @@\n-old line\n+new line\n context",
+    } as const;
+    const { container } = render(<ToolChip part={part} />);
+    expect(container.querySelector(".pv-hunk")?.textContent).toContain("@@");
+    expect(container.querySelector(".pv-add")?.textContent).toContain("+new line");
+    expect(container.querySelector(".pv-del")?.textContent).toContain("-old line");
+    expect(screen.getByRole("button", { name: "복사" })).toBeInTheDocument();
+  });
+
+  it("classifies preview lines without over-matching diff headers", () => {
+    expect(previewLineClass("+added")).toBe("add");
+    expect(previewLineClass("-removed")).toBe("del");
+    expect(previewLineClass("@@ -1 +1 @@")).toBe("hunk");
+    // File headers are not content lines.
+    expect(previewLineClass("+++ b/file.ts")).toBe("");
+    expect(previewLineClass("--- a/file.ts")).toBe("");
+    expect(previewLineClass("plain")).toBe("");
   });
 });

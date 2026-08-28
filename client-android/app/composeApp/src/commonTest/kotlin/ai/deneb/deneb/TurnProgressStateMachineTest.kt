@@ -435,6 +435,28 @@ class TurnProgressStateMachineTest {
     }
 
     @Test
+    fun summaryCarryingRowLingersToTheRaisedFloor() = runTest {
+        // A summary is real information — the row holds past the plain-label
+        // floor (1.5s was measured too short to reliably read it) and becomes
+        // the reviewing continuity only after the raised floor.
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started())
+
+        progress.onTool(completed(resultSummary = "3건 · 5줄"))
+        advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS + 1)
+        runCurrent()
+        assertEquals(
+            ToolStatusLabels.doneLabel("mail_search") + ": 3건 · 5줄",
+            rows.value.single().toolName,
+        )
+
+        advanceTimeBy(DenebGatewayClient.MIN_SUMMARY_DISPLAY_MS - DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS)
+        runCurrent()
+        assertEquals(ToolStatusLabels.REVIEWING, rows.value.single().toolName)
+    }
+
+    @Test
     fun failedToolRendersTheGatewaysResultSummary() = runTest {
         val rows = history()
         val progress = TurnProgress(rows, this)

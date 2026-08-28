@@ -183,6 +183,14 @@ sidebar status / `[andromeda:rpc]` logs.
   the MSW service-worker gate delays mount past the load event and one-shot
   screenshots capture an empty body. For populated screens point plain dev at
   the dev gateway (`VITE_GATEWAY_URL`/`VITE_GATEWAY_TOKEN`).
+- **Headless BEHAVIOR verification (drive a real turn):**
+  `node scripts/dev/andromeda-drive.mjs send "http://localhost:1422/?window=cygnus" <outdir> "<prompt>"`
+  types into the composer via CDP, sends, and samples the working state
+  (screenshots + a DOM probe of busy/chips/status). `eval` mode runs arbitrary
+  JS first (e.g. open every `<details>`) then screenshots; `shot` is a plain
+  capture. It catches what static shots can't — dead composers, chips losing
+  state mid-turn, expanded-only layout breaks. The script owns its chromium
+  child (no orphan processes to pkill).
 - **pnpm supply-chain wrapper:** this pnpm distribution (locally _and_ in CI) gates
   build scripts and fails `install` until each is approved in `pnpm-workspace.yaml`
   (`allowBuilds:`). esbuild is already approved there. Add new ones the same way.

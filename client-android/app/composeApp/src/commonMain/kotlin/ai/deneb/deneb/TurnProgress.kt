@@ -217,7 +217,15 @@ internal class TurnProgress(
                     return
                 }
                 val elapsed = startMarks.remove(key)?.elapsedNow() ?: 0.milliseconds
-                val remaining = DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS.milliseconds - elapsed
+                // A row that carries the result summary has more to read than a
+                // bare label — hold it to the raised floor.
+                val displayFloor =
+                    if (ev.resultSummary.isEmpty()) {
+                        DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS
+                    } else {
+                        DenebGatewayClient.MIN_SUMMARY_DISPLAY_MS
+                    }
+                val remaining = displayFloor.milliseconds - elapsed
                 // The row lingers for `remaining`; give that moment the finished
                 // label and what came back instead of a stale "…중".
                 if (remaining.isPositive()) {

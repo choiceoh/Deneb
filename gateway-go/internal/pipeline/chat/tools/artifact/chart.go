@@ -57,16 +57,19 @@ const (
 	chartGridZero = "rgba(255,255,255,0.16)"
 )
 
-// chartPalette cycles per series / per doughnut segment. Teal, blue, amber,
-// coral, purple — distinct in hue and (roughly) in lightness so the chart stays
-// legible for colour-vision deficiency; line charts add a dash cue on top.
+// chartPalette cycles per series / per doughnut segment. Cool spectrum first
+// (design-foundations skill: both product surfaces are cool-toned, so charts
+// with the common 1–4 series stay warm-free); warm hues only appear from the
+// 5th series on, where hue separation matters more than temperature. Hues stay
+// distinct in lightness too so the chart remains legible for colour-vision
+// deficiency; line charts add a dash cue on top.
 var chartPalette = []string{
-	"#1D9E75", // teal
 	"#378ADD", // blue
+	"#3FB5B0", // cyan
+	"#7F77DD", // purple
+	"#1D9E75", // teal
 	"#EF9F27", // amber
 	"#D85A30", // coral
-	"#7F77DD", // purple
-	"#3FB5B0", // cyan
 	"#C45C9C", // magenta
 }
 

@@ -49,12 +49,14 @@ func TestIsAutoTitleSessionReturnsTrueForConversationKeys(t *testing.T) {
 		// Per-conversation native chats are titled.
 		"client:main:9f1c2a":       true, // 업무 explicit new chat (child of the home)
 		"client:main:wf-mail-argo": true, // 업무 work-card side-conversation
+		"client:cygnus:b41d0c":     true, // Cygnus companion conversation (drawer row)
 		"chat:9f1c2a":              true, // legacy 챗봇 conversation (titleable when continued)
 		// The 업무 home keeps its fixed identity.
 		"client:main": false,
 		// Bare prefixes (empty suffix) are not conversations.
-		"chat:":   false,
-		"client:": false,
+		"chat:":          false,
+		"client:":        false,
+		"client:cygnus:": false,
 		// Other namespaces are never auto-titled.
 		"cron:mail-analysis": false,
 		"system:boot":        false,
