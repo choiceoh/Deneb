@@ -403,11 +403,49 @@ internal suspend fun DenebGatewayClient.fetchTranscriptPayload(sessionKey: Strin
     },
 )
 
-private fun mapTranscriptMessages(messages: List<TranscriptMsgOut>): List<History> = messages.mapIndexedNotNull { index, m ->
+private fun mapTranscriptMessages(messages: List<TranscriptMsgOut>): List<History> {
+    val rows = ArrayList<History>(messages.size)
+    val rowIndexBySrc = HashMap<Int, Int>()
+    messages.forEachIndexed { index, m ->
+        mapTranscriptMessage(messages, index, m)?.let {
+            rowIndexBySrc[index] = rows.size
+            rows.add(it)
+        }
+    }
+    // Restored tool footprint (parity with the live turn): aggregate each
+    // turn's toolTrace — the assistant run between user messages — and pin the
+    // same "메일 확인 ×2 · 웹 검색 ⚠" line under that turn's last visible
+    // assistant bubble. Chip-only messages (blank content) are dropped above,
+    // so without this a reloaded conversation showed no tool activity at all.
+    val trail = ArrayList<Pair<String, Boolean>>()
+    var lastAssistantRow = -1
+    fun flushTurn() {
+        if (lastAssistantRow >= 0) {
+            ToolStatusLabels.buildToolFootprint(trail)?.let {
+                rows[lastAssistantRow] = rows[lastAssistantRow].copy(toolFootprint = it)
+            }
+        }
+        trail.clear()
+        lastAssistantRow = -1
+    }
+    messages.forEachIndexed { index, m ->
+        if (m.role.equals("user", ignoreCase = true)) {
+            flushTurn()
+            return@forEachIndexed
+        }
+        if (!m.role.equals("assistant", ignoreCase = true)) return@forEachIndexed
+        m.toolTrace.forEach { trail.add(it.tool to it.isError) }
+        rowIndexBySrc[index]?.let { lastAssistantRow = it }
+    }
+    flushTurn()
+    return rows
+}
+
+private fun mapTranscriptMessage(messages: List<TranscriptMsgOut>, index: Int, m: TranscriptMsgOut): History? = run {
     val role = when (m.role.lowercase()) {
         "user" -> History.Role.USER
         "assistant" -> History.Role.ASSISTANT
-        else -> return@mapIndexedNotNull null
+        else -> return@run null
     }
     val attachments = m.attachments
         .filter { it.data.isNotBlank() && it.mimeType.isNotBlank() }

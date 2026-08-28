@@ -350,6 +350,9 @@ func (h *Handler) HandleBtw(ctx context.Context, sessionKey, question string) (s
 }
 
 // History handles "chat.history" — returns capped, sanitized transcript.
+// Dormant surface: no bundled client calls it (both restore through
+// miniapp.sessions.transcript, which also rebuilds toolTrace chips) — kept
+// for external RPC consumers; extend the sessions handler first.
 func (h *Handler) History(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 	var p struct {
 		SessionKey string `json:"sessionKey"`

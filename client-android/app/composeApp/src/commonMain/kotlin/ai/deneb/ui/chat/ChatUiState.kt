@@ -189,8 +189,8 @@ data class History(
     val isStatusMessage: Boolean = false,
     val fallbackServiceName: String? = null,
     // Compact trail of the tools this answer's turn ran ("메일 확인 ×2 · 웹 검색"),
-    // shown as a meta line under the bubble. Live-turn only — transcript
-    // reloads do not carry it.
+    // shown as a meta line under the bubble. Filled live by TurnProgress and on
+    // transcript reload from the server's toolTrace — same builder, same format.
     val toolFootprint: String? = null,
     val uiSubmission: UiSubmission? = null,
     // Preserved from a tool-call assistant turn so it can be round-tripped

@@ -84,4 +84,29 @@ internal object ToolStatusLabels {
         val base = labels[tool] ?: return "$tool 완료"
         return if (base.endsWith(" 중")) base.removeSuffix(" 중") + " 완료" else "$base 완료"
     }
+
+    /**
+     * One-line trail of what a turn did — "메일 확인 ×2 · 웹 검색 ⚠" — from
+     * (tool, isError) completion pairs. Shared by the live turn's footprint
+     * and the transcript-restore path so the two never drift in format.
+     * Null when nothing completed.
+     */
+    fun buildToolFootprint(trail: List<Pair<String, Boolean>>): String? {
+        if (trail.isEmpty()) return null
+        val counts = LinkedHashMap<String, IntArray>() // tool → [count, errored(0/1)]
+        for ((tool, isError) in trail) {
+            val agg = counts.getOrPut(tool) { intArrayOf(0, 0) }
+            agg[0]++
+            if (isError) agg[1] = 1
+        }
+        val parts = counts.entries.take(DenebGatewayClient.FOOTPRINT_MAX_TOOLS).map { (tool, agg) ->
+            buildString {
+                append(trailLabel(tool))
+                if (agg[0] > 1) append(" ×${agg[0]}")
+                if (agg[1] == 1) append(" ⚠")
+            }
+        }
+        val more = counts.size - DenebGatewayClient.FOOTPRINT_MAX_TOOLS
+        return parts.joinToString(" · ") + if (more > 0) " 외 $more" else ""
+    }
 }
