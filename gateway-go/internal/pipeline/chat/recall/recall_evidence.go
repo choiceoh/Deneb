@@ -1223,6 +1223,18 @@ func polarisRerankWindowFromEnv() int {
 // worth ~+9pp P@1, which is exactly the metric the transcript plane was stuck on
 // (LongMemEval top1 sat at ~39% across three ranking changes).
 //
+// Do NOT "fix" this to derived terms the way the wiki VECTOR clause was fixed
+// (#4859). The two calls answer the same question opposite ways, for a
+// structural reason: a single-vector embedding AVERAGES the text, so boilerplate
+// dilutes the topic and derived terms win; a cross-encoder ATTENDS over
+// query and document together, ignores the boilerplate on its own, and the
+// surrounding context helps it. Measured on LongMemEval_s with an email-style
+// body appended to every question: raw-message query recall@4 81.0% / top1
+// 61.9% vs derived-terms 79.6% / 59.4% (the bench's LONGMEMEVAL_PAD +
+// LONGMEMEVAL_RERANK_QUERY knobs reproduce this). Cost stays bounded on
+// multi-KB messages too: the sidecar tokenizes pairs with truncation at 512
+// (rerank-server.py), so the query cannot blow up the batch.
+//
 // Failure is always silent and lossless: a nil reranker, a short candidate list,
 // a timeout, a service error, or a length mismatch all return the input order.
 func rerankPolarisEvidence(ctx context.Context, reranker Reranker, message string, cue bool, rows []recallEvidence) []recallEvidence {
