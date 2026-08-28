@@ -500,6 +500,8 @@ export interface ChatToolEvent {
   toolUseId: string;
   detail?: string;
   isError?: boolean;
+  // Gateway-owned one-line digest of the result; `completed` frames only.
+  resultSummary?: string;
 }
 
 // Deterministic gateway-owned phase narration. Unlike `thinking`, this payload
@@ -604,6 +606,7 @@ export async function chatStream(
             toolUseId: asStr(obj.toolUseId) ?? "",
             detail: asStr(obj.detail),
             isError: asBool(obj.isError),
+            resultSummary: asStr(obj.resultSummary),
           });
         }
         break;

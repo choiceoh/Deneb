@@ -45,11 +45,13 @@ class TurnProgressStateMachineTest {
         tool: String = "mail_search",
         id: String = "tool-1",
         isError: Boolean = false,
+        resultSummary: String = "",
     ) = ToolEvent(
         state = "completed",
         tool = tool,
         toolUseId = id,
         isError = isError,
+        resultSummary = resultSummary,
     )
 
     private fun List<History>.progressRows() = filter { it.role == History.Role.TOOL_EXECUTING && it.isStatusMessage }
@@ -399,18 +401,52 @@ class TurnProgressStateMachineTest {
     }
 
     @Test
-    fun successfulToolKeepsOriginalLabelBeforeMinimumDisplayExpires() = runTest {
+    fun successfulToolShowsFinishedLabelWhileTheRowLingers() = runTest {
+        // The row stays on screen briefly after the call returns; holding the
+        // in-progress label there read as if the tool were still running (the
+        // failure path already relabelled — this is its missing sibling).
         val rows = history()
         val progress = TurnProgress(rows, this)
         progress.onTool(started(detail = "target"))
-        val label = rows.value.single().toolName
 
         progress.onTool(completed())
         advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS - 1)
         runCurrent()
 
-        assertEquals(label, rows.value.single().toolName)
+        assertEquals(ToolStatusLabels.doneLabel("mail_search"), rows.value.single().toolName)
         assertEquals("mail_search", rows.value.single().content)
+    }
+
+    @Test
+    fun completedToolRendersTheGatewaysResultSummary() = runTest {
+        // The gateway owns the wording; the client appends it verbatim.
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(detail = "target"))
+
+        progress.onTool(completed(resultSummary = "3건 · 5줄"))
+        advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS - 1)
+        runCurrent()
+
+        assertEquals(
+            ToolStatusLabels.doneLabel("mail_search") + ": 3건 · 5줄",
+            rows.value.single().toolName,
+        )
+    }
+
+    @Test
+    fun failedToolRendersTheGatewaysResultSummary() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started())
+
+        progress.onTool(completed(isError = true, resultSummary = "exit code 2 · 5줄"))
+        runCurrent()
+
+        assertEquals(
+            ToolStatusLabels.failureLabel("mail_search") + ": exit code 2 · 5줄",
+            rows.value.single().toolName,
+        )
     }
 
     @Test

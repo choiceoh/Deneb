@@ -26,7 +26,15 @@ internal data class ToolEvent(
     val toolUseId: String = "",
     val detail: String = "",
     val isError: Boolean = false,
+    /** Gateway-authored one-line digest of what the call produced; completed
+     * frames only. Rendered verbatim — the server owns the wording so every
+     * client shows the same line. */
+    val resultSummary: String = "",
 )
+
+/** ": <요약>" for a status row, or "" when the frame carried none. The gateway
+ * already bounded the length, so this never re-truncates. */
+internal fun ToolEvent.summarySuffix(): String = if (resultSummary.isNotEmpty()) ": $resultSummary" else ""
 
 /** Deterministic gateway-owned turn phase; unlike thinking previews this never
  * contains model chain-of-thought. */
@@ -197,7 +205,7 @@ internal class TurnProgress(
                     // Swap the row to its failure form ("메일 확인 실패")
                     // and hold it readable — the agent usually keeps going,
                     // so this explains why the turn is taking longer.
-                    val failure = ToolStatusLabels.failureLabel(ev.tool)
+                    val failure = ToolStatusLabels.failureLabel(ev.tool) + ev.summarySuffix()
                     chatHistory.update { list ->
                         list.map { if (it.id == rowId) it.copy(toolName = failure) else it }
                     }
@@ -210,6 +218,14 @@ internal class TurnProgress(
                 }
                 val elapsed = startMarks.remove(key)?.elapsedNow() ?: 0.milliseconds
                 val remaining = DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS.milliseconds - elapsed
+                // The row lingers for `remaining`; give that moment the finished
+                // label and what came back instead of a stale "…중".
+                if (remaining.isPositive()) {
+                    val done = ToolStatusLabels.doneLabel(ev.tool) + ev.summarySuffix()
+                    chatHistory.update { list ->
+                        list.map { if (it.id == rowId) it.copy(toolName = done) else it }
+                    }
+                }
                 if (rowIds.isEmpty()) {
                     // Last running tool finished — the model is back in an
                     // LLM step reading the results, which on a cache-missed

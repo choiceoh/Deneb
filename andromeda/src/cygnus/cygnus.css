@@ -527,6 +527,35 @@ body.cygnus-window {
   font-size: 11.5px;
   color: var(--muted-2);
 }
+/* The outcome sits after the command, one shade quieter, behind a hairline. */
+.cygnus-root .tool-chip-result {
+  padding-left: 7px;
+  border-left: 1px solid var(--line-2);
+  font-size: 11px;
+  color: var(--faint);
+}
+/* A long command or result must ellipsize, not push the chip past the window:
+   flex children need min-width:0 before overflow can clip them. */
+/* Flex items default to min-width:auto, so a long chip pushed the whole turn
+   past the window instead of clipping. Let the turn shrink first. */
+.cygnus-root .ai-turn,
+.cygnus-root .ai-turn-body {
+  min-width: 0;
+}
+.cygnus-root .tool-chip {
+  max-width: 100%;
+  align-self: flex-start;
+}
+.cygnus-root .tool-chip-name {
+  flex: none;
+}
+.cygnus-root .tool-chip-detail,
+.cygnus-root .tool-chip-result {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Stop is a normal control, not a hazard — red is reserved for failures. */
 .cygnus-root .ai-send-stop,

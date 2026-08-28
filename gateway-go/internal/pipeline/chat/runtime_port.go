@@ -120,11 +120,12 @@ func syncOptionsFromPort(req chatport.SyncRequest) *SyncOptions {
 	if req.OnToolEvent != nil {
 		options.OnToolEvent = func(event ToolStreamEvent) {
 			req.OnToolEvent(chatport.ToolStreamEvent{
-				State:     event.State,
-				Tool:      event.Tool,
-				ToolUseID: event.ToolUseID,
-				Detail:    event.Detail,
-				IsError:   event.IsError,
+				State:         event.State,
+				Tool:          event.Tool,
+				ToolUseID:     event.ToolUseID,
+				Detail:        event.Detail,
+				IsError:       event.IsError,
+				ResultSummary: event.ResultSummary,
 			})
 		}
 	}
