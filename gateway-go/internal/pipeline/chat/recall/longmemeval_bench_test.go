@@ -61,7 +61,10 @@ type lmTurn struct {
 }
 
 func lmParseDate(s string) time.Time {
-	t, err := time.Parse("2006/01/02 (Mon) 15:04", strings.TrimSpace(s))
+	// Same zone the renderer pins (KST): the dataset's timestamps carry no zone,
+	// and parsing them in any OTHER zone would shift every rendered date= off
+	// the values the gold answers reference.
+	t, err := time.ParseInLocation("2006/01/02 (Mon) 15:04", strings.TrimSpace(s), recallRenderZone)
 	if err != nil {
 		return time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
 	}
@@ -87,6 +90,31 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 	}
 	if limit, _ := strconv.Atoi(os.Getenv("LONGMEMEVAL_LIMIT")); limit > 0 && limit < len(questions) {
 		questions = questions[:limit]
+	}
+	// LONGMEMEVAL_QIDS: newline-separated question-id allowlist. The checked-in
+	// use is the deterministic stratified half (every 2nd question per type,
+	// ~/.deneb/bench/longmemeval/half_qids.txt), which tracks the full set
+	// within sampling error (validated on v4a verdicts: full 42.0% vs half
+	// 40.8%) and halves a sweep's wall clock. Iterate on the half; publish
+	// numbers only from the full set — category slices get noisy at n≈30.
+	if qidPath := strings.TrimSpace(os.Getenv("LONGMEMEVAL_QIDS")); qidPath != "" {
+		raw, err := os.ReadFile(qidPath)
+		if err != nil {
+			t.Fatalf("qids: %v", err)
+		}
+		allow := make(map[string]struct{})
+		for _, line := range strings.Split(string(raw), "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				allow[line] = struct{}{}
+			}
+		}
+		var kept []lmQuestion
+		for _, q := range questions {
+			if _, ok := allow[q.QuestionID]; ok {
+				kept = append(kept, q)
+			}
+		}
+		questions = kept
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -135,6 +163,8 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 	abstention := 0
 	poolSize, rankedSize, dedupHits, filterHits := 0, 0, 0, 0
 	charCutNoCue, charCutCue, charCutCueTurns := 0, 0, 0
+	srcHits := 0
+	dumpMismatch := 0
 	evidenceTotal, recalledNoCue, recalledCue := 0, 0, 0
 	rerankBatchNoCue, rerankBatchCue, poolNoCue, poolCue := 0, 0, 0, 0
 
@@ -236,8 +266,15 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			// msgSession maps (sessionKey, msgIndex) back to the haystack session id
 			// the message came from, which is what the labels are keyed on.
 			msgSession := map[string][]string{}
+			tailKey := map[string]string{}
+			registerTail := func(key string) {
+				if i := strings.LastIndex(key, ":"); i >= 0 {
+					tailKey[key[i+1:]] = key
+				}
+			}
 			for si, sess := range q.HaystackSessions {
 				key := sessionKeyFor(si)
+				registerTail(key)
 				at := lmParseDate(q.HaystackDates[si]).UnixMilli()
 				for _, turn := range sess {
 					if err := bridge.Append(key, chatport.ChatMessage{
@@ -264,14 +301,36 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 				failq("q%d: append question: %v", qi, err)
 				return
 			}
+			registerTail(questionKey)
 			msgSession[questionKey] = append(msgSession[questionKey], "__question__")
 
 			// hitsEvidence resolves one rendered/candidate row back to its haystack
 			// session. Rows carry three Source shapes: "msg#<i>/<role>" (current
 			// session), "cl:<key>#<i>/<role>" (cross-session), and "cl:<key> 요약"
 			// (semantic summary of another session).
+			// resolveKey undoes the metadata diet for scoring: a session ref
+			// rendered as the key's tail maps back to the full ingest key. Every
+			// scoring path must go through this — an earlier copy lived only in
+			// one of the three, and the other two silently scored short refs as
+			// misses.
+			resolveKey := func(key string) string {
+				if _, ok := msgSession[key]; !ok {
+					if full, hit := tailKey[strings.TrimPrefix(key, "cl:")]; hit {
+						return full
+					}
+				}
+				return key
+			}
 			rowIsEvidence := func(source string) bool {
 				key, idx, kind := parseRecallSource(source, questionKey)
+				// Metadata diet renders session refs as the key's TAIL
+				// ("s31#1/user"); map it back to the full ingest key. This
+				// resolution lives HERE, in the scoring function itself — an
+				// earlier copy lived only in a lookalike test helper, which
+				// verified a reimplementation while the real path silently
+				// scored every short ref as a miss (rendered-hit 58.1% vs
+				// source-hit 95.9% on the same rows).
+				key = resolveKey(key)
 				switch kind {
 				case sourceKindSummary:
 					ids := msgSession[key]
@@ -425,6 +484,7 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			coveredNoCue := map[string]struct{}{}
 			for _, source := range rendered {
 				if key, _, kind := parseRecallSource(source, questionKey); kind != sourceKindOther {
+					key = resolveKey(key)
 					if ids := msgSession[key]; len(ids) > 0 && evidenceSessions[ids[0]] {
 						coveredNoCue[ids[0]] = struct{}{}
 					}
@@ -453,6 +513,42 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			evidenceTotal += len(evidenceSessions)
 			recalledNoCue += len(coveredNoCue)
 			recalledCue += len(coveredCue)
+			if os.Getenv("LONGMEMEVAL_DEBUG_REFS") != "" {
+				for _, source := range rendered {
+					fmt.Printf("DBGREF %q -> %v\n", source, rowIsEvidence(source))
+				}
+			}
+			// Discriminator: score the SAME rows via their original Sources.
+			// Divergence from the rendered-ref scoring below = ref/diet bug;
+			// agreement at a low value = the selection itself picked non-evidence.
+			srcHit := false
+			for _, ev := range evidence {
+				if rowIsEvidence(ev.Source) {
+					srcHit = true
+					break
+				}
+			}
+			if srcHit {
+				srcHits++
+				renderedAny := false
+				for _, source := range rendered {
+					if rowIsEvidence(source) {
+						renderedAny = true
+						break
+					}
+				}
+				if !renderedAny && dumpMismatch < 3 {
+					dumpMismatch++
+					t.Logf("MISMATCH q=%s", q.QuestionID)
+					for i, ev := range evidence {
+						r := ""
+						if i < len(rendered) {
+							r = rendered[i]
+						}
+						t.Logf("  row%d src=%q srcHit=%v | ref=%q refHit=%v", i, ev.Source, rowIsEvidence(ev.Source), r, rowIsEvidence(r))
+					}
+				}
+			}
 			for rank, source := range rendered {
 				if rowIsEvidence(source) {
 					b.anyHit++
@@ -501,6 +597,8 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 		t.Logf("RERANK-BATCH  no-cue: pool=%.1f batch=%.1f (창 %d)   cue: pool=%.1f batch=%.1f (창 %d)",
 			float64(poolNoCue)/float64(overall.total), float64(rerankBatchNoCue)/float64(overall.total), polarisRerankWindow(false),
 			float64(poolCue)/float64(overall.total), float64(rerankBatchCue)/float64(overall.total), polarisRerankWindow(true))
+		t.Logf("DISCRIMINATOR  rendered-hit=%s  source-hit=%s (같으면 선택버그, 갈리면 ref버그)",
+			pct(overall.anyHit, overall.total), pct(srcHits, overall.total))
 		t.Logf("CHARBUDGET  rows dropped by recallMaxChars: no-cue=%d  cue=%d (on %d/%d cue-budget turns)",
 			charCutNoCue, charCutCue, charCutCueTurns, overall.total)
 		t.Logf("STAGE  pool=%s  after-dedup=%s  after-filter=%s  | avg pool=%.1f ranked(cue8)=%.1f",

@@ -421,13 +421,30 @@ type SearchHit struct {
 	Snippet    string
 	// Wide is the 4x match window (textsearch.Hit.Wide) — model-pruning input,
 	// never rendered directly.
-	Wide      string
+	Wide string
+	// NextText is the head of the FOLLOWING message when this hit is a user
+	// turn answered by an assistant turn. A recall question phrased in the
+	// user's vocabulary matches the user message; the fact it asks about lives
+	// one message later — measured as the dominant failure of the
+	// single-session-assistant category (reader stage: 43 of 47 failures had
+	// the gold content absent from the block). Stitching the answer head onto
+	// the hit lets the pruner keep it when it is the relevant part.
+	NextText  string
 	MsgIndex  int
 	Timestamp int64
 	Score     float64
 }
 
 // SearchMessages performs full-text search across message content.
+// clipRunesHead returns the first n runes of text.
+func clipRunesHead(text string, n int) string {
+	r := []rune(strings.TrimSpace(text))
+	if len(r) <= n {
+		return string(r)
+	}
+	return string(r[:n]) + "..."
+}
+
 func (s *Store) SearchMessages(sessionKey, query string, maxResults int) ([]SearchHit, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -447,13 +464,18 @@ func (s *Store) SearchMessages(sessionKey, query string, maxResults int) ([]Sear
 		if err != nil {
 			continue
 		}
-		for _, m := range sd.messages {
+		for mi, m := range sd.messages {
 			if m.MsgIndex == msgIdx {
+				next := ""
+				if m.Role == "user" && mi+1 < len(sd.messages) && sd.messages[mi+1].Role == "assistant" {
+					next = clipRunesHead(sd.messages[mi+1].TextContent, 600)
+				}
 				results = append(results, SearchHit{
 					SessionKey: sessionKey,
 					Role:       m.Role,
 					Snippet:    h.Snippet,
 					Wide:       h.Wide,
+					NextText:   next,
 					MsgIndex:   m.MsgIndex,
 					Timestamp:  m.Timestamp,
 					Score:      h.Score / (h.Score + 1), // normalize to 0-1
@@ -494,13 +516,18 @@ func (s *Store) SearchResidentSessions(excludeKey, query string, maxResults int)
 			if n, _ := fmt.Sscanf(h.ID, "%d", &msgIdx); n != 1 {
 				continue
 			}
-			for _, m := range sd.messages {
+			for mi, m := range sd.messages {
 				if m.MsgIndex == msgIdx {
+					next := ""
+					if m.Role == "user" && mi+1 < len(sd.messages) && sd.messages[mi+1].Role == "assistant" {
+						next = clipRunesHead(sd.messages[mi+1].TextContent, 600)
+					}
 					results = append(results, SearchHit{
 						SessionKey: key,
 						Role:       m.Role,
 						Snippet:    h.Snippet,
 						Wide:       h.Wide,
+						NextText:   next,
 						MsgIndex:   m.MsgIndex,
 						Timestamp:  m.Timestamp,
 						Score:      h.Score / (h.Score + 1), // normalize to 0-1
