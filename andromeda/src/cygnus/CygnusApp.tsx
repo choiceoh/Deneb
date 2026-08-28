@@ -21,6 +21,10 @@ import { LiveDot } from "@/components/LiveDot";
 import { ModelPicker } from "@/components/ModelPicker";
 import { SessionDrawer } from "@/components/SessionDrawer";
 import { UiSubmissionBubble } from "@/components/UiSubmission";
+// The coding surface's mono voice — bundled so the real shell (webkit on
+// Linux/macOS/Windows) doesn't fall back to a chunky system mono.
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/500.css";
 import "./cygnus.css";
 
 // Cygnus — the agent companion window. Andromeda stays the 업무비서 workstation;

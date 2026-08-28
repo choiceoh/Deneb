@@ -45,7 +45,7 @@
   --shadow-pill: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 18px -5px rgba(0, 0, 0, 0.55);
 
   /* --- cygnus-only tokens --- */
-  --cy-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  --cy-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
   --cy-warning: #f2c15a;
 
   color-scheme: dark;
@@ -332,6 +332,12 @@ body.cygnus-window {
 }
 .cygnus-root *::-webkit-scrollbar-thumb:hover {
   background: rgba(155, 163, 163, 0.75);
+}
+
+/* Composer reads calmer at the reference control radius (12px ladder step)
+ * inside the narrow companion window. */
+.cygnus-root .ai-composer {
+  border-radius: 12px;
 }
 
 /* focus ring follows the accent inside cygnus */
