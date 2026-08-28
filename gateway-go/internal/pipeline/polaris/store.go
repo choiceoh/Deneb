@@ -419,9 +419,12 @@ type SearchHit struct {
 	SessionKey string
 	Role       string
 	Snippet    string
-	MsgIndex   int
-	Timestamp  int64
-	Score      float64
+	// Wide is the 4x match window (textsearch.Hit.Wide) — model-pruning input,
+	// never rendered directly.
+	Wide      string
+	MsgIndex  int
+	Timestamp int64
+	Score     float64
 }
 
 // SearchMessages performs full-text search across message content.
@@ -450,6 +453,7 @@ func (s *Store) SearchMessages(sessionKey, query string, maxResults int) ([]Sear
 					SessionKey: sessionKey,
 					Role:       m.Role,
 					Snippet:    h.Snippet,
+					Wide:       h.Wide,
 					MsgIndex:   m.MsgIndex,
 					Timestamp:  m.Timestamp,
 					Score:      h.Score / (h.Score + 1), // normalize to 0-1
@@ -496,6 +500,7 @@ func (s *Store) SearchResidentSessions(excludeKey, query string, maxResults int)
 						SessionKey: key,
 						Role:       m.Role,
 						Snippet:    h.Snippet,
+						Wide:       h.Wide,
 						MsgIndex:   m.MsgIndex,
 						Timestamp:  m.Timestamp,
 						Score:      h.Score / (h.Score + 1), // normalize to 0-1

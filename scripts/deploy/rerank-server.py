@@ -3,7 +3,8 @@
 
 Serves the gateway's rerank client contract (internal/ai/rerank/client.go):
 
-    POST /rerank {"query": str, "documents": [str, ...]}  →  {"scores": [float, ...]}
+    POST /rerank {"query": str, "documents": [str, ...]}
+        → {"scores": [float, ...], "pruned": [str, ...]?}   # pruned: xprovence only
     GET  /health                                          →  {"status": "ok", "model": ...}
 
 Model (--model):
@@ -11,7 +12,8 @@ Model (--model):
              the 177-case merged wiki-qa gold: P@1 83.6→87.0 (+3.4pp, no CV-fold
              regression) vs bge-reranker's 86.4 (+2.8pp, one fold regressed).
              CC BY-NC license (operator-accepted for this single-user personal
-             deployment); also returns pruned contexts (unused here — score-only).
+             deployment). The same forward pass yields query-conditioned pruned
+             contexts; they ride the response as "pruned" (zero extra GPU work).
   bge        BAAI/bge-reranker-v2-m3 — Apache-2.0 fallback, same backbone/latency.
 
 Runs from the ~/nemotron-eval/venv (torch 2.13 cu130 + transformers 4.51 +
@@ -55,9 +57,20 @@ def load_model(kind: str):
                 scores = scores[0]
             if not isinstance(scores, list):
                 scores = [scores]
+            # The SAME forward pass also produced query-conditioned sentence
+            # pruning ("pruned_context") — for a long time computed and thrown
+            # away here. Returning it costs zero extra GPU work and lets the
+            # gateway render the sentences the model judged relevant instead of
+            # a lexical window.
+            pruned = out.get("pruned_context")
+            if isinstance(pruned, list) and pruned and isinstance(pruned[0], list):
+                pruned = pruned[0]
+            if not isinstance(pruned, list):
+                pruned = [pruned] if pruned is not None else []
+            pruned = [p if isinstance(p, str) else "" for p in pruned]
             # A doc whose every sentence got pruned scores None — that IS the
             # model saying "irrelevant", so map it to a strong negative.
-            return [float(s) if s is not None else -10.0 for s in scores]
+            return [float(s) if s is not None else -10.0 for s in scores], pruned
 
     else:  # bge
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
@@ -69,7 +82,7 @@ def load_model(kind: str):
         def score(query, docs):
             with torch.no_grad():
                 enc = tok([query] * len(docs), docs, padding=True, truncation=True, max_length=512, return_tensors="pt").to("cuda")
-                return model(**enc).logits.view(-1).float().cpu().tolist()
+                return model(**enc).logits.view(-1).float().cpu().tolist(), []
 
     _model, _model_name, _scorer = model, name, score
 
@@ -109,11 +122,16 @@ class Handler(BaseHTTPRequestHandler):
                 return
             docs = [str(d)[:MAX_DOC_CHARS] for d in docs]
             with _lock:
-                scores = _scorer(query, docs)
+                scores, pruned = _scorer(query, docs)
             if len(scores) != len(docs):
                 self._json(500, {"error": "score count mismatch"})
                 return
-            self._json(200, {"scores": scores})
+            resp = {"scores": scores}
+            # Aligned pruned contexts, when the model produces them (xprovence).
+            # Additive: old clients ignore the field, bge returns none.
+            if len(pruned) == len(docs):
+                resp["pruned"] = pruned
+            self._json(200, resp)
         except Exception as e:  # noqa: BLE001 — sidecar must never crash the loop
             self._json(500, {"error": str(e)})
 

@@ -735,12 +735,13 @@ func appendPolarisSessionHits(ctx context.Context, store *polaris.Store, session
 			}
 			seen[h.MsgIndex] = struct{}{}
 			evidence = append(evidence, recallEvidence{
-				Kind:   "session",
-				Source: fmt.Sprintf("msg#%d/%s", h.MsgIndex, h.Role),
-				Query:  q,
-				Note:   truncateRecallText(h.Snippet, 280),
-				Score:  0.65 + h.Score,
-				At:     h.Timestamp,
+				Kind:     "session",
+				Source:   fmt.Sprintf("msg#%d/%s", h.MsgIndex, h.Role),
+				Query:    q,
+				Note:     truncateRecallText(h.Snippet, 280),
+				noteWide: h.Wide,
+				Score:    0.65 + h.Score,
+				At:       h.Timestamp,
 			})
 		}
 	}
@@ -860,12 +861,13 @@ func appendPolarisCrossSessionHits(ctx context.Context, store *polaris.Store, se
 			}
 			seenCross[key] = struct{}{}
 			evidence = append(evidence, recallEvidence{
-				Kind:   "session",
-				Source: fmt.Sprintf("%s#%d/%s", abbreviateSession(h.SessionKey), h.MsgIndex, h.Role),
-				Query:  q,
-				Note:   truncateRecallText(h.Snippet, 280),
-				Score:  0.52 + h.Score,
-				At:     h.Timestamp,
+				Kind:     "session",
+				Source:   fmt.Sprintf("%s#%d/%s", abbreviateSession(h.SessionKey), h.MsgIndex, h.Role),
+				Query:    q,
+				Note:     truncateRecallText(h.Snippet, 280),
+				noteWide: h.Wide,
+				Score:    0.52 + h.Score,
+				At:       h.Timestamp,
 			})
 		}
 	}
@@ -1269,6 +1271,7 @@ func rerankPolarisEvidence(ctx context.Context, reranker Reranker, message strin
 		out = append(out, head[index])
 	}
 	out = append(out, rows[count:]...)
+	prunePolarisNotes(ctx, reranker, message, out)
 	// Re-stamp the whole list onto the polaris band by final position.
 	//
 	// blended.Scores live on [0,1] while the fused band runs to
@@ -1281,6 +1284,59 @@ func rerankPolarisEvidence(ctx context.Context, reranker Reranker, message strin
 	// 21.5% on it.
 	assignPolarisBandScores(out)
 	return out
+}
+
+// prunePolarisNotes swaps the rendered rows' lexical snippets for the
+// cross-encoder's own sentence selection, made over a 4x wider window.
+//
+// This is the missing half of the reranker: xprovence computes query-conditioned
+// pruning in the SAME forward pass we already pay for, and the sidecar now
+// returns it. The lexical window can only cut around token matches; the model
+// reads the question. Reader-stage evaluation showed rows from the correct
+// conversation whose 280-char lexical cut carried boilerplate while the fact
+// lived just outside it — a wider window plus model pruning is aimed exactly
+// there. Cost stays minimal by cascading: ranking ran on short snippets over
+// the full candidate window; this second call sends only the rows that will
+// actually be RENDERED (the evidence budget, ≤8), so the wide documents
+// multiply a batch of at most eight, not fifty.
+//
+// Fail-open everywhere: knob off, no reranker, no wide window, call error, or
+// an empty pruned string all leave the lexical Note untouched.
+func prunePolarisNotes(ctx context.Context, reranker Reranker, message string, rows []recallEvidence) {
+	if reranker == nil || os.Getenv("DENEB_POLARIS_PRUNE") != "on" {
+		return
+	}
+	limit := minInt(len(rows), recallMaxEvidence)
+	var idx []int
+	var docs []string
+	for i := 0; i < limit; i++ {
+		if strings.TrimSpace(rows[i].noteWide) == "" {
+			continue
+		}
+		idx = append(idx, i)
+		docs = append(docs, rows[i].Source+"\n"+rows[i].noteWide)
+	}
+	if len(docs) == 0 {
+		return
+	}
+	type prunedCapable interface {
+		RerankPruned(ctx context.Context, query string, documents []string) ([]float64, []string, error)
+	}
+	pc, ok := reranker.(prunedCapable)
+	if !ok {
+		return
+	}
+	pruneCtx, cancel := context.WithTimeout(ctx, polarisRerankTimeout)
+	defer cancel()
+	_, pruned, err := pc.RerankPruned(pruneCtx, strings.TrimSpace(message), docs)
+	if err != nil || len(pruned) != len(docs) {
+		return
+	}
+	for j, i := range idx {
+		if p := strings.TrimSpace(pruned[j]); p != "" {
+			rows[i].Note = truncateRecallText(p, 320)
+		}
+	}
 }
 
 // assignPolarisBandScores writes strictly decreasing scores over the preserved

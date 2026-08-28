@@ -108,17 +108,28 @@ type rankedItem struct {
 
 type rerankResponse struct {
 	Scores  []float64    `json:"scores"`
+	Pruned  []string     `json:"pruned"`
 	Results []rankedItem `json:"results"`
 	Data    []rankedItem `json:"data"`
 }
 
 // Rerank returns one score per input document in the original order.
-func (c *Client) Rerank(ctx context.Context, query string, documents []string) (scores []float64, err error) {
+func (c *Client) Rerank(ctx context.Context, query string, documents []string) ([]float64, error) {
+	scores, _, err := c.RerankPruned(ctx, query, documents)
+	return scores, err
+}
+
+// RerankPruned additionally returns the sidecar's query-conditioned pruned
+// context per document, aligned with scores. The pruning rides the SAME
+// cross-encoder forward pass (xprovence computes it either way), so asking for
+// it costs no extra model work; a sidecar or model without pruning yields nil
+// and callers must treat that as "no pruning", never as empty documents.
+func (c *Client) RerankPruned(ctx context.Context, query string, documents []string) (scores []float64, pruned []string, err error) {
 	if c == nil || c.baseURL == "" {
-		return nil, fmt.Errorf("rerank: client disabled")
+		return nil, nil, fmt.Errorf("rerank: client disabled")
 	}
 	if len(documents) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	c.requests.Add(1)
 	select {
@@ -126,7 +137,7 @@ func (c *Client) Rerank(ctx context.Context, query string, documents []string) (
 		defer func() { <-c.gate }()
 	default:
 		c.busy.Add(1)
-		return nil, ErrBusy
+		return nil, nil, ErrBusy
 	}
 	started := time.Now()
 	defer func() {
@@ -142,7 +153,7 @@ func (c *Client) Rerank(ctx context.Context, query string, documents []string) (
 	}()
 	body, err := json.Marshal(rerankRequest{Model: c.model, Query: query, Documents: documents, TopN: len(documents)})
 	if err != nil {
-		return nil, fmt.Errorf("rerank: marshal: %w", err)
+		return nil, nil, fmt.Errorf("rerank: marshal: %w", err)
 	}
 	endpoint := c.baseURL
 	if !strings.HasSuffix(endpoint, "/rerank") {
@@ -150,40 +161,43 @@ func (c *Client) Rerank(ctx context.Context, query string, documents []string) (
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("rerank: request: %w", err)
+		return nil, nil, fmt.Errorf("rerank: request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("rerank: request failed: %w", err)
+		return nil, nil, fmt.Errorf("rerank: request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return nil, fmt.Errorf("rerank: read response: %w", err)
+		return nil, nil, fmt.Errorf("rerank: read response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("rerank: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		return nil, nil, fmt.Errorf("rerank: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	var decoded rerankResponse
 	if err := json.Unmarshal(raw, &decoded); err != nil {
-		return nil, fmt.Errorf("rerank: decode: %w", err)
+		return nil, nil, fmt.Errorf("rerank: decode: %w", err)
 	}
 	if len(decoded.Scores) == len(documents) {
-		return decoded.Scores, nil
+		if len(decoded.Pruned) == len(documents) {
+			pruned = decoded.Pruned
+		}
+		return decoded.Scores, pruned, nil
 	}
 	items := decoded.Results
 	if len(items) == 0 {
 		items = decoded.Data
 	}
 	if len(items) != len(documents) {
-		return nil, fmt.Errorf("rerank: expected %d scores, got %d", len(documents), max(len(decoded.Scores), len(items)))
+		return nil, nil, fmt.Errorf("rerank: expected %d scores, got %d", len(documents), max(len(decoded.Scores), len(items)))
 	}
 	scores = make([]float64, len(documents))
 	seen := make([]bool, len(documents))
 	for _, item := range items {
 		if item.Index < 0 || item.Index >= len(documents) || seen[item.Index] {
-			return nil, fmt.Errorf("rerank: invalid result index %d", item.Index)
+			return nil, nil, fmt.Errorf("rerank: invalid result index %d", item.Index)
 		}
 		score := item.RelevanceScore
 		if score == 0 {
@@ -192,7 +206,7 @@ func (c *Client) Rerank(ctx context.Context, query string, documents []string) (
 		scores[item.Index] = score
 		seen[item.Index] = true
 	}
-	return scores, nil
+	return scores, nil, nil
 }
 
 // Probe verifies the configured endpoint without relying on a vendor-specific
