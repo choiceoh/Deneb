@@ -33,8 +33,8 @@ Two platform facts make hand-picking unreliable:
 | `reclaim` | remove **dead** experiment containers (`q38*`/`q38save*` only), reap orphan harness processes, drop caches on all nodes, print before/after |
 | `help` | usage text (also saved as `~/README-tp4-mem.md`) |
 
-Defaults: `--static 46` (measured per-rank: NVFP4 weights 31.5 + FP8 PLE 11.9
-+ runtime overhead), `--kv-min 6`, `--margin 2`. Fast probe mode uses
+Defaults: `--static 46` (measured per-rank: NVFP4 weights 31.5 + FP8 PLE
+11.9 + runtime overhead), `--kv-min 6`, `--margin 2`. Fast probe mode uses
 MemAvailable minus a conservative 12 GiB reserve; `--accurate` uses torch
 `mem_get_info` but **refuses while any engine container runs**, because adding
 a CUDA context can kill a boot holding a ~2 GiB margin.
