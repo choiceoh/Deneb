@@ -126,9 +126,9 @@ describe("useSessions", () => {
 
     expect(result.current.sessionKey).toBe("client:main:abc");
     expect(chat.setTurns).toHaveBeenCalledWith([
-      { id: "u1", role: "user", text: "질문", status: "done" },
-      { id: "tr-client:main:abc-1", role: "assistant", text: "답변", status: "done" },
-      { id: "sys", role: "assistant", text: "상태", status: "done" },
+      { id: "u1", role: "user", text: "질문", status: "done", canRegenerate: false },
+      { id: "tr-client:main:abc-1", role: "assistant", text: "답변", status: "done", canRegenerate: false },
+      { id: "sys", role: "assistant", text: "상태", status: "done", canRegenerate: false },
     ]);
     expect(result.current.sessionErr).toBe("");
   });

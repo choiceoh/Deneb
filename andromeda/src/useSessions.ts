@@ -322,6 +322,9 @@ export function useSessions(
         status: "done" as const,
         // Textless turns keep parts undefined so the plain-body path renders.
         parts: parts.length > 0 ? parts : undefined,
+        // Regenerate replays lastSendRef, which only a live send fills — on a
+        // restored turn the button would render but do nothing (dead control).
+        canRegenerate: false,
       };
     });
 

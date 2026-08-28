@@ -53,12 +53,14 @@ class SessionTranscriptStateMachineTest {
         id: String = "wire-id",
         timestampMs: Long = 0,
         attachments: String = "[]",
+        toolTrace: String = "[]",
     ): String = """{
         "id":${json.encodeToString(id)},
         "role":${json.encodeToString(role)},
         "content":${json.encodeToString(content)},
         "attachments":$attachments,
-        "timestampMs":$timestampMs
+        "timestampMs":$timestampMs,
+        "toolTrace":$toolTrace
     }
     """.trimIndent()
 
@@ -344,6 +346,65 @@ class SessionTranscriptStateMachineTest {
         val params = f.transport.singleRequest().requireRpc("miniapp.sessions.transcript")
         assertEquals("client:main:one", params["sessionKey"]?.jsonPrimitive?.content)
         assertEquals(200, params["limit"]?.jsonPrimitive?.content?.toInt())
+    }
+
+    @Test
+    fun fetchTranscriptRebuildsTheToolFootprintPerTurn() = runTest {
+        // Chip-only assistant steps are dropped from the bubble list, but their
+        // toolTrace must survive as the turn's footprint — pinned under that
+        // turn's LAST visible answer, exactly where the live turn puts it.
+        val f = gatewayClientFixture()
+        f.transport.enqueueTranscript(
+            transcriptPayload(
+                message("user", "메일 확인해줘"),
+                message(
+                    "assistant",
+                    "",
+                    toolTrace = """[{"tool":"gmail.list_recent","summary":"3건"},{"tool":"web","isError":true}]""",
+                ),
+                message("assistant", "메일 3건을 확인했습니다."),
+                message("user", "고마워"),
+                message("assistant", "네!"),
+            ),
+        )
+
+        val result = f.client.fetchTranscript("client:main").orEmpty()
+
+        // Blank chip-only step stays dropped; four bubbles remain.
+        assertEquals(4, result.size)
+        val answer = result[1]
+        assertEquals("메일 3건을 확인했습니다.", answer.content)
+        assertEquals(
+            ToolStatusLabels.buildToolFootprint(
+                listOf("gmail.list_recent" to false, "web" to true),
+            ),
+            answer.toolFootprint,
+        )
+        // The second turn ran no tools — its answer keeps a bare meta line.
+        assertNull(result[3].toolFootprint)
+        // The user bubbles never carry a footprint.
+        assertNull(result[0].toolFootprint)
+    }
+
+    @Test
+    fun fetchTranscriptPinsTheFootprintOnTheTraceOwningTurnOnly() = runTest {
+        // A trace in turn 1 must not bleed into turn 2's answer (turn boundary
+        // = the next real user message).
+        val f = gatewayClientFixture()
+        f.transport.enqueueTranscript(
+            transcriptPayload(
+                message("user", "질문 1"),
+                message("assistant", "", toolTrace = """[{"tool":"exec"}]"""),
+                message("assistant", "답 1"),
+                message("user", "질문 2"),
+                message("assistant", "답 2"),
+            ),
+        )
+
+        val result = f.client.fetchTranscript("client:main").orEmpty()
+
+        assertEquals(ToolStatusLabels.buildToolFootprint(listOf("exec" to false)), result[1].toolFootprint)
+        assertNull(result.last().toolFootprint)
     }
 
     @Test

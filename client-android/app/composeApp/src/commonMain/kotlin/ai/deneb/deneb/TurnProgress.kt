@@ -285,27 +285,10 @@ internal class TurnProgress(
     /**
      * One-line trail of what this turn did — "메일 확인 ×2 · 웹 검색 ⚠" —
      * attached under the finished answer. Null when no tool completed.
-     * Live-turn only by design: the gateway transcript does not carry it,
-     * so reloading a conversation drops the line.
+     * Restored conversations rebuild the same line from the transcript's
+     * toolTrace (DenebClientSessions), through the same shared builder.
      */
-    fun footprint(): String? {
-        if (trail.isEmpty()) return null
-        val counts = LinkedHashMap<String, IntArray>() // tool → [count, errored(0/1)]
-        for ((tool, isError) in trail) {
-            val agg = counts.getOrPut(tool) { intArrayOf(0, 0) }
-            agg[0]++
-            if (isError) agg[1] = 1
-        }
-        val parts = counts.entries.take(DenebGatewayClient.FOOTPRINT_MAX_TOOLS).map { (tool, agg) ->
-            buildString {
-                append(ToolStatusLabels.trailLabel(tool))
-                if (agg[0] > 1) append(" ×${agg[0]}")
-                if (agg[1] == 1) append(" ⚠")
-            }
-        }
-        val more = counts.size - DenebGatewayClient.FOOTPRINT_MAX_TOOLS
-        return parts.joinToString(" · ") + if (more > 0) " 외 $more" else ""
-    }
+    fun footprint(): String? = ToolStatusLabels.buildToolFootprint(trail)
 
     /** Remove every row this turn added (idempotent; runs in ask()'s finally). */
     fun clear() {
