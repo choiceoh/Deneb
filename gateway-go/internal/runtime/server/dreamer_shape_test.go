@@ -166,3 +166,31 @@ func TestDreamerLLMShapeReturnsToggleAndBudgetByModel(t *testing.T) {
 		}
 	})
 }
+
+func TestDreamerSynthesisFallbackTargetsFollowTinyChain(t *testing.T) {
+	reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
+		MainModel:        "zai/main-model",
+		LightweightModel: "wormhole/deepseek-v4-flash",
+		TinyModel:        "wormhole/dsv4-nothink",
+		FallbackModel:    "wormhole/glm-5.3",
+		Providers: map[string]modelrole.ProviderResolved{
+			"wormhole": {BaseURL: "http://127.0.0.1:1/v1"},
+		},
+	})
+
+	targets := dreamerSynthesisFallbackTargets(reg)
+	if len(targets) != 2 {
+		t.Fatalf("fallback targets = %+v, want lightweight and fallback", targets)
+	}
+	if targets[0].Label != "lightweight" || targets[0].Model != "deepseek-v4-flash" {
+		t.Fatalf("first fallback = label=%q model=%q, want lightweight/deepseek-v4-flash",
+			targets[0].Label, targets[0].Model)
+	}
+	if targets[1].Label != "fallback" || targets[1].Model != "glm-5.3" {
+		t.Fatalf("second fallback = label=%q model=%q, want fallback/glm-5.3",
+			targets[1].Label, targets[1].Model)
+	}
+	if targets[1].SynthesisMaxTokens != 16384 {
+		t.Fatalf("glm fallback synthesis max = %d, want reasoning headroom", targets[1].SynthesisMaxTokens)
+	}
+}

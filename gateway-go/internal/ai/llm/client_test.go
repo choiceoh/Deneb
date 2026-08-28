@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
 )
 
 // TestClientAppliesUserAgentWithOverride verifies that LLM requests carry the honest
@@ -116,6 +117,18 @@ func TestClientAuthSchemeSelectsHeaderFormat(t *testing.T) {
 	}
 	if xAPIKey != "" {
 		t.Errorf("bearer scheme: unexpected x-api-key %q", xAPIKey)
+	}
+}
+
+func TestClassifyErrorLiftsAPIStatus(t *testing.T) {
+	err := fmt.Errorf("wrapped: %w", &httpretry.APIError{
+		StatusCode: http.StatusNotFound,
+		Message:    `{"error":{"message":"The model bad-model does not exist.","type":"NotFoundError","param":"model","code":404}}`,
+	})
+
+	got := ClassifyError(err)
+	if got.Reason != llmerr.ReasonModelNotFound || got.HTTPStatus != http.StatusNotFound {
+		t.Fatalf("ClassifyError = reason=%s status=%d, want model_not_found/404", got.Reason, got.HTTPStatus)
 	}
 }
 

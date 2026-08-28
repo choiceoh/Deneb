@@ -179,6 +179,7 @@ func (s *Server) initWikiSubsystem(chatCfg *chat.HandlerConfig, reg *modelrole.R
 		// dream failures), reasoning headroom when no off-switch exists.
 		extra, synthMax := dreamerLLMShape(reg)
 		s.wikiDreamer.SetLLMRequestShape(extra, synthMax)
+		s.wikiDreamer.SetSynthesisLLMFallbackTargets(dreamerSynthesisFallbackTargets(reg))
 		// Let dream cycles consume + curate the auto-recorded
 		// workspace MEMORY.md (distill to wiki, keep a bounded buffer).
 		s.wikiDreamer.SetWorkspaceDir(configresolve.WorkspaceDir())

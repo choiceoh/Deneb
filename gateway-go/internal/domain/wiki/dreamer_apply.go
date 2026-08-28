@@ -353,11 +353,9 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 	rules := wd.loadWikiSynthesisRules()
 	prompt := buildWikiSynthesisPromptWithRules(rules, indexContent, processedHistory, polarisSection, briefSection, anchorSection, diaryContent)
 
-	resp, err := wd.client.Complete(ctx,
-		wd.llmRequest("You are a wiki knowledge base maintainer. Respond only with a JSON array.", prompt, wd.synthesisBudget()))
+	resp, err := wd.completeSynthesisLLM(ctx,
+		"You are a wiki knowledge base maintainer. Respond only with a JSON array.", prompt)
 	if err != nil {
-		// errSynthesisLLMCall marks this as transient (nothing was delivered);
-		// the caller retries on the short delay instead of a full interval.
 		return nil, false, fmt.Errorf("%w: %w", errSynthesisLLMCall, err)
 	}
 

@@ -458,10 +458,17 @@ func dreamerLLMShape(reg *modelrole.Registry) (extraBody map[string]any, synthes
 		return nil, 0
 	}
 	cfg := reg.Config(wikiDreamerModelRole)
+	return dreamerLLMShapeFor(reg, cfg.ProviderID, cfg.Model)
+}
+
+func dreamerLLMShapeFor(reg *modelrole.Registry, providerID, model string) (extraBody map[string]any, synthesisMaxTokens int) {
+	if reg == nil {
+		return nil, 0
+	}
 	// Shared three-way, registry-aware so deneb.json routing.toggleKwarg
 	// overrides shape the dreamer like they shape foreground turns (see
 	// modelrole.ThinkingOffDirectiveFor).
-	if directive := reg.ThinkingOffDirectiveFor(cfg.ProviderID, cfg.Model); directive != nil {
+	if directive := reg.ThinkingOffDirectiveFor(providerID, model); directive != nil {
 		return map[string]any{
 			"chat_template_kwargs": map[string]any{directive.TemplateKwarg(): false},
 		}, 0
@@ -473,10 +480,50 @@ func dreamerLLMShape(reg *modelrole.Registry) (extraBody map[string]any, synthes
 	// checked registry-aware, not builtin-only: a deneb.json provider entry
 	// declaring reasoning:true (a model the builtin prefix table doesn't
 	// know) must get the same headroom.
-	if modelrole.IsReasoningModel(cfg.Model) || reg.CapabilityForModel(cfg.ProviderID, cfg.Model).Reasoning {
+	if modelrole.IsReasoningModel(model) || reg.CapabilityForModel(providerID, model).Reasoning {
 		return nil, 16384
 	}
 	return nil, 0
+}
+
+func dreamerSynthesisFallbackTargets(reg *modelrole.Registry) []wiki.DreamerLLMTarget {
+	if reg == nil {
+		return nil
+	}
+	chain := reg.FallbackChain(wikiDreamerModelRole)
+	if len(chain) <= 1 {
+		return nil
+	}
+	primary := reg.Config(wikiDreamerModelRole)
+	seen := map[string]bool{}
+	if primary.Model != "" {
+		seen[primary.ProviderID+"/"+primary.Model] = true
+	}
+	targets := make([]wiki.DreamerLLMTarget, 0, len(chain)-1)
+	for _, role := range chain[1:] {
+		cfg := reg.Config(role)
+		if cfg.Model == "" {
+			continue
+		}
+		key := cfg.ProviderID + "/" + cfg.Model
+		if seen[key] {
+			continue
+		}
+		client := reg.Client(role)
+		if client == nil {
+			continue
+		}
+		seen[key] = true
+		extra, synthMax := dreamerLLMShapeFor(reg, cfg.ProviderID, cfg.Model)
+		targets = append(targets, wiki.DreamerLLMTarget{
+			Label:              string(role),
+			Client:             client,
+			Model:              cfg.Model,
+			ExtraBody:          extra,
+			SynthesisMaxTokens: synthMax,
+		})
+	}
+	return targets
 }
 
 // spilloverAskFunc returns the local-LLM delegate that read_spillover(question=)

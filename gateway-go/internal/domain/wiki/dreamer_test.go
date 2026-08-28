@@ -4,15 +4,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -370,6 +376,76 @@ func TestDreamTransientSynthesisBackoff(t *testing.T) {
 	}
 	if !wd.ShouldDream(context.Background()) {
 		t.Fatal("cleared state must release the trigger")
+	}
+}
+
+func TestDreamSynthesisModelNotFoundIsNotTransient(t *testing.T) {
+	notFound := fmt.Errorf("%w: %w", errSynthesisLLMCall, &httpretry.APIError{
+		StatusCode: http.StatusNotFound,
+		Message:    `{"error":{"message":"The model bad-model does not exist.","type":"NotFoundError","code":404}}`,
+	})
+	if isTransientSynthesisFailure(notFound) {
+		t.Fatal("model-not-found 404 must not arm the short synthesis retry")
+	}
+
+	overloaded := fmt.Errorf("%w: %w", errSynthesisLLMCall, &httpretry.APIError{
+		StatusCode: http.StatusServiceUnavailable,
+		Message:    "temporarily unavailable",
+	})
+	if !isTransientSynthesisFailure(overloaded) {
+		t.Fatal("503 should still use the short synthesis retry")
+	}
+}
+
+func TestWikiDreamerSynthesisFallsBackAfterModelNotFound(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	var primaryCalls atomic.Int32
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		primaryCalls.Add(1)
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, `{"error":{"message":"The model bad-model does not exist.","type":"NotFoundError","code":404}}`)
+	}))
+	defer primary.Close()
+
+	var fallbackCalls atomic.Int32
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackCalls.Add(1)
+		var req struct {
+			Model string `json:"model"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode fallback request: %v", err)
+		}
+		if req.Model != "fallback-model" {
+			t.Fatalf("fallback request model = %q, want fallback-model", req.Model)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"[{\"action\":\"create\",\"path\":\"프로젝트/deneb.md\",\"title\":\"Deneb\",\"summary\":\"memory\",\"category\":\"프로젝트\",\"type\":\"project\",\"confidence\":\"high\",\"importance\":0.9,\"content\":\"body\"}]"},"finish_reason":"stop"}]}`)
+	}))
+	defer fallback.Close()
+
+	wd := NewWikiDreamer(store, llm.NewClient(primary.URL, "test-key"), "bad-model", Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	wd.SetSynthesisLLMFallbackTargets([]DreamerLLMTarget{{
+		Label:  "fallback",
+		Client: llm.NewClient(fallback.URL, "test-key"),
+		Model:  "fallback-model",
+	}})
+
+	updates, partial, err := wd.synthesize(context.Background(), "## 2026-08-28\n\nmemory", diaryProcessState{})
+	if err != nil {
+		t.Fatalf("synthesize: %v", err)
+	}
+	if partial {
+		t.Fatal("fallback response should parse as a complete array")
+	}
+	if primaryCalls.Load() != 1 || fallbackCalls.Load() != 1 {
+		t.Fatalf("calls primary=%d fallback=%d, want 1/1", primaryCalls.Load(), fallbackCalls.Load())
+	}
+	if len(updates) != 1 || updates[0].Path != "프로젝트/deneb.md" {
+		t.Fatalf("updates = %+v, want fallback-synthesized page", updates)
 	}
 }
 

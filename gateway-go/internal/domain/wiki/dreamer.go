@@ -16,6 +16,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
 )
 
 // Dreaming configuration.
@@ -73,11 +74,22 @@ const (
 	wikiDreamTransientRetryMax   = 2
 )
 
-// errSynthesisLLMCall marks a synthesis failure where the LLM call itself
-// died (transport/backend), as opposed to a parse failure on a delivered
-// response. Call failures are transient by nature — nothing was consumed —
-// so the cycle retries on the short delay instead of a full interval.
+// errSynthesisLLMCall marks a synthesis failure where the LLM call itself died,
+// as opposed to a parse failure on a delivered response. Only transient call
+// failures get the short-delay retry; permanent provider errors such as a
+// missing model must back off normally or use a configured fallback target.
 var errSynthesisLLMCall = errors.New("synthesis LLM call")
+
+// DreamerLLMTarget is an alternate model target for wiki synthesis. The server
+// builds these from the modelrole fallback chain so the wiki package does not
+// import runtime/modelrole wiring.
+type DreamerLLMTarget struct {
+	Label              string
+	Client             *llm.Client
+	Model              string
+	ExtraBody          map[string]any
+	SynthesisMaxTokens int
+}
 
 // Compile-time interface compliance.
 var _ autonomous.Dreamer = (*WikiDreamer)(nil)
@@ -251,6 +263,11 @@ type WikiDreamer struct {
 	// (0 = default). Set for reasoning models with no thinking off-switch,
 	// where the budget must fit chain-of-thought + the JSON answer.
 	synthesisMaxTokens int
+
+	// synthesisFallbacks holds role-fallback LLM targets for the synthesis
+	// phase. The primary target remains client/model above; fallbacks are tried
+	// only after a primary provider error before the whole dream cycle fails.
+	synthesisFallbacks []DreamerLLMTarget
 }
 
 // NewWikiDreamer creates a new wiki dreamer.
@@ -334,11 +351,41 @@ func (wd *WikiDreamer) SetLLMRequestShape(extraBody jsonObject, synthesisMaxToke
 	wd.synthesisMaxTokens = synthesisMaxTokens
 }
 
+// SetSynthesisLLMFallbackTargets installs alternate role targets for synthesis
+// calls. Invalid or duplicate entries are ignored.
+func (wd *WikiDreamer) SetSynthesisLLMFallbackTargets(targets []DreamerLLMTarget) {
+	wd.synthesisFallbacks = wd.synthesisFallbacks[:0]
+	seen := map[string]bool{}
+	if wd.model != "" {
+		seen[wd.model] = true
+	}
+	for _, target := range targets {
+		if target.Client == nil || strings.TrimSpace(target.Model) == "" {
+			continue
+		}
+		if seen[target.Model] {
+			continue
+		}
+		seen[target.Model] = true
+		wd.synthesisFallbacks = append(wd.synthesisFallbacks, DreamerLLMTarget{
+			Label:              target.Label,
+			Client:             target.Client,
+			Model:              target.Model,
+			ExtraBody:          cloneJSONMap(target.ExtraBody),
+			SynthesisMaxTokens: target.SynthesisMaxTokens,
+		})
+	}
+}
+
 // llmRequest builds the dreamer's standard one-shot chat request with the
 // shared shaping applied — the single construction point for the synthesis,
 // verify, open-loops, and project-digest calls so none can drift back to an
 // unshaped request.
 func (wd *WikiDreamer) llmRequest(system, prompt string, maxTokens int) llm.ChatRequest {
+	return wd.llmRequestFor(wd.model, wd.llmExtraBody, wd.synthesisMaxTokens, system, prompt, maxTokens)
+}
+
+func (wd *WikiDreamer) llmRequestFor(model string, extraBody jsonObject, synthesisMaxTokens int, system, prompt string, maxTokens int) llm.ChatRequest {
 	// Headroom mode (untoggleable reasoning model: no off-switch kwargs, a
 	// raised synthesis budget): every call pays chain-of-thought before the
 	// answer, so the small fixed budgets of the non-synthesis calls (verify,
@@ -346,16 +393,16 @@ func (wd *WikiDreamer) llmRequest(system, prompt string, maxTokens int) llm.Chat
 	// otherwise those phases keep failing on exactly the models the headroom
 	// exists for. The synthesis call itself passes synthesisBudget() and is
 	// excluded by the < guard.
-	if wd.llmExtraBody == nil && wd.synthesisMaxTokens > 0 && maxTokens < wd.synthesisMaxTokens {
+	if extraBody == nil && synthesisMaxTokens > 0 && maxTokens < synthesisMaxTokens {
 		maxTokens *= 4
 	}
 	systemJSON, _ := json.Marshal(system)
 	req := llm.ChatRequest{
-		Model:     wd.model,
+		Model:     model,
 		System:    llm.FlexibleFromRaw(systemJSON),
 		Messages:  []llm.Message{llm.NewTextMessage("user", prompt)},
 		MaxTokens: maxTokens,
-		ExtraBody: flexibleExtraBody(wd.llmExtraBody),
+		ExtraBody: flexibleExtraBody(extraBody),
 	}
 	// A headroom-only shape means the model emits reasoning but has no
 	// chat-template off-switch. These dreamer calls are bounded extraction and
@@ -364,7 +411,7 @@ func (wd *WikiDreamer) llmRequest(system, prompt string, maxTokens int) llm.Chat
 	// switch it off. On GLM behind wormhole this becomes reasoning_effort=low,
 	// which wormhole translates to thinking.type=disabled; without it GLM spent
 	// the entire budget on reasoning and returned empty content.
-	if wd.llmExtraBody == nil && wd.synthesisMaxTokens > 0 {
+	if extraBody == nil && synthesisMaxTokens > 0 {
 		req.Thinking = &llm.ThinkingConfig{Type: "disabled"}
 	}
 	return req
@@ -372,8 +419,12 @@ func (wd *WikiDreamer) llmRequest(system, prompt string, maxTokens int) llm.Chat
 
 // synthesisBudget returns the synthesis call's MaxTokens (override or default).
 func (wd *WikiDreamer) synthesisBudget() int {
-	if wd.synthesisMaxTokens > 0 {
-		return wd.synthesisMaxTokens
+	return synthesisBudgetFor(wd.synthesisMaxTokens)
+}
+
+func synthesisBudgetFor(synthesisMaxTokens int) int {
+	if synthesisMaxTokens > 0 {
+		return synthesisMaxTokens
 	}
 	return wikiDreamMaxTokens
 }
@@ -657,7 +708,7 @@ func (wd *WikiDreamer) synthesizeDreamCycle(ctx context.Context, cycle *dreamCyc
 
 	updates, partial, err := wd.synthesize(ctx, cycle.synthInput, cycle.scan.State)
 	if err != nil {
-		if errors.Is(err, errSynthesisLLMCall) && wd.noteTransientSynthesisFailure() {
+		if isTransientSynthesisFailure(err) && wd.noteTransientSynthesisFailure() {
 			wd.logger.Error("wiki-dream: synthesis failed; retrying after short delay",
 				"error", err, "retryIn", wikiDreamTransientRetryDelay)
 			cycle.addPhaseError("synthesis (transient): %v", err)
@@ -711,6 +762,65 @@ func (wd *WikiDreamer) synthesizeDreamCycle(ctx context.Context, cycle *dreamCyc
 		cycle.addPhaseError("proposal-save: %v", err)
 	}
 	return true
+}
+
+func (wd *WikiDreamer) completeSynthesisLLM(ctx context.Context, system, prompt string) (string, error) {
+	if wd.client == nil {
+		return "", errors.New("LLM client not available")
+	}
+	req := wd.llmRequestFor(wd.model, wd.llmExtraBody, wd.synthesisMaxTokens, system, prompt, wd.synthesisBudget())
+	resp, err := wd.client.Complete(ctx, req)
+	if err == nil {
+		return resp, nil
+	}
+	lastErr := err
+	lastLabel := "primary"
+	attemptedFallback := false
+	for _, target := range wd.synthesisFallbacks {
+		if target.Client == nil || strings.TrimSpace(target.Model) == "" {
+			continue
+		}
+		attemptedFallback = true
+		if wd.logger != nil {
+			wd.logger.Warn("wiki-dream: synthesis model failed; trying fallback",
+				"failedModel", req.Model, "nextModel", target.Model, "nextLabel", target.Label, "error", lastErr)
+		}
+		req = wd.llmRequestFor(target.Model, target.ExtraBody, target.SynthesisMaxTokens,
+			system, prompt, synthesisBudgetFor(target.SynthesisMaxTokens))
+		resp, err = target.Client.Complete(ctx, req)
+		if err == nil {
+			if wd.logger != nil {
+				wd.logger.Info("wiki-dream: synthesis fallback succeeded",
+					"model", target.Model, "label", target.Label)
+			}
+			return resp, nil
+		}
+		lastErr = err
+		lastLabel = target.Label
+		if wd.logger != nil {
+			wd.logger.Warn("wiki-dream: synthesis fallback failed",
+				"model", target.Model, "label", target.Label, "error", err)
+		}
+	}
+	if attemptedFallback {
+		return "", fmt.Errorf("all synthesis LLM targets failed; last target %q: %w", lastLabel, lastErr)
+	}
+	return "", lastErr
+}
+
+func isTransientSynthesisFailure(err error) bool {
+	if !errors.Is(err, errSynthesisLLMCall) {
+		return false
+	}
+	switch llm.ClassifyError(err).Reason {
+	case llmerr.ReasonServerError,
+		llmerr.ReasonOverloaded,
+		llmerr.ReasonRateLimit,
+		llmerr.ReasonTimeout:
+		return true
+	default:
+		return false
+	}
 }
 
 // loadPrevDreamProposal reads the last cycle's persisted proposal report; nil
@@ -1089,6 +1199,17 @@ func flexibleExtraBody(m map[string]any) map[string]llm.FlexibleJSON {
 	out := make(map[string]llm.FlexibleJSON, len(m))
 	for k, v := range m {
 		out[k] = llm.FlexibleFromValue(v)
+	}
+	return out
+}
+
+func cloneJSONMap(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = v
 	}
 	return out
 }
