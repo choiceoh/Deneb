@@ -131,6 +131,66 @@ five trap scenarios). Verdicts:
   skips the final send/create step), cross-validated by the community run
   above.
 
+## Where the base step actually goes (2026-08-29 profile + campaign transfer)
+
+The operator's challenge — "an A6B must beat an A13B regardless of the fabric
+tax" — forced a real decomposition. An eager, spec-off torch profile of 80
+decode tokens first said NCCL AllReduce was 71% of GPU kernel time, with QSA,
+mamba and the PLE all under 1% combined. That 71% is **over-attribution**:
+NCCL kernels spin-wait for peer ranks, so in eager mode they absorb every
+other rank's launch jitter. The dsv4 kernel campaign (srv4 `~/stkernel`,
+ledger-driven) measured the same fabric properly: decode AllReduce is
+67.6 us/op, ~6.7 ms/step at hidden 4096, hop latency = 4.0 us fixed +
+0.10 us/KB — doorbell-bound, so extra bandwidth is unusable. Scaled to this
+model (hidden 2560, ~96 collectives/step) the true comm share is **~3-7 ms of
+the 30.6 ms step**. The dominant remainder is the per-layer small-kernel
+launch storm (hyper-connection, mamba, QSA, PLE glue x 48 layers), which
+FULL cudagraphs already compress — there is no single fat target left.
+
+Why the A13B stays competitive: dsv4's decode is weight-bandwidth-bound
+(~7 ms/rank/step of streaming, campaign verdict: "decode kernels measure at
+the 273 GB/s floor; only byte-diet applies"), which hides its overheads.
+This model streams only ~3 ms/rank, so the same overheads are exposed. The
+A6B advantage is real in the bandwidth term and buried by everything else.
+
+Cells closed on the way (all rejected):
+
+- **NCCL Tree / LL128 / Simple** — pre-eliminated by the dsv4 campaign ledger
+  (Tree fails to boot on this fabric; LL128 is NVLink-only; Simple is
+  latency-dominated). Reading the ledger saved the boot.
+- **naive all2all + QSA_MAX_SPLITS=8** — 50.3, inside the noise band.
+- **Adaptive speculative length** (overlay, acceptance-EMA choosing K in
+  {2,3,8}) — structurally blocked: the QSA ring requires (K+4) to divide the
+  attention block size 832, so the next usable K above 3 is 12, useless for a
+  one-layer draft head.
+- **draft_tensor_parallel_size=1** — accepted by config, runs, and is an
+  *active regression* (31.1 vs ~49): three ranks idle during every draft pass
+  and hidden states reshard between TP=4 and TP=1 each iteration.
+- **Serving temperature 0.8** — the dsv4 campaign's +7% acceptance lever does
+  not transfer: interleaved same-boot A/B shows acceptance flat
+  (1.09-1.12 tokens/step at both temperatures) and medians inside noise.
+
+With the workload gradient from the previous section this closes the speed
+axis: ~49 prose / 56-76 agent-workload is what this checkpoint does on this
+fabric, and the remaining upside is upstream (comm-compute overlap, PLE
+compression enabling fewer nodes), not local knobs.
+
+### Incident: profiler boot -> kernel OOM spiral (and the recovery that works)
+
+The eager+profiler boot ballooned host memory on the head node; the cleanup
+command was OOM-killed before it finished, leaving a 34 GB worker resident.
+The kernel OOM killer then killed every NEW fork (docker rm, nvidia-smi, even
+sudo) while sparing the score-adjusted worker — a self-sustaining spiral that
+plain SSH cannot break. What worked, in order: verify the box via the fabric
+path from another node (management ssh starves first); a background retry
+loop of `sudo systemctl --force --force reboot` (fork success is
+probabilistic — one attempt eventually lands); and for data stranded on the
+sick box, `rsync --partial --append` in a retry loop, which accumulates
+progress across dying connections (a plain scp truncates silently).
+Prevention: keep profile captures short, parse traces on a different node,
+and run cleanup immediately after capture while the engine still has margin.
+Post-reboot, /tmp is gone — the bench harness now lives in `~/q38-harness/`.
+
 ## Background load is a first-class experimental variable
 
 Idle gradle and kotlin build daemons left by a Kotlin gate run cost **32%** of
