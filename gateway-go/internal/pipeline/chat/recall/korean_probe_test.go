@@ -98,10 +98,25 @@ func TestKoreanRecallProbe(t *testing.T) {
 			FilesToolReachable: true,
 		}, Deps{Wiki: store}, logger)
 		durations = append(durations, time.Since(start))
+		found := false
 		for _, want := range c.GoldPaths {
 			if strings.Contains(block, want) {
 				hit++
+				found = true
 				break
+			}
+		}
+		// DENEB_PROBE_DUMP_MISSES=<path>: append each miss as JSONL for
+		// offline diagnosis — which gold pages the block failed to carry.
+		if !found {
+			if dump := os.Getenv("DENEB_PROBE_DUMP_MISSES"); dump != "" {
+				if f, err := os.OpenFile(dump, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+					rec, _ := json.Marshal(map[string]any{
+						"question": c.Question, "gold": c.GoldPaths, "block": block,
+					})
+					_, _ = f.Write(append(rec, '\n'))
+					_ = f.Close()
+				}
 			}
 		}
 	}
