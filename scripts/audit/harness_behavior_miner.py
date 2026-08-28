@@ -50,6 +50,11 @@ DEFAULT_AGENTS = ("claude", "codex", "cursor")
 
 # Artifact discovery globs, relative to the home directory. Mirrors the
 # numbat agent-coverage matrix for the harnesses this fleet actually runs.
+# The coding_dispatch_sessions dir is where the RSI L4 executor
+# (scripts/dev/coding_dispatch_executor.py) archives dispatch rollouts out of
+# .codex/sessions — the fleet's main Codex volume source. Its nested
+# .codex/sessions suffix preserves the vendor layout numbat's path-based
+# agent detection requires.
 ARTIFACT_GLOBS: dict[str, tuple[str, ...]] = {
     "claude": (".claude/projects/**/*.jsonl",),
     "codex": (
@@ -57,6 +62,7 @@ ARTIFACT_GLOBS: dict[str, tuple[str, ...]] = {
         ".codex/sessions/**/*.jsonl.zst",
         ".codex/archived_sessions/*.jsonl",
         ".codex/archived_sessions/*.jsonl.zst",
+        ".deneb/data/coding_dispatch_sessions/.codex/sessions/*.jsonl",
     ),
     "cursor": (".cursor/projects/*/agent-transcripts/**/*.jsonl",),
 }
