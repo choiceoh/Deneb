@@ -876,6 +876,19 @@ func appendPolarisSessionHits(ctx context.Context, store *polaris.Store, session
 // limits of top-4 precision. Sweep it again with DENEB_POLARIS_CROSS_HITS if the
 // budget itself changes — that is the input that would make this decision
 // different, not a better retriever.
+//
+// The budget DID change (no-cue 4 → 8 rows, plus reranker + session decay),
+// and the re-sweep reversed the old verdict exactly as predicted (470
+// questions, 8-row no-cue budget):
+//
+//	quota  pool    strict@4  hit@4   top1    SSA hit@4
+//	2      93.4%   80.4%     93.2%   62.1%   76.8%
+//	3      95.7%   83.8%     94.5%   63.2%   76.8%   <- current
+//	4      96.4%   83.3%     93.0%   65.3%   67.9%   (SSA crowded out)
+//
+// 3 dominates 2 on every deterministic metric and 4 starts evicting SSA rows
+// at the render budget. The decay + cross-encoder absorb the extra
+// candidates' noise that made the old 4-row sweep monotonically worse.
 var polarisCrossHitsPerQuery = polarisCrossHitsFromEnv()
 
 // polarisCrossHits scales reach to the budget that will consume it.
@@ -926,7 +939,7 @@ func polarisCrossHitsFromEnv() int {
 	return defaultPolarisCrossHits
 }
 
-const defaultPolarisCrossHits = 2
+const defaultPolarisCrossHits = 3
 
 // stitchWide/stitchNote fold a hit's assistant-reply head (SearchHit.NextText)
 // into the prune input and the lexical fallback — see the field's comment.
