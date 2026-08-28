@@ -29,7 +29,8 @@ export function upsertToolPart(turn: ChatTurn, ev: ChatToolEvent): ChatTurn {
   // frame only; `completed` carries the result instead. Overwriting with the
   // completed event's empty detail erased it, so finished chips read as a bare
   // tool name — keep the hint we were already shown.
-  const prevDetail = idx >= 0 ? (parts[idx] as ToolPart).detail : undefined;
+  const prev = idx >= 0 ? (parts[idx] as ToolPart) : undefined;
+  const prevDetail = prev?.detail;
   const next: ToolPart = {
     kind: "tool",
     id: ev.toolUseId || `${ev.tool}-${parts.length}`,
@@ -37,6 +38,7 @@ export function upsertToolPart(turn: ChatTurn, ev: ChatToolEvent): ChatTurn {
     state: ev.state || "started",
     detail: ev.detail || prevDetail,
     isError: ev.isError,
+    resultSummary: ev.resultSummary || prev?.resultSummary,
   };
   if (idx >= 0) parts[idx] = { ...(parts[idx] as ToolPart), ...next };
   else parts.push(next);

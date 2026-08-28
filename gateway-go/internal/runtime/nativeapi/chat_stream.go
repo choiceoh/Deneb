@@ -98,6 +98,8 @@ type toolStreamFrame struct {
 	ToolUseID string `json:"toolUseId"`
 	Detail    string `json:"detail,omitempty"`
 	IsError   bool   `json:"isError,omitempty"`
+	// ResultSummary rides only on `completed` frames; older clients ignore it.
+	ResultSummary string `json:"resultSummary,omitempty"`
 }
 
 // thinkingStreamFrame is the wire payload of one SSE "thinking" frame. Preview
@@ -357,11 +359,12 @@ func writeChatStreamSSE(
 				emitProgress("working")
 			}
 			writeEvent("tool", toolStreamFrame{
-				State:     ev.State,
-				Tool:      ev.Tool,
-				ToolUseID: ev.ToolUseID,
-				Detail:    ev.Detail,
-				IsError:   ev.IsError,
+				State:         ev.State,
+				Tool:          ev.Tool,
+				ToolUseID:     ev.ToolUseID,
+				Detail:        ev.Detail,
+				IsError:       ev.IsError,
+				ResultSummary: ev.ResultSummary,
 			})
 			if ev.State == "completed" {
 				emitProgress("reviewing")

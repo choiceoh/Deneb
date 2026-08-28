@@ -30,6 +30,8 @@ export interface ToolPart {
   state: string; // "started" | "completed"
   detail?: string;
   isError?: boolean;
+  // What the call produced, in one gateway-authored line (completed only).
+  resultSummary?: string;
 }
 export type CaptureKind = "image" | "audio" | "document";
 export interface AttachmentPart {

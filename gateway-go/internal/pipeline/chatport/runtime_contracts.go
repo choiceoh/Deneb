@@ -67,6 +67,8 @@ type ToolStreamEvent struct {
 	ToolUseID string
 	Detail    string
 	IsError   bool
+	// ResultSummary is the gateway-owned one-line digest of a completed call.
+	ResultSummary string
 }
 
 // SyncRequest is the runtime-safe subset of synchronous chat options. Rich API

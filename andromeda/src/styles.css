@@ -1836,6 +1836,12 @@ input[type="checkbox"] {
   border-radius: var(--radius-pill);
   animation: chipIn 0.22s var(--ease) both;
 }
+.tool-chip-result {
+  color: var(--muted-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .tool-chip-ico {
   display: inline-flex;
   flex: 0 0 auto;

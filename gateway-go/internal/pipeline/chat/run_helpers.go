@@ -29,6 +29,10 @@ type ToolStreamEvent struct {
 	ToolUseID string
 	Detail    string
 	IsError   bool
+	// ResultSummary is the gateway-owned one-line digest of a completed call
+	// (see tool_result_summary.go). Empty on `started` frames and whenever the
+	// result carries nothing worth showing.
+	ResultSummary string
 }
 
 // streamEventSinks carries the per-event callbacks a streaming HTTP transport
@@ -84,16 +88,18 @@ func executeAgentRunWithDelta(
 					Tool      string `json:"tool"`
 					ToolUseID string `json:"toolUseId"`
 					Detail    string `json:"detail"`
+					Result    string `json:"result"`
 					IsError   bool   `json:"isError"`
 				} `json:"payload"`
 			}
 			if err := json.Unmarshal(data, &envelope); err == nil && envelope.Payload.Tool != "" {
 				sinks.OnTool(ToolStreamEvent{
-					State:     envelope.Payload.State,
-					Tool:      envelope.Payload.Tool,
-					ToolUseID: envelope.Payload.ToolUseID,
-					Detail:    envelope.Payload.Detail,
-					IsError:   envelope.Payload.IsError,
+					State:         envelope.Payload.State,
+					Tool:          envelope.Payload.Tool,
+					ToolUseID:     envelope.Payload.ToolUseID,
+					Detail:        envelope.Payload.Detail,
+					IsError:       envelope.Payload.IsError,
+					ResultSummary: summarizeToolResult(envelope.Payload.Result),
 				})
 			}
 		case streaming.EventThinking:

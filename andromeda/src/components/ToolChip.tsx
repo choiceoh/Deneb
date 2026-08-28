@@ -31,6 +31,9 @@ export function ToolChip({ part }: { part: ToolPart }) {
       </span>
       <span className="tool-chip-name">{toolLabel(part.tool)}</span>
       {part.detail ? <span className="tool-chip-detail">{part.detail}</span> : null}
+      {/* What the call produced — the gateway authors this line so every client
+          shows the same wording. Started chips have none yet. */}
+      {part.resultSummary ? <span className="tool-chip-result">{part.resultSummary}</span> : null}
     </div>
   );
 }
