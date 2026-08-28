@@ -26,13 +26,13 @@ func budgetEvidence(n int) []recallEvidence {
 func TestFormatRecallEvidenceReportsBudgetDrops(t *testing.T) {
 	now := time.Now()
 
-	block, dropped := formatRecallEvidenceAt(budgetEvidence(3), now, true)
+	block, dropped := formatRecallEvidenceAt(budgetEvidence(3), now, true, true)
 	if dropped != 0 {
 		t.Errorf("a set that fits reported %d drops:\n%s", dropped, block)
 	}
 
 	many := budgetEvidence(40)
-	block, dropped = formatRecallEvidenceAt(many, now, true)
+	block, dropped = formatRecallEvidenceAt(many, now, true, true)
 	if dropped <= 0 {
 		t.Fatalf("40 rows of 320 runes did not exceed the %d-char budget (len=%d)", recallMaxChars, len(block))
 	}
@@ -53,7 +53,7 @@ func TestFormatRecallEvidenceReportsBudgetDrops(t *testing.T) {
 // so it must not be frozen: the snapshot store is first-write-wins with no
 // expiry, and freezing would pin the gap onto every later turn about the topic.
 func TestBudgetTruncatedSnapshotIsNotFrozen(t *testing.T) {
-	block, dropped := formatRecallEvidenceAt(budgetEvidence(40), time.Now(), true)
+	block, dropped := formatRecallEvidenceAt(budgetEvidence(40), time.Now(), true, true)
 	if dropped == 0 {
 		t.Fatal("probe did not truncate")
 	}
@@ -65,7 +65,7 @@ func TestBudgetTruncatedSnapshotIsNotFrozen(t *testing.T) {
 		t.Error("a budget-truncated snapshot was accepted for freezing")
 	}
 	// A complete snapshot still freezes — the guard must not swallow the good case.
-	full, dropped := formatRecallEvidenceAt(budgetEvidence(3), time.Now(), true)
+	full, dropped := formatRecallEvidenceAt(budgetEvidence(3), time.Now(), true, true)
 	if dropped != 0 {
 		t.Fatalf("control set truncated unexpectedly: %d", dropped)
 	}
@@ -83,12 +83,12 @@ func TestBudgetTruncatedSnapshotIsNotFrozen(t *testing.T) {
 func TestRecallHeaderNamesOnlyReachableFileRoutes(t *testing.T) {
 	ev := budgetEvidence(1)
 
-	reachable, _ := formatRecallEvidenceAt(ev, time.Now(), true)
+	reachable, _ := formatRecallEvidenceAt(ev, time.Now(), true, true)
 	if !strings.Contains(reachable, "files 도구") {
 		t.Errorf("unrestricted run lost the files pointer:\n%s", reachable)
 	}
 
-	restricted, _ := formatRecallEvidenceAt(ev, time.Now(), false)
+	restricted, _ := formatRecallEvidenceAt(ev, time.Now(), false, true)
 	if strings.Contains(restricted, "files 도구") {
 		t.Errorf("restricted run was told to use a tool it cannot reach:\n%s", restricted)
 	}
