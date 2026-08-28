@@ -7,6 +7,8 @@ package recall
 
 import (
 	"log/slog"
+	"os"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -14,6 +16,14 @@ import (
 )
 
 func recallEvidenceBudget(cue bool) int {
+	// DENEB_RECALL_MAX_EVIDENCE overrides BOTH budgets — the evidence-budget
+	// sweep knob (rows × note cap is the axis the reader-accuracy curve is
+	// measured over; the operator decides the production point from that curve).
+	if raw := strings.TrimSpace(os.Getenv("DENEB_RECALL_MAX_EVIDENCE")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v >= 4 && v <= 24 {
+			return v
+		}
+	}
 	if cue {
 		return recallMaxEvidence
 	}
