@@ -87,7 +87,12 @@ fn toggle_cygnus_window(app: &tauri::AppHandle) {
         }
         return;
     }
-    let built = WebviewWindowBuilder::new(app, "cygnus", WebviewUrl::App("index.html".into()))
+    // Identity is triple-carried: the window LABEL (canonical — main.tsx asks
+    // the Tauri API), the URL query (works in every webview), and the init
+    // script. The Xvfb real-shell run showed a single carrier is fragile in
+    // the webkit shell (the companion failed to take the cygnus branch until
+    // query+label were added) — never rely on one signal alone.
+    let built = WebviewWindowBuilder::new(app, "cygnus", WebviewUrl::App("index.html?window=cygnus".into()))
         .initialization_script("window.__CYGNUS__ = true;")
         .title("Cygnus")
         .inner_size(480.0, 700.0)

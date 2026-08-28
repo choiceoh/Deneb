@@ -45,7 +45,7 @@
   --shadow-pill: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 18px -5px rgba(0, 0, 0, 0.55);
 
   /* --- cygnus-only tokens --- */
-  --cy-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  --cy-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
   --cy-warning: #f2c15a;
 
   color-scheme: dark;
@@ -170,8 +170,10 @@ body.cygnus-window {
   min-height: 0;
 }
 
-/* Sessions rail — overlay drawer (the window is narrow), toggled from the
- * titlebar. Reuses SessionDrawer wholesale; only the container is Cygnus. */
+/* Sessions rail. Their reference window keeps the thread list permanently
+ * docked; at the companion's summon size (480px) a 300px rail would eat the
+ * conversation, so the rail DOCKS when the window is wide enough and falls
+ * back to an overlay drawer when it is not. The toggle drives both. */
 .cy-rail {
   position: absolute;
   inset: 0 auto 0 0;
@@ -186,16 +188,31 @@ body.cygnus-window {
   padding: 10px;
   animation: cy-rail-in 0.18s var(--ease);
 }
-@keyframes cy-rail-in {
-  from {
-    transform: translateX(-14px);
-    opacity: 0;
+
+/* Docked mode: wide enough for the list to live beside the thread. */
+@media (min-width: 720px) {
+  .cy-rail {
+    position: relative;
+    inset: auto;
+    width: 250px;
+    flex: none;
+    box-shadow: none;
+    background: transparent;
+    animation: none;
   }
-  to {
-    transform: none;
-    opacity: 1;
+  .cy-scrim {
+    display: none;
+  }
+  /* Flush inside the docked rail — the shared drawer paints its own card, which
+     read as a card inside a card once the rail stopped being an overlay. */
+  .cy-rail .session-drawer {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
   }
 }
+
 .cy-scrim {
   position: absolute;
   inset: 0;
@@ -221,7 +238,7 @@ body.cygnus-window {
   padding: 14px 16px 10px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
   overscroll-behavior: contain;
 }
 .cy-empty {
@@ -244,24 +261,92 @@ body.cygnus-window {
   font-size: 12px;
   color: var(--muted-2);
 }
-.cy-empty-hint {
-  margin-top: 14px;
-  font-family: var(--cy-mono);
-  font-size: 11px;
-  color: var(--muted-2);
-  border: 1px solid var(--line);
+.cy-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 18px;
+}
+.cy-starter {
+  font-family: var(--font);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
   border-radius: var(--radius-pill);
-  padding: 4px 10px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background 0.12s ease;
+}
+.cy-starter:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.cy-empty-hint {
+  /* Information, not an action — a pill here read as a fourth button next to
+     the starter chips. Quiet mono text instead. */
+  margin-top: 20px;
+  font-family: var(--cy-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+}
+
+/* Exchange rhythm: a user turn opens a new exchange (air above it) while the
+ * answer that follows stays tight to its question. */
+.cygnus-root .ai-turn.user:not(:first-child) {
+  margin-top: 14px;
+}
+
+/* User turns as right-aligned soft bubbles (reference request-block pattern —
+ * and '나' reads from the right in every Deneb surface). */
+.cygnus-root .ai-turn.user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.cygnus-root .ai-turn.user .ai-turn-body {
+  display: inline-block;
   background: var(--panel-sunken);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 7px 11px;
+  max-width: 88%;
+  text-align: left;
+}
+
+/* Turn actions stay quiet until pointed at (reference: actions don't chant on
+ * every turn) — keyboard focus still reveals them for a11y. */
+.cygnus-root .ai-turn-actions {
+  /* Collapse the height too, not just the ink: an invisible-but-laid-out row
+     left ~30px of dead space under every turn (caught in the screenshot loop). */
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition:
+    opacity 0.12s ease,
+    max-height 0.12s ease;
+}
+.cygnus-root .ai-turn:hover .ai-turn-actions,
+.cygnus-root .ai-turn-actions:focus-within {
+  opacity: 1;
+  max-height: 40px;
 }
 
 /* Density: the companion window is narrow — tighten the shared turn layout a
  * touch without forking it. */
 .cygnus-root .ai-turn-label {
-  font-size: 10.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted-2);
+  display: flex;
+  align-items: center;
+  height: 14px;
+  margin-bottom: 2px;
+  opacity: 0.85;
 }
 .cygnus-root .ai-turn-body,
 .cygnus-root .ai-md {
@@ -277,17 +362,45 @@ body.cygnus-window {
   border: 1px solid var(--line);
 }
 
-/* ---- composer + status ---- */
+/* ---- composer + status: one floating card ---- */
+/* Reference pattern (their composer card): the input and the identity/status
+ * row read as a single floating surface over the transcript. The shared
+ * .ai-composer keeps its structure but dissolves into the card; focus lights
+ * the card itself (single ring — no chrome-in-chrome). */
 .cy-foot {
   flex: none;
-  border-top: 1px solid var(--line);
-  padding: 10px 12px 8px;
+  margin: 0 10px 10px;
+  padding: 7px 10px 6px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  background: color-mix(in srgb, var(--panel) 68%, transparent);
+  gap: 5px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: 16px;
+  box-shadow: var(--shadow-pill);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.cy-foot:has(.ai-compose:focus) {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 3px var(--accent-soft),
+    var(--shadow-pill);
+}
+.cygnus-root .ai-composer {
+  margin-top: 0;
+  border-color: transparent;
+  background: transparent;
+  padding-left: 5px;
+}
+.cygnus-root .ai-composer:focus-within {
+  border-color: transparent;
+  box-shadow: none;
 }
 .cy-status {
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -332,6 +445,12 @@ body.cygnus-window {
 }
 .cygnus-root *::-webkit-scrollbar-thumb:hover {
   background: rgba(155, 163, 163, 0.75);
+}
+
+/* Composer reads calmer at the reference control radius (12px ladder step)
+ * inside the narrow companion window. */
+.cygnus-root .ai-composer {
+  border-radius: 12px;
 }
 
 /* focus ring follows the accent inside cygnus */
