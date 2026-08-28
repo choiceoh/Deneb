@@ -19,6 +19,14 @@ import (
 // results would otherwise be cut to a third of the intended length.
 const toolSummaryMaxRunes = 60
 
+// Preview bounds. The chip's expandable body shows what came back without
+// carrying the whole result to the client: enough to read a short file, a diff
+// hunk, or a command's output, and no more.
+const (
+	toolPreviewMaxRunes = 800
+	toolPreviewMaxLines = 24
+)
+
 // summarizeToolResult renders a raw tool result as one short line: the first
 // meaningful line, plus a count of the lines it stands for. Returns "" when the
 // result carries nothing worth showing — the chip then reads as it does today.
@@ -52,4 +60,37 @@ func summarizeToolResult(result string) string {
 		return fmt.Sprintf("%s · %d줄", head, len(lines))
 	}
 	return head
+}
+
+// toolResultPreview renders the readable head of a tool result for the chip's
+// expandable body: line structure kept (a diff or listing must stay readable),
+// control characters dropped, bounded in both lines and runes. Returns "" when
+// there is nothing to show.
+func toolResultPreview(result string) string {
+	normalized := strings.ReplaceAll(strings.ReplaceAll(result, "\r\n", "\n"), "\r", "\n")
+	normalized = strings.Map(func(r rune) rune {
+		if r != '\t' && r != '\n' && unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, normalized)
+	if strings.TrimSpace(normalized) == "" {
+		return ""
+	}
+
+	lines := strings.Split(normalized, "\n")
+	truncated := false
+	if len(lines) > toolPreviewMaxLines {
+		lines = lines[:toolPreviewMaxLines]
+		truncated = true
+	}
+	body := strings.TrimRight(strings.Join(lines, "\n"), " \t\n")
+	if runes := []rune(body); len(runes) > toolPreviewMaxRunes {
+		body = string(runes[:toolPreviewMaxRunes])
+		truncated = true
+	}
+	if truncated {
+		body += "\n…"
+	}
+	return body
 }

@@ -32,6 +32,8 @@ export interface ToolPart {
   isError?: boolean;
   // What the call produced, in one gateway-authored line (completed only).
   resultSummary?: string;
+  // The readable head of the result, shown when the chip is expanded.
+  resultPreview?: string;
 }
 export type CaptureKind = "image" | "audio" | "document";
 export interface AttachmentPart {

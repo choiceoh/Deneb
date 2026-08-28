@@ -21,4 +21,18 @@ describe("ToolChip", () => {
     rerender(<ToolChip part={{ kind: "tool", id: "t1", tool: "x", state: "completed", isError: true }} />);
     expect(screen.getByRole("img", { name: "실패" })).toBeInTheDocument();
   });
+
+  it("stays a plain row without a preview and becomes a disclosure with one", () => {
+    const base = { kind: "tool", id: "t1", tool: "exec", state: "completed" } as const;
+    const { container, rerender } = render(<ToolChip part={{ ...base, resultSummary: "합계 60 · 8줄" }} />);
+    expect(screen.getByText("합계 60 · 8줄")).toBeInTheDocument();
+    expect(container.querySelector("details")).toBeNull();
+
+    rerender(<ToolChip part={{ ...base, resultSummary: "합계 60 · 8줄", resultPreview: "a.ts\nb.ts" }} />);
+    const details = container.querySelector("details");
+    expect(details).not.toBeNull();
+    // Closed by default — the preview is opt-in, not noise in the transcript.
+    expect(details).not.toHaveAttribute("open");
+    expect(screen.getByText(/a\.ts/)).toBeInTheDocument();
+  });
 });

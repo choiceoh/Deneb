@@ -100,6 +100,8 @@ type toolStreamFrame struct {
 	IsError   bool   `json:"isError,omitempty"`
 	// ResultSummary rides only on `completed` frames; older clients ignore it.
 	ResultSummary string `json:"resultSummary,omitempty"`
+	// ResultPreview is the expandable body for clients that offer one.
+	ResultPreview string `json:"resultPreview,omitempty"`
 }
 
 // thinkingStreamFrame is the wire payload of one SSE "thinking" frame. Preview
@@ -365,6 +367,7 @@ func writeChatStreamSSE(
 				Detail:        ev.Detail,
 				IsError:       ev.IsError,
 				ResultSummary: ev.ResultSummary,
+				ResultPreview: ev.ResultPreview,
 			})
 			if ev.State == "completed" {
 				emitProgress("reviewing")

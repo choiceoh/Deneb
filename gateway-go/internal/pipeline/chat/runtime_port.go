@@ -126,6 +126,7 @@ func syncOptionsFromPort(req chatport.SyncRequest) *SyncOptions {
 				Detail:        event.Detail,
 				IsError:       event.IsError,
 				ResultSummary: event.ResultSummary,
+				ResultPreview: event.ResultPreview,
 			})
 		}
 	}
