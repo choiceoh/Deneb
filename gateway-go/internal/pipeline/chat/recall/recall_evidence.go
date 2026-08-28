@@ -1095,6 +1095,15 @@ func formatRecallEvidenceAt(evidence []recallEvidence, now time.Time, filesToolR
 	// answers from a gestalt impression of interleaved rows. Enumerate-then-
 	// answer is the cheapest known fix (CoT gains concentrate on temporal/
 	// aggregation in the LongMemEval paper) and costs one sentence.
+	// One scaffold sentence, aimed at aggregation questions: enumerate-then-
+	// count moved multi-session +4.9 with the other categories answer-for-
+	// answer identical (paired k3 judge, half set). A second date-arithmetic
+	// sentence for temporal-reasoning was tried and REVERTED: its isolation
+	// run (R4) moved temporal itself −1.6 and landed inside the harness noise
+	// floor — single-sentence reader levers measure below ±2.6 overall /
+	// ±6 multi run-to-run variance (sampled reader + sampled judge), so only
+	// mechanism-plus-large-signature levers or deterministic retrieval
+	// metrics justify further prompt tuning here.
 	sb.WriteString(" 횟수·목록·기간을 묻는 질문은 해당하는 근거 행을 날짜와 함께 먼저 나열한 뒤, 그 목록을 세어 답하라.\n\n")
 
 	written, dropped := 0, 0
@@ -1532,6 +1541,13 @@ func noteCapFor(row recallEvidence) int {
 	base := polarisNoteCap()
 	assistantish := strings.HasSuffix(row.Source, "/assistant") ||
 		strings.Contains(row.noteWide, "[assistant reply]")
+	// 900 is the measured ceiling for this cap. 1300 was tried (R3, half-set
+	// paired k3 judge) because 16 of 18 SSA abstentions genuinely lacked the
+	// answer — and its TARGET did not move (SSA 32.1 → 32.1, answer-for-answer)
+	// while multi-session fell 3.2 on blocks with IDENTICAL row counts: at a
+	// fixed row budget, longer assistant rows dilute enumeration-style reading.
+	// Length pays only when it carries the answer; past 900 it stopped doing
+	// that and only taxed the categories that read many rows.
 	if assistantish && base < 900 {
 		return 900
 	}
