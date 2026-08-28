@@ -74,4 +74,14 @@ internal object ToolStatusLabels {
 
     /** Compact footprint form for the post-turn trail ("메일 확인 중" → "메일 확인"). */
     fun trailLabel(tool: String): String = (labels[tool] ?: return tool).removeSuffix(" 중")
+
+    /**
+     * Completed form for the row's last moment on screen ("메일 확인 중" →
+     * "메일 확인 완료"). The row lingers briefly after the call returns, and an
+     * in-progress label held there reads as if the tool were still running.
+     */
+    fun doneLabel(tool: String): String {
+        val base = labels[tool] ?: return "$tool 완료"
+        return if (base.endsWith(" 중")) base.removeSuffix(" 중") + " 완료" else "$base 완료"
+    }
 }
