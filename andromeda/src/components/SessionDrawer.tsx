@@ -138,8 +138,12 @@ export function SessionDrawer({
                   <button type="button" className="session-row-main" onClick={() => onSelect(s.key)} disabled={busy}>
                     <span className="session-row-title">{s.pinned ? `핀 · ${title}` : title}</span>
                     {home ? <span className="session-row-hint">선제 보고가 모이는 업무 홈</span> : null}
+                    {/* Model and time as separate spans (the separator is drawn
+                        in CSS) so a surface skin can style them apart — the
+                        joined string could only ever be one flat line. */}
                     <span className="session-row-meta">
-                      {[s.model, s.updatedAtMs ? fmtDate(s.updatedAtMs) : ""].filter(Boolean).join(" · ")}
+                      {s.model ? <span className="session-row-model">{s.model}</span> : null}
+                      {s.updatedAtMs ? <span className="session-row-time">{fmtDate(s.updatedAtMs)}</span> : null}
                     </span>
                   </button>
                 )}

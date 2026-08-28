@@ -34,4 +34,22 @@ describe("upsertToolPart", () => {
     expect(completed.parts?.length).toBe(1);
     expect(completed.parts?.[0]).toMatchObject({ id: "t1", state: "completed", detail: "3 hits" });
   });
+
+  it("keeps the started hint when the completed frame carries none", () => {
+    // The gateway sends the human hint (command/query/path) only on `started`;
+    // `completed` carries the result. Overwriting with undefined left finished
+    // chips reading as a bare tool name ("exec" with no command).
+    const started = upsertToolPart(base, {
+      state: "started",
+      tool: "exec",
+      toolUseId: "t2",
+      detail: "ls andromeda/src/cygnus",
+    });
+    const completed = upsertToolPart(started, { state: "completed", tool: "exec", toolUseId: "t2" });
+    expect(completed.parts?.[0]).toMatchObject({
+      id: "t2",
+      state: "completed",
+      detail: "ls andromeda/src/cygnus",
+    });
+  });
 });

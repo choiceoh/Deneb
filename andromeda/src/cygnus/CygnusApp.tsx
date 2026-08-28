@@ -185,6 +185,20 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
     return () => window.removeEventListener("focus", onWindowFocus);
   }, []);
 
+  // Esc stops the running turn — the status row advertises the key, so it has
+  // to actually do it. Ignored while an IME composition is open (Esc cancels
+  // the candidate window first) and when the turn is not abortable.
+  useEffect(() => {
+    if (!busy || !stoppable) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape" || e.isComposing) return;
+      e.preventDefault();
+      stop();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [busy, stoppable, stop]);
+
   const { attachNote, attachingRef, attachFiles, onPick, staged, removeStaged, sendStaged } = useAttachPipeline({
     connected,
     busy,
@@ -396,8 +410,18 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
               <span>{connected ? "연결됨" : "미연결"}</span>
               <ModelPicker models={models} value={model} onChange={setModel} disabled={busy} />
               <span className="cy-sp" />
-              <span>
-                스레드 <b>{sessions.length}</b>
+              {/* A keyboard-driven surface states its keys where they apply —
+                  send/newline while composing, stop while a turn runs. */}
+              <span className="cy-keys" aria-hidden="true">
+                {busy && stoppable ? (
+                  <>
+                    <kbd>Esc</kbd> 중단
+                  </>
+                ) : (
+                  <>
+                    <kbd>⏎</kbd> 전송 <kbd>⇧⏎</kbd> 줄바꿈
+                  </>
+                )}
               </span>
             </div>
           </div>
