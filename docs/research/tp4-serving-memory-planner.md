@@ -30,8 +30,12 @@ Two platform facts make hand-picking unreliable:
 |---|---|
 | `plan` | probe all 4 nodes in parallel, print per-node usable table, identify the floor node, compute `budget = floor - margin`, `KV = budget - static`, and either print the recommended `GPU_MEM` (plus the equivalent `--kv-cache-memory` bytes) or refuse with "free N GiB on node X" |
 | `gmu` | print just the number — consumed by the launcher's `GPU_MEM=auto` (now the default), turning a 12-minute failed boot into a 2-second refusal |
-| `reclaim` | remove **dead** experiment containers (`q38*`/`q38save*` only), reap orphan harness processes, drop caches on all nodes, print before/after |
-| `help` | usage text (also saved as `~/README-tp4-mem.md`) |
+| `reclaim` | remove **dead** experiment containers (`q38*`/`q38save*` only), reap orphan harness processes, drop caches on all nodes, print before/after; `--stop-gradle` also reaps idle gradle/kotlin build daemons |
+| `doctor` | fleet health sweep (fabric link speed, clocks, container inventory); `--collect` writes a bundle |
+| `clock` | `status` / `set MHZ` — application clock cap across all four nodes |
+| `restore-prod` | put production back after an experiment: clear experiment containers, start the production model and OCR sidecar, then **prove it with a real chat call** |
+| `preflight` · `record` · `history` | pre-boot check, boot-ledger append, past-boot table |
+| `help` | usage text (also saved as a README next to the tool) |
 
 Defaults: `--static 46` (measured per-rank: NVFP4 weights 31.5 + FP8 PLE
 11.9 + runtime overhead), `--kv-min 6`, `--margin 2`. Fast probe mode uses
@@ -62,3 +66,21 @@ a CUDA context can kill a boot holding a ~2 GiB margin.
 - Never combine `pkill -f <script>` and a relaunch of the same script in one
   remote shell: the shell's own cmdline contains the script path and pkill
   kills it (the bracket trick covers matching, not colocation).
+- **A cleanup tool that kills harness scripts must exempt its own ancestry.**
+  Wiring `reclaim` into the bench harness so every boot started from a clean
+  background made each boot kill itself on its first line — the tool's kill
+  list names the harness, and the harness was now the caller. The bracket
+  trick does not help: the victim is a genuine ancestor, not a self-match.
+  The fix walks `/proc/<pid>/status` up the parent chain and refuses to signal
+  any PID in it, which covers every future caller rather than that one script.
+
+## Static reserve is configuration-dependent
+
+The `--static 46` default was measured on the plain serving configuration.
+Turning on torch.compile fusion passes pushes the per-rank static footprint
+past it: the planner cleared a boot at `GPU_MEM=0.66` and the engine then
+computed **`Available KV cache memory: -5.14 GiB`** and aborted. The planner
+cannot see this, because fusion allocates during compilation, after the
+planning probe. Until the reserve is made configuration-aware, raise
+`--static` by hand when enabling fusion, or treat a negative-KV abort as the
+signal that the static term, not the budget, was wrong.
