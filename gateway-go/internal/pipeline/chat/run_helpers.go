@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/chatportwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
 )
 
@@ -102,8 +103,8 @@ func executeAgentRunWithDelta(
 					ToolUseID:     envelope.Payload.ToolUseID,
 					Detail:        envelope.Payload.Detail,
 					IsError:       envelope.Payload.IsError,
-					ResultSummary: summarizeToolResult(envelope.Payload.Result),
-					ResultPreview: toolResultPreview(envelope.Payload.Result),
+					ResultSummary: toolport.SummarizeToolResult(envelope.Payload.Result),
+					ResultPreview: toolport.ToolResultPreview(envelope.Payload.Result),
 				})
 			}
 		case streaming.EventThinking:

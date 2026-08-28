@@ -4070,8 +4070,46 @@ class MiniappWireValueContractTest {
                     value = JsonPrimitive(Long.MAX_VALUE),
                     expectation = Expectation.Exact,
                 ),
+                fieldValue(
+                    name = "toolTrace",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
             ),
             invalidField = "id",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "TranscriptToolTraceOut",
+            serializer = TranscriptToolTraceOut.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "tool",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "detail",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "summary",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "preview",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "isError",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "tool",
             invalidValue = JsonObject(emptyMap()),
         ),
         wireContract(

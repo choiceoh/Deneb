@@ -14,7 +14,7 @@ import {
   sessionTranscript,
   setModel as persistModel,
 } from "@/gateway";
-import { type ChatTurn } from "@/hooks";
+import { type AssistantPart, type ChatTurn } from "@/hooks";
 import { errText } from "@/format";
 import { getString, setString } from "@/storage";
 
@@ -299,13 +299,31 @@ export function useSessions(
   }
 
   const toTurns = (msgs: TranscriptMsg[], key: string): ChatTurn[] =>
-    msgs.map((m, i) => ({
-      id: m.id || `tr-${key}-${i}`,
-      role: m.role === "user" ? "user" : "assistant",
-      text: m.content,
-      reasoning: m.reasoning,
-      status: "done" as const,
-    }));
+    msgs.map((m, i) => {
+      // Rebuild tool chips from the server's toolTrace so a restored
+      // conversation shows the same tool activity the live stream did. The
+      // calls ran before the message's text was written, so chips precede it.
+      const parts: AssistantPart[] = (m.toolTrace ?? []).map((t, j) => ({
+        kind: "tool" as const,
+        id: `tr-${key}-${i}-t${j}`,
+        tool: t.tool,
+        state: "completed" as const,
+        detail: t.detail || undefined,
+        isError: t.isError || undefined,
+        resultSummary: t.summary || undefined,
+        resultPreview: t.preview || undefined,
+      }));
+      if (parts.length > 0 && m.content) parts.push({ kind: "text", text: m.content });
+      return {
+        id: m.id || `tr-${key}-${i}`,
+        role: m.role === "user" ? ("user" as const) : ("assistant" as const),
+        text: m.content,
+        reasoning: m.reasoning,
+        status: "done" as const,
+        // Textless turns keep parts undefined so the plain-body path renders.
+        parts: parts.length > 0 ? parts : undefined,
+      };
+    });
 
   async function loadTranscript(key: string, limit?: number) {
     const { messages, total } = await sessionTranscript(cfg, key, limit);

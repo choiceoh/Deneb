@@ -22,6 +22,7 @@ type (
 	SessionRowOut           = handlerminiapp.SessionRowOut
 	TranscriptAttachmentOut = handlerminiapp.TranscriptAttachmentOut
 	TranscriptMsgOut        = handlerminiapp.TranscriptMsgOut
+	TranscriptToolTraceOut  = handlerminiapp.TranscriptToolTraceOut
 	SessionSearchHitOut     = handlerminiapp.SessionSearchHitOut
 	SessionSearchResult     = handlerminiapp.SessionSearchResult
 	SessionFocusResult      = handlerminiapp.SessionFocusResult

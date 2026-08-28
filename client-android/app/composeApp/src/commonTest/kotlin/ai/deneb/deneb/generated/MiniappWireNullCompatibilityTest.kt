@@ -3898,6 +3898,42 @@ class MiniappWireNullCompatibilityTest {
             field = "timestampMs",
         ),
         nullContract(
+            name = "TranscriptMsgOut.toolTrace",
+            serializer = TranscriptMsgOut.serializer(),
+            empty = TranscriptMsgOut(),
+            field = "toolTrace",
+        ),
+        nullContract(
+            name = "TranscriptToolTraceOut.tool",
+            serializer = TranscriptToolTraceOut.serializer(),
+            empty = TranscriptToolTraceOut(),
+            field = "tool",
+        ),
+        nullContract(
+            name = "TranscriptToolTraceOut.detail",
+            serializer = TranscriptToolTraceOut.serializer(),
+            empty = TranscriptToolTraceOut(),
+            field = "detail",
+        ),
+        nullContract(
+            name = "TranscriptToolTraceOut.summary",
+            serializer = TranscriptToolTraceOut.serializer(),
+            empty = TranscriptToolTraceOut(),
+            field = "summary",
+        ),
+        nullContract(
+            name = "TranscriptToolTraceOut.preview",
+            serializer = TranscriptToolTraceOut.serializer(),
+            empty = TranscriptToolTraceOut(),
+            field = "preview",
+        ),
+        nullContract(
+            name = "TranscriptToolTraceOut.isError",
+            serializer = TranscriptToolTraceOut.serializer(),
+            empty = TranscriptToolTraceOut(),
+            field = "isError",
+        ),
+        nullContract(
             name = "UsageStat.name",
             serializer = UsageStat.serializer(),
             empty = UsageStat(),

@@ -5,6 +5,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
@@ -66,7 +67,7 @@ func wireStreamHooks(
 		hc.OnToolEmit(func(name, toolUseID string, input []byte) {
 			// The detail hint (query/command/file name) turns the client's
 			// waiting chip from "메일 확인 중" into "메일 확인 중: 아르고".
-			broadcaster.EmitToolStart(name, toolUseID, toolStreamDetail(name, input))
+			broadcaster.EmitToolStart(name, toolUseID, toolport.ToolStreamDetail(name, input))
 		})
 		hc.OnToolResult(func(name, toolUseID, result string, isErr bool) {
 			broadcaster.EmitToolResult(name, toolUseID, result, isErr)
