@@ -1169,17 +1169,19 @@ var polarisRerankCandidates = polarisRerankWindowFromEnv()
 // polarisRerankWindow routes the cross-encoder window the same way
 // polarisCrossHits routes reach: by the budget the turn will actually spend.
 //
-// Routing is what makes the wide window affordable. Judged as one global number
-// it loses — 50 buys +1.3pp of hit@8, nothing at the 4-row budget, and costs
-// every turn a bigger cross-encoder batch (280-char snippets, 12 samples:
-// median 16.8/43.1/64.9ms and p90 38.9/46.1/95.0ms at 10/20/50 docs). The tail
-// is the real cost, since a saturated sidecar pushes calls past
-// polarisRerankTimeout and drops reranking for that turn silently.
+// The window is a CEILING, not a cost. Measured batch sizes are the pool, never
+// the window: 11.8 docs on a no-cue turn against a window of 20, and 24.7 on a
+// cue turn against 50 (LongMemEval_s, 470 questions). Nothing is ever truncated
+// by it today, so widening it buys the rows a smaller ceiling would have cut —
+// the 20-to-50 step was worth +1.3pp of hit@8 for exactly that reason — while
+// costing nothing extra to run.
 //
-// Per-turn, the ledger is different: a no-cue turn searches with reach 2, so its
-// pool rarely reaches 20 rows and a wider window changes nothing it would pay
-// for. The gain and the latency both land on cue turns — the ones where the
-// operator explicitly asked to remember — so they are the ones that should pay.
+// What actually drives cross-encoder cost is REACH (polarisCrossHits), because
+// the batch is the pool: doubling reach doubled the batch, ~12 docs to ~25,
+// which on the measured curve (280-char snippets, 12 samples: median
+// 16.8/43.1/64.9ms at 10/20/50 docs) is roughly 20ms to 50ms. Routing still
+// belongs here, but as headroom that follows the budget rather than as spend:
+// a cue turn's wider reach needs a ceiling wide enough not to clip it.
 func polarisRerankWindow(cue bool) int {
 	if cue {
 		return polarisRerankCandidatesCue

@@ -591,15 +591,31 @@ func TestDedupRecallEvidenceDeduplicatesAcrossSources(t *testing.T) {
 	}
 }
 
-func TestRecallEvidenceBudgetReturnsTighterBudgetWithoutCue(t *testing.T) {
+// A cue turn must still search harder than a silent one. That contract used to
+// be asserted on the ROW budget, but rows turned out to be the pipeline's
+// binding constraint rather than a place to economize: retrieval reached the
+// evidence 93.4% of the time while only 70.9% fit in four rows, and widening the
+// render costs no latency at all. The row budgets are now equal, so the contract
+// moved to the axes that still separate the two paths.
+//
+// Of those, only reach is a real cost — the cross-encoder batch is the pool
+// (measured 11.8 vs 24.7 docs), never the window, so the window is a ceiling
+// that keeps a cue turn's wider pool from being clipped rather than extra spend.
+func TestCueTurnSpendsMoreThanSilentRecall(t *testing.T) {
 	if got := recallEvidenceBudget(true); got != recallMaxEvidence {
 		t.Errorf("cue budget = %d, want %d", got, recallMaxEvidence)
 	}
 	if got := recallEvidenceBudget(false); got != recallAutoMaxEvidence {
 		t.Errorf("auto budget = %d, want %d", got, recallAutoMaxEvidence)
 	}
-	if recallAutoMaxEvidence >= recallMaxEvidence {
-		t.Error("auto-recall budget must be tighter than the explicit-cue budget")
+	if recallAutoMaxEvidence > recallMaxEvidence {
+		t.Error("the silent budget must never exceed the explicit-cue budget")
+	}
+	if polarisCrossHits(true) <= polarisCrossHits(false) {
+		t.Error("a cue turn must search wider than a silent one")
+	}
+	if polarisRerankWindow(true) <= polarisRerankWindow(false) {
+		t.Error("a cue turn must rerank a wider window than a silent one")
 	}
 }
 

@@ -135,6 +135,7 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 	poolSize, rankedSize, dedupHits, filterHits := 0, 0, 0, 0
 	charCutNoCue, charCutCue, charCutCueTurns := 0, 0, 0
 	evidenceTotal, recalledNoCue, recalledCue := 0, 0, 0
+	rerankBatchNoCue, rerankBatchCue, poolNoCue, poolCue := 0, 0, 0, 0
 
 	// Questions are independent — each builds its own store — and the run is
 	// dominated by round-trips to the embedding sidecar, not by GPU throughput
@@ -411,6 +412,11 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 					}
 				}
 			}
+			// 리랭커에 실제로 넘어간 문서 수 = min(풀, 창)
+			rerankBatchNoCue += minInt(len(candidates), polarisRerankWindow(false))
+			rerankBatchCue += minInt(len(cueCandidates), polarisRerankWindow(true))
+			poolNoCue += len(candidates)
+			poolCue += len(cueCandidates)
 			evidenceTotal += len(evidenceSessions)
 			recalledNoCue += len(coveredNoCue)
 			recalledCue += len(coveredCue)
@@ -459,6 +465,9 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 		// honest claim is about the pipeline, not a like-for-like retriever win.
 		t.Logf("STRICT-RECALL  recall@4=%s  recall@8=%s  (%d evidence sessions over %d questions — the paper's metric; compare to 58.2%%/64.4%% round-level)",
 			pct(recalledNoCue, evidenceTotal), pct(recalledCue, evidenceTotal), evidenceTotal, overall.total)
+		t.Logf("RERANK-BATCH  no-cue: pool=%.1f batch=%.1f (창 %d)   cue: pool=%.1f batch=%.1f (창 %d)",
+			float64(poolNoCue)/float64(overall.total), float64(rerankBatchNoCue)/float64(overall.total), polarisRerankWindow(false),
+			float64(poolCue)/float64(overall.total), float64(rerankBatchCue)/float64(overall.total), polarisRerankWindow(true))
 		t.Logf("CHARBUDGET  rows dropped by recallMaxChars: no-cue=%d  cue=%d (on %d/%d cue-budget turns)",
 			charCutNoCue, charCutCue, charCutCueTurns, overall.total)
 		t.Logf("STAGE  pool=%s  after-dedup=%s  after-filter=%s  | avg pool=%.1f ranked(cue8)=%.1f",

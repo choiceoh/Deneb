@@ -22,9 +22,29 @@ import (
 const (
 	recallPreflightTimeout = 1500 * time.Millisecond
 	// recallMaxEvidence is the evidence budget for an explicit recall cue;
-	// silent every-turn auto-recall gets the tighter recallAutoMaxEvidence.
+	// silent every-turn auto-recall gets recallAutoMaxEvidence.
+	//
+	// The auto budget was 4 and is now 8. Four rows was the binding constraint on
+	// the whole pipeline: retrieval reached the evidence 93.4% of the time but
+	// only 70.9% of it fit (LongMemEval_s, 470 questions, 890 evidence sessions,
+	// strict recall@k — the metric the paper reports). Widening the render alone,
+	// with reach and rerank window left at their no-cue values, recovers most of
+	// that gap for no latency at all: nothing is searched or reranked differently,
+	// the ranked list is simply cut later.
+	//
+	//	auto budget                      recall@k   success@k   block tokens
+	//	4                                70.9%      90.9%       1587
+	//	8 (reach 2, window 20)           80.7%      93.2%       2263
+	//	8 + cue reach 5 + cue window 50  82.8%      94.0%       2263
+	//
+	// The cost is context, not time: +676 tokens per recall turn, which against
+	// the production median first turn (10,658 input tokens, 252 turns over 3
+	// days) moves the block from 14.9% to 21.2% of the prompt — and on a small
+	// turn (p25, 7,850) from 20.2% to 28.8%. That is the tradeoff being accepted
+	// here; the remaining +2.1pp needs the wider cue reach, which stays reserved
+	// for turns where the operator actually asked to remember.
 	recallMaxEvidence     = 8
-	recallAutoMaxEvidence = 4
+	recallAutoMaxEvidence = 8
 	// recallBroadeningPenalty multiplies the score of a hit found only by an
 	// individual broadening term (not the combined multi-term query), demoting
 	// incidental single-common-term matches (e.g. "조직" → an unrelated "조직명"
