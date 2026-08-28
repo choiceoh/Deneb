@@ -61,8 +61,8 @@ Authoring discipline that makes small-to-mid local models execute a skill
 accurately. Distilled 2026-08 from a clean-room study of a production
 local-agent skill corpus (verdict record: `perplexity-portable-computer-review`
 in the operator memory's closed-reviews index) — principles only, no text
-imported. The measured background: a small model rarely *disobeys* a skill; it
-*fails to satisfy* one whose body isn't self-serve. Facts, tables, and budgets
+imported. The measured background: a small model rarely _disobeys_ a skill; it
+_fails to satisfy_ one whose body isn't self-serve. Facts, tables, and budgets
 outperform exhortation.
 
 1. **State the call budget up front.** Right after the workflow overview, pin
@@ -70,7 +70,7 @@ outperform exhortation.
    build + verify in one more call: target 2"). Without a budget the model
    pokes the shell ten times even when a helper exists.
 2. **Block the one fatal mistake with a leading blockquote.** Every domain
-   has one error the model *will* make; preempt exactly that as a quote at
+   has one error the model _will_ make; preempt exactly that as a quote at
    the top (for example "> The .xlsx is a binary produced by running Python.
    Never patch it with `edit`").
 3. **Helper first, hand-rolling as fallback.** If the skill bundles a
