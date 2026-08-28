@@ -21,6 +21,7 @@ type (
 	RecallMiss              = wiki.RecallMiss
 	RecallUsage             = wiki.RecallUsage
 	WikiDreamer             = wiki.WikiDreamer
+	DreamerLLMTarget        = wiki.DreamerLLMTarget
 	Page                    = wiki.Page
 	Frontmatter             = wiki.Frontmatter
 	EpisodeSource           = wiki.EpisodeSource
