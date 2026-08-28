@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for the main workstation window",
-  "windows": ["main"],
+  "description": "Default capability for the workstation and Cygnus companion windows",
+  "windows": ["main", "cygnus"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

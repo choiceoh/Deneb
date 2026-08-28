@@ -1,0 +1,391 @@
+/* Cygnus — the agent companion window's design layer.
+ *
+ * Dark-first, single cyan-teal accent (Deneb the blue-white supergiant), on
+ * teal-biased slate neutrals. Clean-room craft study of Perplexity's local
+ * agent shell; no assets or values lifted.
+ *
+ * Mechanism: the workstation components reused here (AssistantBody, ChatComposer,
+ * SessionDrawer, ModelPicker …) style themselves from the :root tokens in
+ * styles.css. Cygnus re-declares THOSE SAME token names inside .cygnus-root, so
+ * every shared component reskins without a fork. Cygnus-only tokens are --cy-*.
+ * Light theme is an explicit attribute (the shell has no OS-follow need). */
+
+.cygnus-root {
+  /* --- primitive ramp (cygnus-scoped) --- */
+  --cy-teal-100: #c9ecef;
+  --cy-teal-300: #63c9d3;
+  --cy-teal-400: #35c2d1;
+  --cy-teal-500: #1fa3b2;
+  --cy-teal-600: #147c88;
+  --cy-teal-800: #0c4b53;
+  --cy-teal-950: #061f23;
+
+  /* --- andromeda token names, Cygnus dark values --- */
+  --grad: linear-gradient(168deg, #101416 0%, #0c0e0f 58%, #0e1517 100%);
+  --panel: #14181a;
+  --panel-sunken: #0e1214;
+  --row-hover: #1b2124;
+  --ink: #e8ecec;
+  --ink-2: #c3cacb;
+  --muted: #9ba3a3;
+  --muted-2: #7c8485;
+  --faint: #5a6263;
+  --line: #232a2d;
+  --line-2: #2d3538;
+  --accent: var(--cy-teal-400);
+  --accent-deep: var(--cy-teal-500);
+  --accent-soft: rgba(53, 194, 209, 0.13);
+  --accent-on-dark: var(--cy-teal-300);
+  --online: #4fbe8e;
+  --due: #e4694a;
+  --due-soft: rgba(228, 105, 74, 0.14);
+  --danger: #e4694a;
+  --shadow-panel:
+    0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 26px -10px rgba(0, 0, 0, 0.6), 0 30px 70px -22px rgba(0, 0, 0, 0.7);
+  --shadow-pill: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 18px -5px rgba(0, 0, 0, 0.55);
+
+  /* --- cygnus-only tokens --- */
+  --cy-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  --cy-orb-glow: 0 0 46px -6px rgba(53, 194, 209, 0.5);
+  --cy-warning: #f2c15a;
+
+  color-scheme: dark;
+}
+
+.cygnus-root[data-theme="light"] {
+  --grad: linear-gradient(168deg, #f7f6f2 0%, #f2f1ec 58%, #eef1f1 100%);
+  --panel: #ffffff;
+  --panel-sunken: #efede7;
+  --row-hover: #f2f0ea;
+  --ink: #1a1d1e;
+  --ink-2: #3b4245;
+  --muted: #5b6163;
+  --muted-2: #8a8f8e;
+  --faint: #b0b4b2;
+  --line: #e2dfd6;
+  --line-2: #cfcbbf;
+  --accent: var(--cy-teal-600);
+  --accent-deep: #0e626c;
+  --accent-soft: rgba(20, 124, 136, 0.11);
+  --accent-on-dark: var(--cy-teal-300);
+  --online: #2f7d5b;
+  --due: #b34328;
+  --due-soft: rgba(179, 67, 40, 0.11);
+  --danger: #b34328;
+  --shadow-panel:
+    0 1px 2px rgba(26, 29, 30, 0.06), 0 10px 24px -10px rgba(26, 29, 30, 0.16), 0 30px 64px -22px rgba(26, 29, 30, 0.26);
+  --shadow-pill: 0 1px 2px rgba(26, 29, 30, 0.1), 0 8px 18px -5px rgba(26, 29, 30, 0.2);
+  --cy-orb-glow: 0 0 40px -8px rgba(20, 124, 136, 0.4);
+  --cy-warning: #a9701a;
+
+  color-scheme: light;
+}
+
+/* The workstation stylesheet paints body with its warm gradient; on the
+ * transparent Cygnus window that would peek past the rounded corners. */
+body.cygnus-window {
+  background: transparent;
+}
+
+/* ============ window shell ============ */
+/* Covers the transparent frameless window; rounded like the workstation panels. */
+.cygnus-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--grad);
+  color: var(--ink);
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  font-family: var(--font);
+}
+
+/* ---- titlebar (drag region) ---- */
+.cy-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.cy-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  pointer-events: none;
+}
+.cy-title-session {
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  pointer-events: none;
+}
+.cy-titlebar .cy-sp {
+  flex: 1;
+  min-width: 12px;
+}
+.cy-tbtn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+}
+.cy-tbtn:hover {
+  color: var(--ink);
+  background: var(--row-hover);
+  border-color: var(--line);
+}
+.cy-tbtn[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+  background: var(--accent-soft);
+}
+
+/* ---- the orb (clean-room CSS sphere; the surface's signature) ---- */
+.cy-orb {
+  --sz: 18px;
+  width: var(--sz);
+  height: var(--sz);
+  border-radius: 50%;
+  flex: none;
+  position: relative;
+  background:
+    radial-gradient(circle at 34% 28%, #ffffff 0%, rgba(255, 255, 255, 0) 22%),
+    radial-gradient(
+      circle at 36% 30%,
+      var(--cy-teal-100) 0%,
+      var(--cy-teal-400) 30%,
+      var(--cy-teal-600) 62%,
+      var(--cy-teal-950) 100%
+    );
+  box-shadow:
+    var(--cy-orb-glow),
+    inset -2px -3px 6px -1px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+.cy-orb.busy {
+  animation: cy-breathe 2.2s var(--ease) infinite;
+}
+.cy-orb-hero {
+  --sz: 64px;
+  margin-bottom: 14px;
+  animation: cy-breathe 6s var(--ease) infinite;
+}
+@keyframes cy-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+/* ============ body: rail + thread ============ */
+.cy-body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.cy-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Sessions rail — overlay drawer (the window is narrow), toggled from the
+ * titlebar. Reuses SessionDrawer wholesale; only the container is Cygnus. */
+.cy-rail {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: min(300px, 86%);
+  z-index: 12;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  box-shadow: var(--shadow-panel);
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: 10px;
+  animation: cy-rail-in 0.18s var(--ease);
+}
+@keyframes cy-rail-in {
+  from {
+    transform: translateX(-14px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.cy-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  background: rgba(0, 0, 0, 0.35);
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* File-drag affordance — the shared .drop-over style is scoped to .panel, which
+ * .cy-main is not; give the companion its own accent ring. */
+.cy-main.drop-over {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: inherit;
+}
+
+/* ---- transcript ---- */
+.cy-transcript {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overscroll-behavior: contain;
+}
+.cy-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 4px;
+  color: var(--muted);
+  padding: 24px;
+}
+.cy-empty p {
+  margin: 0;
+  font-size: 14.5px;
+  color: var(--ink-2);
+}
+.cy-empty-sub {
+  font-size: 12px;
+  color: var(--muted-2);
+}
+.cy-empty-hint {
+  margin-top: 14px;
+  font-family: var(--cy-mono);
+  font-size: 11px;
+  color: var(--muted-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  padding: 4px 10px;
+  background: var(--panel-sunken);
+}
+
+/* Density: the companion window is narrow — tighten the shared turn layout a
+ * touch without forking it. */
+.cygnus-root .ai-turn-label {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.cygnus-root .ai-turn-body,
+.cygnus-root .ai-md {
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.cygnus-root .ai-md pre,
+.cygnus-root .ai-md code {
+  font-family: var(--cy-mono);
+}
+.cygnus-root .ai-md pre {
+  background: var(--panel-sunken);
+  border: 1px solid var(--line);
+}
+
+/* ---- composer + status ---- */
+.cy-foot {
+  flex: none;
+  border-top: 1px solid var(--line);
+  padding: 10px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: color-mix(in srgb, var(--panel) 68%, transparent);
+}
+.cy-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--cy-mono);
+  font-size: 10.5px;
+  color: var(--muted-2);
+  padding: 2px 2px 0;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.cy-status .cy-sp {
+  flex: 1;
+}
+.cy-status b {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* Light-tuned literals in the shared stylesheet that read wrong on the dark
+ * skin — retargeted inside the cygnus scope only. */
+.cy-main {
+  position: relative; /* .chat-scroll-bottom anchors here (parity with .chat-main) */
+}
+.cygnus-root ::selection {
+  background: var(--accent-soft); /* global selection tint is warm clay */
+}
+.cygnus-root .ai-send {
+  color: #062629; /* white-on-bright-teal fails contrast; dark ink on the light accent */
+}
+.cygnus-root[data-theme="light"] .ai-send {
+  color: #ffffff; /* light theme's accent is deep teal — white is right again */
+}
+.cygnus-root .session-row-main:hover {
+  background: var(--row-hover); /* was a white glass wash — a flash on dark */
+}
+/* scrollbars: the global thumb is warm taupe; use a slate thumb here */
+.cygnus-root *:hover {
+  scrollbar-color: rgba(124, 133, 134, 0.5) transparent;
+}
+.cygnus-root *:hover::-webkit-scrollbar-thumb {
+  background: rgba(124, 133, 134, 0.5);
+}
+.cygnus-root *::-webkit-scrollbar-thumb:hover {
+  background: rgba(155, 163, 163, 0.75);
+}
+
+/* focus ring follows the accent inside cygnus */
+.cygnus-root :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cy-orb,
+  .cy-orb-hero,
+  .cy-rail {
+    animation: none !important;
+  }
+}
