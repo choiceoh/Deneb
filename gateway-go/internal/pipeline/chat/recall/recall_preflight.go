@@ -562,10 +562,105 @@ func rankRecallEvidence(
 		}
 		return evidence[i].Score > evidence[j].Score
 	})
-	if budget := recallEvidenceBudget(cue); len(evidence) > budget {
-		return evidence[:budget]
+	return cutToBudgetWithDiversity(evidence, recallEvidenceBudget(cue))
+}
+
+// cutToBudgetWithDiversity fills the evidence budget by rank but refuses to let
+// one conversation monopolize it. Measured on the rendered blocks: in 26% of
+// LongMemEval questions a single session held 3+ of the 8 rows while other
+// evidence sessions went unrendered — exactly the slots an aggregation question
+// ("how many X did I…") needs. Rule: at most two session-rows per conversation
+// while other candidates remain; near-duplicate notes (≥70% token overlap with
+// an already-picked row) are skipped the same way. Overflow slots fall back to
+// pure rank order, so a turn whose evidence genuinely lives in one conversation
+// still fills its budget.
+func cutToBudgetWithDiversity(evidence []recallEvidence, budget int) []recallEvidence {
+	if len(evidence) <= budget {
+		return evidence
 	}
-	return evidence
+	perSession := make(map[string]int)
+	sessionOf := func(ev recallEvidence) string {
+		if ev.Kind != "session" {
+			return ""
+		}
+		if i := strings.LastIndex(ev.Source, "#"); i > 0 {
+			return ev.Source[:i]
+		}
+		return ev.Source
+	}
+	picked := make([]recallEvidence, 0, budget)
+	pickedTokens := make([]map[string]struct{}, 0, budget)
+	used := make([]bool, len(evidence))
+	noteTokens := func(note string) map[string]struct{} {
+		out := make(map[string]struct{})
+		for _, t := range splitRecallTokens(note) {
+			out[t] = struct{}{}
+		}
+		return out
+	}
+	// Near-duplicate skip applies ONLY within the same conversation. The first
+	// version compared across sessions and collapsed retrieval outright
+	// (rendered recall@4 80.7% → 34.9%): model pruning rewrites every relevant
+	// row into the same question-shaped sentences, so cross-session evidence
+	// rows — each carrying a DISTINCT fact ("visited the ENT", "visited the
+	// dermatologist") — read as duplicates of each other, got skipped, and the
+	// budget filled with low-rank chatter. hit@8 stayed at 94.5% the whole
+	// time, because one surviving evidence row satisfies it — the damage was
+	// invisible outside strict recall.
+	pickedSessions := make([]string, 0, budget)
+	overlaps := func(tokens map[string]struct{}, session string) bool {
+		for pi, prev := range pickedTokens {
+			if session == "" || pickedSessions[pi] != session {
+				continue
+			}
+			if len(tokens) == 0 || len(prev) == 0 {
+				continue
+			}
+			shared := 0
+			for t := range tokens {
+				if _, ok := prev[t]; ok {
+					shared++
+				}
+			}
+			smaller := len(tokens)
+			if len(prev) < smaller {
+				smaller = len(prev)
+			}
+			if smaller > 0 && float64(shared)/float64(smaller) >= 0.7 {
+				return true
+			}
+		}
+		return false
+	}
+	for i := range evidence {
+		if len(picked) == budget {
+			break
+		}
+		key := sessionOf(evidence[i])
+		if key != "" && perSession[key] >= 2 {
+			continue
+		}
+		tokens := noteTokens(evidence[i].Note)
+		if overlaps(tokens, key) {
+			continue
+		}
+		used[i] = true
+		picked = append(picked, evidence[i])
+		pickedTokens = append(pickedTokens, tokens)
+		pickedSessions = append(pickedSessions, key)
+		if key != "" {
+			perSession[key]++
+		}
+	}
+	for i := range evidence { // fall back to rank order for any unfilled slots
+		if len(picked) == budget {
+			break
+		}
+		if !used[i] {
+			picked = append(picked, evidence[i])
+		}
+	}
+	return picked
 }
 
 // filterCrossSubjectEvidence drops wiki rows whose SubjectID is a non-self
