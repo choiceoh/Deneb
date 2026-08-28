@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DataProviderScope } from "@/crud";
 import { denebDataProvider } from "@/dataProvider";
+import { useDesktopChrome } from "@/desktopChrome";
 import { type GatewayConfig, loadConfig, saveConfig } from "@/gateway";
 import { useChat } from "@/hooks";
 import { parseUiSubmission } from "@/markdown/denebUiParse";
@@ -45,6 +46,7 @@ export function CygnusApp() {
   const [cfg, setCfg] = useState<GatewayConfig>(loadConfig());
   const dataProvider = useMemo(() => denebDataProvider(cfg), [cfg]);
   const connected = Boolean(cfg.url && cfg.token);
+  useDesktopChrome();
   useEffect(() => {
     if (cfg.token) return;
     let cancelled = false;
@@ -151,6 +153,15 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
   const { models, model, setModel } = useModels(cfg, connected, sessionKey, sessionModel);
   const { ref: transcriptRef, onScroll, pin, atBottom, scrollToBottom } = useStickyScroll([turns, thinking]);
   useComposerBehavior(composeRef, { input, busy, hidden: false, focusOnReveal: true });
+
+  // Summon-to-type: the OS window regaining focus (tray click / global
+  // shortcut) puts the caret straight into the composer — a summonable
+  // surface must be typeable without a mouse click.
+  useEffect(() => {
+    const onWindowFocus = () => composeRef.current?.focus();
+    window.addEventListener("focus", onWindowFocus);
+    return () => window.removeEventListener("focus", onWindowFocus);
+  }, []);
 
   const { attachNote, attachingRef, attachFiles, onPick, staged, removeStaged, sendStaged } = useAttachPipeline({
     connected,
