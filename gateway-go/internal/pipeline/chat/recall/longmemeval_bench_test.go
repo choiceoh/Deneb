@@ -292,16 +292,28 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			}
 			// The production path, verbatim: query derivation → polaris source →
 			// ranking → budget-cut rendering.
-			queries := searchQueries(q.Question)
+			// LONGMEMEVAL_PAD appends an email-style body to every question — the
+			// autonomous-lane message shape — and LONGMEMEVAL_RERANK_QUERY=terms swaps
+			// the cross-encoder's query to derived terms. Together they reproduce the
+			// raw-vs-terms verdict recorded on rerankPolarisEvidence.
+			question := q.Question
+			if os.Getenv("LONGMEMEVAL_PAD") != "" {
+				question = q.Question + "\n\n" + strings.Repeat("Sharing today's site progress and material delivery schedule; please review the invoice timing and reply. Thanks. ", 6)
+			}
+			queries := searchQueries(question)
+			rerankQuery := question
+			if os.Getenv("LONGMEMEVAL_RERANK_QUERY") == "terms" {
+				rerankQuery = strings.Join(queries, " ")
+			}
 			// Reach now scales with the budget (polarisCrossHits), so the two
 			// budgets need their own candidate pools — reusing one would score the
 			// cue budget against the no-cue turn's narrower reach.
 			candidates := rerankPolarisEvidence(
-				context.Background(), reranker, q.Question, false,
+				context.Background(), reranker, rerankQuery, false,
 				recallPolarisEvidence(context.Background(), bridge, questionKey, queries, false),
 			)
 			cueCandidates := rerankPolarisEvidence(
-				context.Background(), reranker, q.Question, true,
+				context.Background(), reranker, rerankQuery, true,
 				recallPolarisEvidence(context.Background(), bridge, questionKey, queries, true),
 			)
 			// Ceiling probe: what FTS could reach at limit 10, ignoring the per-query
@@ -334,11 +346,11 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			// (finding problem), and where does the no-cue budget of 4 rows cut it
 			// (ranking/budget problem)? The two need different fixes.
 			poolHit := hitIn(candidates)
-			evidence := rankRecallEvidence(append([]recallEvidence(nil), candidates...), queries, q.Question, hasCue(q.Question), questionAt)
+			evidence := rankRecallEvidence(append([]recallEvidence(nil), candidates...), queries, question, hasCue(question), questionAt)
 			// rankRecallEvidence cuts to recallEvidenceBudget(cue) internally, so the
 			// budget-8 number needs its own ranking pass with cue=true — slicing the
 			// returned rows to 8 would silently re-measure the same 4.
-			cueRanked := rankRecallEvidence(append([]recallEvidence(nil), cueCandidates...), queries, q.Question, true, questionAt)
+			cueRanked := rankRecallEvidence(append([]recallEvidence(nil), cueCandidates...), queries, question, true, questionAt)
 			// Stage isolation: where does a pooled hit die — dedup or cross-subject filter?
 			afterDedup := dedupRecallEvidence(append([]recallEvidence(nil), candidates...))
 			afterFilter := filterCrossSubjectEvidence(append([]recallEvidence(nil), afterDedup...), q.Question)
