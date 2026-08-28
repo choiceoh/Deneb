@@ -1102,7 +1102,7 @@ func formatRecallEvidenceAt(evidence []recallEvidence, now time.Time, filesToolR
 		// answer did not survive the cut, the model can pull the conversation
 		// itself instead of guessing — sessions.history resolves these ref
 		// tails and accepts the #N anchor as a window center.
-		sb.WriteString(" source=session 행은 과거 대화의 발췌다. 발췌만으로 부족하면 sessions(action=\"history\", sessionKey=\"<그 행의 ref>\")로 해당 대화 전체를 열람하라.")
+		sb.WriteString(" source=session 행은 과거 대화의 발췌다. 발췌만으로 부족하면 sessions(action=\"history\", sessionKey=\"<그 행의 ref>\")로 해당 대화 전체를 열람하고, 관련 행이 아예 없으면 sessions(action=\"search\", query=\"<핵심 키워드>\")로 과거 대화를 직접 검색하라.")
 	}
 	// Aggregation scaffold: count/list/period questions fail when the reader
 	// answers from a gestalt impression of interleaved rows. Enumerate-then-
