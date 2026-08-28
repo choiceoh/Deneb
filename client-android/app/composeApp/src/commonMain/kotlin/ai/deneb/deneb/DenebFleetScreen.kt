@@ -19,9 +19,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,7 +45,9 @@ import kotlinx.coroutines.launch
  * Fleet management as its own full screen (NOT a settings tab — the settings
  * hub stays configuration-only; running GPU nodes is an operational surface,
  * like mail or people). The frame deliberately mirrors [DenebConfigScreen]:
- * title row + pill tab bar + pager, with 노드 / 레시피 / 작업 as the tabs.
+ * title row + pill tab bar + pager, with 노드 / 모델 / 작업 as the tabs. (레시피·벤치
+ * surfaces were removed 2026-08-28: recipe control is AI-only via the gateway's
+ * `fleet` chat tool; benchmarking left the product.)
  *
  * Data flows through the gateway's authenticated SparkFleet passthrough
  * (DenebClientFleet); one poll loop at screen level feeds all three tabs, so a
@@ -66,28 +66,21 @@ fun DenebFleetScreen(
     val haptics = rememberHaptics()
 
     var state by remember { mutableStateOf<FleetState?>(null) }
-    var recipes by remember { mutableStateOf<List<FleetRecipe>?>(null) }
     var jobs by remember { mutableStateOf<List<FleetJob>?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var stale by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
-    var confirm by remember { mutableStateOf<Pair<FleetRecipe, String>?>(null) }
-    // Read-only diagnostics open directly (no confirm): container logs / crash triage.
-    var logsTarget by remember { mutableStateOf<FleetRecipe?>(null) }
-    var diagnoseTarget by remember { mutableStateOf<FleetRecipe?>(null) }
 
     suspend fun refresh() {
         val st = client.fleetState()
-        val rc = client.fleetRecipes()
         val jb = client.fleetJobs()
         st?.let { state = it }
-        rc?.let { recipes = it }
         jb?.let { jobs = it }
         // Every fetch failing after a successful load means the fleet went away:
         // keep the last data on screen but flag it, instead of letting stale
         // green health pass for live (the retained values would otherwise look
         // current forever).
-        stale = loaded && st == null && rc == null && jb == null
+        stale = loaded && st == null && jb == null
         loaded = true
     }
     // One poll loop for the whole screen: jobs stream their logs server-side,
@@ -172,7 +165,7 @@ fun DenebFleetScreen(
                 state = pagerState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             ) { page ->
-                val unreachable = loaded && state?.nodes.isNullOrEmpty() && recipes.isNullOrEmpty()
+                val unreachable = loaded && state?.nodes.isNullOrEmpty() && jobs.isNullOrEmpty()
                 if (unreachable) {
                     Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
                         DenebError(
@@ -183,109 +176,18 @@ fun DenebFleetScreen(
                 } else {
                     when (FleetTab.entries[page]) {
                         FleetTab.NODES -> FleetNodesPage(state?.nodes.orEmpty(), loaded)
-
-                        FleetTab.RECIPES -> FleetRecipesPage(recipes.orEmpty(), loaded) { rc, action ->
-                            haptics.tap()
-                            when (action) {
-                                "logs" -> logsTarget = rc
-                                "diagnose" -> diagnoseTarget = rc
-                                else -> confirm = rc to action
-                            }
-                        }
-
                         FleetTab.MODELS -> FleetModelsPage(client, state?.nodes.orEmpty()) { notice = it }
-
-                        FleetTab.BENCH -> FleetBenchPage(client, recipes.orEmpty(), jobs.orEmpty(), loaded) { notice = it }
-
                         FleetTab.JOBS -> FleetJobsPage(client, jobs.orEmpty(), loaded) { notice = it }
                     }
                 }
             }
         }
     }
-
-    confirm?.let { (rc, action) ->
-        val label = when (action) {
-            "launch" -> "기동"
-            "stop" -> "중지"
-            "restart" -> "재시작"
-            else -> action
-        }
-        // Per-launch memory overrides, prefilled from the recipe's vLLM block —
-        // SparkFleet applies them to a clone, the recipe file never changes.
-        var gmu by remember(rc.name) { mutableStateOf(rc.vllm?.gpuMemoryUtilization?.toString().orEmpty()) }
-        var maxLen by remember(rc.name) { mutableStateOf(rc.vllm?.maxModelLen?.toString().orEmpty()) }
-        var seqs by remember(rc.name) { mutableStateOf(rc.vllm?.maxNumSeqs?.toString().orEmpty()) }
-        AlertDialog(
-            onDismissRequest = { confirm = null },
-            title = { Text("${rc.name} $label") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("${rc.status.node.ifBlank { rc.node }} 노드에서 ${rc.name} 레시피를 $label 할까요?")
-                    if (action == "launch" && rc.vllm != null) {
-                        Text(
-                            "이번 기동에만 적용되는 메모리 설정 (비우면 레시피 값)",
-                            style = DenebType.hint,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        OutlinedTextField(
-                            value = gmu,
-                            onValueChange = { gmu = it },
-                            label = { Text("GPU 메모리 사용률 (0–1)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        OutlinedTextField(
-                            value = maxLen,
-                            onValueChange = { maxLen = it },
-                            label = { Text("최대 컨텍스트 (tokens)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        OutlinedTextField(
-                            value = seqs,
-                            onValueChange = { seqs = it },
-                            label = { Text("동시 시퀀스") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirm = null
-                    val overrides = if (action == "launch") {
-                        FleetVllm(
-                            gpuMemoryUtilization = gmu.trim().toDoubleOrNull(),
-                            maxModelLen = maxLen.trim().toIntOrNull(),
-                            maxNumSeqs = seqs.trim().toIntOrNull(),
-                        )
-                    } else {
-                        null
-                    }
-                    scope.launch {
-                        val err = client.fleetRecipeAction(rc.name, action, overrides) { jobId ->
-                            notice = "${rc.name} $label 시작됨 — 작업 $jobId 진행 상황은 작업 탭에서"
-                        }
-                        notice = err ?: notice ?: "${rc.name} $label 완료"
-                        refresh()
-                    }
-                }) { Text(label) }
-            },
-            dismissButton = { TextButton(onClick = { confirm = null }) { Text("취소") } },
-        )
-    }
-
-    logsTarget?.let { rc -> FleetLogsDialog(client, rc) { logsTarget = null } }
-    diagnoseTarget?.let { rc -> FleetDiagnoseDialog(client, rc) { diagnoseTarget = null } }
 }
 
 /** The fleet screen's tabs, in display order (same contract as ConfigTab). */
 private enum class FleetTab(val label: String) {
     NODES("노드"),
-    RECIPES("레시피"),
     MODELS("모델"),
-    BENCH("벤치"),
     JOBS("작업"),
 }

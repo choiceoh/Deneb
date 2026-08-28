@@ -1,15 +1,7 @@
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { serializeList } from "@/aiText";
-import {
-  type FleetJob,
-  type FleetNode,
-  type FleetRecipe,
-  fleetJobs,
-  fleetRecipeAction,
-  fleetRecipes,
-  fleetState,
-} from "@/fleet";
+import { type FleetJob, type FleetNode, fleetJobs, fleetState } from "@/fleet";
 import { errText } from "@/format";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import {
@@ -18,11 +10,8 @@ import {
   type FleetServiceRow,
   type FleetView,
   type JobFilter,
-  type RecipeAction,
-  type RecipeFilter,
   type ServiceFilter,
   FLEET_VIEWS,
-  actionLabel,
   asArray,
   gpuText,
   jobState,
@@ -32,17 +21,13 @@ import {
   nodeIssueText,
   nodeIssueView,
   oneLine,
-  recipeNode,
-  vllmText,
 } from "./fleetHelpers";
 import {
-  ConfirmAction,
   FleetJobsView,
   FleetMetric,
   FleetModelsView,
   FleetNodesView,
   FleetOverview,
-  FleetRecipesView,
   FleetServicesView,
 } from "./FleetViews";
 
@@ -51,23 +36,17 @@ import {
 export function FleetPane() {
   const { connected, cfg } = useWorkspace();
   const [nodes, setNodes] = useState<FleetNode[]>([]);
-  const [recipes, setRecipes] = useState<FleetRecipe[]>([]);
   const [jobs, setJobs] = useState<FleetJob[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [stale, setStale] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [confirm, setConfirm] = useState<{ recipe: FleetRecipe; action: RecipeAction } | null>(null);
-  const [busyAction, setBusyAction] = useState("");
   const [expandedJob, setExpandedJob] = useState("");
   const [view, setView] = useState<FleetView>("overview");
   const [nodeQuery, setNodeQuery] = useState("");
   const [nodeProblemsOnly, setNodeProblemsOnly] = useState(false);
   const [modelQuery, setModelQuery] = useState("");
   const [serviceFilter, setServiceFilter] = useState<ServiceFilter>("all");
-  const [recipeQuery, setRecipeQuery] = useState("");
-  const [recipeFilter, setRecipeFilter] = useState<RecipeFilter>("all");
   const [jobFilter, setJobFilter] = useState<JobFilter>("all");
   const loadedRef = useRef(false);
   const refreshSeqRef = useRef(0);
@@ -77,11 +56,7 @@ export function FleetPane() {
     const seq = ++refreshSeqRef.current;
     setLoading(true);
     setError("");
-    const [stateResult, recipesResult, jobsResult] = await Promise.allSettled([
-      fleetState(cfg),
-      fleetRecipes(cfg),
-      fleetJobs(cfg),
-    ]);
+    const [stateResult, jobsResult] = await Promise.allSettled([fleetState(cfg), fleetJobs(cfg)]);
     if (seq !== refreshSeqRef.current) return;
     let successCount = 0;
     const failures: unknown[] = [];
@@ -89,10 +64,6 @@ export function FleetPane() {
       setNodes(asArray(stateResult.value.nodes));
       successCount += 1;
     } else failures.push(stateResult.reason);
-    if (recipesResult.status === "fulfilled") {
-      setRecipes(asArray(recipesResult.value));
-      successCount += 1;
-    } else failures.push(recipesResult.reason);
     if (jobsResult.status === "fulfilled") {
       setJobs(asArray(jobsResult.value));
       successCount += 1;
@@ -139,15 +110,12 @@ export function FleetPane() {
     };
   }, [connected, refresh]);
 
-  const runningRecipes = recipes.filter((r) => r.status?.running).length;
   const runningJobs = jobs.filter((j) => jobState(j) === "running").length;
   const failedJobs = jobs.filter((j) => jobState(j) === "failed").length;
   const reachableNodes = nodes.filter((n) => n.reachable !== false).length;
   const downNodes = nodes.length - reachableNodes;
   const latestJob = jobs[0];
   const nodeIssues = nodes.filter(nodeHasIssue);
-  const runningRecipeList = recipes.filter((r) => r.status?.running);
-  const missingWeightRecipes = recipes.filter((r) => r.status?.weightsPresent === false);
   const failedJobList = jobs.filter((j) => jobState(j) === "failed");
   const modelRows: FleetModelRow[] = nodes.flatMap((node) =>
     asArray(node.models).map((model, idx) => ({
@@ -190,13 +158,6 @@ export function FleetPane() {
       view: nodeIssueView(node),
       tone: node.reachable === false || node.error ? ("bad" as const) : ("warn" as const),
     })),
-    ...missingWeightRecipes.map((recipe) => ({
-      key: `recipe:${recipe.name}`,
-      title: recipe.name,
-      detail: "가중치 없음",
-      view: "recipes" as const,
-      tone: "warn" as const,
-    })),
     ...failedJobList.slice(0, 5).map((job) => ({
       key: `job:${job.id}`,
       title: job.title || job.id,
@@ -228,24 +189,12 @@ export function FleetPane() {
     if (serviceFilter === "down") return !service.ok || !service.nodeReachable;
     return true;
   });
-  const filteredRecipes = recipes.filter((recipe) => {
-    const q = recipeQuery.trim().toLowerCase();
-    const running = recipe.status?.running === true;
-    const matchesFilter = recipeFilter === "all" || (recipeFilter === "running" ? running : !running);
-    const matchesQuery =
-      !q ||
-      [recipe.name, recipe.description, recipe.node, recipe.status?.node, recipe.container]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(q));
-    return matchesFilter && matchesQuery;
-  });
   const filteredJobs = jobs.filter((job) => jobFilter === "all" || jobState(job) === jobFilter);
   const viewCounts: Record<FleetView, number> = {
     overview: issues.length,
     nodes: nodes.length,
     models: modelRows.length,
     services: serviceRows.length,
-    recipes: recipes.length,
     jobs: jobs.length,
   };
 
@@ -274,50 +223,21 @@ export function FleetPane() {
         `${n.error ? ` · 오류 ${n.error}` : ""}`,
       "대",
     );
-    const recipeText = serializeList(
-      "플릿 레시피",
-      recipes,
-      (r) =>
-        `- ${r.name}: ${r.status?.running ? "실행 중" : "중지"}` +
-        `${recipeNode(r) ? ` · ${recipeNode(r)}` : ""}` +
-        `${vllmText(r) ? ` · ${vllmText(r)}` : ""}` +
-        `${r.description ? ` · ${r.description}` : ""}`,
-    );
     const jobText = serializeList(
       "플릿 작업",
       jobs.slice(0, 8),
       (j) => `- ${j.title || j.id}: ${j.state || "unknown"}${j.log ? ` · ${oneLine(j.log)}` : ""}`,
     );
-    return [nodeText, recipeText, jobText].filter(Boolean).join("\n\n");
-  }, [jobs, nodes, recipes]);
+    return [nodeText, jobText].filter(Boolean).join("\n\n");
+  }, [jobs, nodes]);
   useRegisterPane("fleet", aiText);
-
-  async function runRecipeAction(recipe: FleetRecipe, action: RecipeAction) {
-    setConfirm(null);
-    setBusyAction(`${recipe.name}:${action}`);
-    setNotice("");
-    setError("");
-    try {
-      const result = await fleetRecipeAction(cfg, recipe.name, action);
-      setNotice(
-        result.jobId
-          ? `${recipe.name} ${actionLabel(action)} 시작됨 · 작업 ${result.jobId}`
-          : `${recipe.name} ${actionLabel(action)} 완료`,
-      );
-      await refresh();
-    } catch (e) {
-      setError(errText(e));
-    } finally {
-      setBusyAction("");
-    }
-  }
 
   return (
     <>
       <div className="fleet-head">
         <div>
           <h2 style={{ margin: 0 }}>플릿</h2>
-          <p className="fleet-subtitle">SparkFleet 노드, GPU 레시피, 최근 작업</p>
+          <p className="fleet-subtitle">SparkFleet 노드·모델·최근 작업 (레시피 제어는 채팅의 AI에게)</p>
         </div>
         <button className="btn" type="button" onClick={refresh} disabled={!connected || loading}>
           {loading ? "새로고침 중" : "새로고침"}
@@ -336,12 +256,6 @@ export function FleetPane() {
               tone={downNodes ? "bad" : "ok"}
             />
             <FleetMetric
-              label="레시피"
-              value={`${runningRecipes}/${recipes.length || 0}`}
-              hint="실행 중 / 전체"
-              tone={runningRecipes ? "ok" : "neutral"}
-            />
-            <FleetMetric
               label="작업"
               value={String(runningJobs)}
               hint={failedJobs ? `최근 실패 ${failedJobs}` : "진행 중"}
@@ -357,7 +271,6 @@ export function FleetPane() {
 
           {stale && <div className="fleet-banner error">플릿 연결 끊김 · 마지막 데이터를 표시 중입니다.</div>}
           {error && <div className="fleet-banner error">오류: {error}</div>}
-          {notice && <div className="fleet-banner">{notice}</div>}
 
           {!loaded && loading ? (
             <div className="fleet-empty">플릿 상태를 불러오는 중…</div>
@@ -393,12 +306,9 @@ export function FleetPane() {
                 {view === "overview" && (
                   <FleetOverview
                     issues={issues}
-                    runningRecipes={runningRecipeList}
                     recentJobs={jobs.slice(0, 6)}
-                    busyAction={busyAction}
                     expandedJob={expandedJob}
                     onView={setView}
-                    onRecipeAction={(recipe, action) => setConfirm({ recipe, action })}
                     onJobToggle={(jobId) => setExpandedJob(expandedJob === jobId ? "" : jobId)}
                   />
                 )}
@@ -428,18 +338,6 @@ export function FleetPane() {
                     onFilter={setServiceFilter}
                   />
                 )}
-                {view === "recipes" && (
-                  <FleetRecipesView
-                    recipes={filteredRecipes}
-                    total={recipes.length}
-                    query={recipeQuery}
-                    filter={recipeFilter}
-                    busyAction={busyAction}
-                    onQuery={setRecipeQuery}
-                    onFilter={setRecipeFilter}
-                    onAction={(recipe, action) => setConfirm({ recipe, action })}
-                  />
-                )}
                 {view === "jobs" && (
                   <FleetJobsView
                     jobs={filteredJobs}
@@ -454,15 +352,6 @@ export function FleetPane() {
             </>
           )}
         </>
-      )}
-
-      {confirm && (
-        <ConfirmAction
-          recipe={confirm.recipe}
-          action={confirm.action}
-          onClose={() => setConfirm(null)}
-          onConfirm={() => void runRecipeAction(confirm.recipe, confirm.action)}
-        />
       )}
     </>
   );

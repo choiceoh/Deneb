@@ -1,12 +1,10 @@
-import type { FleetJob, FleetNode, FleetRecipe } from "@/fleet";
+import type { FleetJob, FleetNode } from "@/fleet";
 
 // FleetPane's shared types and pure display helpers — split from FleetPane.tsx
 // (calendarHelpers/fileHelpers pattern) so the pane file stays within the repo's
 // size guideline and non-component exports don't trip react-refresh.
 
-export type RecipeAction = "launch" | "stop" | "restart";
-export type FleetView = "overview" | "nodes" | "models" | "services" | "recipes" | "jobs";
-export type RecipeFilter = "all" | "running" | "stopped";
+export type FleetView = "overview" | "nodes" | "models" | "services" | "jobs";
 export type JobFilter = "all" | "running" | "done" | "failed";
 export type ServiceFilter = "all" | "healthy" | "down";
 
@@ -15,7 +13,6 @@ export const FLEET_VIEWS: { key: FleetView; label: string }[] = [
   { key: "nodes", label: "노드" },
   { key: "models", label: "모델" },
   { key: "services", label: "서비스" },
-  { key: "recipes", label: "레시피" },
   { key: "jobs", label: "작업" },
 ];
 
@@ -69,22 +66,6 @@ export function memoryText(node: FleetNode): string {
   return `${percent(used, mem.totalKB)}% · ${bytes(used * 1024)}/${bytes(mem.totalKB * 1024)}`;
 }
 
-export function recipeNode(recipe: FleetRecipe): string {
-  return recipe.status?.node || recipe.node || "";
-}
-
-export function vllmText(recipe: FleetRecipe): string {
-  const v = recipe.vllm;
-  if (!v) return "";
-  return [
-    v.gpuMemoryUtilization != null ? `GPU ${v.gpuMemoryUtilization}` : "",
-    v.maxModelLen != null ? `${v.maxModelLen} ctx` : "",
-    v.maxNumSeqs != null ? `${v.maxNumSeqs} seq` : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
-
 export function jobState(job: FleetJob): string {
   return (job.state || "").toLowerCase() || "unknown";
 }
@@ -94,12 +75,6 @@ export function jobStateLabel(state: string): string {
   if (state === "done") return "완료";
   if (state === "failed") return "실패";
   return state;
-}
-
-export function recipeFilterLabel(filter: RecipeFilter): string {
-  if (filter === "running") return "실행";
-  if (filter === "stopped") return "중지";
-  return "전체";
 }
 
 export function jobFilterLabel(filter: JobFilter): string {
@@ -152,10 +127,6 @@ export function nodeIssueView(node: FleetNode): FleetView {
   if (node.reachable === false || node.error) return "nodes";
   if (asArray(node.metrics?.services).some((service) => service.ok === false)) return "services";
   return "nodes";
-}
-
-export function actionLabel(action: RecipeAction): string {
-  return action === "launch" ? "기동" : action === "restart" ? "재시작" : "중지";
 }
 
 export function percent(used: number, total: number): number {

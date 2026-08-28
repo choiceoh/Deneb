@@ -280,10 +280,5 @@ export const handlers = [
   ),
 
   http.get("*/api/v1/fleet/api/state", () => HttpResponse.json(fx.fleetState)),
-  http.get("*/api/v1/fleet/api/recipes", () => HttpResponse.json(fx.fleetRecipes)),
   http.get("*/api/v1/fleet/api/jobs", () => HttpResponse.json(fx.fleetJobs)),
-  http.post("*/api/v1/fleet/api/recipes/action", async ({ request }) => {
-    const body = (await request.json()) as { recipe?: string; action?: string };
-    return HttpResponse.json({ jobId: `mock-${body.recipe ?? "recipe"}-${body.action ?? "action"}` });
-  }),
 ];

@@ -3,7 +3,7 @@
 // (isUnread, due, nextRunAtMs, workfeed body/source/createdAtMs, …) — they're what
 // an agent (or a screenshot) sees when running against the mock.
 import type { CalendarProposal, ModelsList, SessionRow, TranscriptMsg } from "@/gateway";
-import type { FleetJob, FleetRecipe, FleetState } from "@/fleet";
+import type { FleetJob, FleetState } from "@/fleet";
 import type {
   CalEvent,
   Cron,
@@ -388,27 +388,6 @@ export const fleetState: FleetState = {
     },
   ],
 };
-
-export const fleetRecipes: FleetRecipe[] = [
-  {
-    name: "qwen36",
-    description: "문서/코딩 보조 기본 로컬 모델",
-    node: "srv1",
-    container: "vllm-qwen36",
-    port: 8000,
-    vllm: { gpuMemoryUtilization: 0.78, maxModelLen: 32768, maxNumSeqs: 8 },
-    status: { running: true, weightsPresent: true, node: "srv1" },
-  },
-  {
-    name: "deepseek-v4-flash",
-    description: "고속 추론 후보",
-    node: "srv3",
-    container: "vllm-dsv4",
-    port: 8001,
-    vllm: { gpuMemoryUtilization: 0.72, maxModelLen: 65536, maxNumSeqs: 4 },
-    status: { running: false, weightsPresent: true, node: "srv3" },
-  },
-];
 
 export const fleetJobs: FleetJob[] = [
   {
