@@ -347,8 +347,16 @@ describe("SessionDrawer", () => {
       />,
     );
 
-    expect(screen.getByText(/smart ·/)).toBeInTheDocument();
-    expect(screen.getByText("client:main:beta").parentElement).not.toHaveTextContent("·");
+    // Model and time are separate spans now (the separator is CSS-drawn), so
+    // the no-dangling-separator contract is structural: a row missing one field
+    // simply renders one span, never a stray middot.
+    const withBoth = screen.getByText("smart");
+    expect(withBoth).toHaveClass("session-row-model");
+    expect(withBoth.parentElement?.querySelector(".session-row-time")).not.toBeNull();
+
+    const bare = screen.getByText("client:main:beta").parentElement;
+    expect(bare).not.toHaveTextContent("·");
+    expect(bare?.querySelector(".session-row-model")).toBeNull();
   });
 
   it("routes select, delete, and new-conversation actions", async () => {

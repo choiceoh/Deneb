@@ -557,6 +557,88 @@ body.cygnus-window {
   border-left: 2px solid var(--line-2);
 }
 
+/* ---- session rows ---- */
+/* The list is the surface's memory: give the model a badge and the time a
+   tabular voice so rows scan by shape, not by reading. */
+.cygnus-root .session-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.cygnus-root .session-row-model {
+  padding: 1px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-pill);
+  font-family: var(--cy-mono);
+  font-size: 9.5px;
+  color: var(--muted);
+}
+.cygnus-root .session-row-model + .session-row-time::before {
+  content: none;
+}
+.cygnus-root .session-row-time {
+  font-family: var(--cy-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.cygnus-root .session-row.active {
+  position: relative;
+  background: var(--accent-soft);
+}
+.cygnus-root .session-row.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.cygnus-root .session-row-title {
+  font-size: 12.5px;
+}
+
+/* ---- keyboard affordances ---- */
+/* A summonable, keyboard-driven surface should say its keys where they apply.
+   Rendered as kbd chips in the status row; hidden below 380px. */
+.cygnus-root .cy-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--faint);
+}
+.cygnus-root .cy-keys kbd {
+  font-family: var(--cy-mono);
+  font-size: 9.5px;
+  line-height: 1.5;
+  padding: 1px 4px;
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--muted-2);
+}
+@media (max-width: 400px) {
+  .cygnus-root .cy-keys {
+    display: none;
+  }
+}
+
+/* ---- titlebar ---- */
+/* Was a flat strip: give it the panel's surface and a hairline that reads as
+   window chrome, with the session name as a quiet second rank. */
+.cygnus-root .cy-titlebar {
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+  border-bottom-color: var(--line-2);
+}
+.cygnus-root .cy-title-session {
+  padding-left: 9px;
+  border-left: 1px solid var(--line-2);
+}
+
 /* focus ring follows the accent inside cygnus */
 .cygnus-root :focus-visible {
   outline: 2px solid var(--accent);

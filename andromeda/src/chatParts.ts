@@ -25,12 +25,17 @@ export function appendTextPart(turn: ChatTurn, t: string): ChatTurn {
 export function upsertToolPart(turn: ChatTurn, ev: ChatToolEvent): ChatTurn {
   const parts: AssistantPart[] = [...(turn.parts ?? [])];
   const idx = ev.toolUseId ? parts.findIndex((p) => p.kind === "tool" && p.id === ev.toolUseId) : -1;
+  // The gateway puts the human hint (command, query, path) on the `started`
+  // frame only; `completed` carries the result instead. Overwriting with the
+  // completed event's empty detail erased it, so finished chips read as a bare
+  // tool name — keep the hint we were already shown.
+  const prevDetail = idx >= 0 ? (parts[idx] as ToolPart).detail : undefined;
   const next: ToolPart = {
     kind: "tool",
     id: ev.toolUseId || `${ev.tool}-${parts.length}`,
     tool: ev.tool,
     state: ev.state || "started",
-    detail: ev.detail,
+    detail: ev.detail || prevDetail,
     isError: ev.isError,
   };
   if (idx >= 0) parts[idx] = { ...(parts[idx] as ToolPart), ...next };

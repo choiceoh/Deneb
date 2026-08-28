@@ -1802,6 +1802,11 @@ input[type="checkbox"] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Model and time are separate spans; the separator that used to be part of the
+ * joined string is drawn here so the row reads identically. */
+.session-row-model + .session-row-time::before {
+  content: " · ";
+}
 .session-row-del,
 .session-row-pin,
 .session-row-reset {
