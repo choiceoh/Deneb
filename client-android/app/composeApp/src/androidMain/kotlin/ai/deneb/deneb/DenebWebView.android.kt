@@ -496,7 +496,14 @@ actual fun DenebWebView(
             // old back/forward list after the user navigated away would be a lie.
             BrowserTabStateDisk.remove(context, state.tabId)
             holder.lastCommandUrl = target
-            holder.web?.loadUrl(target)
+            holder.web?.let { web ->
+                // Right after (re)entering the browser the restored session is
+                // often still loading, and its pending restore navigation can
+                // supersede a loadUrl issued meanwhile — the first bookmark or
+                // history tap looked dead. Stop it first; a no-op when idle.
+                web.stopLoading()
+                web.loadUrl(target)
+            }
         }
     }
     LaunchedEffect(state.goBackTick) {
