@@ -1,0 +1,15 @@
+{
+  "skill": "design-foundations",
+  "cases": [
+    {"name": "chart", "message": "월별 매출 추이 차트로 그려줘", "shouldTrigger": true},
+    {"name": "visualize", "message": "이 수치들 보기 좋게 시각화해줘", "shouldTrigger": true},
+    {"name": "report-page", "message": "이 내용을 웹페이지 형태로 예쁘게 만들어줘", "shouldTrigger": true},
+    {"name": "diagram", "message": "처리 흐름을 도표로 정리해줘", "shouldTrigger": true},
+    {"name": "pdf-report", "message": "분기 리포트 문서로 만들어줘 — 표랑 그래프 넣어서", "shouldTrigger": true},
+    {"name": "plain-answer", "message": "지난달 매출이 얼마였지?", "shouldTrigger": false},
+    {"name": "code-fix", "message": "안드로메다 사이드바 색상 코드를 수정해줘", "shouldTrigger": false},
+    {"name": "wiki-write", "message": "이 회의 내용을 위키에 기록해줘", "shouldTrigger": false},
+    {"name": "schedule", "message": "내일 오후 회의 일정 잡아줘", "shouldTrigger": false},
+    {"name": "mail-draft", "message": "거래처에 보낼 메일 초안 써줘", "shouldTrigger": false}
+  ]
+}

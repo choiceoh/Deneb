@@ -31,7 +31,7 @@ description: One-line description of what skills belong in this category.
 | Category | Description | Skills |
 |---|---|---|
 | `coding` | Software development, code generation, version control, CI/CD | evolution-proposal, skill-factory |
-| `productivity` | Daily workflows, documents, summarization, personal automation | contract-review, decision-premortem, deep-research, deneb-ui-authoring, email-analysis, fact-check, meeting-minutes, morning-letter, proactive-gate, retrieval-plan, weekly-report |
+| `productivity` | Daily workflows, documents, summarization, personal automation | contract-review, decision-premortem, deep-research, deneb-ui-authoring, design-foundations, email-analysis, fact-check, meeting-minutes, morning-letter, proactive-gate, retrieval-plan, weekly-report |
 | `devops` | System monitoring, terminal management, infrastructure | (none — 2026-07 사용량 감사로 은퇴; 필요 시 git 히스토리에서 복원) |
 | `security` | Security, secrets management, and credential handling | (none) |
 | `integration` | External service connectivity, API bridges | (none) |
