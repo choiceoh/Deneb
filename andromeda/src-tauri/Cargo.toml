@@ -37,4 +37,4 @@ base64 = "0.22"
 # X11 screen capture (GetImage) — enigo links x11rb already; declared so the
 # capture path can use it directly. Wayland falls back to CLI tools at runtime.
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
-x11rb = "0.13"
+x11rb = "0.14"
