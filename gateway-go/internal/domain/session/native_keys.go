@@ -12,6 +12,13 @@ const (
 	DreamWorkSessionKey = NativeWorkSessionKey + ":dream"
 	// NativeWorkSessionTarget is the channel target portion of client:main.
 	NativeWorkSessionTarget = "main"
+	// CompanionWorkSessionPrefix namespaces the desktop companion window's
+	// (Andromeda's Cygnus) conversations. They are ordinary user conversations
+	// on the same `client` channel as client:main… — so they list in the
+	// drawers and are rebuilt from transcripts on startup — while the distinct
+	// namespace lets the companion filter its own threads client-side and keeps
+	// agent/coding work out of the 업무 chat's labels.
+	CompanionWorkSessionPrefix = "client:cygnus:"
 	// HeartbeatWorkSessionKey is the ISOLATED session the 30-min heartbeat turn
 	// reasons in. Kept separate from client:main so autonomous ticks never
 	// assemble or compact the user's live conversation (the old client:main
@@ -78,9 +85,11 @@ func RestorableTranscriptChannel(sessionKey string) (channel string, ok bool) {
 	}
 	isNative := sessionKey == NativeWorkSessionKey ||
 		strings.HasPrefix(sessionKey, NativeWorkSessionKey+":")
+	isCompanion := strings.HasPrefix(sessionKey, CompanionWorkSessionPrefix) &&
+		strings.TrimPrefix(sessionKey, CompanionWorkSessionPrefix) != ""
 	isLegacyChat := strings.HasPrefix(sessionKey, "chat:") &&
 		strings.TrimPrefix(sessionKey, "chat:") != ""
-	if isNative || isLegacyChat {
+	if isNative || isCompanion || isLegacyChat {
 		return "client", true
 	}
 	return "", false

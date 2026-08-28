@@ -26,6 +26,12 @@ func TestRestorableTranscriptChannelParsesValidAndInvalidKeys(t *testing.T) {
 		{key: "client:main:sub-a-1784342370344:sub-b-1784342999999", ok: false},
 		{key: "client:main:subagent:1784342370344", ok: false},
 		{key: "client:main:gmail-large-attachment-fix:1782276675257", ok: false},
+		// The desktop companion window (Cygnus) mints its own namespace. Its
+		// threads are user conversations too — while unrecognized they listed
+		// in no drawer and the startup restore dropped them.
+		{key: "client:cygnus:main", ok: true},
+		{key: "client:cygnus:6c4385b5-6124-4224-afc2-492017824ef2", ok: true},
+		{key: "client:cygnus:", ok: false},
 		{key: "client:topic:old", ok: false},
 		{key: "client:uuid", ok: false},
 		{key: "chat:", ok: false},
