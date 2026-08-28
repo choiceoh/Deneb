@@ -11,6 +11,7 @@ import {
   sessionTranscript,
   setModel,
 } from "@/gateway";
+import type { ChatTurn } from "@/hooks";
 import { useSessions } from "./useSessions";
 
 vi.mock("@/gateway", () => ({
@@ -130,6 +131,43 @@ describe("useSessions", () => {
       { id: "sys", role: "assistant", text: "상태", status: "done" },
     ]);
     expect(result.current.sessionErr).toBe("");
+  });
+
+  it("rebuilds tool chips from the server toolTrace on restore", async () => {
+    transcript.mockResolvedValue({
+      messages: [
+        { id: "u1", role: "user", content: "폴더 보여줘" },
+        {
+          role: "assistant",
+          content: "",
+          toolTrace: [{ tool: "exec", detail: "ls -la", summary: "total 60 · 2줄", preview: "total 60\nfile.ts" }],
+        },
+        { role: "assistant", content: "6개 파일이 있습니다." },
+      ],
+      total: 3,
+      turnRunning: false,
+    });
+    const chat = chatDouble();
+    const { result } = renderHook(() => useSessions(cfg, true, false, chat));
+
+    await act(async () => result.current.selectSession("client:main:abc"));
+
+    const turns = chat.setTurns.mock.calls.at(-1)?.[0] as ChatTurn[];
+    const chipTurn = turns[1];
+    expect(chipTurn.parts).toEqual([
+      {
+        kind: "tool",
+        id: "tr-client:main:abc-1-t0",
+        tool: "exec",
+        state: "completed",
+        detail: "ls -la",
+        isError: undefined,
+        resultSummary: "total 60 · 2줄",
+        resultPreview: "total 60\nfile.ts",
+      },
+    ]);
+    // The final answer row has no trace — plain body path (no parts).
+    expect(turns[2].parts).toBeUndefined();
   });
 
   it("when deleting the active session removes it and mints a fresh conversation", async () => {

@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
@@ -28,6 +29,7 @@ import (
 type (
 	sessionRowOut           = miniappcontract.SessionRowOut
 	transcriptAttachmentOut = miniappcontract.TranscriptAttachmentOut
+	transcriptToolTraceOut  = miniappcontract.TranscriptToolTraceOut
 	transcriptMsgOut        = miniappcontract.TranscriptMsgOut
 	sessionSearchHitOut     = miniappcontract.SessionSearchHitOut
 	sessionSearchResult     = miniappcontract.SessionSearchResult
@@ -103,6 +105,10 @@ func SessionsMethods(deps SessionsDeps) map[string]rpcutil.HandlerFunc {
 	return out
 }
 
+// syntheticTraceAnchor prefixes the request-local message anchors stamped in
+// sessionsTranscript. The NUL byte keeps it impossible as a real stored ID.
+const syntheticTraceAnchor = "\x00trace:"
+
 // sessionsTranscript returns the most recent N messages of a single
 // session. The Mini App's session detail view renders these as a
 // timeline; the rest of the chat history (compaction, system prompt,
@@ -147,15 +153,31 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 		// prefix so user bubbles show what was typed. The stored transcript is
 		// untouched. This RPC is what the native client actually loads its
 		// timeline from, so the strip must live here, not only on chat.history.
-		msgs = toolport.StripLinkEnrichmentForDisplay(msgs)
-		msgs = toolport.StripToolResultBlocksForDisplay(msgs)
-		msgs = toolport.StripUserMessageTimestampsForDisplay(msgs)
+		// Rebuild tool chips from the raw tool_use/tool_result pairs BEFORE the
+		// strips drop those blocks — a restored conversation keeps the same
+		// tool activity (and the same gateway-authored digests) the live
+		// stream showed. Two ground truths shape the mechanics: stored
+		// messages carry no ID (the store keys by index), so we stamp a
+		// request-local anchor; and store.Load can hand back a cache-shared
+		// slice, so we stamp (and run the in-place display strips) on a
+		// value copy, never on the shared elements.
+		work := make([]toolport.ChatMessage, len(msgs))
+		copy(work, msgs)
+		for i := range work {
+			if work[i].ID == "" {
+				work[i].ID = syntheticTraceAnchor + strconv.Itoa(i)
+			}
+		}
+		traces := toolport.CollectToolTraces(work)
+		work = toolport.StripLinkEnrichmentForDisplay(work)
+		work = toolport.StripToolResultBlocksForDisplay(work)
+		work = toolport.StripUserMessageTimestampsForDisplay(work)
 		// Read Sino-Korean Hanja in assistant prose as Hangul (報告書 → 보고서) —
 		// Chinese-lineage models sometimes emit it. Display-only; transcript intact.
-		msgs = toolport.TransliterateAssistantTextForDisplay(msgs)
+		work = toolport.TransliterateAssistantTextForDisplay(work)
 
-		rows := make([]transcriptMsgOut, 0, len(msgs))
-		for _, m := range msgs {
+		rows := make([]transcriptMsgOut, 0, len(work))
+		for _, m := range work {
 			var atts []transcriptAttachmentOut
 			for _, a := range m.Attachments {
 				atts = append(atts, transcriptAttachmentOut{
@@ -167,18 +189,37 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 					Size:     a.Size,
 				})
 			}
+			var trace []transcriptToolTraceOut
+			for _, item := range traces[m.ID] {
+				trace = append(trace, transcriptToolTraceOut{
+					Tool:    item.Tool,
+					Detail:  item.Detail,
+					Summary: item.Summary,
+					Preview: item.Preview,
+					IsError: item.IsError,
+				})
+			}
 			content := decodeChatContent(m.Content)
-			if content == "" && len(atts) == 0 {
-				// Tool/thinking-only message — nothing a bubble can show.
+			if content == "" && len(atts) == 0 && len(trace) == 0 {
+				// Tool/thinking-only message with no rebuilt chips — nothing
+				// a bubble can show. (A tool_use-only assistant step DOES
+				// survive now: its chips are the content.)
 				continue
 			}
+			// The stamped anchor is request-local bookkeeping, not a message
+			// ID — never let it out on the wire.
+			id := m.ID
+			if strings.HasPrefix(id, syntheticTraceAnchor) {
+				id = ""
+			}
 			rows = append(rows, transcriptMsgOut{
-				ID:          m.ID,
+				ID:          id,
 				Role:        m.Role,
 				Content:     content,
 				Reasoning:   decodeThinkingContent(m.Content),
 				Attachments: atts,
 				TimestampMs: m.Timestamp,
+				ToolTrace:   trace,
 			})
 		}
 		turnRunning := false

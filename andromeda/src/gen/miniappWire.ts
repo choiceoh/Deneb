@@ -938,6 +938,15 @@ export interface TranscriptMsgOut {
   reasoning?: string
   attachments?: TranscriptAttachmentOut[]
   timestampMs?: number
+  toolTrace?: TranscriptToolTraceOut[]
+}
+
+export interface TranscriptToolTraceOut {
+  tool?: string
+  detail?: string
+  summary?: string
+  preview?: string
+  isError?: boolean
 }
 
 export interface UsageStat {

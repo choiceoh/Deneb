@@ -1137,6 +1137,17 @@ data class TranscriptMsgOut(
     val reasoning: String = "",
     val attachments: List<TranscriptAttachmentOut> = emptyList(),
     val timestampMs: Long = 0L,
+    val toolTrace: List<TranscriptToolTraceOut> = emptyList(),
+)
+
+@Immutable
+@Serializable
+data class TranscriptToolTraceOut(
+    val tool: String = "",
+    val detail: String = "",
+    val summary: String = "",
+    val preview: String = "",
+    val isError: Boolean = false,
 )
 
 @Immutable

@@ -634,7 +634,13 @@ class MiniappWireDescriptorContractTest {
             name = "TranscriptMsgOut",
             serializer = TranscriptMsgOut.serializer(),
             empty = TranscriptMsgOut(),
-            fields = listOf("id", "role", "content", "reasoning", "attachments", "timestampMs"),
+            fields = listOf("id", "role", "content", "reasoning", "attachments", "timestampMs", "toolTrace"),
+        ),
+        contract(
+            name = "TranscriptToolTraceOut",
+            serializer = TranscriptToolTraceOut.serializer(),
+            empty = TranscriptToolTraceOut(),
+            fields = listOf("tool", "detail", "summary", "preview", "isError"),
         ),
         contract(
             name = "UsageStat",

@@ -748,3 +748,65 @@ func TestSessionsRecentPagesWithOffsetAndReportsTotal(t *testing.T) {
 		t.Errorf("offset past the end returned %d rows, want 0", len(beyond))
 	}
 }
+
+func TestSessionsTranscriptRebuildsToolChipsFromStoredPairsWithoutIDs(t *testing.T) {
+	// Production shape: stored messages carry NO id — the trace must anchor
+	// by position, and the synthetic anchor must never leak onto the wire.
+	loader := &fakeTranscriptLoader{
+		loadFn: func(_ string, _ int) ([]toolport.ChatMessage, int, error) {
+			return []toolport.ChatMessage{
+				toolport.NewTextChatMessage("user", "cygnus 폴더 보여줘", 0),
+				{Role: "assistant", Content: jsonRaw(`[
+					{"type": "tool_use", "id": "t1", "name": "exec", "input": {"command": "ls -la src/cygnus"}}
+				]`)},
+				{Role: "user", Content: jsonRaw(`[
+					{"type": "tool_result", "tool_use_id": "t1", "content": "total 60\nCygnusApp.tsx"}
+				]`)},
+				toolport.NewTextChatMessage("assistant", "6개 파일이 있습니다.", 0),
+			}, 4, nil
+		},
+	}
+	h := sessionsTranscript(transcriptDeps(loader))
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
+		"sessionKey": "k",
+	}))
+	var got struct {
+		Messages []struct {
+			ID        string `json:"id"`
+			Role      string `json:"role"`
+			Content   string `json:"content"`
+			ToolTrace []struct {
+				Tool    string `json:"tool"`
+				Detail  string `json:"detail"`
+				Summary string `json:"summary"`
+				Preview string `json:"preview"`
+			} `json:"toolTrace"`
+		} `json:"messages"`
+	}
+	decode(t, resp, &got)
+
+	// user, tool_use-only assistant (survives as a chip row), final answer.
+	if len(got.Messages) != 3 {
+		t.Fatalf("rows = %d, want 3 (chip-only assistant row must survive): %+v", len(got.Messages), got.Messages)
+	}
+	chipRow := got.Messages[1]
+	if chipRow.Role != "assistant" || chipRow.Content != "" {
+		t.Fatalf("chip row = %+v, want empty-content assistant", chipRow)
+	}
+	if chipRow.ID != "" {
+		t.Errorf("synthetic anchor leaked to the wire: %q", chipRow.ID)
+	}
+	if len(chipRow.ToolTrace) != 1 {
+		t.Fatalf("toolTrace = %+v, want 1 item", chipRow.ToolTrace)
+	}
+	tr := chipRow.ToolTrace[0]
+	if tr.Tool != "exec" || tr.Detail != "ls -la src/cygnus" {
+		t.Errorf("trace hint = %+v (live started-frame parity)", tr)
+	}
+	if tr.Summary != "total 60 · 2줄" || tr.Preview != "total 60\nCygnusApp.tsx" {
+		t.Errorf("trace digests = %+v (live completed-frame parity)", tr)
+	}
+	if len(got.Messages[2].ToolTrace) != 0 {
+		t.Errorf("final answer row must carry no trace: %+v", got.Messages[2].ToolTrace)
+	}
+}

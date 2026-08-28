@@ -207,12 +207,23 @@ export interface SessionRow {
 }
 
 // One transcript message. Mirrors handlerminiapp.transcriptMsgOut (sessions.go).
+export interface TranscriptToolTrace {
+  tool: string;
+  detail?: string; // started-frame human hint (command, query, file name)
+  summary?: string; // gateway-owned one-line result digest
+  preview?: string; // bounded readable head of the result
+  isError?: boolean;
+}
+
 export interface TranscriptMsg {
   id?: string;
   role: string; // user | assistant | system | tool
   content: string;
   reasoning?: string; // assistant chain-of-thought (expandable reasoning block)
   timestampMs?: number;
+  // Completed tool calls this assistant message issued — rebuilt server-side
+  // so a restored conversation keeps its chips (same digests as the live stream).
+  toolTrace?: TranscriptToolTrace[];
 }
 
 // channel (e.g. "client") scopes the recent list server-side. Without it the

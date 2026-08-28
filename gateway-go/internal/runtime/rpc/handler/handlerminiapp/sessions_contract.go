@@ -38,6 +38,25 @@ type transcriptMsgOut struct {
 	Reasoning   string                    `json:"reasoning,omitempty"`
 	Attachments []transcriptAttachmentOut `json:"attachments,omitempty"`
 	TimestampMs int64                     `json:"timestampMs,omitempty"`
+	// ToolTrace lists the tool calls this assistant message issued, rebuilt
+	// from the stored tool_use/tool_result pairs with the same digests the
+	// live stream showed — so a restored conversation keeps its tool chips
+	// (the display strips drop the raw blocks themselves).
+	ToolTrace []transcriptToolTraceOut `json:"toolTrace,omitempty"`
+}
+
+// transcriptToolTraceOut is one completed tool call on a restored assistant
+// message, in the live chip's vocabulary (toolport.ToolTraceItem).
+//
+//deneb:wire
+type transcriptToolTraceOut struct {
+	Tool string `json:"tool"`
+	// Detail is the started-frame human hint (command, query, file name).
+	Detail string `json:"detail,omitempty"`
+	// Summary/Preview are the gateway-owned result digests.
+	Summary string `json:"summary,omitempty"`
+	Preview string `json:"preview,omitempty"`
+	IsError bool   `json:"isError,omitempty"`
 }
 
 // sessionSearchHitOut is one conversation that matched a user drawer search.
@@ -69,6 +88,7 @@ type (
 	SessionRowOut           = sessionRowOut
 	TranscriptAttachmentOut = transcriptAttachmentOut
 	TranscriptMsgOut        = transcriptMsgOut
+	TranscriptToolTraceOut  = transcriptToolTraceOut
 	SessionSearchHitOut     = sessionSearchHitOut
 	SessionSearchResult     = sessionSearchResult
 	SessionFocusResult      = sessionFocusResult
