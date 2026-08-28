@@ -941,7 +941,9 @@ func stitchNote(h polaris.SearchHit) string {
 	if h.NextText == "" {
 		return truncateRecallText(h.Snippet, 280)
 	}
-	return truncateRecallText(h.Snippet, 160) + " ⏩ " + truncateRecallText(h.NextText, 120)
+	// The assistant tail is the likely answer — give it the larger share
+	// (same rationale as noteCapFor).
+	return truncateRecallText(h.Snippet, 140) + " ⏩ " + truncateRecallText(h.NextText, 300)
 }
 
 // appendPolarisCrossSessionHits appends relevant messages from OTHER
@@ -1084,7 +1086,15 @@ func formatRecallEvidenceAt(evidence []recallEvidence, now time.Time, filesToolR
 	sb.WriteString("사용자 메시지가 과거 맥락을 암시해 서버가 위키/일지/파일/세션 이력을 미리 검색했다. 아래 근거만 확실한 과거 맥락으로 사용하고, 근거가 부족하면 부족하다고 말하라. source=file 행은 보관된 파일의 일치 구절이며, 전체 내용은 " + fileOpenHint(filesToolReachable) + "로 열어볼 수 있다.\n\n")
 
 	written, dropped := 0, 0
+	evidence = groupEvidenceByConversation(evidence)
+	prevGroup := ""
 	for _, ev := range evidence {
+		if g := conversationGroupKey(ev); g != prevGroup {
+			prevGroup = g
+			if g != "" {
+				sb.WriteString(conversationGroupHeader(ev))
+			}
+		}
 		kind := sanitizeRecallContextText(ev.Kind)
 		source := sanitizeRecallContextText(ev.Source)
 		query := sanitizeRecallContextText(ev.Query)
@@ -1436,6 +1446,86 @@ func polarisNoteCap() int {
 	return 320
 }
 
+// conversationGroupKey names the conversation a session row came from ("" for
+// non-session rows, which render ungrouped at their rank).
+func conversationGroupKey(ev recallEvidence) string {
+	if ev.Kind != "session" {
+		return ""
+	}
+	src := ev.Source
+	if i := strings.Index(src, "#"); i > 0 {
+		return src[:i]
+	}
+	return strings.TrimSuffix(src, " 요약")
+}
+
+// groupEvidenceByConversation reorders the BUDGETED rows so that rows from the
+// same conversation sit together, groups ordered by their best row's rank.
+//
+// The flat ranked list made the reader reconstruct conversation boundaries on
+// its own — the exact work aggregation questions ("how many X did I…") consist
+// of. The oracle-context experiment isolated the effect: the same reader over
+// the same content GROUPED BY CONVERSATION scored 78.7% on multi-session
+// against 36.1% over our interleaved rows, and the strongest rendering the
+// oracle had that we lacked was the grouping itself. Order-only: nothing is
+// added or evicted, the budget is already cut, and the top-ranked row still
+// renders first (its group leads).
+func groupEvidenceByConversation(evidence []recallEvidence) []recallEvidence {
+	seen := make(map[string]int)
+	var groups [][]recallEvidence
+	var out []recallEvidence
+	for _, ev := range evidence {
+		key := conversationGroupKey(ev)
+		if key == "" {
+			out = append(out, ev) // non-session rows keep their rank position
+			continue
+		}
+		if gi, ok := seen[key]; ok {
+			groups[gi] = append(groups[gi], ev)
+			continue
+		}
+		seen[key] = len(groups)
+		groups = append(groups, []recallEvidence{ev})
+	}
+	for _, g := range groups {
+		out = append(out, g...)
+	}
+	return out
+}
+
+// conversationGroupHeader renders one line naming the conversation and its
+// date — the date survives even when a row's snippet lacks the event date,
+// which is what temporal questions need.
+func conversationGroupHeader(ev recallEvidence) string {
+	label := conversationGroupKey(ev)
+	if i := strings.LastIndex(label, ":"); i >= 0 {
+		label = label[i+1:]
+	}
+	if label == "msg" {
+		label = "현재 대화"
+	}
+	if ev.At > 0 {
+		return "[대화 " + time.UnixMilli(ev.At).In(recallRenderZone).Format("2006-01-02") + " · " + label + "]\n"
+	}
+	return "[대화 " + label + "]\n"
+}
+
+// noteCapFor sizes a pruned note by what the row IS. An assistant-authored row
+// (or a user row stitched with its assistant reply) usually carries the ANSWER
+// — a recommendation, a list, a draft — and truncating it to snippet size is
+// what left single-session-assistant at 28.6% while its oracle ceiling measured
+// 96.4%: the reader solves these whenever the content survives. User rows keep
+// the tight cap; the budget shifts toward the rows that hold answers.
+func noteCapFor(row recallEvidence) int {
+	base := polarisNoteCap()
+	assistantish := strings.HasSuffix(row.Source, "/assistant") ||
+		strings.Contains(row.noteWide, "[assistant reply]")
+	if assistantish && base < 900 {
+		return 900
+	}
+	return base
+}
+
 // prunePolarisNotes swaps the rendered rows' lexical snippets for the
 // cross-encoder's own sentence selection, made over a 4x wider window.
 //
@@ -1494,7 +1584,7 @@ func prunePolarisNotes(ctx context.Context, reranker Reranker, message string, r
 	}
 	for j, i := range idx {
 		if p := strings.TrimSpace(pruned[j]); p != "" {
-			rows[i].Note = truncateRecallText(p, polarisNoteCap())
+			rows[i].Note = truncateRecallText(p, noteCapFor(rows[i]))
 		}
 	}
 }
