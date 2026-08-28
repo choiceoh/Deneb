@@ -64,31 +64,6 @@ internal data class FleetNode(
 internal data class FleetState(val nodes: List<FleetNode> = emptyList())
 
 @Serializable
-internal data class FleetRecipeStatus(
-    val running: Boolean = false,
-    val weightsPresent: Boolean = false,
-    val node: String = "",
-)
-
-@Serializable
-internal data class FleetVllm(
-    val gpuMemoryUtilization: Double? = null,
-    val maxModelLen: Int? = null,
-    val maxNumSeqs: Int? = null,
-)
-
-@Serializable
-internal data class FleetRecipe(
-    val name: String,
-    val description: String = "",
-    val node: String = "",
-    val container: String = "", // docker container name — needed to fetch logs / diagnose
-    val port: Int = 0,
-    val vllm: FleetVllm? = null,
-    val status: FleetRecipeStatus = FleetRecipeStatus(),
-)
-
-@Serializable
 internal data class FleetJob(
     val id: String,
     val title: String = "",
@@ -121,57 +96,6 @@ internal data class FleetHFInfo(
     val sizeBytes: Long = 0,
     val files: Int = 0,
     val gated: Boolean = false,
-)
-
-// --- diagnosis (assist/logs + drift) ---------------------------------------
-
-@Serializable
-internal data class FleetFinding(val cause: String = "", val fix: String = "", val match: String = "")
-
-/** SparkFleet's crash triage of a container: docker state, matched failure
- *  patterns, and (when a fleet LLM is reachable) a free-form root-cause note. */
-@Serializable
-internal data class FleetDiagnosis(
-    val container: String = "",
-    val state: String = "",
-    val findings: List<FleetFinding> = emptyList(),
-    val llm: String = "",
-)
-
-/** Recipe-vs-live-container config drift ("did someone tune it by hand"). */
-@Serializable
-internal data class FleetDrift(
-    val recipe: String = "",
-    val node: String = "",
-    val container: String = "",
-    val inSync: Boolean = true,
-    val diffs: List<String> = emptyList(),
-)
-
-// --- benchmarks (evals) -----------------------------------------------------
-
-@Serializable
-internal data class FleetSpeed(val ttftMs: Double = 0.0, val decodeTokPerSec: Double = 0.0)
-
-/** The latest benchmark run for a recipe — overall score plus the four headline
- *  metrics (도구사용·언어능력·논리능력·안정성, each 0–100) and a speed probe. */
-@Serializable
-internal data class FleetEvalRun(
-    val recipe: String = "",
-    val node: String = "",
-    val model: String = "",
-    val pass: Int = 0,
-    val total: Int = 0,
-    val score: Double = 0.0,
-    val speed: FleetSpeed? = null,
-    val categories: Map<String, Double> = emptyMap(),
-)
-
-/** GET /api/evals digest: the latest run per recipe + whether a judge is set. */
-@Serializable
-internal data class FleetEvals(
-    val runs: Map<String, FleetEvalRun> = emptyMap(),
-    val judge: Boolean = false,
 )
 
 // fleetJson decodes SparkFleet (a Go server) responses: Go marshals nil
@@ -230,8 +154,6 @@ private suspend fun DenebGatewayClient.fleetPost(path: String, jsonBody: String)
 
 internal suspend fun DenebGatewayClient.fleetState(): FleetState? = fleetGetText("/api/state")?.let { runCatching { fleetJson.decodeFromString<FleetState>(it) }.getOrNull() }
 
-internal suspend fun DenebGatewayClient.fleetRecipes(): List<FleetRecipe>? = fleetGetText("/api/recipes")?.let { runCatching { fleetJson.decodeFromString<List<FleetRecipe>>(it) }.getOrNull() }
-
 internal suspend fun DenebGatewayClient.fleetJobs(): List<FleetJob>? = fleetGetText("/api/jobs")?.let { runCatching { fleetJson.decodeFromString<List<FleetJob>>(it) }.getOrNull() }
 
 internal suspend fun DenebGatewayClient.fleetJob(id: String): FleetJob? = fleetGetText("/api/jobs/${id.encodeURLParameter()}")?.let {
@@ -245,42 +167,6 @@ internal suspend fun DenebGatewayClient.fleetJob(id: String): FleetJob? = fleetG
  * error message, or null on success; [onJob] receives the job id when the
  * action runs as a background job (launch/pull).
  */
-internal suspend fun DenebGatewayClient.fleetRecipeAction(
-    recipe: String,
-    action: String,
-    overrides: FleetVllm? = null,
-    onJob: (String) -> Unit = {},
-): String? {
-    val body = buildJsonObject {
-        put("recipe", recipe)
-        put("action", action)
-        // Per-launch memory-budget tweaks — SparkFleet applies them to a clone,
-        // so the recipe file itself never changes.
-        if (action == "launch" && overrides != null &&
-            (overrides.gpuMemoryUtilization != null || overrides.maxModelLen != null || overrides.maxNumSeqs != null)
-        ) {
-            put(
-                "overrides",
-                buildJsonObject {
-                    overrides.gpuMemoryUtilization?.let { put("gpuMemoryUtilization", it) }
-                    overrides.maxModelLen?.let { put("maxModelLen", it) }
-                    overrides.maxNumSeqs?.let { put("maxNumSeqs", it) }
-                },
-            )
-        }
-    }.toString()
-    val (ok, err) = fleetPost("/api/recipes/action", body)
-    if (err != null) return err
-    ok?.let { text ->
-        runCatching { fleetJson.decodeFromString<FleetJobIdResponse>(text) }.getOrNull()
-            ?.jobId?.takeIf { it.isNotBlank() }?.let(onJob)
-    }
-    return null
-}
-
-// sort: "" (trending — the hub default) | downloads | likes | lastModified |
-// createdAt — the keys SparkFleet whitelists. The hub caps the result at 50, so
-// sorting is server-side (re-fetch on sort change), not a reorder of one page.
 internal suspend fun DenebGatewayClient.fleetHFSearch(q: String, sort: String = ""): List<FleetHFModel>? {
     val sortParam = if (sort.isNotBlank()) "&sort=${sort.encodeURLParameter()}" else ""
     return fleetGetText("/api/hf/search?q=${q.encodeURLParameter()}$sortParam")?.let {
@@ -309,42 +195,3 @@ internal suspend fun DenebGatewayClient.fleetDownloadModel(node: String, repo: S
 
 /** Cancel a running job. Error message, or null on success. */
 internal suspend fun DenebGatewayClient.fleetCancelJob(id: String): String? = fleetPost("/api/jobs/${id.encodeURLParameter()}/cancel", "{}").second
-
-// --- diagnosis & benchmarks -------------------------------------------------
-
-/** Read-only crash triage of a managed container (pattern match + fleet-LLM
- *  root cause). null on any failure so the UI degrades to an error line. */
-internal suspend fun DenebGatewayClient.fleetDiagnose(node: String, container: String): FleetDiagnosis? {
-    val body = buildJsonObject {
-        put("node", node)
-        put("container", container)
-    }.toString()
-    val (ok, _) = fleetPost("/api/assist/logs", body)
-    return ok?.let { runCatching { fleetJson.decodeFromString<FleetDiagnosis>(it) }.getOrNull() }
-}
-
-/** Recipe-vs-container config drift for the recipe's running node. */
-internal suspend fun DenebGatewayClient.fleetDrift(recipe: String, node: String): FleetDrift? = fleetGetText("/api/recipes/${recipe.encodeURLParameter()}/drift?node=${node.encodeURLParameter()}")
-    ?.let { runCatching { fleetJson.decodeFromString<FleetDrift>(it) }.getOrNull() }
-
-/** Raw `docker logs --tail` for a managed container (plain text). */
-internal suspend fun DenebGatewayClient.fleetContainerLogs(node: String, container: String, tail: Int = 200): String? = fleetGetText("/api/logs?node=${node.encodeURLParameter()}&container=${container.encodeURLParameter()}&tail=$tail")
-
-/** Latest benchmark run per recipe (+ whether an LLM judge is configured). */
-internal suspend fun DenebGatewayClient.fleetEvals(): FleetEvals? = fleetGetText("/api/evals")?.let { runCatching { fleetJson.decodeFromString<FleetEvals>(it) }.getOrNull() }
-
-/** Start a benchmark of a recipe's served endpoint. Error message, or null on
- *  success; [onJob] receives the background job id so the run is followable. */
-internal suspend fun DenebGatewayClient.fleetRunBench(recipe: String, node: String, onJob: (String) -> Unit = {}): String? {
-    val body = buildJsonObject {
-        put("recipe", recipe)
-        if (node.isNotBlank()) put("node", node)
-    }.toString()
-    val (ok, err) = fleetPost("/api/eval", body)
-    if (err != null) return err
-    ok?.let { text ->
-        runCatching { fleetJson.decodeFromString<FleetJobIdResponse>(text) }.getOrNull()
-            ?.jobId?.takeIf { it.isNotBlank() }?.let(onJob)
-    }
-    return null
-}

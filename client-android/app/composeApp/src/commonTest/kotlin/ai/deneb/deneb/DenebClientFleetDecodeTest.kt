@@ -53,13 +53,9 @@ class DenebClientFleetDecodeTest {
     }
 
     @Test
-    fun decodesRecipesAndJobs() {
-        val recipes = fleetJson.decodeFromString<List<FleetRecipe>>(
-            """[{"name":"qwen36-fast","description":"","node":"srv1","port":8000,
-                 "tags":["vllm"],"status":{"running":true,"weightsPresent":true,"node":"srv1","headroomGB":13.2}}]""",
-        )
-        assertTrue(recipes.single().status.running)
-
+    fun decodesJobs() {
+        // Recipe wire types left the client 2026-08-28 (recipe control is
+        // AI-only via the gateway's fleet chat tool); jobs stay human-visible.
         val jobs = fleetJson.decodeFromString<List<FleetJob>>(
             """[{"id":"job-3","title":"hf download a/b → srv1","state":"running",
                  "log":"progress: 12G downloaded","startedAt":"2026-06-12T10:00:00+09:00","cmd":"…"}]""",

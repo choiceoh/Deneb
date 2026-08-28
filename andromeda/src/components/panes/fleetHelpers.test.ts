@@ -1,25 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import type { FleetJob, FleetNode, FleetRecipe } from "@/fleet";
+import type { FleetNode } from "@/fleet";
 import {
-  actionLabel,
   asArray,
   bytes,
   clamp,
   gpuText,
-  jobFilterLabel,
-  jobState,
-  jobStateLabel,
   memoryText,
   nodeHasIssue,
   nodeIssueText,
   nodeIssueView,
   oneLine,
   percent,
-  recipeFilterLabel,
-  recipeNode,
-  serviceFilterLabel,
-  vllmText,
 } from "./fleetHelpers";
 
 const node = (overrides: Partial<FleetNode> = {}): FleetNode => ({ name: "srv1", ...overrides });
@@ -42,27 +34,6 @@ describe("fleet display helpers", () => {
     ).toBe("GPU0 72% 64°C, GPU1 70°C");
     expect(memoryText(node({ metrics: { memory: { totalKB: 1024, availableKB: 256 } } }))).toBe("75% · 768 KB/1.0 MB");
     expect(memoryText(node({ metrics: { memory: { totalKB: 0, availableKB: 0 } } }))).toBe("");
-  });
-
-  it("formats recipe and job state consistently", () => {
-    const recipe: FleetRecipe = {
-      name: "qwen",
-      node: "fallback",
-      status: { node: "worker" },
-      vllm: { gpuMemoryUtilization: 0.8, maxModelLen: 32768, maxNumSeqs: 4 },
-    };
-    expect(recipeNode(recipe)).toBe("worker");
-    expect(vllmText(recipe)).toBe("GPU 0.8 · 32768 ctx · 4 seq");
-    expect(jobState({ id: "j1", state: "RUNNING" } as FleetJob)).toBe("running");
-    expect(jobState({ id: "j2" } as FleetJob)).toBe("unknown");
-    expect(jobStateLabel("running")).toBe("진행");
-    expect(jobStateLabel("done")).toBe("완료");
-    expect(jobStateLabel("failed")).toBe("실패");
-    expect(actionLabel("launch")).toBe("기동");
-    expect(actionLabel("restart")).toBe("재시작");
-    expect(recipeFilterLabel("stopped")).toBe("중지");
-    expect(jobFilterLabel("done")).toBe("완료");
-    expect(serviceFilterLabel("healthy")).toBe("정상");
   });
 
   it("keeps numeric and one-line formatting bounded", () => {

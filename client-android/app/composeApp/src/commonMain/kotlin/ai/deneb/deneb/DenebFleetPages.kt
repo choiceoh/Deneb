@@ -23,7 +23,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,23 +56,6 @@ internal fun FleetNodesPage(nodes: List<FleetNode>, loaded: Boolean) {
     }
     LazyColumn(Modifier.fillMaxSize()) {
         items(nodes, key = { it.name }) { node -> FleetNodeRow(node) }
-    }
-}
-
-@Composable
-internal fun FleetRecipesPage(recipes: List<FleetRecipe>, loaded: Boolean, onAction: (FleetRecipe, String) -> Unit) {
-    if (!loaded) {
-        DenebLoading()
-        return
-    }
-    if (recipes.isEmpty()) {
-        EmptyTab("레시피가 없습니다.")
-        return
-    }
-    LazyColumn(Modifier.fillMaxSize()) {
-        items(recipes, key = { it.name }) { rc ->
-            FleetRecipeRow(rc = rc, onAction = { action -> onAction(rc, action) })
-        }
     }
 }
 
@@ -180,41 +162,6 @@ private fun FleetNodeRow(node: FleetNode) {
         }
         node.error?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = DenebType.meta, color = MaterialTheme.colorScheme.error, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-    HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
-}
-
-@Composable
-private fun FleetRecipeRow(rc: FleetRecipe, onAction: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FleetDot(rc.status.running)
-            Column(Modifier.weight(1f)) {
-                Text(rc.name, style = DenebType.rowTitleStrong, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
-                    listOfNotNull(
-                        rc.status.node.ifBlank { rc.node }.takeIf { it.isNotBlank() },
-                        rc.port.takeIf { it > 0 }?.let { ":$it" },
-                        if (!rc.status.running && !rc.status.weightsPresent) "가중치 없음" else null,
-                    ).joinToString(" · "),
-                    style = DenebType.rowSubtitle,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (rc.status.running) {
-                OutlinedButton(onClick = { onAction("restart") }) { Text("재시작") }
-                OutlinedButton(onClick = { onAction("stop") }) { Text("중지", color = MaterialTheme.colorScheme.error) }
-            } else {
-                OutlinedButton(onClick = { onAction("launch") }) { Text("▶ 기동") }
-            }
-        }
-        // Read-only diagnostics for a live container: raw logs + crash triage.
-        if (rc.status.running && rc.container.isNotBlank()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { onAction("logs") }) { Text("로그") }
-                TextButton(onClick = { onAction("diagnose") }) { Text("🩺 진단") }
-            }
         }
     }
     HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())

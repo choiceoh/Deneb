@@ -1,16 +1,12 @@
-import { type FleetJob, type FleetNode, type FleetRecipe } from "@/fleet";
+import { type FleetJob, type FleetNode } from "@/fleet";
 import { fmtDate } from "@/format";
-import { Detail, Modal, ModalFooter } from "@/components/Modal";
 import {
   type FleetIssue,
   type FleetModelRow,
   type FleetServiceRow,
   type FleetView,
   type JobFilter,
-  type RecipeAction,
-  type RecipeFilter,
   type ServiceFilter,
-  actionLabel,
   asArray,
   bytes,
   clamp,
@@ -19,15 +15,12 @@ import {
   jobStateLabel,
   nodeHasIssue,
   percent,
-  recipeFilterLabel,
-  recipeNode,
   serviceFilterLabel,
-  vllmText,
 } from "./fleetHelpers";
 
 // FleetPane's tab views and cards — split from FleetPane.tsx so the pane file
 // keeps only state/polling/derivation and stays within the size guideline.
-// The cards (node/recipe/job/bar/section-title) are internal to the views.
+// The cards (node/job/bar/section-title) are internal to the views.
 
 export function FleetMetric({
   label,
@@ -51,21 +44,15 @@ export function FleetMetric({
 
 export function FleetOverview({
   issues,
-  runningRecipes,
   recentJobs,
-  busyAction,
   expandedJob,
   onView,
-  onRecipeAction,
   onJobToggle,
 }: {
   issues: FleetIssue[];
-  runningRecipes: FleetRecipe[];
   recentJobs: FleetJob[];
-  busyAction: string;
   expandedJob: string;
   onView: (view: FleetView) => void;
-  onRecipeAction: (recipe: FleetRecipe, action: RecipeAction) => void;
   onJobToggle: (jobId: string) => void;
 }) {
   return (
@@ -85,26 +72,6 @@ export function FleetOverview({
             ))
           ) : (
             <div className="fleet-empty compact">확인할 항목이 없습니다.</div>
-          )}
-        </div>
-      </section>
-
-      <section className="fleet-section" aria-label="실행 중 레시피">
-        <FleetSectionTitle title="실행 중 레시피" count={runningRecipes.length} />
-        <div className="fleet-list">
-          {runningRecipes.length ? (
-            runningRecipes
-              .slice(0, 4)
-              .map((recipe) => (
-                <FleetRecipeCard
-                  key={recipe.name}
-                  recipe={recipe}
-                  busyAction={busyAction}
-                  onAction={(action) => onRecipeAction(recipe, action)}
-                />
-              ))
-          ) : (
-            <div className="fleet-empty compact">실행 중인 레시피가 없습니다.</div>
           )}
         </div>
       </section>
@@ -285,66 +252,6 @@ export function FleetServicesView({
   );
 }
 
-export function FleetRecipesView({
-  recipes,
-  total,
-  query,
-  filter,
-  busyAction,
-  onQuery,
-  onFilter,
-  onAction,
-}: {
-  recipes: FleetRecipe[];
-  total: number;
-  query: string;
-  filter: RecipeFilter;
-  busyAction: string;
-  onQuery: (query: string) => void;
-  onFilter: (filter: RecipeFilter) => void;
-  onAction: (recipe: FleetRecipe, action: RecipeAction) => void;
-}) {
-  return (
-    <section className="fleet-section" aria-label="레시피">
-      <div className="fleet-toolbar">
-        <label className="fleet-search">
-          <span>검색</span>
-          <input
-            className="field"
-            value={query}
-            onChange={(e) => onQuery(e.target.value)}
-            placeholder="레시피, 노드, 컨테이너"
-          />
-        </label>
-        <div className="fleet-filter" role="group" aria-label="레시피 상태">
-          {(["all", "running", "stopped"] as const).map((key) => (
-            <button key={key} type="button" className={filter === key ? "active" : ""} onClick={() => onFilter(key)}>
-              {recipeFilterLabel(key)}
-            </button>
-          ))}
-        </div>
-        <span className="fleet-count">
-          {recipes.length} / {total}
-        </span>
-      </div>
-      <div className="fleet-card-grid">
-        {recipes.length ? (
-          recipes.map((recipe) => (
-            <FleetRecipeCard
-              key={recipe.name}
-              recipe={recipe}
-              busyAction={busyAction}
-              onAction={(action) => onAction(recipe, action)}
-            />
-          ))
-        ) : (
-          <div className="fleet-empty compact">조건에 맞는 레시피가 없습니다.</div>
-        )}
-      </div>
-    </section>
-  );
-}
-
 export function FleetJobsView({
   jobs,
   total,
@@ -471,73 +378,6 @@ function FleetNodeCard({ node }: { node: FleetNode }) {
   );
 }
 
-function FleetRecipeCard({
-  recipe,
-  busyAction,
-  onAction,
-}: {
-  recipe: FleetRecipe;
-  busyAction: string;
-  onAction: (action: RecipeAction) => void;
-}) {
-  const running = recipe.status?.running === true;
-  const noWeights = recipe.status?.weightsPresent === false;
-  const actionBusy = Boolean(busyAction);
-  return (
-    <article className={"fleet-card" + (running ? " active" : noWeights ? " danger" : "")}>
-      <div className="fleet-row-head">
-        <span className={"fleet-dot" + (running ? "" : " idle")} />
-        <div className="fleet-row-title">
-          <strong>{recipe.name}</strong>
-          <span>{recipe.description || recipeNode(recipe) || "recipe"}</span>
-        </div>
-        <span className="fleet-pill">{running ? "running" : noWeights ? "no weights" : "idle"}</span>
-      </div>
-      <div className="fleet-chip-row">
-        {recipeNode(recipe) && <span className="fleet-chip">{recipeNode(recipe)}</span>}
-        {recipe.port ? <span className="fleet-chip">:{recipe.port}</span> : null}
-        {recipe.container ? <span className="fleet-chip">{recipe.container}</span> : null}
-        {vllmText(recipe) && <span className="fleet-chip">{vllmText(recipe)}</span>}
-      </div>
-      {recipe.description && <p className="fleet-card-note">{recipe.description}</p>}
-      <div className="fleet-actions">
-        {running ? (
-          <>
-            <button
-              className="btn"
-              type="button"
-              aria-label={`${recipe.name} 재시작`}
-              onClick={() => onAction("restart")}
-              disabled={actionBusy}
-            >
-              재시작
-            </button>
-            <button
-              className="btn"
-              type="button"
-              aria-label={`${recipe.name} 중지`}
-              onClick={() => onAction("stop")}
-              disabled={actionBusy}
-            >
-              중지
-            </button>
-          </>
-        ) : (
-          <button
-            className="btn btn-accent"
-            type="button"
-            aria-label={`${recipe.name} 기동`}
-            onClick={() => onAction("launch")}
-            disabled={actionBusy}
-          >
-            기동
-          </button>
-        )}
-      </div>
-    </article>
-  );
-}
-
 function FleetJobCard({ job, expanded, onToggle }: { job: FleetJob; expanded: boolean; onToggle: () => void }) {
   const state = jobState(job);
   return (
@@ -566,29 +406,5 @@ function FleetBar({ label, value, pct }: { label: string; value: string; pct: nu
         <span style={{ width: `${clamp(pct)}%` }} />
       </div>
     </div>
-  );
-}
-
-export function ConfirmAction({
-  recipe,
-  action,
-  onClose,
-  onConfirm,
-}: {
-  recipe: FleetRecipe;
-  action: RecipeAction;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <Modal
-      title={`${recipe.name} ${actionLabel(action)}`}
-      onClose={onClose}
-      footer={<ModalFooter action={actionLabel(action)} onClose={onClose} onSubmit={onConfirm} />}
-    >
-      <Detail label="노드" value={recipeNode(recipe) || "—"} />
-      <Detail label="상태" value={recipe.status?.running ? "실행 중" : "중지"} />
-      {recipe.description && <Detail label="설명" value={recipe.description} multiline />}
-    </Modal>
   );
 }

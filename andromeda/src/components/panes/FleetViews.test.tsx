@@ -3,16 +3,14 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import {
-  ConfirmAction,
   FleetJobsView,
   FleetMetric,
   FleetModelsView,
   FleetNodesView,
   FleetOverview,
-  FleetRecipesView,
   FleetServicesView,
 } from "./FleetViews";
-import type { FleetJob, FleetNode, FleetRecipe } from "@/fleet";
+import type { FleetJob, FleetNode } from "@/fleet";
 import type { FleetIssue, FleetModelRow, FleetServiceRow } from "./fleetHelpers";
 
 const healthyNode: FleetNode = {
@@ -40,27 +38,6 @@ const unhealthyNode: FleetNode = {
   reachable: false,
   error: "connection refused",
   metrics: { services: [{ name: "vllm", ok: false }] },
-};
-
-const runningRecipe: FleetRecipe = {
-  name: "smart-model",
-  description: "고품질 추론",
-  node: "spark-1",
-  container: "vllm-smart",
-  port: 8000,
-  vllm: { gpuMemoryUtilization: 0.85, maxModelLen: 32768, maxNumSeqs: 8 },
-  status: { running: true, weightsPresent: true, node: "spark-1" },
-};
-
-const stoppedRecipe: FleetRecipe = {
-  name: "tiny-model",
-  node: "spark-2",
-  status: { running: false, weightsPresent: true },
-};
-
-const missingWeightsRecipe: FleetRecipe = {
-  name: "missing-model",
-  status: { running: false, weightsPresent: false },
 };
 
 const runningJob: FleetJob = {
@@ -94,12 +71,9 @@ describe("FleetOverview", () => {
   function renderOverview(overrides: Partial<React.ComponentProps<typeof FleetOverview>> = {}) {
     const props: React.ComponentProps<typeof FleetOverview> = {
       issues: [],
-      runningRecipes: [],
       recentJobs: [],
-      busyAction: "",
       expandedJob: "",
       onView: vi.fn(),
-      onRecipeAction: vi.fn(),
       onJobToggle: vi.fn(),
       ...overrides,
     };
@@ -107,22 +81,13 @@ describe("FleetOverview", () => {
     return props;
   }
 
-  it("renders empty states for all three overview sections", () => {
+  it("renders empty states for both overview sections", () => {
+    // Two sections since 2026-08-28: the running-recipes section left with the
+    // human recipe surface (recipes are AI-only via the fleet chat tool).
     renderOverview();
     expect(screen.getByText("확인할 항목이 없습니다.")).toBeInTheDocument();
-    expect(screen.getByText("실행 중인 레시피가 없습니다.")).toBeInTheDocument();
+    expect(screen.queryByText("실행 중인 레시피가 없습니다.")).not.toBeInTheDocument();
     expect(screen.getByText("작업이 없습니다.")).toBeInTheDocument();
-  });
-
-  it("displays section counts", () => {
-    renderOverview({
-      issues: [{ key: "issue", title: "노드 다운", detail: "spark-2", view: "nodes", tone: "bad" }],
-      runningRecipes: [runningRecipe],
-      recentJobs: [runningJob, doneJob],
-    });
-    expect(within(screen.getByRole("region", { name: "확인 필요" })).getByText("1")).toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "실행 중 레시피" })).getByText("1")).toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "최근 작업" })).getByText("2")).toBeInTheDocument();
   });
 
   it.each([
@@ -148,21 +113,6 @@ describe("FleetOverview", () => {
     renderOverview({ issues });
     expect(screen.getAllByRole("button", { name: /Issue/ })).toHaveLength(8);
     expect(screen.queryByText("Issue 8")).not.toBeInTheDocument();
-  });
-
-  it("when caps running recipes at four", () => {
-    const recipes = Array.from({ length: 6 }, (_, index) => ({ ...runningRecipe, name: `recipe-${index}` }));
-    renderOverview({ runningRecipes: recipes });
-    expect(screen.getAllByRole("button", { name: /재시작/ })).toHaveLength(4);
-    expect(screen.queryByText("recipe-4")).not.toBeInTheDocument();
-  });
-
-  it("routes recipe actions with their recipe", async () => {
-    const props = renderOverview({ runningRecipes: [runningRecipe] });
-    await userEvent.click(screen.getByRole("button", { name: "smart-model 재시작" }));
-    await userEvent.click(screen.getByRole("button", { name: "smart-model 중지" }));
-    expect(props.onRecipeAction).toHaveBeenNthCalledWith(1, runningRecipe, "restart");
-    expect(props.onRecipeAction).toHaveBeenNthCalledWith(2, runningRecipe, "stop");
   });
 
   it("when routes job expansion by id", async () => {
@@ -311,78 +261,6 @@ describe("FleetServicesView", () => {
   });
 });
 
-describe("FleetRecipesView", () => {
-  function renderRecipes(overrides: Partial<React.ComponentProps<typeof FleetRecipesView>> = {}) {
-    const props: React.ComponentProps<typeof FleetRecipesView> = {
-      recipes: [runningRecipe, stoppedRecipe, missingWeightsRecipe],
-      total: 5,
-      query: "",
-      filter: "all",
-      busyAction: "",
-      onQuery: vi.fn(),
-      onFilter: vi.fn(),
-      onAction: vi.fn(),
-      ...overrides,
-    };
-    const view = render(<FleetRecipesView {...props} />);
-    return { props, ...view };
-  }
-
-  it("renders running, idle, and missing-weight states", () => {
-    const { container } = renderRecipes();
-    expect(screen.getByText("running")).toBeInTheDocument();
-    expect(screen.getByText("idle")).toBeInTheDocument();
-    expect(screen.getByText("no weights")).toBeInTheDocument();
-    expect(container.querySelectorAll(".fleet-card.active")).toHaveLength(1);
-    expect(container.querySelectorAll(".fleet-card.danger")).toHaveLength(1);
-  });
-
-  it("renders node, port, container, and vLLM tuning", () => {
-    renderRecipes({ recipes: [runningRecipe] });
-    expect(screen.getAllByText("spark-1").length).toBeGreaterThan(0);
-    expect(screen.getByText(":8000")).toBeInTheDocument();
-    expect(screen.getByText("vllm-smart")).toBeInTheDocument();
-    expect(screen.getByText("GPU 0.85 · 32768 ctx · 8 seq")).toBeInTheDocument();
-    expect(screen.getByText("고품질 추론", { selector: ".fleet-card-note" })).toBeInTheDocument();
-  });
-
-  it("routes launch, restart, and stop actions", async () => {
-    const { props } = renderRecipes();
-    await userEvent.click(screen.getByRole("button", { name: "tiny-model 기동" }));
-    await userEvent.click(screen.getByRole("button", { name: "smart-model 재시작" }));
-    await userEvent.click(screen.getByRole("button", { name: "smart-model 중지" }));
-    expect(props.onAction).toHaveBeenNthCalledWith(1, stoppedRecipe, "launch");
-    expect(props.onAction).toHaveBeenNthCalledWith(2, runningRecipe, "restart");
-    expect(props.onAction).toHaveBeenNthCalledWith(3, runningRecipe, "stop");
-  });
-
-  it("when locks every action while one fleet mutation is busy", () => {
-    renderRecipes({ busyAction: "smart-model:restart" });
-    for (const button of screen.getAllByRole("button", { name: /tiny-model 기동|smart-model (재시작|중지)/ })) {
-      expect(button).toBeDisabled();
-    }
-  });
-
-  it("when routes query and status filters", async () => {
-    const { props } = renderRecipes();
-    await userEvent.type(screen.getByPlaceholderText("레시피, 노드, 컨테이너"), "smart");
-    await userEvent.click(screen.getByRole("button", { name: "실행" }));
-    expect(props.onQuery).toHaveBeenLastCalledWith("t");
-    expect(props.onFilter).toHaveBeenCalledWith("running");
-  });
-
-  it("when marks the controlled filter and count", () => {
-    renderRecipes({ filter: "stopped" });
-    expect(screen.getByRole("button", { name: "중지" })).toHaveClass("active");
-    expect(screen.getByText("3 / 5")).toBeInTheDocument();
-  });
-
-  it("renders an empty state", () => {
-    renderRecipes({ recipes: [], total: 3 });
-    expect(screen.getByText("조건에 맞는 레시피가 없습니다.")).toBeInTheDocument();
-  });
-});
-
 describe("FleetJobsView", () => {
   function renderJobs(overrides: Partial<React.ComponentProps<typeof FleetJobsView>> = {}) {
     const props: React.ComponentProps<typeof FleetJobsView> = {
@@ -443,35 +321,5 @@ describe("FleetJobsView", () => {
   it("renders an empty state", () => {
     renderJobs({ jobs: [], total: 5 });
     expect(screen.getByText("조건에 맞는 작업이 없습니다.")).toBeInTheDocument();
-  });
-});
-
-describe("ConfirmAction", () => {
-  it.each([
-    ["launch", "기동"],
-    ["restart", "재시작"],
-    ["stop", "중지"],
-  ] as const)("renders and confirms %s", async (action, label) => {
-    const onConfirm = vi.fn();
-    render(<ConfirmAction recipe={runningRecipe} action={action} onClose={() => {}} onConfirm={onConfirm} />);
-    expect(screen.getByRole("dialog", { name: `smart-model ${label}` })).toBeInTheDocument();
-    expect(screen.getByText("spark-1")).toBeInTheDocument();
-    expect(screen.getByText("실행 중")).toBeInTheDocument();
-    expect(screen.getByText("고품질 추론")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: label }));
-    expect(onConfirm).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows fallbacks for an unassigned stopped recipe", () => {
-    render(<ConfirmAction recipe={{ name: "empty" }} action="launch" onClose={() => {}} onConfirm={() => {}} />);
-    expect(screen.getByText("—")).toBeInTheDocument();
-    expect(screen.getByText("중지")).toBeInTheDocument();
-  });
-
-  it("routes cancel", async () => {
-    const onClose = vi.fn();
-    render(<ConfirmAction recipe={runningRecipe} action="stop" onClose={onClose} onConfirm={() => {}} />);
-    await userEvent.click(screen.getByRole("button", { name: "취소" }));
-    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

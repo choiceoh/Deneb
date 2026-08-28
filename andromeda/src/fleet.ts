@@ -54,22 +54,6 @@ export interface FleetVllm {
   maxNumSeqs?: number | null;
 }
 
-export interface FleetRecipeStatus {
-  running?: boolean;
-  weightsPresent?: boolean;
-  node?: string;
-}
-
-export interface FleetRecipe {
-  name: string;
-  description?: string;
-  node?: string;
-  container?: string;
-  port?: number;
-  vllm?: FleetVllm | null;
-  status?: FleetRecipeStatus | null;
-}
-
 export interface FleetJob {
   id: string;
   title?: string;
@@ -87,46 +71,13 @@ export async function fleetState(cfg: GatewayConfig): Promise<FleetState> {
   return fleetGet(cfg, "/api/state");
 }
 
-export async function fleetRecipes(cfg: GatewayConfig): Promise<FleetRecipe[]> {
-  return fleetGet(cfg, "/api/recipes");
-}
-
 export async function fleetJobs(cfg: GatewayConfig): Promise<FleetJob[]> {
   return fleetGet(cfg, "/api/jobs");
-}
-
-export async function fleetRecipeAction(
-  cfg: GatewayConfig,
-  recipe: string,
-  action: "launch" | "stop" | "restart" | "pull",
-  overrides?: FleetVllm,
-): Promise<FleetJobIdResponse> {
-  const body: Record<string, unknown> = { recipe, action };
-  if (action === "launch" && overrides && hasVllmOverride(overrides)) body.overrides = compactVllm(overrides);
-  return fleetPostAction(cfg, "/api/recipes/action", body);
 }
 
 async function fleetGet<T>(cfg: GatewayConfig, path: string): Promise<T> {
   const text = await fleetRequestText(cfg, path, { method: "GET" });
   return JSON.parse(text) as T;
-}
-
-async function fleetPostAction(
-  cfg: GatewayConfig,
-  path: string,
-  body: Record<string, unknown>,
-): Promise<FleetJobIdResponse> {
-  const text = await fleetRequestText(cfg, path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!text.trim()) return {};
-  try {
-    return JSON.parse(text) as FleetJobIdResponse;
-  } catch {
-    return {};
-  }
 }
 
 async function fleetRequestText(cfg: GatewayConfig, path: string, init: RequestInit): Promise<string> {
@@ -150,16 +101,4 @@ function errorText(text: string): string {
   } catch {
     return text;
   }
-}
-
-function hasVllmOverride(v: FleetVllm): boolean {
-  return v.gpuMemoryUtilization != null || v.maxModelLen != null || v.maxNumSeqs != null;
-}
-
-function compactVllm(v: FleetVllm): FleetVllm {
-  return {
-    ...(v.gpuMemoryUtilization != null ? { gpuMemoryUtilization: v.gpuMemoryUtilization } : {}),
-    ...(v.maxModelLen != null ? { maxModelLen: v.maxModelLen } : {}),
-    ...(v.maxNumSeqs != null ? { maxNumSeqs: v.maxNumSeqs } : {}),
-  };
 }
