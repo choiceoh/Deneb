@@ -588,8 +588,16 @@ func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionK
 	if canceled {
 		return fusePolarisArms(sessionRows, crossRows, nil)
 	}
-	// Pseudo-relevance feedback: one extra lexical round with terms the FIRST
-	// round's best hits agree on. This is the vocabulary bridge the derived
+	// Pseudo-relevance feedback — OFF unless DENEB_POLARIS_PRF=on. Measured
+	// against everything it was meant to buy: pool moved +0.4pp (93.4→93.8)
+	// while strict top1 fell 4.9pp and the weakest-evidence reader categories
+	// (preference −3.3, multi-session −2.4) paid for it — feedback-term rows
+	// displaced exactly the marginal evidence they were supposed to reinforce,
+	// and every widened pool also widens the cross-encoder batch (the real
+	// rerank cost). The knob stays for re-testing if candidate generation ever
+	// changes; the mechanism note below explains what it would buy then.
+	//
+	// One extra lexical round with terms the FIRST round's best hits agree on. This is the vocabulary bridge the derived
 	// queries cannot build alone — a question phrased in the user's words
 	// matches the user's message, that message's topical terms are the ones the
 	// ASSISTANT's answer uses, and the second round follows them. Guarded
@@ -597,7 +605,7 @@ func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionK
 	// of the top three hits, at most three of them, none from the original
 	// query. Cost is one more FTS pass (ms); the widened pool is safe because
 	// the cross-encoder now owns final ordering.
-	if feedback := prfTerms(append(append([]recallEvidence(nil), sessionRows...), crossRows...), queries); len(feedback) > 0 && ctx.Err() == nil {
+	if feedback := prfTerms(append(append([]recallEvidence(nil), sessionRows...), crossRows...), queries); len(feedback) > 0 && ctx.Err() == nil && os.Getenv("DENEB_POLARIS_PRF") == "on" {
 		extraSession, c1 := appendPolarisSessionHits(ctx, store, sessionKey, feedback, maxIdx, nil)
 		if !c1 {
 			sessionRows = append(sessionRows, extraSession...)

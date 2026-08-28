@@ -637,9 +637,16 @@ func cutToBudgetWithDiversity(evidence []recallEvidence, budget int) []recallEvi
 			break
 		}
 		key := sessionOf(evidence[i])
-		if key != "" && perSession[key] >= 2 {
-			continue
-		}
+		// The per-session cap (≤2) that used to live here is REMOVED, by the
+		// category signatures it left: its own target (multi-session) went DOWN
+		// 2.4pp and knowledge-update fell 5.6pp — a latest-value question needs
+		// the SAME conversation's third update row, and the cap evicted it for
+		// an older-value row from elsewhere — while the coverage it was meant to
+		// buy did not move at all (strict recall@4 80.7%→80.8%). A solution
+		// without a measured problem. The same-session near-duplicate skip
+		// below stays: two near-identical rows from one conversation are real
+		// waste, and update pairs ("I use A"/"I use B") sit under the 0.7
+		// overlap threshold.
 		tokens := noteTokens(evidence[i].Note)
 		if overlaps(tokens, key) {
 			continue
