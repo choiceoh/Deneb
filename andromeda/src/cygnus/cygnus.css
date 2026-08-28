@@ -255,14 +255,32 @@ body.cygnus-window {
   background: var(--panel-sunken);
 }
 
-/* User turns as soft bubbles (reference request-block pattern). */
+/* User turns as right-aligned soft bubbles (reference request-block pattern —
+ * and '나' reads from the right in every Deneb surface). */
+.cygnus-root .ai-turn.user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
 .cygnus-root .ai-turn.user .ai-turn-body {
   display: inline-block;
   background: var(--panel-sunken);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 7px 11px;
-  max-width: 100%;
+  max-width: 88%;
+  text-align: left;
+}
+
+/* Turn actions stay quiet until pointed at (reference: actions don't chant on
+ * every turn) — keyboard focus still reveals them for a11y. */
+.cygnus-root .ai-turn-actions {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.cygnus-root .ai-turn:hover .ai-turn-actions,
+.cygnus-root .ai-turn-actions:focus-within {
+  opacity: 1;
 }
 
 /* Density: the companion window is narrow — tighten the shared turn layout a
