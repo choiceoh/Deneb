@@ -289,3 +289,45 @@ func TestSelfFilterUsesTheSameNameTheLoggerWrites(t *testing.T) {
 		t.Errorf("task name %q and self-log prefix %q must share one source", task.Name(), selfLogPrefix)
 	}
 }
+
+// TestEmptyReplyIsNamedAsABudgetGap, not as a parse failure.
+//
+// The distinction is what a reader acts on. Overnight on 2026-08-27, 9 of 22
+// passes reported "판정 응답 해석 실패: unexpected end of JSON input", which
+// reads as a bad prompt or a confused model — so the first investigation went
+// to the parser. The actual cause was the reply never being emitted at all
+// (finish_reason=length, content_len=0), which points at the token ceiling
+// instead. A gap message that misdirects costs the same investigation the
+// ledger exists to save.
+func TestEmptyReplyIsNamedAsABudgetGap(t *testing.T) {
+	d := Digest{Text: "[ERROR] something\n"}
+	empty := func(context.Context, string, string, int) (string, error) { return "", nil }
+	findings, gap := Inspect(context.Background(), empty, d)
+	if len(findings) != 0 {
+		t.Errorf("an empty reply must yield no findings, got %+v", findings)
+	}
+	if !strings.Contains(gap, "예산") {
+		t.Errorf("gap = %q, want it to name the output budget", gap)
+	}
+	if strings.Contains(gap, "해석 실패") {
+		t.Errorf("gap = %q must not blame the parser for a reply that never arrived", gap)
+	}
+
+	// A reply that IS there but is malformed still reads as a parse failure —
+	// the two causes must stay distinguishable in both directions.
+	garbage := func(context.Context, string, string, int) (string, error) { return "not json at all", nil }
+	if _, gap := Inspect(context.Background(), garbage, d); !strings.Contains(gap, "해석 실패") {
+		t.Errorf("a malformed non-empty reply must still read as a parse failure, got %q", gap)
+	}
+}
+
+// TestJudgeBudgetCoversAFullWindow guards the ceiling against being trimmed
+// back to a value a busy window cannot fit in.
+func TestJudgeBudgetCoversAFullWindow(t *testing.T) {
+	// Measured: a 37-message window needed 2672 completion tokens to finish.
+	// Anything at or below that reproduces the outage.
+	if maxJudgeTokens <= 2672 {
+		t.Errorf("maxJudgeTokens = %d, but a measured real window needed 2672 to complete",
+			maxJudgeTokens)
+	}
+}
