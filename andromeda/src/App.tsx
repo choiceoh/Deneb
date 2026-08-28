@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { DataProviderScope } from "@/crud";
 import { type GatewayConfig, loadConfig, saveConfig } from "./gateway";
 import { denebDataProvider } from "./dataProvider";
-import { isTauri, readDesktopToken } from "./tauri";
-import { initZoom } from "./zoom";
+import { readDesktopToken } from "./tauri";
+import { useDesktopChrome } from "./desktopChrome";
 import { type AvailableUpdate, checkForUpdate } from "./updater";
 import { errText } from "./format";
 import { log } from "./log";
@@ -31,23 +31,9 @@ export function App() {
       .catch((e) => log.child("updater").warn("startup update check failed", errText(e)));
   }, []);
 
-  // Desktop chrome: persistent zoom (Ctrl+휠/±) and no default webview context
-  // menu outside editable fields — custom row menus call preventDefault first,
-  // so this only swallows the meaningless browser menu on static chrome.
-  useEffect(() => {
-    const cleanupZoom = initZoom();
-    function onContextMenu(e: MouseEvent) {
-      if (!isTauri() || e.defaultPrevented) return;
-      const t = e.target as HTMLElement | null;
-      if (t?.closest("input, textarea, [contenteditable='true']")) return;
-      e.preventDefault();
-    }
-    document.addEventListener("contextmenu", onContextMenu);
-    return () => {
-      cleanupZoom();
-      document.removeEventListener("contextmenu", onContextMenu);
-    };
-  }, []);
+  // Desktop chrome (zoom + context-menu policy) — shared with the Cygnus
+  // window via useDesktopChrome so the two windows can't drift.
+  useDesktopChrome();
 
   // Desktop auto-connect: if we have no token yet, pull it from the OS keychain /
   // ~/.deneb/client_token so the live gateway connects without manual entry.
