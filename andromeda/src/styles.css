@@ -1521,6 +1521,30 @@ input[type="checkbox"] {
 /* Deneb "응답 중" sparkle — the StarIndicator port (see DenebStar.tsx). The burst
  * (scale + opacity) and glow run on CSS keyframes, so prefers-reduced-motion calms
  * them; the fill is Deneb's own blue-white — the one cool note in the warm palette. */
+/* Collapsible chain-of-thought above a completed answer. Was inline-styled in
+ * AssistantBody; moved here verbatim so surface skins can restyle it. */
+.ai-reasoning {
+  margin: 1px 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.ai-reasoning > summary {
+  cursor: pointer;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  user-select: none;
+}
+.ai-reasoning-body {
+  padding: 3px 11px 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  border-top: 1px solid var(--line);
+}
+
 .deneb-status {
   display: inline-flex;
   /* flex-start (not center): when the summary wraps to two lines the star + word

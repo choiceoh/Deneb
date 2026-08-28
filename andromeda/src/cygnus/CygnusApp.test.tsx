@@ -17,7 +17,7 @@ describe("CygnusApp", () => {
     render(<CygnusApp />);
     expect(screen.getByText("Cygnus")).toBeInTheDocument();
     expect(screen.getByText("게이트웨이 연결 대기 중")).toBeInTheDocument();
-    expect(screen.getByText(/Andromeda 본창에서 게이트웨이를 연결하면/)).toBeInTheDocument();
+    expect(screen.getByText(/Andromeda 본창에서 연결하면/)).toBeInTheDocument();
     expect(document.title).toBe("Cygnus");
   });
 

@@ -2,7 +2,6 @@ import { useState, type ReactNode } from "react";
 
 import type { AttachmentPart, ChatTurn, VariantView } from "@/hooks";
 import { printClosest } from "@/print";
-import { color, line } from "@/theme";
 import { DenebStatus } from "./DenebStatus";
 import { AssistantText } from "./DenebUi";
 import { Icon } from "./Icon";
@@ -13,25 +12,11 @@ import { ToolChip } from "./ToolChip";
 // gateway carries the reasoning on the done frame and in the transcript wire.
 function ReasoningBlock({ text }: { text: string }) {
   return (
-    <details
-      className="ai-reasoning no-print"
-      style={{ margin: "1px 0 9px", border: line, borderRadius: 8, background: color.field }}
-    >
-      <summary style={{ cursor: "pointer", padding: "5px 10px", fontSize: 12, color: color.muted, userSelect: "none" }}>
-        추론 보기
-      </summary>
-      <div
-        style={{
-          padding: "3px 11px 10px",
-          fontSize: 13,
-          lineHeight: 1.55,
-          color: color.text2,
-          whiteSpace: "pre-wrap",
-          borderTop: line,
-        }}
-      >
-        {text}
-      </div>
+    // Styling lives in styles.css (.ai-reasoning) rather than inline so a
+    // surface skin — the Cygnus companion — can quiet it without !important.
+    <details className="ai-reasoning no-print">
+      <summary>추론 보기</summary>
+      <div className="ai-reasoning-body">{text}</div>
     </details>
   );
 }

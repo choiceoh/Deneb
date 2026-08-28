@@ -295,29 +295,13 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
           >
             {turns.length === 0 ? (
               <div className="cy-empty">
-                <DenebStar size={40} />
-                <p>{connected ? "무엇을 시킬까요?" : "게이트웨이 연결 대기 중"}</p>
-                <span className="cy-empty-sub">
-                  {connected
-                    ? "에이전트 실행과 가벼운 코딩을 여기서 — 파일을 끌어놓거나 명령을 적으세요"
-                    : "Andromeda 본창에서 게이트웨이를 연결하면 이 창도 함께 연결됩니다"}
+                <span className="cy-empty-mark" aria-hidden="true">
+                  <DenebStar size={34} />
                 </span>
-                {connected && (
-                  <div className="cy-starters" role="group" aria-label="시작 제안">
-                    {CYGNUS_STARTERS.map((s) => (
-                      <button
-                        key={s}
-                        className="cy-starter"
-                        onClick={() => {
-                          setInput(s);
-                          composeRef.current?.focus();
-                        }}
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <h2>{connected ? "무엇을 시킬까요?" : "게이트웨이 연결 대기 중"}</h2>
+                <span className="cy-empty-sub">
+                  {connected ? "에이전트 실행과 가벼운 코딩" : "Andromeda 본창에서 연결하면 이 창도 따라옵니다"}
+                </span>
                 <span className="cy-empty-hint">Ctrl+Shift+Space 어디서든 소환</span>
               </div>
             ) : (
@@ -371,6 +355,24 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
           </div>
 
           <ScrollToBottomButton visible={!atBottom && turns.length > 0} onClick={scrollToBottom} />
+          {/* Suggestions belong to the input, not to the void: they sit right
+              above the composer and align with its card. */}
+          {connected && turns.length === 0 && (
+            <div className="cy-starters" role="group" aria-label="시작 제안">
+              {CYGNUS_STARTERS.map((s) => (
+                <button
+                  key={s}
+                  className="cy-starter"
+                  onClick={() => {
+                    setInput(s);
+                    composeRef.current?.focus();
+                  }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="cy-foot">
             <ChatComposer
               composeRef={composeRef}

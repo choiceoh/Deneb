@@ -247,53 +247,83 @@ body.cygnus-window {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  text-align: center;
-  gap: 4px;
-  color: var(--muted);
   padding: 24px;
+  text-align: center;
 }
-.cy-empty p {
+
+.cy-empty-mark {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, var(--accent-soft) 0%, transparent 68%);
+}
+
+.cy-empty h2 {
   margin: 0;
-  font-size: 14.5px;
-  color: var(--ink-2);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-wrap: balance;
 }
+
 .cy-empty-sub {
-  font-size: 12px;
-  color: var(--muted-2);
-}
-.cy-starters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-  margin-top: 18px;
-}
-.cy-starter {
-  font-family: var(--font);
+  margin-top: 5px;
   font-size: 12.5px;
-  color: var(--ink-2);
-  background: var(--panel);
-  border: 1px solid var(--line-2);
-  border-radius: var(--radius-pill);
-  padding: 7px 12px;
+  color: var(--muted);
+}
+
+.cy-starters {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  /* Card-edge aligned with the composer below. */
+  margin: 0 10px 8px;
+}
+
+.cy-starter {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-ctl);
+  background: transparent;
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--muted);
+  text-align: left;
   cursor: pointer;
   transition:
-    border-color 0.12s ease,
-    color 0.12s ease,
-    background 0.12s ease;
+    background 0.12s ease,
+    color 0.12s ease;
 }
+
+.cy-starter::before {
+  content: "\203A";
+  font-family: var(--cy-mono);
+  font-size: 13px;
+  color: var(--faint);
+  transition: color 0.12s ease;
+}
+
 .cy-starter:hover {
-  border-color: var(--accent);
-  color: var(--accent);
   background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+
+.cy-starter:hover::before {
+  color: var(--accent);
 }
 
 .cy-empty-hint {
-  /* Information, not an action — a pill here read as a fourth button next to
-     the starter chips. Quiet mono text instead. */
-  margin-top: 20px;
+  margin-top: 14px;
   font-family: var(--cy-mono);
-  font-size: 10.5px;
+  font-size: 9.5px;
   letter-spacing: 0.02em;
   color: var(--faint);
 }
@@ -451,6 +481,80 @@ body.cygnus-window {
  * inside the narrow companion window. */
 .cygnus-root .ai-composer {
   border-radius: 12px;
+}
+
+/* ---- working state (the surface's real moment) ---- */
+/* The shared status row and tool chips are inline-flex, so they flowed into one
+   line box: the progress line rendered beside a chip like an accident. In the
+   companion each gets its own line, and the row's star is dropped — the turn is
+   already marked by one. */
+.cygnus-root .deneb-status {
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
+}
+.cygnus-root .deneb-status .deneb-star {
+  display: none;
+}
+.cygnus-root .deneb-status-text,
+.cygnus-root .deneb-status-summary,
+.cygnus-root .deneb-status-elapsed {
+  font-size: 12px;
+}
+.cygnus-root .deneb-status-elapsed {
+  font-family: var(--cy-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tool calls are steps in the answer, not buttons stapled beside it: quiet
+   hairline rows with the tool name in the coding voice. */
+.cygnus-root .tool-chip {
+  display: flex;
+  gap: 7px;
+  margin: 5px 0;
+  padding: 4px 9px;
+  background: var(--panel-sunken);
+  border-color: var(--line);
+  border-radius: var(--radius-ctl);
+}
+.cygnus-root .tool-chip-name {
+  font-family: var(--cy-mono);
+  font-size: 11px;
+  letter-spacing: -0.01em;
+  color: var(--ink-2);
+}
+.cygnus-root .tool-chip-detail {
+  font-size: 11.5px;
+  color: var(--muted-2);
+}
+
+/* Stop is a normal control, not a hazard — red is reserved for failures. */
+.cygnus-root .ai-send-stop,
+.cygnus-root .ai-send-stop:hover:not(:disabled) {
+  background: var(--ink-2);
+  color: var(--panel);
+}
+.cygnus-root .ai-send-stop:hover:not(:disabled) {
+  background: var(--ink);
+}
+
+/* Reasoning is an aside, not a panel: no card chrome, just a quiet toggle. */
+.cygnus-root .ai-reasoning {
+  margin: 2px 0 8px;
+  border: 0;
+  background: transparent;
+}
+.cygnus-root .ai-reasoning > summary {
+  padding: 2px 0;
+  font-size: 11.5px;
+  color: var(--muted-2);
+}
+.cygnus-root .ai-reasoning-body {
+  padding: 4px 0 2px 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+  border-top: 0;
+  border-left: 2px solid var(--line-2);
 }
 
 /* focus ring follows the accent inside cygnus */
