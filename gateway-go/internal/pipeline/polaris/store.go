@@ -436,6 +436,34 @@ type SearchHit struct {
 }
 
 // SearchMessages performs full-text search across message content.
+// nextTextClipRunes bounds the assistant-reply head carried on a user-turn
+// hit. 2400, up from 600: NextText is PRUNER INPUT, never rendered raw — the
+// cross-encoder's sentence selection picks the rendered note from it (capped
+// at noteCapFor), and the stitch fallback still clips to 300. At 600 the
+// answer sentences of a long assistant reply (recommendation lists, drafts —
+// the single-session-assistant shape) sat beyond the clip, so no sentence
+// selector could ever surface them: R3 measured that raising the RENDER cap
+// alone moved SSA 0.0 — the content was missing at the input, not the output.
+const nextTextClipRunes = 2400
+
+// assistantWide widens the pruner input for an assistant-authored hit: the 4x
+// lexical window around the match often excludes the answer body of a long
+// reply (the single-session-assistant failure shape), so the reply head joins
+// it — head only when the window already sits inside the head.
+func assistantWide(role, fullText, wide string) string {
+	if role != "assistant" {
+		return wide
+	}
+	head := clipRunesHead(fullText, nextTextClipRunes)
+	if len(head) <= len(wide) {
+		return wide
+	}
+	if strings.Contains(head, wide) {
+		return head
+	}
+	return head + " … " + wide
+}
+
 // clipRunesHead returns the first n runes of text.
 func clipRunesHead(text string, n int) string {
 	r := []rune(strings.TrimSpace(text))
@@ -468,13 +496,13 @@ func (s *Store) SearchMessages(sessionKey, query string, maxResults int) ([]Sear
 			if m.MsgIndex == msgIdx {
 				next := ""
 				if m.Role == "user" && mi+1 < len(sd.messages) && sd.messages[mi+1].Role == "assistant" {
-					next = clipRunesHead(sd.messages[mi+1].TextContent, 600)
+					next = clipRunesHead(sd.messages[mi+1].TextContent, nextTextClipRunes)
 				}
 				results = append(results, SearchHit{
 					SessionKey: sessionKey,
 					Role:       m.Role,
 					Snippet:    h.Snippet,
-					Wide:       h.Wide,
+					Wide:       assistantWide(m.Role, m.TextContent, h.Wide),
 					NextText:   next,
 					MsgIndex:   m.MsgIndex,
 					Timestamp:  m.Timestamp,
@@ -520,13 +548,13 @@ func (s *Store) SearchResidentSessions(excludeKey, query string, maxResults int)
 				if m.MsgIndex == msgIdx {
 					next := ""
 					if m.Role == "user" && mi+1 < len(sd.messages) && sd.messages[mi+1].Role == "assistant" {
-						next = clipRunesHead(sd.messages[mi+1].TextContent, 600)
+						next = clipRunesHead(sd.messages[mi+1].TextContent, nextTextClipRunes)
 					}
 					results = append(results, SearchHit{
 						SessionKey: key,
 						Role:       m.Role,
 						Snippet:    h.Snippet,
-						Wide:       h.Wide,
+						Wide:       assistantWide(m.Role, m.TextContent, h.Wide),
 						NextText:   next,
 						MsgIndex:   m.MsgIndex,
 						Timestamp:  m.Timestamp,
