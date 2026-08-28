@@ -12,19 +12,28 @@ import {
   setModel,
 } from "@/gateway";
 import type { ChatTurn } from "@/hooks";
+import { CHAT_RECOVERY_POLL_MS } from "@/gateway";
 import { useSessions } from "./useSessions";
 
-vi.mock("@/gateway", () => ({
-  TRANSCRIPT_MAX: 200,
-  deleteSession: vi.fn(),
-  focusSession: vi.fn(),
-  pinSession: vi.fn(),
-  recentSessions: vi.fn(),
-  renameSession: vi.fn(),
-  searchSessions: vi.fn(),
-  sessionTranscript: vi.fn(),
-  setModel: vi.fn(),
-}));
+vi.mock("@/gateway", async (importOriginal) => {
+  // recoverTurnAnswer (and its constants) stay REAL so the foreign-turn
+  // watcher tests exercise the actual poll loop against the mocked
+  // sessionTranscript; everything the hook calls directly is a spy.
+  const real = await importOriginal<typeof import("@/gateway")>();
+  return {
+    TRANSCRIPT_MAX: 200,
+    CHAT_RECOVERY_POLL_MS: real.CHAT_RECOVERY_POLL_MS,
+    recoverTurnAnswer: real.recoverTurnAnswer,
+    deleteSession: vi.fn(),
+    focusSession: vi.fn(),
+    pinSession: vi.fn(),
+    recentSessions: vi.fn(),
+    renameSession: vi.fn(),
+    searchSessions: vi.fn(),
+    sessionTranscript: vi.fn(),
+    setModel: vi.fn(),
+  };
+});
 
 const cfg: GatewayConfig = { url: "http://test", token: "token" };
 const recent = vi.mocked(recentSessions);
@@ -168,6 +177,77 @@ describe("useSessions", () => {
     ]);
     // The final answer row has no trace — plain body path (no parts).
     expect(turns[2].parts).toBeUndefined();
+  });
+
+  it("shows a running placeholder and delivers the answer when a foreign turn finishes", async () => {
+    // The companion scenario: a turn started on the phone is still running when
+    // this surface opens the session. First load carries turnRunning=true; the
+    // watcher polls (recoverTurnAnswer → sessionTranscript) and the finished
+    // transcript replaces the placeholder.
+    vi.useFakeTimers();
+    try {
+      const runningPayload = {
+        messages: [{ id: "u1", role: "user", content: "보고서 정리해줘", timestampMs: 1_000 }],
+        total: 1,
+        turnRunning: true,
+      };
+      const donePayload = {
+        messages: [
+          { id: "u1", role: "user", content: "보고서 정리해줘", timestampMs: 1_000 },
+          { id: "a1", role: "assistant", content: "정리했습니다." },
+        ],
+        total: 2,
+        turnRunning: false,
+      };
+      transcript
+        .mockResolvedValueOnce(runningPayload) // selectSession load
+        .mockResolvedValueOnce(donePayload) // watcher poll snapshot 1
+        .mockResolvedValueOnce(donePayload) // watcher poll snapshot 2 (stability confirm)
+        .mockResolvedValue(donePayload); // final reload
+      const chat = chatDouble();
+      const { result } = renderHook(() => useSessions(cfg, true, false, chat));
+
+      await act(async () => result.current.selectSession("client:main:run"));
+
+      const first = chat.setTurns.mock.calls.at(-1)?.[0] as ChatTurn[];
+      expect(first.at(-1)).toMatchObject({ status: "streaming", startedAt: 1_000 });
+
+      // Two polls confirm the answer, then the reload swaps the transcript in.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(CHAT_RECOVERY_POLL_MS * 3);
+      });
+      const finalTurns = chat.setTurns.mock.calls.at(-1)?.[0] as ChatTurn[];
+      expect(finalTurns.at(-1)).toMatchObject({ status: "done", text: "정리했습니다." });
+      expect(finalTurns.some((t) => t.status === "streaming")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a live send stops the foreign-turn watcher so it cannot clobber the stream", async () => {
+    vi.useFakeTimers();
+    try {
+      transcript.mockResolvedValue({
+        messages: [{ id: "u1", role: "user", content: "질문", timestampMs: 0 }],
+        total: 1,
+        turnRunning: true,
+      });
+      const chat = chatDouble();
+      const { result, rerender } = renderHook(({ busy }) => useSessions(cfg, true, busy, chat), {
+        initialProps: { busy: false },
+      });
+      await act(async () => result.current.selectSession("client:main:run"));
+      const callsBefore = transcript.mock.calls.length;
+
+      rerender({ busy: true });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(CHAT_RECOVERY_POLL_MS * 4);
+      });
+      // No further polls once the surface went busy.
+      expect(transcript.mock.calls.length).toBe(callsBefore);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("when deleting the active session removes it and mints a fresh conversation", async () => {

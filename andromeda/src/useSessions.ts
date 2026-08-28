@@ -9,6 +9,7 @@ import {
   focusSession,
   pinSession,
   recentSessions,
+  recoverTurnAnswer,
   renameSession as renameSessionRpc,
   searchSessions,
   sessionTranscript,
@@ -289,6 +290,7 @@ export function useSessions(
   }
 
   function newChat() {
+    stopRunningWatch();
     if (busy) return;
     setSessionsOpen(false);
     // mint a fresh key when the caller provides one (채팅 탭 → 새 대화마다 새
@@ -328,9 +330,63 @@ export function useSessions(
       };
     });
 
+  // A turn started elsewhere (the phone, a closed window) can still be running
+  // when this surface opens the session — the transcript alone would show a
+  // stale conversation and the answer would never arrive. Watch it: show the
+  // working sparkle, poll through the shared recovery helper, and reload the
+  // transcript (answer + tool chips + footprint in one shot) when it lands.
+  const runningWatch = useRef<AbortController | null>(null);
+  function stopRunningWatch() {
+    runningWatch.current?.abort();
+    runningWatch.current = null;
+  }
+  // A live send in this surface takes over the stream — the watcher's reload
+  // would clobber the streaming turn. Unmount must not leak the poll either.
+  useEffect(() => {
+    if (busy) stopRunningWatch();
+  }, [busy]);
+  useEffect(() => stopRunningWatch, []);
+
+  function watchRunningTurn(key: string, sentText: string) {
+    const ctrl = new AbortController();
+    runningWatch.current = ctrl;
+    void (async () => {
+      // Null = lost/anchor-miss; the reload below re-checks turnRunning and
+      // re-arms if the turn is genuinely still going, so a miss degrades to a
+      // slow transcript refresh instead of a dropped answer.
+      await recoverTurnAnswer(cfg, key, sentText, {
+        signal: ctrl.signal,
+        // Injected (not the helper's internal default) so the poll goes
+        // through THIS module's sessionTranscript import — one seam for
+        // tests and for any future per-surface fetch shaping.
+        fetchSnapshot: (c, s) =>
+          sessionTranscript(c, s).then((r) => ({ messages: r.messages, turnRunning: r.turnRunning })),
+      }).catch(() => null);
+      if (ctrl.signal.aborted) return;
+      runningWatch.current = null;
+      await loadTranscript(key).catch(() => {});
+    })();
+  }
+
   async function loadTranscript(key: string, limit?: number) {
-    const { messages, total } = await sessionTranscript(cfg, key, limit);
-    chat.setTurns(toTurns(messages, key));
+    stopRunningWatch();
+    const { messages, total, turnRunning } = await sessionTranscript(cfg, key, limit);
+    const turns = toTurns(messages, key);
+    if (turnRunning) {
+      const lastUser = [...messages].reverse().find((m) => m.role === "user");
+      turns.push({
+        id: `running-${key}`,
+        role: "assistant",
+        text: "",
+        status: "streaming",
+        // Real start when the transcript carries it — the elapsed timer then
+        // reads "this turn has been going N seconds", not "since I looked".
+        startedAt: lastUser?.timestampMs || Date.now(),
+        canRegenerate: false,
+      });
+      watchRunningTurn(key, lastUser?.content ?? "");
+    }
+    chat.setTurns(turns);
     const hidden = total - messages.length;
     // The server clamps at TRANSCRIPT_MAX, so once we've loaded that much there
     // is no way to page further — drop the affordance instead of lying.
