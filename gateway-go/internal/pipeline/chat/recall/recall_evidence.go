@@ -1050,7 +1050,7 @@ func recallSummarySemanticQuotaValue() int {
 var recallRenderZone = time.FixedZone("KST", 9*3600)
 
 func formatRecallEvidence(evidence []recallEvidence) string {
-	block, _ := formatRecallEvidenceAt(evidence, time.Now(), true)
+	block, _ := formatRecallEvidenceAt(evidence, time.Now(), true, true)
 	return block
 }
 
@@ -1068,7 +1068,7 @@ func fileOpenHint(filesToolReachable bool) string {
 // the character budget cut. The count matters beyond this turn: a snapshot the
 // budget shortened is degraded exactly the way a deadline-cut one is, and
 // ShouldFreeze must not pin it onto every later turn about the same topic.
-func formatRecallEvidenceAt(evidence []recallEvidence, now time.Time, filesToolReachable bool) (string, int) {
+func formatRecallEvidenceAt(evidence []recallEvidence, now time.Time, filesToolReachable, sessionsToolReachable bool) (string, int) {
 	var sb strings.Builder
 	sb.WriteString(recallContextOpenTag)
 	sb.WriteString("\n")
@@ -1083,7 +1083,19 @@ func formatRecallEvidenceAt(evidence []recallEvidence, now time.Time, filesToolR
 	// Anchor date for temporal arithmetic: rows carry date=/age=, but without
 	// an explicit reference date the reader cannot tell what age counts from.
 	sb.WriteString("기준일=" + now.In(recallRenderZone).Format("2006-01-02") + "\n")
-	sb.WriteString("사용자 메시지가 과거 맥락을 암시해 서버가 위키/일지/파일/세션 이력을 미리 검색했다. 아래 근거만 확실한 과거 맥락으로 사용하고, 근거가 부족하면 부족하다고 말하라. source=file 행은 보관된 파일의 일치 구절이며, 전체 내용은 " + fileOpenHint(filesToolReachable) + "로 열어볼 수 있다.\n\n")
+	sb.WriteString("사용자 메시지가 과거 맥락을 암시해 서버가 위키/일지/파일/세션 이력을 미리 검색했다. 아래 근거만 확실한 과거 맥락으로 사용하고, 근거가 부족하면 부족하다고 말하라. source=file 행은 보관된 파일의 일치 구절이며, 전체 내용은 " + fileOpenHint(filesToolReachable) + "로 열어볼 수 있다.")
+	if sessionsToolReachable {
+		// The follow-up read route. Snippets are budget-cut excerpts; when the
+		// answer did not survive the cut, the model can pull the conversation
+		// itself instead of guessing — sessions.history resolves these ref
+		// tails and accepts the #N anchor as a window center.
+		sb.WriteString(" source=session 행은 과거 대화의 발췌다. 발췌만으로 부족하면 sessions(action=\"history\", sessionKey=\"<그 행의 ref>\")로 해당 대화 전체를 열람하라.")
+	}
+	// Aggregation scaffold: count/list/period questions fail when the reader
+	// answers from a gestalt impression of interleaved rows. Enumerate-then-
+	// answer is the cheapest known fix (CoT gains concentrate on temporal/
+	// aggregation in the LongMemEval paper) and costs one sentence.
+	sb.WriteString(" 횟수·목록·기간을 묻는 질문은 해당하는 근거 행을 날짜와 함께 먼저 나열한 뒤, 그 목록을 세어 답하라.\n\n")
 
 	written, dropped := 0, 0
 	evidence = groupEvidenceByConversation(evidence)

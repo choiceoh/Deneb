@@ -29,6 +29,11 @@ type Params struct {
 	// named unconditionally because it rides the same allow-lists as the wiki
 	// surfaces those presets keep.
 	FilesToolReachable bool
+	// SessionsToolReachable says the run may call the `sessions` tool. The
+	// evidence header points source=session rows at sessions.history for
+	// opening the full conversation; same rule as FilesToolReachable — never
+	// name a route the preset cannot take.
+	SessionsToolReachable bool
 }
 
 // recallSuppressed reports whether this turn must not run the preflight.

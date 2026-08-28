@@ -582,6 +582,11 @@ func SessionsToolSchema() map[string]any {
 				"description": "Session action",
 				"enum":        []string{"list", "history", "search", "send", "stats"},
 			},
+			"around": map[string]any{
+				"type":        "number",
+				"description": "history: 이 메시지 번호 주변 창을 연다 (회상 ref의 #번호). limit이 창 크기가 된다",
+				"minimum":     1,
+			},
 			"days": map[string]any{
 				"type":        "number",
 				"description": "stats: 집계 기간(일). 기본 7",
@@ -619,7 +624,7 @@ func SessionsToolSchema() map[string]any {
 			},
 			"sessionKey": map[string]any{
 				"type":        "string",
-				"description": "Target session key (history/send actions)",
+				"description": "Target session key (history/send actions). history는 회상 근거의 세션 ref 꼬리(예: \"s38#2/user\")도 받는다 — 저장된 키 목록에 접미사 매칭으로 해소하고, #뒤 번호는 창 중심으로 쓴다",
 			},
 		},
 		"required": []string{"action"},

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -170,12 +171,59 @@ func toolSessionsList(sessions *session.Manager) toolport.ToolFunc {
 
 // --- sessions history sub-action ---
 
+// resolveHistoryKey turns a recall-evidence session ref into a loadable
+// session key. Recall rows render refs as short tails ("s38#2/user",
+// "kimi/k3#5/assistant") — the metadata diet cut the long key prefix because
+// nothing consumed it in one-shot reading; the follow-up read route consumes
+// it here instead, by resolving the tail back against the store's key list.
+// Returns the resolved key, the #N anchor parsed off the ref (-1 when absent),
+// and — when the tail matches several sessions — the candidate keys to report.
+func resolveHistoryKey(transcript toolport.TranscriptStore, raw string) (key string, anchor int, candidates []string) {
+	key, anchor = raw, -1
+	if i := strings.IndexByte(key, '#'); i >= 0 {
+		tail := key[i+1:]
+		key = key[:i]
+		digits := tail
+		if j := strings.IndexByte(digits, '/'); j >= 0 {
+			digits = digits[:j]
+		}
+		if n, err := strconv.Atoi(digits); err == nil && n >= 0 {
+			anchor = n
+		}
+	}
+	// The recall renderer abbreviates "client:" to "cl:"; undo it before
+	// matching so an un-dieted ref also resolves exactly.
+	expanded := key
+	if strings.HasPrefix(key, "cl:") {
+		expanded = "client:" + key[len("cl:"):]
+	}
+	keys, err := transcript.ListKeys()
+	if err != nil {
+		return key, anchor, nil
+	}
+	for _, k := range keys {
+		if k == key || k == expanded {
+			return k, anchor, nil
+		}
+	}
+	for _, k := range keys {
+		if strings.HasSuffix(k, ":"+key) || strings.HasSuffix(k, ":"+expanded) {
+			candidates = append(candidates, k)
+		}
+	}
+	if len(candidates) == 1 {
+		return candidates[0], anchor, nil
+	}
+	return key, anchor, candidates
+}
+
 // toolSessionsHistory returns a tool function that retrieves session transcript history.
 func toolSessionsHistory(transcript toolport.TranscriptStore) toolport.ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			SessionKey string           `json:"sessionKey"`
 			Limit      artifact.FlexInt `json:"limit"`
+			Around     artifact.FlexInt `json:"around"`
 		}
 		if err := jsonutil.UnmarshalInto("sessions_history params", input, &p); err != nil {
 			return "", err
@@ -192,13 +240,71 @@ func toolSessionsHistory(transcript toolport.TranscriptStore) toolport.ToolFunc 
 			limit = 20
 		}
 
-		msgs, total, err := transcript.Load(p.SessionKey, limit)
+		sessionKey, refAnchor, cands := resolveHistoryKey(transcript, p.SessionKey)
+		if len(cands) > 1 {
+			if len(cands) > 8 {
+				cands = cands[:8]
+			}
+			return fmt.Sprintf("Ref %q matches %d sessions — specify one sessionKey:\n%s",
+				p.SessionKey, len(cands), strings.Join(cands, "\n")), nil
+		}
+		anchor := p.Around.Int()
+		if anchor <= 0 && refAnchor >= 0 {
+			anchor = refAnchor
+		}
+
+		if anchor > 0 {
+			// Windowed read around one message — the follow-up route for a
+			// recall snippet that lost its answer to the budget cut. Loads the
+			// whole transcript (limit<=0 = all) and slices locally; per-message
+			// truncation is wider here because a focused window of few
+			// messages IS the deep read, not a preview.
+			all, total, err := transcript.Load(sessionKey, 0)
+			if err != nil {
+				return fmt.Sprintf("Failed to load history for session %q: %s", sessionKey, err.Error()), nil
+			}
+			if len(all) == 0 {
+				return fmt.Sprintf("Session %q has no history (or does not exist).", sessionKey), nil
+			}
+			center := anchor
+			if center > len(all) {
+				center = len(all)
+			}
+			start := center - 1 - limit/2
+			if start < 0 {
+				start = 0
+			}
+			end := start + limit
+			if end > len(all) {
+				end = len(all)
+				if start = end - limit; start < 0 {
+					start = 0
+				}
+			}
+			var sb strings.Builder
+			fmt.Fprintf(&sb, "Session %q — messages %d..%d of %d (window around #%d):\n\n",
+				sessionKey, start+1, end, total, anchor)
+			for i, msg := range all[start:end] {
+				content := msg.SearchableText()
+				if strings.TrimSpace(content) == "" {
+					continue
+				}
+				if len(content) > 1200 {
+					content = textutil.TruncateBytes(content, 1200) + "..."
+				}
+				fmt.Fprintf(&sb, "%d. [%s] %s\n", start+i+1, msg.Role, content)
+			}
+			return sb.String(), nil
+		}
+
+		msgs, total, err := transcript.Load(sessionKey, limit)
 		if err != nil {
-			return fmt.Sprintf("Failed to load history for session %q: %s", p.SessionKey, err.Error()), nil
+			return fmt.Sprintf("Failed to load history for session %q: %s", sessionKey, err.Error()), nil
 		}
 		if len(msgs) == 0 {
-			return fmt.Sprintf("Session %q has no history (or does not exist).", p.SessionKey), nil
+			return fmt.Sprintf("Session %q has no history (or does not exist).", sessionKey), nil
 		}
+		p.SessionKey = sessionKey
 
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "Session %q history (%d of %d messages):\n\n", p.SessionKey, len(msgs), total)

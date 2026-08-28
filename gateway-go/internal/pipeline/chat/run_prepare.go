@@ -195,6 +195,9 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, se
 			// fetch_tools activation too), so the caller — which knows the
 			// preset — decides whether that route may be named.
 			FilesToolReachable: toolAllowedUnderPreset("files", sessionToolPreset),
+			// Same contract for the session follow-up read route: source=session
+			// rows point at sessions.history only when the preset can call it.
+			SessionsToolReachable: toolAllowedUnderPreset("sessions", sessionToolPreset),
 		},
 		chatrecall.Deps{
 			Wiki:         deps.memory.Wiki,

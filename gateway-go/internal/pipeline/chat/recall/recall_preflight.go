@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"regexp"
 	"sort"
@@ -336,7 +337,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	}
 
 	evidence = rankRecallEvidence(evidence, queries, searchMessage, cue, deps.now())
-	block, budgetDropped := formatRecallEvidenceAt(evidence, deps.now(), params.FilesToolReachable)
+	block, budgetDropped := formatRecallEvidenceAt(evidence, deps.now(), params.FilesToolReachable, params.SessionsToolReachable)
 	if budgetDropped > 0 {
 		// The character budget cut rows the ranking chose. That is the same
 		// class of degradation as a deadline cut, so it must reach `truncated`
@@ -565,15 +566,18 @@ func rankRecallEvidence(
 	return cutToBudgetWithDiversity(evidence, recallEvidenceBudget(cue))
 }
 
-// cutToBudgetWithDiversity fills the evidence budget by rank but refuses to let
-// one conversation monopolize it. Measured on the rendered blocks: in 26% of
-// LongMemEval questions a single session held 3+ of the 8 rows while other
-// evidence sessions went unrendered — exactly the slots an aggregation question
-// ("how many X did I…") needs. Rule: at most two session-rows per conversation
-// while other candidates remain; near-duplicate notes (≥70% token overlap with
-// an already-picked row) are skipped the same way. Overflow slots fall back to
-// pure rank order, so a turn whose evidence genuinely lives in one conversation
-// still fills its budget.
+// cutToBudgetWithDiversity fills the evidence budget by rank, skipping
+// same-conversation near-duplicates (≥70% token overlap), with an optional
+// soft per-conversation decay (DENEB_POLARIS_SESSION_DECAY): each row already
+// picked from a conversation multiplies that conversation's next candidate by
+// the decay factor. Unlike the removed hard cap (≤2 — it categorically evicted
+// the third same-conversation row and cost knowledge-update 5.6pp, which needs
+// the SAME conversation's latest update row), a decayed row still wins whenever
+// its base score carries it: the mechanism only breaks ties toward unrendered
+// conversations, which is what strict recall@k (all evidence sessions present)
+// needs on multi-evidence questions. The first pick is provably unaffected.
+// Overflow slots fall back to pure rank order, so a turn whose evidence
+// genuinely lives in one conversation still fills its budget.
 func cutToBudgetWithDiversity(evidence []recallEvidence, budget int) []recallEvidence {
 	if len(evidence) <= budget {
 		return evidence
@@ -632,27 +636,39 @@ func cutToBudgetWithDiversity(evidence []recallEvidence, budget int) []recallEvi
 		}
 		return false
 	}
-	for i := range evidence {
-		if len(picked) == budget {
+	// Greedy argmax over decay-adjusted scores. At decay=1 (default) this IS
+	// the plain rank-order walk: evidence arrives sorted by score descending
+	// and strict > keeps the earliest maximum. The per-session hard cap (≤2)
+	// that used to live here is REMOVED — see the function comment.
+	decay := polarisSessionDecay()
+	blocked := make([]bool, len(evidence))
+	for len(picked) < budget {
+		best, bestAdj := -1, 0.0
+		for i := range evidence {
+			if used[i] || blocked[i] {
+				continue
+			}
+			adj := evidence[i].Score
+			if decay < 1 {
+				if key := sessionOf(evidence[i]); key != "" && perSession[key] > 0 {
+					adj *= math.Pow(decay, float64(perSession[key]))
+				}
+			}
+			if best == -1 || adj > bestAdj {
+				best, bestAdj = i, adj
+			}
+		}
+		if best == -1 {
 			break
 		}
-		key := sessionOf(evidence[i])
-		// The per-session cap (≤2) that used to live here is REMOVED, by the
-		// category signatures it left: its own target (multi-session) went DOWN
-		// 2.4pp and knowledge-update fell 5.6pp — a latest-value question needs
-		// the SAME conversation's third update row, and the cap evicted it for
-		// an older-value row from elsewhere — while the coverage it was meant to
-		// buy did not move at all (strict recall@4 80.7%→80.8%). A solution
-		// without a measured problem. The same-session near-duplicate skip
-		// below stays: two near-identical rows from one conversation are real
-		// waste, and update pairs ("I use A"/"I use B") sit under the 0.7
-		// overlap threshold.
-		tokens := noteTokens(evidence[i].Note)
+		key := sessionOf(evidence[best])
+		tokens := noteTokens(evidence[best].Note)
 		if overlaps(tokens, key) {
+			blocked[best] = true
 			continue
 		}
-		used[i] = true
-		picked = append(picked, evidence[i])
+		used[best] = true
+		picked = append(picked, evidence[best])
 		pickedTokens = append(pickedTokens, tokens)
 		pickedSessions = append(pickedSessions, key)
 		if key != "" {
@@ -668,6 +684,29 @@ func cutToBudgetWithDiversity(evidence []recallEvidence, budget int) []recallEvi
 		}
 	}
 	return picked
+}
+
+// polarisSessionDecay reads DENEB_POLARIS_SESSION_DECAY (0.5..1.0); 1 = off.
+// Default 0.7 — the knee of the measured ladder (LongMemEval_s 470, strict
+// recall@8 = coverage of the 8 rendered rows; everything else invariant):
+//
+//	decay   strict@4   strict@8   KU hit@4/top1
+//	1 (off) 80.2%      83.4%      97.2 / 88.9
+//	0.85    80.2%      85.4%      97.2 / 88.9
+//	0.7     80.6%      86.4%      97.2 / 88.9   ← default
+//	0.5     80.8%      86.6%      97.2 / 88.9
+//
+// hit@4 93.2 / top1 62.1 at every rung, and knowledge-update — the category
+// the removed HARD cap damaged 5.6pp — is untouched even at 0.5: demotion
+// only flips near-ties, eviction flipped certainties. 0.5's extra +0.2 is not
+// worth living at the clamp edge.
+func polarisSessionDecay() float64 {
+	if raw := strings.TrimSpace(os.Getenv("DENEB_POLARIS_SESSION_DECAY")); raw != "" {
+		if v, err := strconv.ParseFloat(raw, 64); err == nil && v >= 0.5 && v <= 1.0 {
+			return v
+		}
+	}
+	return 0.7
 }
 
 // filterCrossSubjectEvidence drops wiki rows whose SubjectID is a non-self

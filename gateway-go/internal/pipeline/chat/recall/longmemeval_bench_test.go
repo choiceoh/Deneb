@@ -434,12 +434,12 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			if hitIn(afterFilter) {
 				filterHits++
 			}
-			block, cutNoCue := formatRecallEvidenceAt(evidence, questionAt, true)
+			block, cutNoCue := formatRecallEvidenceAt(evidence, questionAt, true, false)
 			// Does the CHARACTER budget bind before the row budget does? The row
 			// budget is conditional (4/8) but recallMaxChars is not, so a cue turn
 			// can be allowed eight rows and then lose some to the char cap —
 			// which would make the reach and window routing partly wasted.
-			_, cutCue := formatRecallEvidenceAt(cueRanked, questionAt, true)
+			_, cutCue := formatRecallEvidenceAt(cueRanked, questionAt, true, false)
 
 			rendered := renderedSources(block)
 			// Aggregation is the only shared state; everything above is per-question.
