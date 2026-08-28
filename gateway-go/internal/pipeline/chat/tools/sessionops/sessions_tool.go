@@ -255,10 +255,16 @@ func toolSessionsHistory(transcript toolport.TranscriptStore) toolport.ToolFunc 
 
 		if anchor > 0 {
 			// Windowed read around one message — the follow-up route for a
-			// recall snippet that lost its answer to the budget cut. Loads the
-			// whole transcript (limit<=0 = all) and slices locally; per-message
-			// truncation is wider here because a focused window of few
-			// messages IS the deep read, not a preview.
+			// recall snippet that lost its answer to the budget cut. The shape
+			// is deep-read, not preview: FEWER messages (default 10, not 20)
+			// with a DEEP per-message cap (4000B) under a 24KB total guard.
+			// Measured on the tool-loop reader: the original 20x1200B window
+			// re-cut exactly the long answers the open exists for — a 100-item
+			// list's item 27 sat beyond 1200B and the model reported
+			// "excerpts only show items 1-21"; at 4000B it answered.
+			if p.Limit.Int() <= 0 {
+				limit = 10
+			}
 			all, total, err := transcript.Load(sessionKey, 0)
 			if err != nil {
 				return fmt.Sprintf("Failed to load history for session %q: %s", sessionKey, err.Error()), nil
@@ -284,15 +290,21 @@ func toolSessionsHistory(transcript toolport.TranscriptStore) toolport.ToolFunc 
 			var sb strings.Builder
 			fmt.Fprintf(&sb, "Session %q — messages %d..%d of %d (window around #%d):\n\n",
 				sessionKey, start+1, end, total, anchor)
+			budget := 24000
 			for i, msg := range all[start:end] {
 				content := msg.SearchableText()
 				if strings.TrimSpace(content) == "" {
 					continue
 				}
-				if len(content) > 1200 {
-					content = textutil.TruncateBytes(content, 1200) + "..."
+				if len(content) > 4000 {
+					content = textutil.TruncateBytes(content, 4000) + "..."
 				}
-				fmt.Fprintf(&sb, "%d. [%s] %s\n", start+i+1, msg.Role, content)
+				line := fmt.Sprintf("%d. [%s] %s\n", start+i+1, msg.Role, content)
+				if budget -= len(line); budget < 0 {
+					sb.WriteString("… (window truncated at 24KB)\n")
+					break
+				}
+				sb.WriteString(line)
 			}
 			return sb.String(), nil
 		}

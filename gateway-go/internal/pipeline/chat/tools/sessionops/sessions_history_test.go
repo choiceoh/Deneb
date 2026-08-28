@@ -64,6 +64,27 @@ func TestSessionsHistoryResolvesRecallRefTailAndOpensWindow(t *testing.T) {
 	}
 }
 
+func TestSessionsHistoryAnchoredReadIsDeepNotPreview(t *testing.T) {
+	long := strings.Repeat("파라미터 목록 항목입니다. ", 300) // ~4200 runes ≈ 12KB — beyond the old 1200B cap
+	msgs := historyMessages(30)
+	msgs[14] = toolport.NewTextChatMessage("assistant", long, 15)
+	fake := &historyFakeTranscript{sessions: map[string][]toolport.ChatMessage{
+		"client:deep": msgs,
+	}}
+	out, err := toolSessionsHistory(fake)(context.Background(),
+		sessionSearchJSON(t, map[string]any{"action": "history", "sessionKey": "deep#15/assistant"}))
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if !strings.Contains(out, "messages 10..19 of 30") {
+		t.Fatalf("anchored read without limit must default to a 10-message window:\n%s", out[:200])
+	}
+	// The deep read exists to carry long answers: well past the old 1200B cap.
+	if !strings.Contains(out, strings.Repeat("파라미터 목록 항목입니다. ", 80)) {
+		t.Fatalf("long assistant message must survive far beyond 1200 bytes in the window")
+	}
+}
+
 func TestSessionsHistoryReportsAmbiguousRefTail(t *testing.T) {
 	fake := &historyFakeTranscript{sessions: map[string][]toolport.ChatMessage{
 		"lane-a:s38": historyMessages(3),
