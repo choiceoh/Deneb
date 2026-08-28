@@ -7,6 +7,7 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.encodeToString
@@ -538,6 +539,49 @@ class SessionTranscriptStateMachineTest {
 
         assertEquals(listOf("question", "answer"), f.client.chatHistory.value.map { it.content })
         assertEquals(listOf("question", "answer"), f.client.loadCachedTranscript("client:main")?.map { it.content })
+    }
+
+    @Test
+    fun foreignRunningTurnShowsWatchRowAndInstallsTheAnswerWhenItLands() = runTest {
+        // The companion scenario, phone side: a turn started elsewhere is still
+        // running when this conversation loads. The load must show a status row
+        // and the watch must install the finished transcript by itself.
+        val f = gatewayClientFixture()
+        f.transport.enqueueTranscript(runningTranscriptPayload(message("user", "보고서 정리해줘")))
+        // Watch polls: still running, then the quiescent answer twice.
+        f.transport.enqueueTranscript(runningTranscriptPayload(message("user", "보고서 정리해줘")))
+        f.transport.enqueueTranscript(answered(sent = "보고서 정리해줘", answer = "정리했습니다."))
+        f.transport.enqueueTranscript(answered(sent = "보고서 정리해줘", answer = "정리했습니다."))
+
+        f.client.loadTranscriptGuarded("client:main", replacing = true, watchScope = this)
+
+        val afterLoad = f.client.chatHistory.value
+        assertEquals(ToolStatusLabels.WORKING, afterLoad.last().toolName)
+        assertEquals(History.Role.TOOL_EXECUTING, afterLoad.last().role)
+
+        // join(): runTest auto-advances virtual delays while the test coroutine
+        // waits, and real-dispatcher hops inside the RPC mock finish on their
+        // own threads — advanceUntilIdle alone returned during such a hop.
+        f.client.foreignTurnWatch?.join()
+
+        val settled = f.client.chatHistory.value
+        assertEquals(listOf("보고서 정리해줘", "정리했습니다."), settled.map { it.content })
+        assertEquals(0, settled.count { it.role == History.Role.TOOL_EXECUTING })
+    }
+
+    @Test
+    fun ownSendCancelsTheForeignTurnWatchRow() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueTranscript(runningTranscriptPayload(message("user", "질문")))
+
+        f.client.loadTranscriptGuarded("client:main", replacing = true, watchScope = this)
+        assertEquals(1, f.client.chatHistory.value.count { it.role == History.Role.TOOL_EXECUTING })
+
+        f.client.cancelForeignTurnWatch()
+
+        assertEquals(0, f.client.chatHistory.value.count { it.role == History.Role.TOOL_EXECUTING })
+        f.client.foreignTurnWatch?.join() // the cancelled poll must not resurrect anything
+        assertEquals(0, f.client.chatHistory.value.count { it.role == History.Role.TOOL_EXECUTING })
     }
 
     @Test

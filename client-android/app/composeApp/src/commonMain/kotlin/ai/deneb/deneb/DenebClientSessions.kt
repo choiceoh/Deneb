@@ -7,11 +7,15 @@ import ai.deneb.deneb.generated.TranscriptMsgOut
 import ai.deneb.ui.chat.History
 import ai.deneb.ui.chat.stableTranscriptId
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.time.TimeSource
+import kotlin.uuid.Uuid
 
 /**
  * Sessions-drawer surface of [DenebGatewayClient] (`miniapp.sessions.recent`):
@@ -190,7 +194,13 @@ private fun prettyJobName(job: String): String = when {
  * appeared to get no response until the next message was sent. Epoch-checked
  * under historyGate, so it is safe whichever of load / send finishes first.
  */
-internal suspend fun DenebGatewayClient.loadTranscriptGuarded(key: String, replacing: Boolean = false) {
+internal suspend fun DenebGatewayClient.loadTranscriptGuarded(
+    key: String,
+    replacing: Boolean = false,
+    // Tests pass their TestScope so the watch poll runs on virtual time;
+    // production uses the client scope.
+    watchScope: CoroutineScope = scope,
+) {
     val startEpoch = historyGate.withLock { historyEpoch }
     // Pin the credential epoch: if the user switches gateways while this fetch is
     // in flight, both the view install and the cache write below are skipped, so an
@@ -220,7 +230,10 @@ internal suspend fun DenebGatewayClient.loadTranscriptGuarded(key: String, repla
             // not replacing + (no cache or live view present): leave it for the network.
         }
     }
-    val transcript = fetchTranscript(key) // null = RPC failure; [] = authoritative empty
+    // Payload (not just messages): turnRunning tells us a turn started on
+    // another surface is still going in this conversation.
+    val payload = fetchTranscriptPayload(key)
+    val transcript = payload?.let { mapTranscriptMessages(it.messages) } // null = RPC failure; [] = authoritative empty
     val authoritative = historyGate.withLock {
         if (historyEpoch != startEpoch) return // optimistic send won — don't touch view or cache
         if (epoch != credEpoch) return // credentials switched mid-flight — old account, drop it
@@ -238,6 +251,60 @@ internal suspend fun DenebGatewayClient.loadTranscriptGuarded(key: String, repla
     // mid-flight (this transcript belongs to the old account).
     if (authoritative && epoch == credEpoch) {
         if (transcript!!.isEmpty()) removeCachedTranscript(key) else storeCachedTranscript(key, transcript)
+        // Andromeda-parity foreign-turn watch: without it the answer to a turn
+        // started on another surface never reached this open conversation.
+        if (payload!!.turnRunning) {
+            armForeignTurnWatch(watchScope, key, transcript.lastOrNull { it.role == History.Role.USER }?.content.orEmpty())
+        } else {
+            cancelForeignTurnWatch()
+        }
+    }
+}
+
+// ---- Foreign-turn watch -----------------------------------------------------
+// A conversation opened while a turn (started on the phone earlier, or on
+// Andromeda/Cygnus) is still running would otherwise show a stale transcript
+// and never receive the answer. Show a status row (rendered by the waiting
+// chip) and poll through the same recovery loop the stream-failure path uses —
+// on completion it installs the finished transcript itself (epoch-fenced).
+
+private const val FOREIGN_TURN_ROW_PREFIX = "foreign-turn-watch-"
+
+/** Stop the watch and drop its status row. Own sends and session switches call
+ * this so the row and the poll can never outlive the state they narrate. */
+internal fun DenebGatewayClient.cancelForeignTurnWatch() {
+    foreignTurnWatch?.cancel()
+    foreignTurnWatch = null
+    _chatHistory.update { list -> list.filterNot { it.id.startsWith(FOREIGN_TURN_ROW_PREFIX) } }
+}
+
+private fun DenebGatewayClient.armForeignTurnWatch(watchScope: CoroutineScope, key: String, sentText: String) {
+    cancelForeignTurnWatch()
+    // Per-watch row id: cancel() does not join, so a previous job's finally can
+    // run AFTER this arm — with a shared id it would strip the row this watch
+    // just added. Each job only ever removes its own row.
+    val rowId = FOREIGN_TURN_ROW_PREFIX + Uuid.random()
+    _chatHistory.update { list ->
+        list + History(
+            id = rowId,
+            role = History.Role.TOOL_EXECUTING,
+            content = "foreign-turn",
+            toolName = ToolStatusLabels.WORKING,
+            isStatusMessage = true,
+        )
+    }
+    // The stale Job handle after completion is harmless (cancel is a no-op),
+    // so the job never nulls the field itself — that write raced a newer arm.
+    foreignTurnWatch = watchScope.launch {
+        try {
+            // Recovered → installRecoveredTranscript already swapped the view
+            // (answer + chips + footprint) under the session/epoch guards.
+            // NotArrived/GiveUp → the turn died or the anchor is unusable; the
+            // row is dropped below and the transcript stays as loaded.
+            recoverTurnFromTranscript(key, sentText)
+        } finally {
+            _chatHistory.update { list -> list.filter { it.id != rowId } }
+        }
     }
 }
 

@@ -27,6 +27,20 @@ class ChatTurnChromeTest {
     }
 
     @Test
+    fun executingRowsShowEvenWithoutAnOwnSendInFlight() {
+        // The foreign-turn watch adds a status row while isLoading is false (the
+        // turn was started on another surface) — it must still render.
+        assertTrue(
+            chatShowWaitingRow(
+                isLoading = false,
+                isResponseStreaming = false,
+                hasExecutingTools = true,
+                hasPendingUiSubmission = false,
+            ),
+        )
+    }
+
+    @Test
     fun waitingRowHidesOnceTheAnswerIsOnScreen() {
         assertFalse(
             chatShowWaitingRow(

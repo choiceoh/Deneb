@@ -23,6 +23,9 @@ internal suspend fun DenebGatewayClient.askGateway(
     question: String?,
     uiSubmission: UiSubmission?,
 ): Boolean {
+    // Our send owns this conversation now — a lingering foreign-turn watch
+    // would drop a stale status row into the fresh turn (and waste polls).
+    cancelForeignTurnWatch()
     val displayText = question?.trim().orEmpty()
     val sendText = if (uiSubmission != null) formatUiCallback(uiSubmission) else displayText
     if (sendText.isEmpty()) return true
