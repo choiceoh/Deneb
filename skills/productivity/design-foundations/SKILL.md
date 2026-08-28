@@ -35,9 +35,11 @@ user-invocable: true
 
 ## 도구 우선, 손그림은 폴백
 
-- **차트는 `chart` 도구**로 만든다(`line`·`area`·`bar`·`doughnut`). 도구가
-  Deneb 렌더러로 그리므로 색·타이포·여백이 자동으로 이 기준을 따른다.
-  `stacked`·`horizontal`·`y_unit`·`value_kind`로 형태를 조절한다.
+- **차트는 `chart` 도구**로 만든다(`line`·`area`·`bar`·`doughnut`). 도구는
+  자체 다크 카드에 쿨-우선 고정 팔레트로 그린다 — 색을 고르거나 지정할 수 없고
+  그럴 필요도 없다. `stacked`·`horizontal`·`y_unit`·`value_kind`로 형태만
+  조절한다. 아래 역할 표는 **수공 산출물**(matplotlib·SVG·deneb-html·문서)에
+  적용되는 것이다.
 - **다이어그램은 `diagram` 도구**(노드·엣지·타임라인). 손으로 SVG를 쓰지 않는다.
 - `exec` + matplotlib으로 직접 그리는 건 **도구가 표현하지 못하는 형태일 때만**
   (히스토그램·산점도·히트맵 등). 그때만 아래 팔레트를 코드에 직접 넣는다.

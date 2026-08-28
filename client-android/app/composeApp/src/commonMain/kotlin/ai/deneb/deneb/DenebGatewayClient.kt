@@ -876,6 +876,12 @@ class DenebGatewayClient private constructor(
         // so fast tools register as a readable label instead of a flicker.
         const val MIN_PROGRESS_DISPLAY_MS = 1_500L
 
+        // Raised floor when the finished row carries a gateway result summary
+        // ("메일 확인 완료: 3건 · 5줄") — that is real information, and 1.5s
+        // was measured too short to reliably read it (a ~1.5–2s screenshot
+        // round-trip kept missing the frame entirely).
+        const val MIN_SUMMARY_DISPLAY_MS = 2_400L
+
         // How long a failed tool's "~ 실패" label stays in the chip before the
         // turn moves on — long enough to read, short enough not to alarm.
         const val FAILURE_DISPLAY_MS = 1_800L

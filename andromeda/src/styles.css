@@ -1872,6 +1872,40 @@ input[type="checkbox"] {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* Copy affordance floats over the body's top-right corner; visible on hover so
+   the collapsed/idle chip stays quiet. */
+.tool-chip-preview-wrap {
+  position: relative;
+}
+.tool-chip-copy {
+  position: absolute;
+  top: 10px;
+  right: 6px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.tool-chip-preview-wrap:hover .tool-chip-copy,
+.tool-chip-copy:focus-visible {
+  opacity: 1;
+}
+/* Diff tinting (display-only): the companion's coding use makes patch output a
+   first-class preview shape. */
+.tool-chip-preview .pv-add {
+  color: #3f8f57; /* success green — same value as .dui-badge.success */
+}
+.tool-chip-preview .pv-del {
+  color: var(--danger);
+}
+.tool-chip-preview .pv-hunk {
+  color: var(--accent);
+}
 .tool-chip-result {
   color: var(--muted-2);
   overflow: hidden;

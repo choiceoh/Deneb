@@ -3,6 +3,7 @@
 // frame (same toolUseId) flips it to a ✓ (or ✕ on error) and reveals the
 // gateway's one-line `detail` (e.g. "메일 3건"). Mirrors the native client's
 // inline tool rows.
+import { useState } from "react";
 import type { ToolPart } from "@/hooks";
 import { Icon } from "./Icon";
 
@@ -10,6 +11,52 @@ import { Icon } from "./Icon";
 // chip reads without a per-tool label table we don't have client-side.
 function toolLabel(tool: string): string {
   return tool.replace(/[._]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// Classify one preview line for display tinting. Diff/patch output is the
+// bread-and-butter of the companion's coding use — tint added/removed/hunk
+// lines so a diff reads as a diff. Display-only: the gateway owns the text.
+export function previewLineClass(line: string): string {
+  if (line.startsWith("@@")) return "hunk";
+  if (line.startsWith("+") && !line.startsWith("+++")) return "add";
+  if (line.startsWith("-") && !line.startsWith("---")) return "del";
+  return "";
+}
+
+function PreviewBody({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const lines = text.split("\n");
+  const isDiff = lines.some((l) => previewLineClass(l) !== "");
+  return (
+    <div className="tool-chip-preview-wrap">
+      <button
+        type="button"
+        className="tool-chip-copy"
+        title="출력 복사"
+        onClick={(e) => {
+          e.preventDefault(); // keep the disclosure open state untouched
+          void navigator.clipboard?.writeText(text).catch(() => {});
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1200);
+        }}
+      >
+        {copied ? "복사됨" : "복사"}
+      </button>
+      <pre className="tool-chip-preview">
+        {isDiff
+          ? lines.map((l, i) => {
+              const k = previewLineClass(l);
+              return (
+                <span key={i} className={k ? `pv-${k}` : undefined}>
+                  {l}
+                  {i < lines.length - 1 ? "\n" : ""}
+                </span>
+              );
+            })
+          : text}
+      </pre>
+    </div>
+  );
 }
 
 export function ToolChip({ part }: { part: ToolPart }) {
@@ -42,7 +89,7 @@ export function ToolChip({ part }: { part: ToolPart }) {
   return (
     <details className={cls + " tool-chip-expandable"}>
       <summary>{row}</summary>
-      <pre className="tool-chip-preview">{part.resultPreview}</pre>
+      <PreviewBody text={part.resultPreview} />
     </details>
   );
 }
