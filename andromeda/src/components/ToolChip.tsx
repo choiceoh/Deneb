@@ -18,8 +18,8 @@ export function ToolChip({ part }: { part: ToolPart }) {
   // The icon alone carries the running/done/error state visually — label it so
   // assistive tech announces it too (otherwise the chip reads as just a name).
   const stateText = part.isError ? "실패" : done ? "완료" : "실행 중";
-  return (
-    <div className={cls}>
+  const row = (
+    <>
       <span className="tool-chip-ico" role="img" aria-label={stateText}>
         {!done ? (
           <span className="tool-spin" />
@@ -34,6 +34,15 @@ export function ToolChip({ part }: { part: ToolPart }) {
       {/* What the call produced — the gateway authors this line so every client
           shows the same wording. Started chips have none yet. */}
       {part.resultSummary ? <span className="tool-chip-result">{part.resultSummary}</span> : null}
-    </div>
+    </>
+  );
+  // Without a preview the chip stays a plain row; with one it becomes a
+  // disclosure whose summary IS that row, so the closed state looks identical.
+  if (!part.resultPreview) return <div className={cls}>{row}</div>;
+  return (
+    <details className={cls + " tool-chip-expandable"}>
+      <summary>{row}</summary>
+      <pre className="tool-chip-preview">{part.resultPreview}</pre>
+    </details>
   );
 }

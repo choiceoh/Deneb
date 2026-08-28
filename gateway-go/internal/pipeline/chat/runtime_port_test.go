@@ -233,11 +233,11 @@ func TestSyncOptionsFromPortPreservesRuntimeAndStreamContract(t *testing.T) {
 	}
 	got.OnToolEvent(ToolStreamEvent{
 		State: "completed", Tool: "wiki", ToolUseID: "tool-1", Detail: "done", IsError: true,
-		ResultSummary: "3개 문서 · 2줄",
+		ResultSummary: "3개 문서 · 2줄", ResultPreview: "문서 A\n문서 B",
 	})
 	if gotEvent != (chatport.ToolStreamEvent{
 		State: "completed", Tool: "wiki", ToolUseID: "tool-1", Detail: "done", IsError: true,
-		ResultSummary: "3개 문서 · 2줄",
+		ResultSummary: "3개 문서 · 2줄", ResultPreview: "문서 A\n문서 B",
 	}) {
 		t.Fatalf("stream event = %#v", gotEvent)
 	}

@@ -33,6 +33,9 @@ type ToolStreamEvent struct {
 	// (see tool_result_summary.go). Empty on `started` frames and whenever the
 	// result carries nothing worth showing.
 	ResultSummary string
+	// ResultPreview is the bounded, readable head of the same result — what the
+	// chip shows when the user expands it.
+	ResultPreview string
 }
 
 // streamEventSinks carries the per-event callbacks a streaming HTTP transport
@@ -100,6 +103,7 @@ func executeAgentRunWithDelta(
 					Detail:        envelope.Payload.Detail,
 					IsError:       envelope.Payload.IsError,
 					ResultSummary: summarizeToolResult(envelope.Payload.Result),
+					ResultPreview: toolResultPreview(envelope.Payload.Result),
 				})
 			}
 		case streaming.EventThinking:

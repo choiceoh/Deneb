@@ -1836,6 +1836,42 @@ input[type="checkbox"] {
   border-radius: var(--radius-pill);
   animation: chipIn 0.22s var(--ease) both;
 }
+.tool-chip-expandable {
+  display: block;
+  cursor: pointer;
+}
+.tool-chip-expandable > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+}
+.tool-chip-expandable > summary::-webkit-details-marker {
+  display: none;
+}
+.tool-chip-expandable > summary::after {
+  content: "⌄";
+  margin-left: auto;
+  padding-left: 6px;
+  color: var(--faint);
+  transition: transform 0.12s ease;
+}
+.tool-chip-expandable[open] > summary::after {
+  transform: rotate(180deg);
+}
+.tool-chip-preview {
+  margin: 6px 0 0;
+  padding: 7px 8px;
+  max-height: 220px;
+  overflow: auto;
+  background: var(--panel-sunken);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .tool-chip-result {
   color: var(--muted-2);
   overflow: hidden;

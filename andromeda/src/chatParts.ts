@@ -39,6 +39,7 @@ export function upsertToolPart(turn: ChatTurn, ev: ChatToolEvent): ChatTurn {
     detail: ev.detail || prevDetail,
     isError: ev.isError,
     resultSummary: ev.resultSummary || prev?.resultSummary,
+    resultPreview: ev.resultPreview || prev?.resultPreview,
   };
   if (idx >= 0) parts[idx] = { ...(parts[idx] as ToolPart), ...next };
   else parts.push(next);

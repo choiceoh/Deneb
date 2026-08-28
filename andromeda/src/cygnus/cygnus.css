@@ -536,6 +536,32 @@ body.cygnus-window {
 }
 /* A long command or result must ellipsize, not push the chip past the window:
    flex children need min-width:0 before overflow can clip them. */
+/* An expandable chip is a block: the cygnus `.tool-chip { display: flex }` rule
+   otherwise made the disclosure body a flex sibling of the summary and wrapped
+   it to one character per line. The summary keeps the row layout. */
+.cygnus-root .tool-chip-expandable {
+  display: block;
+}
+.cygnus-root .tool-chip-expandable > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+/* The expanded body is machine output — give it the coding voice. */
+.cygnus-root .tool-chip-preview {
+  font-family: var(--cy-mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+  background: var(--panel-sunken);
+}
+.cygnus-root .tool-chip-expandable > summary::after {
+  font-size: 10px;
+}
+
 /* Flex items default to min-width:auto, so a long chip pushed the whole turn
    past the window instead of clipping. Let the turn shrink first. */
 .cygnus-root .ai-turn,
