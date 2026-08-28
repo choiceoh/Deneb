@@ -1541,15 +1541,21 @@ func noteCapFor(row recallEvidence) int {
 	base := polarisNoteCap()
 	assistantish := strings.HasSuffix(row.Source, "/assistant") ||
 		strings.Contains(row.noteWide, "[assistant reply]")
-	// 900 is the measured ceiling for this cap. 1300 was tried (R3, half-set
-	// paired k3 judge) because 16 of 18 SSA abstentions genuinely lacked the
-	// answer — and its TARGET did not move (SSA 32.1 → 32.1, answer-for-answer)
-	// while multi-session fell 3.2 on blocks with IDENTICAL row counts: at a
-	// fixed row budget, longer assistant rows dilute enumeration-style reading.
-	// Length pays only when it carries the answer; past 900 it stopped doing
-	// that and only taxed the categories that read many rows.
-	if assistantish && base < 900 {
-		return 900
+	// 700 balances the WIDENED pruner input (nextTextClipRunes/assistantWide:
+	// answer sentences deep in a reply become selectable — the only lever that
+	// moved the zero-variance SSA line, 9/28 → 13/28) against block inflation.
+	// The ladder, paired k3 judge on the half set:
+	//   cap 1300, narrow input (R3): SSA +0.0, multi −3.2  — length without
+	//     selection buys nothing and dilutes enumeration.
+	//   cap 900, wide input (R5): SSA +14.3 but blocks +24% → budget evicted
+	//     tail rows (strict@4 −1.2, deterministic) — overall −2.2.
+	//   global prune threshold 0.35 (T0.35): starved EVERY category
+	//     (KU −11.1, SSU −9.4) — the tax was assistantish inflation, not
+	//     ordinary rows' content.
+	//   cap 700, wide input (R6): SSA +14.3 kept, overall level with base,
+	//     blocks +19%. The accepted trade.
+	if assistantish && base < 700 {
+		return 700
 	}
 	return base
 }
