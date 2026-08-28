@@ -36,6 +36,10 @@ import "./cygnus.css";
 const CYGNUS_MAIN = "client:cygnus:main";
 const THEME_KEY = "cygnus.theme";
 
+// Empty-state starters: what this surface is FOR, in the user's own words. They
+// fill the composer (never send on their own) so the phrasing stays editable.
+const CYGNUS_STARTERS = ["레포 상태 요약", "이 폴더 TODO 찾기", "스크립트 하나 짜줘"];
+
 // Hide (not close) the companion window — the tray/global shortcut re-summons.
 async function hideSelf(): Promise<void> {
   if (!isTauri()) return;
@@ -90,7 +94,15 @@ export function CygnusApp() {
 // data-provider context (useChat → useInvalidate) mounts below the scope.
 function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: boolean }) {
   // Light-first (operator call, 2026-08-28) — dark stays one toggle away.
-  const [theme, setTheme] = useState(() => (getString(THEME_KEY) === "dark" ? "dark" : "light"));
+  // Dev-only `?theme=dark` lets the headless screenshot loop capture the other
+  // skin (it cannot click the toggle). Stripped from production builds.
+  const [theme, setTheme] = useState(() => {
+    if (import.meta.env.DEV) {
+      const forced = new URLSearchParams(window.location.search).get("theme");
+      if (forced === "dark" || forced === "light") return forced;
+    }
+    return getString(THEME_KEY) === "dark" ? "dark" : "light";
+  });
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
@@ -113,7 +125,11 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
   } = useChat(cfg);
   const [input, setInput] = useState("");
   const [attaching, setAttaching] = useState(false);
-  const [railOpen, setRailOpen] = useState(false);
+  // Dev-only `?rail`: lets the headless screenshot loop capture the drawer open
+  // (a one-shot screenshot cannot click). Stripped from production builds.
+  const [railOpen, setRailOpen] = useState(
+    () => import.meta.env.DEV && new URLSearchParams(window.location.search).has("rail"),
+  );
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -286,6 +302,22 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
                     ? "에이전트 실행과 가벼운 코딩을 여기서 — 파일을 끌어놓거나 명령을 적으세요"
                     : "Andromeda 본창에서 게이트웨이를 연결하면 이 창도 함께 연결됩니다"}
                 </span>
+                {connected && (
+                  <div className="cy-starters" role="group" aria-label="시작 제안">
+                    {CYGNUS_STARTERS.map((s) => (
+                      <button
+                        key={s}
+                        className="cy-starter"
+                        onClick={() => {
+                          setInput(s);
+                          composeRef.current?.focus();
+                        }}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <span className="cy-empty-hint">Ctrl+Shift+Space 어디서든 소환</span>
               </div>
             ) : (
@@ -299,7 +331,14 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
                   const sub = turn.role === "user" ? parseUiSubmission(turn.text) : null;
                   return (
                     <div key={turn.id} className={`ai-turn ${turn.role} ${turn.status}`}>
-                      <div className="ai-turn-label">{turn.role === "user" ? "나" : "Cygnus"}</div>
+                      {/* Quiet identity: the answer is marked by the star, the
+                          request by its right-aligned bubble — no wordmark
+                          repeated on every turn. */}
+                      {turn.role === "assistant" && (
+                        <div className="ai-turn-label" aria-label="Cygnus 응답">
+                          <DenebStar size={12} />
+                        </div>
+                      )}
                       {turn.role === "user" ? (
                         <div className="ai-turn-body">
                           {turn.imageUrl && <img className="ai-turn-image" src={turn.imageUrl} alt="첨부 이미지" />}

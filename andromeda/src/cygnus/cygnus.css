@@ -170,8 +170,10 @@ body.cygnus-window {
   min-height: 0;
 }
 
-/* Sessions rail — overlay drawer (the window is narrow), toggled from the
- * titlebar. Reuses SessionDrawer wholesale; only the container is Cygnus. */
+/* Sessions rail. Their reference window keeps the thread list permanently
+ * docked; at the companion's summon size (480px) a 300px rail would eat the
+ * conversation, so the rail DOCKS when the window is wide enough and falls
+ * back to an overlay drawer when it is not. The toggle drives both. */
 .cy-rail {
   position: absolute;
   inset: 0 auto 0 0;
@@ -186,16 +188,31 @@ body.cygnus-window {
   padding: 10px;
   animation: cy-rail-in 0.18s var(--ease);
 }
-@keyframes cy-rail-in {
-  from {
-    transform: translateX(-14px);
-    opacity: 0;
+
+/* Docked mode: wide enough for the list to live beside the thread. */
+@media (min-width: 720px) {
+  .cy-rail {
+    position: relative;
+    inset: auto;
+    width: 250px;
+    flex: none;
+    box-shadow: none;
+    background: transparent;
+    animation: none;
   }
-  to {
-    transform: none;
-    opacity: 1;
+  .cy-scrim {
+    display: none;
+  }
+  /* Flush inside the docked rail — the shared drawer paints its own card, which
+     read as a card inside a card once the rail stopped being an overlay. */
+  .cy-rail .session-drawer {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
   }
 }
+
 .cy-scrim {
   position: absolute;
   inset: 0;
@@ -221,7 +238,7 @@ body.cygnus-window {
   padding: 14px 16px 10px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
   overscroll-behavior: contain;
 }
 .cy-empty {
@@ -244,15 +261,47 @@ body.cygnus-window {
   font-size: 12px;
   color: var(--muted-2);
 }
-.cy-empty-hint {
-  margin-top: 14px;
-  font-family: var(--cy-mono);
-  font-size: 11px;
-  color: var(--muted-2);
-  border: 1px solid var(--line);
+.cy-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 18px;
+}
+.cy-starter {
+  font-family: var(--font);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
   border-radius: var(--radius-pill);
-  padding: 4px 10px;
-  background: var(--panel-sunken);
+  padding: 7px 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background 0.12s ease;
+}
+.cy-starter:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.cy-empty-hint {
+  /* Information, not an action — a pill here read as a fourth button next to
+     the starter chips. Quiet mono text instead. */
+  margin-top: 20px;
+  font-family: var(--cy-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+}
+
+/* Exchange rhythm: a user turn opens a new exchange (air above it) while the
+ * answer that follows stays tight to its question. */
+.cygnus-root .ai-turn.user:not(:first-child) {
+  margin-top: 14px;
 }
 
 /* User turns as right-aligned soft bubbles (reference request-block pattern —
@@ -275,21 +324,29 @@ body.cygnus-window {
 /* Turn actions stay quiet until pointed at (reference: actions don't chant on
  * every turn) — keyboard focus still reveals them for a11y. */
 .cygnus-root .ai-turn-actions {
+  /* Collapse the height too, not just the ink: an invisible-but-laid-out row
+     left ~30px of dead space under every turn (caught in the screenshot loop). */
   opacity: 0;
-  transition: opacity 0.12s ease;
+  max-height: 0;
+  overflow: hidden;
+  transition:
+    opacity 0.12s ease,
+    max-height 0.12s ease;
 }
 .cygnus-root .ai-turn:hover .ai-turn-actions,
 .cygnus-root .ai-turn-actions:focus-within {
   opacity: 1;
+  max-height: 40px;
 }
 
 /* Density: the companion window is narrow — tighten the shared turn layout a
  * touch without forking it. */
 .cygnus-root .ai-turn-label {
-  font-size: 10.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted-2);
+  display: flex;
+  align-items: center;
+  height: 14px;
+  margin-bottom: 2px;
+  opacity: 0.85;
 }
 .cygnus-root .ai-turn-body,
 .cygnus-root .ai-md {
