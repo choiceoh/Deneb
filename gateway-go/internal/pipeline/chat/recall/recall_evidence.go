@@ -1300,10 +1300,20 @@ func rerankPolarisEvidence(ctx context.Context, reranker Reranker, message strin
 // actually be RENDERED (the evidence budget, ≤8), so the wide documents
 // multiply a batch of at most eight, not fifty.
 //
-// Fail-open everywhere: knob off, no reranker, no wide window, call error, or
-// an empty pruned string all leave the lexical Note untouched.
+// Fail-open everywhere: knob off, no reranker, no wide window, a sidecar that
+// does not return pruned contexts (pre-#4863 deployments), a call error, or an
+// empty pruned string all leave the lexical Note untouched.
+//
+// ON by default — the decision came from a same-reader A/B over the frozen
+// LongMemEval snapshot (470 questions, kimi k3 reading, dsv4 judging; only the
+// blocks differed): reader accuracy 40.4% → 45.3%, every one of the six
+// categories positive (temporal +8.6pp, knowledge-update +5.6pp), abstention
+// 45% → 39%. Korean pruning verified by smoke (bgem3 backbone + multilingual
+// sentence splitter picked the 기성-청구 sentence out of greeting/weather
+// filler). Cost: one extra ≤8-doc batch per recall turn, measured median 66ms
+// p90 82ms — an order under polarisRerankTimeout.
 func prunePolarisNotes(ctx context.Context, reranker Reranker, message string, rows []recallEvidence) {
-	if reranker == nil || os.Getenv("DENEB_POLARIS_PRUNE") != "on" {
+	if reranker == nil || os.Getenv("DENEB_POLARIS_PRUNE") == "off" {
 		return
 	}
 	limit := minInt(len(rows), recallMaxEvidence)
