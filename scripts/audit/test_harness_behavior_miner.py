@@ -314,6 +314,25 @@ class EndToEndTest(unittest.TestCase):
             )
             self.assertEqual(found["claude"], [path])
 
+    def test_discovery_includes_dispatch_session_archive(self) -> None:
+        # The RSI L4 executor archives dispatch rollouts out of .codex/sessions
+        # into .deneb/data/coding_dispatch_sessions; both must be discovered.
+        with tempfile.TemporaryDirectory() as tmp:
+            home = pathlib.Path(tmp)
+            live = home / ".codex" / "sessions" / "2026" / "08" / "28"
+            live.mkdir(parents=True)
+            live_rollout = live / "rollout-2026-08-28T01-00-00-aaa.jsonl"
+            live_rollout.write_text("{}", encoding="utf-8")
+            archive = (
+                home / ".deneb" / "data" / "coding_dispatch_sessions"
+                / ".codex" / "sessions"
+            )
+            archive.mkdir(parents=True)
+            archived_rollout = archive / "rollout-2026-08-28T02-00-00-bbb.jsonl"
+            archived_rollout.write_text("{}", encoding="utf-8")
+            found = discover_artifacts(home, ("codex",))
+            self.assertEqual(found["codex"], [live_rollout, archived_rollout])
+
     def test_load_episodes_last_write_wins_and_skips_junk(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "episodes.jsonl"

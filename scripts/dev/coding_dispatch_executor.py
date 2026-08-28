@@ -1,18 +1,34 @@
 #!/usr/bin/env python3
-"""Run an RSI L4 coding prompt through the authenticated Codex CLI."""
+"""Run an RSI L4 coding prompt through the authenticated Codex CLI.
+
+Sessions are persisted (no ``--ephemeral``) so the cross-harness behavior
+miner (scripts/audit/harness_behavior_miner.py) can observe the fleet's main
+Codex consumer. After each run the rollout files whose recorded session cwd
+lies under the dispatch worktree root are moved out of ``$CODEX_HOME/sessions``
+into a dedicated archive, keeping the operator's interactive Codex session
+list clean and giving the archive its own retention window. The archive nests
+a ``.codex/sessions`` suffix because numbat classifies artifacts by vendor
+directory layout ("Preserve vendor directory layouts when scanning copied or
+mounted artifacts") — a rollout outside such a path parses to zero sessions.
+"""
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
 TIMEOUT_EXIT = 124
+
+SESSION_ARCHIVE_SUBDIR = Path("data") / "coding_dispatch_sessions" / ".codex" / "sessions"
+DEFAULT_SESSION_RETENTION_DAYS = 90
 
 
 def resolve_codex(explicit: str = "") -> str | None:
@@ -46,11 +62,83 @@ def build_command(codex: str, worktree: Path, prod_dir: Path) -> list[str]:
         str(prod_dir / ".git"),
         "-c",
         "sandbox_workspace_write.network_access=true",
-        "--ephemeral",
         "--color",
         "never",
         "-",
     ]
+
+
+def rollout_session_cwd(path: Path) -> str | None:
+    """Recorded session cwd from a rollout's first-line session_meta, or None.
+
+    Codex 0.144.x writes ``{"type": "session_meta", "payload": {"cwd": ...}}``;
+    the pre-0.144 schema carried cwd at the top level. Anything unreadable or
+    schema-less returns None and the file is left untouched.
+    """
+    try:
+        with path.open(encoding="utf-8") as fh:
+            meta = json.loads(fh.readline())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(meta, dict):
+        return None
+    payload = meta.get("payload")
+    if isinstance(payload, dict) and isinstance(payload.get("cwd"), str):
+        return payload["cwd"]
+    cwd = meta.get("cwd")
+    return cwd if isinstance(cwd, str) else None
+
+
+def archive_session_rollouts(
+    codex_home: Path,
+    dispatch_root: Path,
+    archive_dir: Path,
+    retention_days: int = DEFAULT_SESSION_RETENTION_DAYS,
+    now_s: float | None = None,
+) -> tuple[int, int]:
+    """Move dispatch-session rollouts into the archive and prune old ones.
+
+    A rollout belongs to the dispatch lane iff its recorded session cwd is at
+    or under ``dispatch_root`` (the worktree root), so operator sessions are
+    never touched and orphans from a crashed prior run are swept on the next
+    dispatch. Archived files older than ``retention_days`` (mtime) are deleted;
+    0 disables pruning. Never raises — mining persistence must not affect the
+    dispatch result. Returns (archived, pruned).
+    """
+    archived = pruned = 0
+    for path in sorted(codex_home.glob("sessions/**/rollout-*.jsonl")):
+        cwd = rollout_session_cwd(path)
+        if cwd is None:
+            continue
+        try:
+            if not Path(cwd).is_relative_to(dispatch_root):
+                continue
+        except ValueError:
+            continue
+        try:
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(path), str(archive_dir / path.name))
+            archived += 1
+        except (OSError, shutil.Error) as exc:
+            print(f"rollout archive failed for {path}: {exc}", file=sys.stderr)
+    if retention_days > 0 and archive_dir.is_dir():
+        cutoff = (time.time() if now_s is None else now_s) - retention_days * 86400
+        for path in sorted(archive_dir.glob("rollout-*.jsonl")):
+            try:
+                if path.stat().st_mtime < cutoff:
+                    path.unlink()
+                    pruned += 1
+            except OSError:
+                continue
+    return archived, pruned
+
+
+def session_retention_days() -> int:
+    raw = os.environ.get("DENEB_DISPATCH_SESSION_RETENTION_DAYS", "").strip()
+    try:
+        return int(raw) if raw else DEFAULT_SESSION_RETENTION_DAYS
+    except ValueError:
+        return DEFAULT_SESSION_RETENTION_DAYS
 
 
 def preflight(codex: str, timeout: float = 15) -> bool:
@@ -124,13 +212,21 @@ def main(argv: list[str] | None = None) -> int:
     if not prompt.strip():
         print("dispatch prompt is empty", file=sys.stderr)
         return 1
-    return run_codex(
-        codex,
-        Path(args.worktree).resolve(),
-        Path(args.prod_dir).resolve(),
-        prompt,
-        args.timeout,
+    worktree = Path(args.worktree).resolve()
+    rc = run_codex(codex, worktree, Path(args.prod_dir).resolve(), prompt, args.timeout)
+    # Archive on every exit path (timeout included — rollouts are written
+    # incrementally, so a killed session still leaves a minable partial file).
+    state_dir = Path(os.environ.get("DENEB_STATE_DIR") or Path.home() / ".deneb").expanduser()
+    codex_home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex").expanduser()
+    archived, pruned = archive_session_rollouts(
+        codex_home,
+        worktree.parent,
+        state_dir / SESSION_ARCHIVE_SUBDIR,
+        retention_days=session_retention_days(),
     )
+    if archived or pruned:
+        print(f"session rollouts: archived {archived}, pruned {pruned}", file=sys.stderr)
+    return rc
 
 
 if __name__ == "__main__":
