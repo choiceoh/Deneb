@@ -174,6 +174,15 @@ sidebar status / `[andromeda:rpc]` logs.
 - **Tauri:** full `cargo`/`tauri build` needs system GUI libs (webkit2gtk-4.1) that
   the dev sandbox lacks; only config/structure/dep-resolution are verifiable here.
   `@tauri-apps/api` is dynamically imported so the web build never pulls it.
+  **On the srv4 host itself the GUI libs ARE installed** (webkit2gtk-4.1, GTK3,
+  Xvfb) — `xvfb-run pnpm tauri:dev` can run the real shell headlessly.
+- **Headless visual verification (agents can SEE the UI):** with `pnpm dev`
+  running, `scripts/dev/andromeda-shot.sh "/?window=cygnus" out.png 480x700`
+  screenshots any surface via the playwright chromium cached on the host — view
+  the PNG, iterate, repeat. Use PLAIN `pnpm dev` for this, never `dev:mock`:
+  the MSW service-worker gate delays mount past the load event and one-shot
+  screenshots capture an empty body. For populated screens point plain dev at
+  the dev gateway (`VITE_GATEWAY_URL`/`VITE_GATEWAY_TOKEN`).
 - **pnpm supply-chain wrapper:** this pnpm distribution (locally _and_ in CI) gates
   build scripts and fails `install` until each is approved in `pnpm-workspace.yaml`
   (`allowBuilds:`). esbuild is already approved there. Add new ones the same way.

@@ -14,6 +14,7 @@ import { useSessions } from "@/useSessions";
 import { useStickyScroll } from "@/useStickyScroll";
 import { AssistantBody, AssistantTurnActions } from "@/components/AssistantBody";
 import { ChatComposer, ScrollToBottomButton } from "@/components/ChatComposer";
+import { DenebStar } from "@/components/DenebStar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Icon } from "@/components/Icon";
 import { LiveDot } from "@/components/LiveDot";
@@ -26,7 +27,7 @@ import "./cygnus.css";
 // this summonable surface is for DRIVING the agent: kicking off tasks, light
 // coding runs, watching tool calls stream. Same gateway, same shared chat
 // modules (useChat/AssistantBody/ChatComposer — the parity rule), its own
-// session namespace (client:cygnus:*) and its own dark-first token skin
+// session namespace (client:cygnus:*) and its own light-first token skin
 // (cygnus.css re-values the workstation token names under .cygnus-root).
 const CYGNUS_MAIN = "client:cygnus:main";
 const THEME_KEY = "cygnus.theme";
@@ -84,7 +85,8 @@ export function CygnusApp() {
 // The chat surface proper — split from CygnusApp so every hook that needs the
 // data-provider context (useChat → useInvalidate) mounts below the scope.
 function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: boolean }) {
-  const [theme, setTheme] = useState(() => (getString(THEME_KEY) === "light" ? "light" : "dark"));
+  // Light-first (operator call, 2026-08-28) — dark stays one toggle away.
+  const [theme, setTheme] = useState(() => (getString(THEME_KEY) === "dark" ? "dark" : "light"));
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
@@ -197,7 +199,7 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
   return (
     <div className="cygnus-root" data-theme={theme}>
       <header className="cy-titlebar" data-tauri-drag-region>
-        <span className={"cy-orb" + (busy ? " busy" : "")} aria-hidden="true" />
+        <DenebStar size={16} />
         <span className="cy-title">Cygnus</span>
         <span className="cy-title-session">{sessionLabel}</span>
         <span className="cy-sp" data-tauri-drag-region />
@@ -273,7 +275,7 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
           >
             {turns.length === 0 ? (
               <div className="cy-empty">
-                <span className="cy-orb cy-orb-hero" aria-hidden="true" />
+                <DenebStar size={40} />
                 <p>{connected ? "무엇을 시킬까요?" : "게이트웨이 연결 대기 중"}</p>
                 <span className="cy-empty-sub">
                   {connected

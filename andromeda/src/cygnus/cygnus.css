@@ -1,6 +1,6 @@
 /* Cygnus — the agent companion window's design layer.
  *
- * Dark-first, single cyan-teal accent (Deneb the blue-white supergiant), on
+ * Light-first, single cyan-teal accent (Deneb the blue-white supergiant), on
  * teal-biased slate neutrals. Clean-room craft study of Perplexity's local
  * agent shell; no assets or values lifted.
  *
@@ -46,7 +46,6 @@
 
   /* --- cygnus-only tokens --- */
   --cy-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
-  --cy-orb-glow: 0 0 46px -6px rgba(53, 194, 209, 0.5);
   --cy-warning: #f2c15a;
 
   color-scheme: dark;
@@ -75,7 +74,6 @@
   --shadow-panel:
     0 1px 2px rgba(26, 29, 30, 0.06), 0 10px 24px -10px rgba(26, 29, 30, 0.16), 0 30px 64px -22px rgba(26, 29, 30, 0.26);
   --shadow-pill: 0 1px 2px rgba(26, 29, 30, 0.1), 0 8px 18px -5px rgba(26, 29, 30, 0.2);
-  --cy-orb-glow: 0 0 40px -8px rgba(20, 124, 136, 0.4);
   --cy-warning: #a9701a;
 
   color-scheme: light;
@@ -155,46 +153,6 @@ body.cygnus-window {
   color: var(--accent);
   border-color: var(--accent-soft);
   background: var(--accent-soft);
-}
-
-/* ---- the orb (clean-room CSS sphere; the surface's signature) ---- */
-.cy-orb {
-  --sz: 18px;
-  width: var(--sz);
-  height: var(--sz);
-  border-radius: 50%;
-  flex: none;
-  position: relative;
-  background:
-    radial-gradient(circle at 34% 28%, #ffffff 0%, rgba(255, 255, 255, 0) 22%),
-    radial-gradient(
-      circle at 36% 30%,
-      var(--cy-teal-100) 0%,
-      var(--cy-teal-400) 30%,
-      var(--cy-teal-600) 62%,
-      var(--cy-teal-950) 100%
-    );
-  box-shadow:
-    var(--cy-orb-glow),
-    inset -2px -3px 6px -1px rgba(0, 0, 0, 0.5);
-  pointer-events: none;
-}
-.cy-orb.busy {
-  animation: cy-breathe 2.2s var(--ease) infinite;
-}
-.cy-orb-hero {
-  --sz: 64px;
-  margin-bottom: 14px;
-  animation: cy-breathe 6s var(--ease) infinite;
-}
-@keyframes cy-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.08);
-  }
 }
 
 /* ============ body: rail + thread ============ */
@@ -381,10 +339,13 @@ body.cygnus-window {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+/* …except the composer textarea: its pill already lights up via
+ * .ai-composer:focus-within, so a second inner ring reads as double chrome. */
+.cygnus-root .ai-compose:focus-visible {
+  outline: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .cy-orb,
-  .cy-orb-hero,
   .cy-rail {
     animation: none !important;
   }
