@@ -1554,6 +1554,20 @@ func noteCapFor(row recallEvidence) int {
 	return base
 }
 
+// polarisPruneThreshold reads DENEB_POLARIS_PRUNE_THRESHOLD (0..0.9); 0
+// defers to the sidecar default (0.1, the model's own). Raising it prunes
+// harder — the balance knob for widened pruner INPUT (nextTextClipRunes,
+// assistantWide): input growth must not become output growth, or the block
+// budget evicts tail rows (measured: R5 blocks +24%, strict@4 −1.2).
+func polarisPruneThreshold() float64 {
+	if raw := strings.TrimSpace(os.Getenv("DENEB_POLARIS_PRUNE_THRESHOLD")); raw != "" {
+		if v, err := strconv.ParseFloat(raw, 64); err == nil && v >= 0 && v <= 0.9 {
+			return v
+		}
+	}
+	return 0
+}
+
 // prunePolarisNotes swaps the rendered rows' lexical snippets for the
 // cross-encoder's own sentence selection, made over a 4x wider window.
 //
@@ -1598,7 +1612,7 @@ func prunePolarisNotes(ctx context.Context, reranker Reranker, message string, r
 		return
 	}
 	type prunedCapable interface {
-		RerankPruned(ctx context.Context, query string, documents []string) ([]float64, []string, error)
+		RerankPruned(ctx context.Context, query string, documents []string, pruneThreshold float64) ([]float64, []string, error)
 	}
 	pc, ok := reranker.(prunedCapable)
 	if !ok {
@@ -1606,7 +1620,7 @@ func prunePolarisNotes(ctx context.Context, reranker Reranker, message string, r
 	}
 	pruneCtx, cancel := context.WithTimeout(ctx, polarisRerankTimeout)
 	defer cancel()
-	_, pruned, err := pc.RerankPruned(pruneCtx, strings.TrimSpace(message), docs)
+	_, pruned, err := pc.RerankPruned(pruneCtx, strings.TrimSpace(message), docs, polarisPruneThreshold())
 	if err != nil || len(pruned) != len(docs) {
 		return
 	}
