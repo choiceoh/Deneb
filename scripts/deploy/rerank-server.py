@@ -48,10 +48,14 @@ def load_model(kind: str):
         cls = get_class_from_dynamic_module("modeling_xprovence_hf.XProvence", name)
         model = cls.from_pretrained(name, torch_dtype=torch.float16).cuda().eval()
 
-        def score(query, docs):
+        def score(query, docs, threshold=0.1):
             # Provence batch shape: queries[i] ↔ contexts[i] where contexts[i]
             # is that query's LIST of documents. One query here → wrap both.
-            out = model.process([query], [docs])
+            # threshold is the sentence-keep bar (model default 0.1): higher
+            # prunes harder, holding pruned-output LENGTH down while the wider
+            # input still lets the model pick answer sentences from deep in a
+            # reply. Reranking scores are unaffected.
+            out = model.process([query], [docs], threshold=threshold)
             scores = out["reranking_score"]
             if isinstance(scores, list) and scores and isinstance(scores[0], list):
                 scores = scores[0]
@@ -79,7 +83,7 @@ def load_model(kind: str):
         tok = AutoTokenizer.from_pretrained(name)
         model = AutoModelForSequenceClassification.from_pretrained(name, torch_dtype=torch.float16).cuda().eval()
 
-        def score(query, docs):
+        def score(query, docs, threshold=0.1):  # noqa: ARG001 — bge has no pruning
             with torch.no_grad():
                 enc = tok([query] * len(docs), docs, padding=True, truncation=True, max_length=512, return_tensors="pt").to("cuda")
                 return model(**enc).logits.view(-1).float().cpu().tolist(), []
@@ -121,8 +125,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": f"too many documents (max {MAX_DOCS})"})
                 return
             docs = [str(d)[:MAX_DOC_CHARS] for d in docs]
+            try:
+                threshold = float(req.get("prune_threshold") or 0.1)
+            except (TypeError, ValueError):
+                threshold = 0.1
+            if not 0.0 <= threshold <= 0.9:
+                threshold = 0.1
             with _lock:
-                scores, pruned = _scorer(query, docs)
+                scores, pruned = _scorer(query, docs, threshold)
             if len(scores) != len(docs):
                 self._json(500, {"error": "score count mismatch"})
                 return

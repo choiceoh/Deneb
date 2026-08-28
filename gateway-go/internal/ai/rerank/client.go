@@ -98,6 +98,9 @@ type rerankRequest struct {
 	Query     string   `json:"query"`
 	Documents []string `json:"documents"`
 	TopN      int      `json:"top_n,omitempty"`
+	// PruneThreshold is the sidecar's sentence-keep bar for pruned contexts
+	// (xprovence only; 0 = sidecar default 0.1). Higher prunes harder.
+	PruneThreshold float64 `json:"prune_threshold,omitempty"`
 }
 
 type rankedItem struct {
@@ -115,7 +118,7 @@ type rerankResponse struct {
 
 // Rerank returns one score per input document in the original order.
 func (c *Client) Rerank(ctx context.Context, query string, documents []string) ([]float64, error) {
-	scores, _, err := c.RerankPruned(ctx, query, documents)
+	scores, _, err := c.RerankPruned(ctx, query, documents, 0)
 	return scores, err
 }
 
@@ -124,7 +127,7 @@ func (c *Client) Rerank(ctx context.Context, query string, documents []string) (
 // cross-encoder forward pass (xprovence computes it either way), so asking for
 // it costs no extra model work; a sidecar or model without pruning yields nil
 // and callers must treat that as "no pruning", never as empty documents.
-func (c *Client) RerankPruned(ctx context.Context, query string, documents []string) (scores []float64, pruned []string, err error) {
+func (c *Client) RerankPruned(ctx context.Context, query string, documents []string, pruneThreshold float64) (scores []float64, pruned []string, err error) {
 	if c == nil || c.baseURL == "" {
 		return nil, nil, fmt.Errorf("rerank: client disabled")
 	}
@@ -151,7 +154,7 @@ func (c *Client) RerankPruned(ctx context.Context, query string, documents []str
 			c.successes.Add(1)
 		}
 	}()
-	body, err := json.Marshal(rerankRequest{Model: c.model, Query: query, Documents: documents, TopN: len(documents)})
+	body, err := json.Marshal(rerankRequest{Model: c.model, Query: query, Documents: documents, TopN: len(documents), PruneThreshold: pruneThreshold})
 	if err != nil {
 		return nil, nil, fmt.Errorf("rerank: marshal: %w", err)
 	}
