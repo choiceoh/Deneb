@@ -141,6 +141,9 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
       // Own restore slot — sharing the 채팅 탭's slot made either surface boot
       // into the other's conversation (and load its transcript).
       lastKeyStore: "cygnus.chat.lastSession",
+      // And follow gateway focus only within our own namespace — otherwise the
+      // conversation just touched on the phone/채팅 탭 hijacks the boot session.
+      followPrefix: "client:cygnus:",
     },
   );
   const { clearDraft } = useSessionDraft(sessionKey, input, setInput);

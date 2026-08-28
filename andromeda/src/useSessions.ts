@@ -35,7 +35,14 @@ export function useSessions(
   connected: boolean,
   busy: boolean,
   chat: { clear: () => void; setTurns: (turns: ChatTurn[]) => void },
-  opts?: { mainKey?: string; filter?: string; channel?: string; newKey?: () => string; lastKeyStore?: string },
+  opts?: {
+    mainKey?: string;
+    filter?: string;
+    channel?: string;
+    newKey?: () => string;
+    lastKeyStore?: string;
+    followPrefix?: string;
+  },
 ) {
   // mainKey = the default session; newKey (if given) mints a *fresh* key per "새 대화"
   // so the 채팅 탭이 여러 client:main:* 대화를 가질 수 있다(work panel은 client:main 하나).
@@ -49,6 +56,11 @@ export function useSessions(
   // the 채팅 탭 sharing one slot made either surface boot into (and load the
   // transcript of) the other's conversation.
   const lastKeyStore = opts?.lastKeyStore ?? LAST_SESSION_KEY;
+  // followPrefix scopes gateway focus-follow (adopting the conversation the
+  // user just touched on another device) to THIS surface's minted-key
+  // namespace. The old hardcoded "client:main:" made Cygnus adopt the 채팅
+  // 탭/모바일's freshest conversation at boot.
+  const followPrefix = opts?.followPrefix ?? "client:main:";
   const keep = (s: SessionRow[]) => (filter ? s.filter((r) => r.key.startsWith(filter)) : s);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [sessionKey, setSessionKey] = useState(() => {
@@ -160,7 +172,7 @@ export function useSessions(
           if (cancelled) return;
           landed = true;
           applyPage(page);
-          if (opts?.newKey && page.focus && sessionKey === mainKey && page.focus.startsWith("client:main:")) {
+          if (opts?.newKey && page.focus && sessionKey === mainKey && page.focus.startsWith(followPrefix)) {
             persistKey(page.focus);
             void loadTranscript(page.focus).catch(() => {});
           }

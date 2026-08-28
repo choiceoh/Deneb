@@ -348,6 +348,34 @@ body.cygnus-window {
   font-weight: 500;
 }
 
+/* Light-tuned literals in the shared stylesheet that read wrong on the dark
+ * skin — retargeted inside the cygnus scope only. */
+.cy-main {
+  position: relative; /* .chat-scroll-bottom anchors here (parity with .chat-main) */
+}
+.cygnus-root ::selection {
+  background: var(--accent-soft); /* global selection tint is warm clay */
+}
+.cygnus-root .ai-send {
+  color: #062629; /* white-on-bright-teal fails contrast; dark ink on the light accent */
+}
+.cygnus-root[data-theme="light"] .ai-send {
+  color: #ffffff; /* light theme's accent is deep teal — white is right again */
+}
+.cygnus-root .session-row-main:hover {
+  background: var(--row-hover); /* was a white glass wash — a flash on dark */
+}
+/* scrollbars: the global thumb is warm taupe; use a slate thumb here */
+.cygnus-root *:hover {
+  scrollbar-color: rgba(124, 133, 134, 0.5) transparent;
+}
+.cygnus-root *:hover::-webkit-scrollbar-thumb {
+  background: rgba(124, 133, 134, 0.5);
+}
+.cygnus-root *::-webkit-scrollbar-thumb:hover {
+  background: rgba(155, 163, 163, 0.75);
+}
+
 /* focus ring follows the accent inside cygnus */
 .cygnus-root :focus-visible {
   outline: 2px solid var(--accent);

@@ -346,4 +346,23 @@ describe("useSessions last-session slots", () => {
     expect(localStorage.getItem("cygnus.chat.lastSession")).toBe("client:cygnus:x");
     expect(localStorage.getItem("andromeda.chat.lastSession")).toBeNull();
   });
+
+  it("ignores a gateway focus session from another surface's namespace", async () => {
+    // The phone/채팅 탭 just touched client:main:hot — the gateway reports it as
+    // the focused session. Cygnus must NOT adopt it at boot.
+    recent.mockResolvedValue(page([{ key: "client:cygnus:a", label: "A" }], 1, "client:main:hot"));
+    const { result } = renderHook(() =>
+      useSessions(cfg, true, false, chatDouble(), { ...cygnusOpts, followPrefix: "client:cygnus:" }),
+    );
+    await waitFor(() => expect(result.current.sessions.length).toBe(1));
+    expect(result.current.sessionKey).toBe("client:cygnus:main");
+  });
+
+  it("follows a gateway focus session inside its own namespace", async () => {
+    recent.mockResolvedValue(page([{ key: "client:cygnus:hot", label: "핫" }], 1, "client:cygnus:hot"));
+    const { result } = renderHook(() =>
+      useSessions(cfg, true, false, chatDouble(), { ...cygnusOpts, followPrefix: "client:cygnus:" }),
+    );
+    await waitFor(() => expect(result.current.sessionKey).toBe("client:cygnus:hot"));
+  });
 });
