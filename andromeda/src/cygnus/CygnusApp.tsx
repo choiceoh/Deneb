@@ -63,6 +63,11 @@ export function CygnusApp() {
   }, [cfg.token]);
   useEffect(() => {
     document.title = "Cygnus";
+    // The workstation stylesheet paints body with the warm --grad; on this
+    // transparent frameless window that gradient would peek past .cygnus-root's
+    // rounded corners. Marking body lets cygnus.css make it transparent.
+    document.body.classList.add("cygnus-window");
+    return () => document.body.classList.remove("cygnus-window");
   }, []);
 
   return (
@@ -133,6 +138,9 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
       channel: "client",
       filter: "client:cygnus:",
       newKey: () => `client:cygnus:${crypto.randomUUID()}`,
+      // Own restore slot — sharing the 채팅 탭's slot made either surface boot
+      // into the other's conversation (and load its transcript).
+      lastKeyStore: "cygnus.chat.lastSession",
     },
   );
   const { clearDraft } = useSessionDraft(sessionKey, input, setInput);

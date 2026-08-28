@@ -81,6 +81,12 @@
   color-scheme: light;
 }
 
+/* The workstation stylesheet paints body with its warm gradient; on the
+ * transparent Cygnus window that would peek past the rounded corners. */
+body.cygnus-window {
+  background: transparent;
+}
+
 /* ============ window shell ============ */
 /* Covers the transparent frameless window; rounded like the workstation panels. */
 .cygnus-root {
@@ -240,6 +246,13 @@
   border: 0;
   padding: 0;
   cursor: pointer;
+}
+
+/* File-drag affordance — the shared .drop-over style is scoped to .panel, which
+ * .cy-main is not; give the companion its own accent ring. */
+.cy-main.drop-over {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: inherit;
 }
 
 /* ---- transcript ---- */

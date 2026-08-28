@@ -301,3 +301,49 @@ describe("useSessions", () => {
     expect(result.current.sessions[0]?.model).toBe("");
   });
 });
+
+// The last-conversation restore slot: each key-minting surface (채팅 탭 · Cygnus)
+// gets its own localStorage slot, plus a namespace guard on whatever it reads.
+// Regression: both surfaces sharing one slot made either boot into (and load
+// the transcript of) the other's conversation.
+describe("useSessions last-session slots", () => {
+  const cygnusOpts = {
+    mainKey: "client:cygnus:main",
+    filter: "client:cygnus:",
+    newKey: () => "client:cygnus:new",
+    lastKeyStore: "cygnus.chat.lastSession",
+  };
+  afterEach(() => {
+    localStorage.removeItem("cygnus.chat.lastSession");
+  });
+
+  it("restores from its own slot and ignores another surface's slot", () => {
+    localStorage.setItem("andromeda.chat.lastSession", "client:main:work");
+    localStorage.setItem("cygnus.chat.lastSession", "client:cygnus:abc");
+    const { result } = renderHook(() => useSessions(cfg, false, false, chatDouble(), cygnusOpts));
+    expect(result.current.sessionKey).toBe("client:cygnus:abc");
+
+    // The 채팅 탭 (default slot) still restores its own conversation.
+    const tab = renderHook(() =>
+      useSessions(cfg, false, false, chatDouble(), {
+        mainKey: "client:main",
+        filter: "client:",
+        newKey: () => "client:main:new",
+      }),
+    );
+    expect(tab.result.current.sessionKey).toBe("client:main:work");
+  });
+
+  it("falls back to its own main when the restored key is outside the namespace", () => {
+    localStorage.setItem("cygnus.chat.lastSession", "client:main:leaked");
+    const { result } = renderHook(() => useSessions(cfg, false, false, chatDouble(), cygnusOpts));
+    expect(result.current.sessionKey).toBe("client:cygnus:main");
+  });
+
+  it("persists a selected conversation to its own slot only", async () => {
+    const { result } = renderHook(() => useSessions(cfg, true, false, chatDouble(), cygnusOpts));
+    await act(async () => result.current.selectSession("client:cygnus:x"));
+    expect(localStorage.getItem("cygnus.chat.lastSession")).toBe("client:cygnus:x");
+    expect(localStorage.getItem("andromeda.chat.lastSession")).toBeNull();
+  });
+});

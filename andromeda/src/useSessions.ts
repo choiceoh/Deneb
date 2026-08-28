@@ -35,7 +35,7 @@ export function useSessions(
   connected: boolean,
   busy: boolean,
   chat: { clear: () => void; setTurns: (turns: ChatTurn[]) => void },
-  opts?: { mainKey?: string; filter?: string; channel?: string; newKey?: () => string },
+  opts?: { mainKey?: string; filter?: string; channel?: string; newKey?: () => string; lastKeyStore?: string },
 ) {
   // mainKey = the default session; newKey (if given) mints a *fresh* key per "새 대화"
   // so the 채팅 탭이 여러 client:main:* 대화를 가질 수 있다(work panel은 client:main 하나).
@@ -44,16 +44,25 @@ export function useSessions(
   const mainKey = opts?.mainKey ?? MAIN_SESSION;
   const filter = opts?.filter;
   const channel = opts?.channel;
+  // lastKeyStore = the localStorage slot the restored "last conversation" lives
+  // in. Each surface that mints its own keys MUST use its own slot — Cygnus and
+  // the 채팅 탭 sharing one slot made either surface boot into (and load the
+  // transcript of) the other's conversation.
+  const lastKeyStore = opts?.lastKeyStore ?? LAST_SESSION_KEY;
   const keep = (s: SessionRow[]) => (filter ? s.filter((r) => r.key.startsWith(filter)) : s);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [sessionKey, setSessionKey] = useState(() => {
     if (!opts?.newKey) return mainKey;
-    const stored = getString(LAST_SESSION_KEY).trim();
+    const stored = getString(lastKeyStore).trim();
+    // Namespace guard: a restored key from outside this surface's namespace
+    // (stale slot contents, another surface's write) must not hijack the boot
+    // session — fall back to this surface's own main.
+    if (stored && filter && !stored.startsWith(filter)) return mainKey;
     return stored || mainKey;
   });
   const persistKey = (key: string) => {
     setSessionKey(key);
-    if (opts?.newKey) setString(LAST_SESSION_KEY, key);
+    if (opts?.newKey) setString(lastKeyStore, key);
     void focusSession(cfg, key).catch(() => {});
   };
   const [sessionsOpen, setSessionsOpen] = useState(false);
