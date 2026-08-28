@@ -21,15 +21,15 @@ describe("CygnusApp", () => {
     expect(document.title).toBe("Cygnus");
   });
 
-  it("defaults to the dark skin and persists a theme toggle", async () => {
+  it("defaults to the light skin and persists a theme toggle", async () => {
     const user = userEvent.setup();
     const { container } = render(<CygnusApp />);
     const root = container.querySelector(".cygnus-root");
     expect(root).not.toBeNull();
-    expect(root!.getAttribute("data-theme")).toBe("dark");
-    await user.click(screen.getByRole("button", { name: "테마 전환" }));
     expect(root!.getAttribute("data-theme")).toBe("light");
-    expect(localStorage.getItem("cygnus.theme")).toContain("light");
+    await user.click(screen.getByRole("button", { name: "테마 전환" }));
+    expect(root!.getAttribute("data-theme")).toBe("dark");
+    expect(localStorage.getItem("cygnus.theme")).toContain("dark");
   });
 
   it("opens and closes the thread rail", async () => {
