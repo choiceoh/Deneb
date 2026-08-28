@@ -255,6 +255,16 @@ body.cygnus-window {
   background: var(--panel-sunken);
 }
 
+/* User turns as soft bubbles (reference request-block pattern). */
+.cygnus-root .ai-turn.user .ai-turn-body {
+  display: inline-block;
+  background: var(--panel-sunken);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 7px 11px;
+  max-width: 100%;
+}
+
 /* Density: the companion window is narrow — tighten the shared turn layout a
  * touch without forking it. */
 .cygnus-root .ai-turn-label {
@@ -277,17 +287,45 @@ body.cygnus-window {
   border: 1px solid var(--line);
 }
 
-/* ---- composer + status ---- */
+/* ---- composer + status: one floating card ---- */
+/* Reference pattern (their composer card): the input and the identity/status
+ * row read as a single floating surface over the transcript. The shared
+ * .ai-composer keeps its structure but dissolves into the card; focus lights
+ * the card itself (single ring — no chrome-in-chrome). */
 .cy-foot {
   flex: none;
-  border-top: 1px solid var(--line);
-  padding: 10px 12px 8px;
+  margin: 0 10px 10px;
+  padding: 7px 10px 6px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  background: color-mix(in srgb, var(--panel) 68%, transparent);
+  gap: 5px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: 16px;
+  box-shadow: var(--shadow-pill);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.cy-foot:has(.ai-compose:focus) {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 3px var(--accent-soft),
+    var(--shadow-pill);
+}
+.cygnus-root .ai-composer {
+  margin-top: 0;
+  border-color: transparent;
+  background: transparent;
+  padding-left: 5px;
+}
+.cygnus-root .ai-composer:focus-within {
+  border-color: transparent;
+  box-shadow: none;
 }
 .cy-status {
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
   display: flex;
   align-items: center;
   gap: 12px;
