@@ -985,6 +985,15 @@ func formatRecallEvidenceAt(evidence []recallEvidence, now time.Time, filesToolR
 			formatRecallAgeAt(ev.At, now),
 			ev.Score,
 		)
+		// Absolute date next to the relative age. Age alone strands every
+		// date-shaped question: the reader cannot turn "age=8d" into "May 20"
+		// without the reference date it does not have. Measured on the reader
+		// stage (LongMemEval temporal-reasoning): 51 of that category's 81
+		// failures had the gold answer — a date — absent from the block, and
+		// rows carried only relative ages.
+		if ev.At > 0 {
+			entry += " date=" + time.UnixMilli(ev.At).Format("2006-01-02")
+		}
 		if ev.Query != "" {
 			entry += fmt.Sprintf(" query=%q", query)
 		}
