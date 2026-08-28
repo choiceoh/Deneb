@@ -55,6 +55,11 @@ artifacts. The single biggest Codex behavior source is invisible to mining.
 Follow-up: persist dispatch sessions (drop `--ephemeral`, or point
 `CODEX_HOME` at a mining-visible location) — one-line change, but it touches
 the L4 lane, so it ships separately with operator awareness.
+Follow-up shipped (2026-08-28, PR #4869): `--ephemeral` dropped; the executor
+now archives dispatch rollouts to
+`~/.deneb/data/coding_dispatch_sessions/.codex/sessions/` (nested vendor
+layout because numbat detects agents by path; 90-day retention) and the
+miner's codex globs cover that archive.
 
 **2. Session shapes are three different animals.** Medians: Claude Code 560
 events / 192 execs / 14.5 user prompts per session (long multi-task grinds;
