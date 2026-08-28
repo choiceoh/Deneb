@@ -86,6 +86,12 @@ type Hit struct {
 	ID      string  // document ID
 	Score   float64 // relevance score (higher is better)
 	Snippet string  // text excerpt with match context
+	// Wide is the same idf-weighted match window at 4x the span. It exists for
+	// consumers that hand the row to a model which can prune for itself (the
+	// xprovence cross-encoder returns query-conditioned pruned sentences from
+	// the same pass) — the lexical window is what WE can cut, the wide window
+	// is what the MODEL should get to cut from.
+	Wide string
 }
 
 // LocateSnippet returns a source-addressable line window around the strongest
@@ -425,6 +431,12 @@ func (idx *Index) search(queryTokens []string, andMode bool, limit int) []Hit {
 		results = results[:limit]
 	}
 
+	// Snippet windows weigh coverage by the same idf the ranking used: a window
+	// holding one rare token should beat one holding two ubiquitous ones.
+	idfByToken := make(map[string]float64, len(terms))
+	for _, t := range terms {
+		idfByToken[t.token] = t.idf
+	}
 	hits := make([]Hit, len(results))
 	for i, r := range results {
 		doc := idx.docs[r.id]
@@ -435,7 +447,8 @@ func (idx *Index) search(queryTokens []string, andMode bool, limit int) []Hit {
 		hits[i] = Hit{
 			ID:      r.id,
 			Score:   r.score,
-			Snippet: extractSnippet(src, queryTokens, 40),
+			Snippet: extractSnippet(src, queryTokens, 40, idfByToken),
+			Wide:    extractSnippet(src, queryTokens, 160, idfByToken),
 		}
 	}
 	return hits
@@ -668,52 +681,169 @@ func matchedTermFrequency(tokens []string, queryToken string) int {
 
 // extractSnippet finds the best matching window in the document fields
 // and returns a snippet of approximately windowTokens tokens.
-func extractSnippet(fields []string, queryTokens []string, windowTokens int) string {
+// extractSnippet cuts the evidence window a consumer actually reads — recall
+// rows, the cross-encoder's documents, and ultimately the model. Three rules,
+// each earned by a measured failure:
+//
+//  1. Coverage is idf-WEIGHTED, not counted. Counting let a boilerplate window
+//     holding two ubiquitous tokens ("many", "different") outrank the single
+//     window holding the informative one ("doctors") — the reader stage showed
+//     rows from the correct conversation whose snippet was about something else.
+//  2. Boundaries snap to sentence breaks, so a fact is not cut mid-clause.
+//  3. When the best window still misses weight — an aggregation answer spread
+//     across the message — a SECOND fragment covering the heaviest missed
+//     tokens is appended with " … ", inside the same character budget.
+//
+// nilable idf falls back to uniform weights (plain-Upsert indexes, tests).
+func extractSnippet(fields []string, queryTokens []string, windowTokens int, idf map[string]float64) string {
 	text := strings.Join(fields, " ")
 	if len(text) == 0 {
 		return ""
 	}
-
 	runes := []rune(text)
 	lower := []rune(strings.ToLower(text))
 	windowChars := windowTokens * 5 // approximate chars per token
 
-	// Find the rune position of the first query token match.
-	bestPos := -1
-	for _, qt := range queryTokens {
-		qtRunes := []rune(qt)
-		pos := runeIndex(lower, qtRunes)
-		if pos >= 0 && (bestPos < 0 || pos < bestPos) {
-			bestPos = pos
+	weight := func(token string) float64 {
+		if idf != nil {
+			if w, ok := idf[token]; ok && w > 0 {
+				return w
+			}
 		}
+		return 1
 	}
 
-	if bestPos < 0 {
-		// No exact substring match; return the beginning.
+	type match struct {
+		pos, token int
+	}
+	var matches []match
+	for ti, qt := range queryTokens {
+		qtRunes := []rune(qt)
+		from := 0
+		for range 8 { // cap occurrences per token; snippets don't need more
+			pos := runeIndex(lower[from:], qtRunes)
+			if pos < 0 {
+				break
+			}
+			matches = append(matches, match{pos: from + pos, token: ti})
+			from += pos + len(qtRunes)
+		}
+	}
+	if len(matches) == 0 {
 		if len(runes) > windowChars {
 			return string(runes[:windowChars]) + "..."
 		}
 		return text
 	}
 
-	// Expand window around the match.
-	start := bestPos - windowChars/2
-	if start < 0 {
-		start = 0
+	// coveredBy reports the distinct tokens inside [start, start+size).
+	coveredBy := func(start, size int) map[int]struct{} {
+		out := make(map[int]struct{})
+		for _, m := range matches {
+			if m.pos >= start && m.pos < start+size {
+				out[m.token] = struct{}{}
+			}
+		}
+		return out
 	}
-	end := start + windowChars
-	if end > len(runes) {
-		end = len(runes)
+	weightOf := func(tokens map[int]struct{}, exclude map[int]struct{}) float64 {
+		total := 0.0
+		for ti := range tokens {
+			if _, done := exclude[ti]; done {
+				continue
+			}
+			total += weight(queryTokens[ti])
+		}
+		return total
+	}
+	// bestWindow finds the anchor whose window carries the most uncovered
+	// weight; ties break toward the earliest anchor for determinism.
+	bestWindow := func(size int, exclude map[int]struct{}) (start int, gain float64, cover map[int]struct{}) {
+		start, gain = -1, 0
+		for _, anchor := range matches {
+			s := anchor.pos - size/2
+			if s < 0 {
+				s = 0
+			}
+			c := coveredBy(s, size)
+			w := weightOf(c, exclude)
+			if w > gain || (w == gain && start >= 0 && s < start) {
+				gain, start, cover = w, s, c
+			} else if start < 0 {
+				gain, start, cover = w, s, c
+			}
+		}
+		return start, gain, cover
+	}
+	// snapSentence widens [start, end) to the nearest sentence boundaries,
+	// giving the fact its full clause, without drifting more than slackRunes.
+	isBreak := func(r rune) bool {
+		return r == '.' || r == '!' || r == '?' || r == '\n' || r == '。'
+	}
+	snapSentence := func(start, end, slackRunes int) (int, int) {
+		s := start
+		for s > 0 && start-s < slackRunes && !isBreak(runes[s-1]) {
+			s--
+		}
+		if s > 0 && start-s >= slackRunes {
+			s = start // no boundary within reach; keep the raw cut
+		}
+		e := end
+		for e < len(runes) && e-end < slackRunes && !isBreak(runes[e-1]) {
+			e++
+		}
+		if e < len(runes) && e-end >= slackRunes {
+			e = end
+		}
+		return s, e
+	}
+	clip := func(start, size int) (int, int) {
+		end := start + size
+		if end > len(runes) {
+			end = len(runes)
+		}
+		return snapSentence(start, end, 40)
+	}
+	render := func(start, end int) string {
+		out := string(runes[start:end])
+		if start > 0 {
+			out = "..." + out
+		}
+		if end < len(runes) {
+			out = out + "..."
+		}
+		return out
 	}
 
-	snippet := string(runes[start:end])
-	if start > 0 {
-		snippet = "..." + snippet
+	firstStart, _, firstCover := bestWindow(windowChars, nil)
+	missing := 0.0
+	for ti := range queryTokens {
+		if _, ok := firstCover[ti]; !ok {
+			missing += weight(queryTokens[ti])
+		}
 	}
-	if end < len(runes) {
-		snippet = snippet + "..."
+	// A second fragment must earn its keep: only when real weight is missing
+	// AND a half-size window somewhere else recovers some of it. Both fragments
+	// are re-anchored AT half size — reusing the full-window start would shift
+	// the window off its anchor (a full window centers the anchor at start+100;
+	// cut to half, the anchor lands one rune past the end, and the fragment
+	// shows everything AROUND the fact except the fact).
+	if missing > 0 {
+		halfAStart, _, halfACover := bestWindow(windowChars/2, nil)
+		secondStart, secondGain, _ := bestWindow(windowChars/2, halfACover)
+		if secondGain > 0 {
+			aS, aE := clip(halfAStart, windowChars/2)
+			bS, bE := clip(secondStart, windowChars/2)
+			if bS < aS {
+				aS, aE, bS, bE = bS, bE, aS, aE
+			}
+			if bS > aE { // disjoint — join as two fragments
+				return render(aS, aE) + " … " + render(bS, bE)
+			}
+		}
 	}
-	return snippet
+	s0, e0 := clip(firstStart, windowChars)
+	return render(s0, e0)
 }
 
 // runeIndex returns the index of the first occurrence of needle in haystack,

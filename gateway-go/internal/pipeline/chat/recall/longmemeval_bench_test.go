@@ -47,6 +47,7 @@ type lmQuestion struct {
 	QuestionID        string     `json:"question_id"`
 	QuestionType      string     `json:"question_type"`
 	Question          string     `json:"question"`
+	Answer            any        `json:"answer"`
 	QuestionDate      string     `json:"question_date"`
 	HaystackDates     []string   `json:"haystack_dates"`
 	HaystackSessionID []string   `json:"haystack_session_ids"`
@@ -157,6 +158,19 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 		if v, err := strconv.Atoi(raw); err == nil && v > 0 && v <= 32 {
 			workers = v
 		}
+	}
+	// LONGMEMEVAL_EXPORT freezes each question's rendered production block to a
+	// JSONL file so a reader stage (scripts, different models) can consume the
+	// EXACT retrieval snapshot this run measured — the reader-separation
+	// methodology: swap readers over a frozen snapshot instead of re-retrieving.
+	var exportFile *os.File
+	if path := strings.TrimSpace(os.Getenv("LONGMEMEVAL_EXPORT")); path != "" {
+		f, err := os.Create(path)
+		if err != nil {
+			t.Fatalf("export: %v", err)
+		}
+		defer f.Close()
+		exportFile = f
 	}
 	sem := make(chan struct{}, workers)
 	var mu sync.Mutex
@@ -429,6 +443,13 @@ func TestLongMemEvalRetrieval(t *testing.T) {
 			rerankBatchCue += minInt(len(cueCandidates), polarisRerankWindow(true))
 			poolNoCue += len(candidates)
 			poolCue += len(cueCandidates)
+			if exportFile != nil {
+				line, _ := json.Marshal(map[string]any{
+					"qid": q.QuestionID, "type": q.QuestionType,
+					"question": q.Question, "gold": q.Answer, "block": block,
+				})
+				_, _ = exportFile.Write(append(line, '\n'))
+			}
 			evidenceTotal += len(evidenceSessions)
 			recalledNoCue += len(coveredNoCue)
 			recalledCue += len(coveredCue)

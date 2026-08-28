@@ -71,9 +71,12 @@ type recallEvidence struct {
 	// lookup rather than a ranked guess declare it here — their score is a
 	// fixed rank anchor, so no threshold over it can carry information.
 	Confidence string
-	Score      float64
-	At         int64
-	SubjectID  string // empty/self = operator; used for cross-subject filtering (M6)
+	// noteWide is the 4x lexical window around the same match cluster — input
+	// for model-side pruning (rerankPolarisEvidence), never rendered as-is.
+	noteWide  string
+	Score     float64
+	At        int64
+	SubjectID string // empty/self = operator; used for cross-subject filtering (M6)
 }
 
 type recallSource struct {
