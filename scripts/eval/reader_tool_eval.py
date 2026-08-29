@@ -103,6 +103,28 @@ Rules:
   not know. A wrong specific answer is worse than an honest one.
 - Answer in the question's language. Be brief: the answer, not an essay."""
 
+# Chain-of-Note reading. The paper this benchmark comes from measures the
+# reading STRATEGY as a ceiling lever, not a retrieval one: under ORACLE
+# retrieval (evidence sessions handed over whole), CoN plus a structured format
+# moved GPT-4o from 0.870 to 0.924, and it reports up to 10 absolute points
+# between the worst and best reading strategy. That is the only documented lever
+# that raises the ceiling itself rather than approaching it — which is the
+# situation this harness measured: 76.7 against a 77.5 oracle, i.e. retrieval
+# and escalation are spent, and what remains is failing to reason over evidence
+# already in hand.
+READER_SYSTEM_CON = READER_SYSTEM.replace(
+    "Rules:",
+    """Before answering, write notes. For EACH piece of evidence that could bear
+on the question, write one line:
+
+  NOTE <ref> | <what it says that is relevant, or NONE>
+
+Then write the ANSWER line, reasoning from your notes rather than from the raw
+evidence. Notes come first, ANSWER last. This applies to the final answer only —
+an OPEN or SEARCH directive still stands alone with no notes.
+
+Rules:""")
+
 JUDGE_SYSTEM = """You grade one answer against a reference answer.
 
 Reply with exactly one line: CORRECT or INCORRECT, then a space, then a short
@@ -403,10 +425,16 @@ def load_haystacks(path: str, qids: set) -> dict:
         if qid not in qids:
             continue
         sessions = q.get("haystack_sessions") or []
+        position = {sid: i for i, sid in enumerate(q.get("haystack_session_ids") or [])}
         out[qid] = {
             "sessions": sessions,
             "dates": q.get("haystack_dates") or [""] * len(sessions),
             "labels": [f"cl:lm:{qid}:s{i}" for i in range(len(sessions))],
+            # Which haystack slots actually hold the answer — the oracle run
+            # serves exactly these, and nothing else.
+            "gold_indices": sorted(position[s] for s in (q.get("answer_session_ids") or [])
+                                   if s in position),
+            "question_date": q.get("question_date") or "",
         }
     return out
 
@@ -432,12 +460,43 @@ def serve_directive(verb: str, arg: str, hay: dict, opens: int, searches: int,
     return ("그 escalation 예산은 소진됐다.", opens, searches)
 
 
+def oracle_block(rec: dict, hay: dict, gold_sessions: list) -> str:
+    """The evidence sessions handed over whole — the paper's oracle setting.
+
+    This is the CEILING measurement, and it has to be re-taken whenever the
+    reader or the judge changes: a ceiling recorded under one reader says
+    nothing about another. Comparing a new reading strategy against a stale
+    oracle is how a run convinces itself it broke through when it only moved.
+    """
+    if not hay or not gold_sessions:
+        return "(근거 세션 없음)"
+    # The reference date belongs here for the same reason the retrieval block
+    # carries it ("기준일="). Without it a temporal question has no anchor to
+    # count from, and the ceiling run would be handicapped exactly where the
+    # retrieval run is not — measured: temporal scored LOWER under the oracle
+    # (68.8) than under retrieval (73.4), which no mechanism explains.
+    parts = []
+    if hay.get("question_date"):
+        parts.append(f'기준일={hay["question_date"]}')
+    for si in gold_sessions:
+        if si >= len(hay["sessions"]):
+            continue
+        turns = hay["sessions"][si]
+        head = f'### {hay["labels"][si]} ({hay["dates"][si]}) — {len(turns)} messages'
+        body = "\n".join(f'[{i}] {t.get("role", "?")}: {_clip(t.get("content", ""), WINDOW_MSG_BYTES)}'
+                          for i, t in enumerate(turns))
+        parts.append(head + "\n" + body)
+    return "\n\n".join(parts) if parts else "(근거 세션 없음)"
+
+
 def run_question(rec: dict, hay: dict, model: str, open_budget: int,
-                 search_budget: int, verbose: bool = False) -> dict:
+                 search_budget: int, verbose: bool = False,
+                 system: str = READER_SYSTEM) -> dict:
     """Drive one question through the escalation loop to a final answer."""
+    evidence = rec.get("oracle_block") or rec.get("block") or "(근거 없음)"
     prompt = (f"다음 질문에 답하라.\n\n질문: {rec['question']}\n\n"
-              f"--- 자동 검색된 근거 ---\n{rec.get('block') or '(근거 없음)'}\n")
-    messages = [{"role": "system", "content": READER_SYSTEM},
+              f"--- 자동 검색된 근거 ---\n{evidence}\n")
+    messages = [{"role": "system", "content": system},
                 {"role": "user", "content": prompt}]
     opens = searches = 0
     answer, error = "", ""
@@ -551,11 +610,16 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--open-budget", type=int, default=DEFAULT_OPEN_BUDGET)
     ap.add_argument("--search-budget", type=int, default=DEFAULT_SEARCH_BUDGET)
+    ap.add_argument("--oracle", action="store_true",
+                    help="hand over the evidence sessions whole (ceiling run)")
+    ap.add_argument("--reading", choices=("direct", "con"), default="direct",
+                    help="reading strategy: direct, or Chain-of-Note")
     ap.add_argument("--workers", type=int, default=1,
                     help="concurrent questions (default 1; see the note in main)")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
+    reader_system = READER_SYSTEM_CON if args.reading == "con" else READER_SYSTEM
     for warning in check_models([args.model, args.judge_model]):
         print(f"warning: {warning}", file=sys.stderr)
 
@@ -578,7 +642,8 @@ def main() -> int:
 
     def score_one(rec: dict) -> dict:
         out = run_question(rec, haystacks.get(rec["qid"]), args.model,
-                           args.open_budget, args.search_budget, args.verbose)
+                           args.open_budget, args.search_budget, args.verbose,
+                           system=reader_system)
         label, reason = judge(out, args.judge_model)
         out["verdict_label"] = label
         out["correct"] = label == "CORRECT"
@@ -593,6 +658,15 @@ def main() -> int:
     # rerank sidecar times out and silently falls back. Here that class of
     # error cannot hide: a call that fails under load becomes UNSCORED and is
     # reported, not folded into the accuracy as a wrong answer.
+    if args.oracle:
+        for rec in records:
+            hay = haystacks.get(rec["qid"])
+            rec["oracle_block"] = oracle_block(
+                rec, hay, (hay or {}).get("gold_indices") or [])
+        served = sum(1 for r in records if r.get("oracle_block", "").startswith("###"))
+        print(f"oracle mode: evidence sessions handed over whole "
+              f"({served}/{len(records)} questions)", file=sys.stderr)
+
     results = [None] * len(records)
     done = 0
     if args.workers > 1:
