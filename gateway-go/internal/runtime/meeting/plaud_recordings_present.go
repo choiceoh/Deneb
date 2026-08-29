@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode"
 
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -13,7 +12,7 @@ import (
 // meetingFilename builds the wiki filename: a Korean-safe slug of the name
 // plus an id prefix so retitled recordings stay idempotent by id.
 func meetingFilename(f plaudFile) string {
-	slug := MeetingSlug(f.Name)
+	slug := wiki.MeetingSlug(f.Name)
 	id := f.ID
 	if len(id) > 8 {
 		id = id[:8]
@@ -22,35 +21,6 @@ func meetingFilename(f plaudFile) string {
 		return "회의-" + id + ".md"
 	}
 	return slug + "-" + id + ".md"
-}
-
-// MeetingSlug keeps unicode letters/digits joined by single hyphens, bounded.
-//
-// Exported because the mail-arrival path needs the SAME slug to recognize that
-// a Plaud AutoFlow notice describes a meeting this service already wrote a page
-// for (wiki_mail_autoflow.go). Two copies of this rule would drift apart and the
-// duplicate-suppression would go quiet without failing anything.
-func MeetingSlug(name string) string {
-	var b strings.Builder
-	lastHyphen := true
-	runes := 0
-	for _, r := range strings.TrimSpace(name) {
-		if runes >= 48 {
-			break
-		}
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			b.WriteRune(unicode.ToLower(r))
-			lastHyphen = false
-			runes++
-			continue
-		}
-		if !lastHyphen {
-			b.WriteRune('-')
-			lastHyphen = true
-			runes++
-		}
-	}
-	return strings.Trim(b.String(), "-")
 }
 
 func buildMeetingPage(f plaudFile, report string, related []string, transcript string, now time.Time, loc *time.Location) *wiki.Page {
