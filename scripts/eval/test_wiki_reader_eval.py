@@ -66,6 +66,38 @@ class OracleBlockTests(unittest.TestCase):
         out = wre.oracle_block(str(self.root), ["pl2-dsv-epc-001"])
         self.assertIn("Deviation", out)
 
+    def test_a_folder_gold_path_serves_every_page_under_it(self):
+        """A third of gold_paths name a project FOLDER, not a page.
+
+        Serving an arbitrary one of them is not an oracle, and it showed: the
+        first oracle run scored BELOW the retrieval run (70.2 vs 79.8) because
+        rglob order handed over 로그.md while the answer sat in 대표.md.
+        """
+        folder = self.root / "프로젝트" / "pl2-abc-001"
+        folder.mkdir(parents=True)
+        (folder / "로그.md").write_text("일지 항목", encoding="utf-8")
+        (folder / "대표.md").write_text("Deviation 승인 대기", encoding="utf-8")
+        (folder / "회의록").mkdir()
+        (folder / "회의록" / "07-27.md").write_text("회의 메모", encoding="utf-8")
+        out = wre.oracle_block(str(self.root), ["프로젝트/pl2-abc-001"])
+        for expected in ("Deviation 승인 대기", "일지 항목", "회의 메모"):
+            self.assertIn(expected, out)
+
+    def test_representative_page_is_served_first(self):
+        # The budget must cut the least important pages, never 대표.
+        folder = self.root / "프로젝트" / "pl2-xyz-001"
+        folder.mkdir(parents=True)
+        (folder / "z-기타.md").write_text("주변 정보", encoding="utf-8")
+        (folder / "대표.md").write_text("핵심 요약", encoding="utf-8")
+        out = wre.oracle_block(str(self.root), ["프로젝트/pl2-xyz-001"])
+        self.assertLess(out.index("핵심 요약"), out.index("주변 정보"))
+
+    def test_pages_are_not_served_twice(self):
+        out = wre.oracle_block(str(self.root),
+                               ["프로젝트/pl2-dsv-epc-001",
+                                "프로젝트/pl2-dsv-epc-001"])
+        self.assertEqual(out.count("Deviation 승인 대기"), 1)
+
     def test_missing_gold_degrades_instead_of_serving_silence(self):
         self.assertIn("없음", wre.oracle_block(str(self.root), ["없는/페이지"]))
         self.assertIn("없음", wre.oracle_block(str(self.root), []))

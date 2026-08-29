@@ -60,7 +60,9 @@ from reader_tool_eval import (  # noqa: E402
     call_model, check_models, format_summary, parse_verdict, summarize,
 )
 
-PAGE_BYTES = 12_000
+PAGE_BYTES = 16_000
+# The oracle is meant to be generous — it is the ceiling, not a budget test.
+ORACLE_TOTAL_BYTES = 60_000
 READ_BUDGET = 2
 
 READER_SYSTEM = """You answer questions about the user's work wiki.
@@ -140,20 +142,42 @@ def render_page(path: pathlib.Path, limit: int = PAGE_BYTES) -> str:
     return f"### {path.name}\n{body}"
 
 
+def resolve_gold_pages(wiki_dir: str, ref: str) -> list:
+    """Every page a gold_paths entry designates, most important first.
+
+    gold_paths in this set are path SUBSTRINGS, and a third of them name a
+    project FOLDER rather than a page: "프로젝트/pl2-dsv-epc-001" covers 대표,
+    로그, o&m-입찰, 회의록/… — seven pages and more. Serving an arbitrary one
+    of them is not an oracle, and it showed: the first oracle run scored BELOW
+    the retrieval run (70.2 vs 79.8), an ordering no mechanism explains,
+    because rglob order handed the reader 로그.md while the answer sat in 대표.md.
+
+    Ordering puts an exact hit first, then 대표 (the project's summary page),
+    then the rest by path, so the budget cuts the least important pages.
+    """
+    exact = resolve_page(wiki_dir, ref)
+    if exact is not None:
+        return [exact]
+    root = pathlib.Path(wiki_dir)
+    if not root.is_dir():
+        return []
+    matches = [p for p in root.rglob("*.md") if ref in str(p.relative_to(root))]
+    matches.sort(key=lambda p: (p.stem != "대표", str(p)))
+    return matches
+
+
 def oracle_block(wiki_dir: str, gold_paths: list) -> str:
     """The gold pages handed over whole — the ceiling setting."""
-    pages = []
+    rendered, budget, seen = [], ORACLE_TOTAL_BYTES, set()
     for ref in gold_paths or []:
-        target = resolve_page(wiki_dir, ref)
-        if target is None:
-            # gold_paths are path SUBSTRINGS in this gold set, so fall back to
-            # a search under the root rather than silently serving nothing.
-            root = pathlib.Path(wiki_dir)
-            matches = [p for p in root.rglob("*.md") if ref in str(p.relative_to(root))]
-            target = matches[0] if matches else None
-        if target is not None:
-            pages.append(render_page(target))
-    return "\n\n".join(pages) if pages else "(근거 페이지 없음)"
+        for page in resolve_gold_pages(wiki_dir, ref):
+            if page in seen or budget <= 0:
+                continue
+            seen.add(page)
+            text = render_page(page, min(PAGE_BYTES, budget))
+            budget -= len(text.encode())
+            rendered.append(text)
+    return "\n\n".join(rendered) if rendered else "(근거 페이지 없음)"
 
 
 # --- deterministic scoring (pure) -------------------------------------------- #
