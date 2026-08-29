@@ -203,6 +203,27 @@ func (s *Store) readRecallHitsLocked() []recallHit {
 	return out
 }
 
+// verificationSessionPrefixes is the single authority for chat-session lanes
+// whose ledger events are VERIFICATION traffic, not demand: live-test chats,
+// the Korean recall probe, and puppet-seat measurements all exercise recall
+// mechanically, and counting their injects/reads as usage inflates exactly
+// the utility signal they exist to measure. Autonomous production lanes
+// (cron, heartbeat, mail analysis) stay counted — they act on the operator's
+// behalf, and their use of a page is real demand. Legacy lines with no
+// session also stay counted: an unclassifiable line must not zero history.
+var verificationSessionPrefixes = []string{
+	"client:lt-", "client:korean-probe", "client:puppet-",
+}
+
+func isVerificationSession(session string) bool {
+	for _, p := range verificationSessionPrefixes {
+		if strings.HasPrefix(session, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // recallHitCounts aggregates events at or after `since` into per-path counts.
 // Every event kind counts: a page's count is total ledger activity, so pages
 // with observed use (read/cite on top of inject) naturally weigh heavier in
@@ -214,7 +235,7 @@ func (s *Store) recallHitCounts(since time.Time) map[string]int {
 	s.recallMu.Unlock()
 	counts := make(map[string]int)
 	for _, h := range hits {
-		if h.At < cutoff {
+		if h.At < cutoff || isVerificationSession(h.Session) {
 			continue
 		}
 		counts[h.Path]++
@@ -252,7 +273,7 @@ func (s *Store) recallUsageCounts(since time.Time) map[string]RecallUsage {
 	s.recallMu.Unlock()
 	usage := make(map[string]RecallUsage)
 	for _, h := range hits {
-		if h.At < cutoff {
+		if h.At < cutoff || isVerificationSession(h.Session) {
 			continue
 		}
 		u := usage[h.Path]

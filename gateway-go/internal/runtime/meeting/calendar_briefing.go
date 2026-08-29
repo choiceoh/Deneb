@@ -653,13 +653,23 @@ func wikiTopNote(ctx context.Context, getStore func() *wiki.Store, query string)
 	if st == nil {
 		return ""
 	}
-	return wikiTopPageNote(ctx, st, query)
+	note, path := wikiTopPageNote(ctx, st, query)
+	if note != "" && path != "" {
+		// The chosen page's title/summary renders into the briefing the
+		// operator reads — model-visible exposure the utility ledger should
+		// count (Session labels the surface; lane-classified as production).
+		_ = st.RecordRecallEvents([]wiki.RecallEvent{{
+			Path: path, Event: wiki.RecallEventInject,
+			Query: "calendar-briefing", Rank: 1, Session: "briefing:calendar",
+		}})
+	}
+	return note
 }
 
-func wikiTopPageNote(ctx context.Context, st briefingWikiStore, query string) string {
+func wikiTopPageNote(ctx context.Context, st briefingWikiStore, query string) (note, path string) {
 	report, err := st.SearchWithOptions(ctx, query, briefWikiSearchCandidates, wiki.QueryOptions{ExcludeFactResults: true})
 	if err != nil || len(report.Results) == 0 {
-		return ""
+		return "", ""
 	}
 	for _, hit := range report.Results {
 		if hit.FactID != "" || hit.Path == "" {
@@ -673,14 +683,14 @@ func wikiTopPageNote(ctx context.Context, st briefingWikiStore, query string) st
 		summary := strings.TrimSpace(page.Meta.Summary)
 		switch {
 		case title != "" && summary != "":
-			return title + " — " + summary
+			return title + " — " + summary, hit.Path
 		case title != "":
-			return title
+			return title, hit.Path
 		case summary != "":
-			return summary
+			return summary, hit.Path
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // alreadySent / markSent / prune guard the dedup map.

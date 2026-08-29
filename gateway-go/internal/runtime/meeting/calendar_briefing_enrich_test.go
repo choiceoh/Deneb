@@ -175,9 +175,12 @@ func TestWikiTopPageNoteSkipsSyntheticFactResult(t *testing.T) {
 			"projects/alpha.md": {Meta: wiki.Frontmatter{Title: "Alpha", Summary: "Current project note"}},
 		},
 	}
-	got := wikiTopPageNote(context.Background(), store, "alpha")
+	got, gotPath := wikiTopPageNote(context.Background(), store, "alpha")
 	if got != "Alpha — Current project note" {
 		t.Fatalf("note = %q", got)
+	}
+	if gotPath != "projects/alpha.md" {
+		t.Fatalf("path = %q — the exposure record needs the chosen page", gotPath)
 	}
 	if store.seenLimit != briefWikiSearchCandidates {
 		t.Fatalf("search limit = %d, want %d", store.seenLimit, briefWikiSearchCandidates)

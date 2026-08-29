@@ -54,6 +54,25 @@ func (a *wikiAdapter) Recall(ctx context.Context, query string, limit int) ([]Re
 		return nil, err
 	}
 	hits := report.Results
+	// Secondary exposure surfaces (mail-archive enrichment, briefings) declare
+	// themselves via WithInjectAttribution; their rendered hits are recorded as
+	// inject exposure so the utility ledger sees every surface the model saw.
+	// The chat preflight records its own richer lines and does not set this.
+	if session, label, ok := InjectAttribution(ctx); ok && len(hits) > 0 {
+		events := make([]wiki.RecallEvent, 0, len(hits))
+		for i, h := range hits {
+			if h.FactID != "" {
+				continue // synthetic fact hits are not dreamer-managed pages
+			}
+			events = append(events, wiki.RecallEvent{
+				Path: h.Path, Event: wiki.RecallEventInject,
+				Query: label, Rank: i + 1, Score: h.Score, Session: session,
+			})
+		}
+		if len(events) > 0 {
+			_ = a.store.RecordRecallEvents(events)
+		}
+	}
 	out := make([]Result, 0, len(hits))
 	for _, h := range hits {
 		meta := map[string]string{}
@@ -139,19 +158,22 @@ func (a *wikiAdapter) FilterRecallResults(query string, results []Result) []Resu
 }
 
 // Read returns the wiki document identified by id.
-func (a *wikiAdapter) Read(_ context.Context, id string) (*Document, error) {
+func (a *wikiAdapter) Read(ctx context.Context, id string) (*Document, error) {
 	factRef := strings.HasPrefix(strings.Trim(strings.ReplaceAll(strings.TrimSpace(id), "\\", "/"), "/"), "@facts/")
 	page, err := a.store.ReadPage(id)
 	if err != nil {
 		return nil, fmt.Errorf("read wiki page %q: %w", id, err)
 	}
-	// 효용 접지: Router.Read's only caller is the chat knowledge tool, so this
-	// is a model-driven page open — observed USE for the recall-utility ledger
-	// (bridge-evidence adoption). No session at this layer (the domain cannot
-	// read chat context keys); path-level attribution is what the scoring uses.
-	// Best-effort derived telemetry by ledger contract; must never fail a read.
+	// 효용 접지: record a read USE event only for ATTRIBUTED reads — surfaces
+	// that declared themselves model-driven via WithReadAttribution (the chat
+	// knowledge tool). Recording every Read was wrong twice over: mechanical
+	// consumers (enrichment, background jobs) counted as "use", and the event
+	// carried no session, so the exposure→use join the utility scoring runs on
+	// could never see it. Best-effort by ledger contract; never fails a read.
 	if !factRef {
-		_ = a.store.RecordRecallEvents([]wiki.RecallEvent{{Path: id, Event: wiki.RecallEventRead}})
+		if session, ok := ReadAttribution(ctx); ok {
+			_ = a.store.RecordRecallEvents([]wiki.RecallEvent{{Path: id, Event: wiki.RecallEventRead, Session: session}})
+		}
 	}
 	meta := map[string]string{}
 	if factRef {
