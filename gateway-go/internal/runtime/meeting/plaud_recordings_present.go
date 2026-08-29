@@ -13,7 +13,7 @@ import (
 // meetingFilename builds the wiki filename: a Korean-safe slug of the name
 // plus an id prefix so retitled recordings stay idempotent by id.
 func meetingFilename(f plaudFile) string {
-	slug := meetingSlug(f.Name)
+	slug := MeetingSlug(f.Name)
 	id := f.ID
 	if len(id) > 8 {
 		id = id[:8]
@@ -24,8 +24,13 @@ func meetingFilename(f plaudFile) string {
 	return slug + "-" + id + ".md"
 }
 
-// meetingSlug keeps unicode letters/digits joined by single hyphens, bounded.
-func meetingSlug(name string) string {
+// MeetingSlug keeps unicode letters/digits joined by single hyphens, bounded.
+//
+// Exported because the mail-arrival path needs the SAME slug to recognize that
+// a Plaud AutoFlow notice describes a meeting this service already wrote a page
+// for (wiki_mail_autoflow.go). Two copies of this rule would drift apart and the
+// duplicate-suppression would go quiet without failing anything.
+func MeetingSlug(name string) string {
 	var b strings.Builder
 	lastHyphen := true
 	runes := 0

@@ -243,7 +243,20 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, mailanalysis.
 			s.logger.Info("mail analysis 위키 저장 생략 — 업무 메일 아님", "id", msg.ID, "reason", err)
 			return errors.Join(errs...)
 		}
+		// Plaud's AutoFlow notice describes a meeting the MCP path may have
+		// already written a 회의록 page AND a project status bullet for. Those two
+		// writes — and only those two — are the ones that would duplicate; the
+		// deal ledger, calendar proposals, card, and workflow state below are the
+		// mail path's own and still run. The message is NOT queued for
+		// re-analysis: like AnalysisNonBusiness, this analysis succeeded.
+		meetingCovered := ""
 		if s.wikiStore != nil {
+			if meetingCovered = autoFlowMeetingCovered(s.wikiStore, msg.From, msg.Subject); meetingCovered != "" {
+				s.logger.Info("mail analysis 위키 저장 생략 — 회의록이 이미 덮음",
+					"id", msg.ID, "subject", msg.Subject, "meeting", meetingCovered)
+			}
+		}
+		if s.wikiStore != nil && meetingCovered == "" {
 			page := buildMailAnalysisPage(handlermail.WikiAnalysisInput{
 				MsgID:           msg.ID,
 				ThreadID:        msg.ThreadID,
