@@ -125,6 +125,10 @@ type ServerRuntime struct {
 	sessionReposMu sync.Mutex
 	sessionRepos   map[string]string
 
+	// Cached pull-request status per conversation (see prStatusTTL).
+	prStatusMu sync.Mutex
+	prStatus   map[string]prStatusEntry
+
 	// cacheHealth holds the rolling vLLM prefix-cache hit-ratio samples surfaced
 	// on /health and /status. gpuHealth caches the latest nvidia-smi reading for
 	// the /health gpu section and /health/gpu route. Both zero values are

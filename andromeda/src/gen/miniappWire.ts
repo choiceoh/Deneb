@@ -825,6 +825,16 @@ export interface SessionFocusResult {
   sessionKey?: string
 }
 
+export interface SessionPROut {
+  state?: string
+  number?: number
+  title?: string
+  url?: string
+  failing?: number
+  pending?: number
+  total?: number
+}
+
 export interface SessionRowOut {
   key?: string
   kind?: string

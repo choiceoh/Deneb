@@ -793,3 +793,53 @@ body.cygnus-window {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* PR status — GitHub's verdict on this conversation's branch. Sits in the
+ * titlebar beside the repo it belongs to. Colour carries emphasis, but the mark
+ * and the aria-label carry the meaning: red/green alone would be invisible to
+ * anyone who cannot separate them. */
+.cygnus-root .pr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.cygnus-root a.pr-badge:hover {
+  border-color: var(--line-2);
+  color: var(--ink-2);
+}
+.cygnus-root .pr-badge-mark {
+  font-size: 12px;
+  line-height: 1;
+}
+.cygnus-root .pr-badge.running {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}
+/* The one state the operator must act on — the only badge that shouts. */
+.cygnus-root .pr-badge.failing {
+  color: var(--due);
+  border-color: var(--due-soft);
+  background: var(--due-soft);
+}
+.cygnus-root .pr-badge.passing {
+  color: var(--online);
+  border-color: var(--line);
+}
+.cygnus-root .pr-badge.merged {
+  color: var(--muted);
+}
+.cygnus-root .pr-badge.closed,
+.cygnus-root .pr-badge.unknown {
+  color: var(--muted-2);
+  opacity: 0.85;
+}

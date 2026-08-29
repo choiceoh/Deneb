@@ -791,9 +791,10 @@ func (s *Server) earlyCodeRepoMethods() map[string]rpcutil.HandlerFunc {
 		s.initCodeRepos()
 	}
 	return minicoderepos.Methods(minicoderepos.CodeReposDeps{
-		Store:     s.codeRepos,
-		Bind:      s.BindSessionRepo,
-		BoundRepo: s.BoundSessionRepo,
+		Store:       s.codeRepos,
+		Bind:        s.BindSessionRepo,
+		BoundRepo:   s.BoundSessionRepo,
+		PullRequest: s.SessionPullRequest,
 	})
 }
 

@@ -565,6 +565,12 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("sessionKey"),
         ),
         contract(
+            name = "SessionPROut",
+            serializer = SessionPROut.serializer(),
+            empty = SessionPROut(),
+            fields = listOf("state", "number", "title", "url", "failing", "pending", "total"),
+        ),
+        contract(
             name = "SessionRowOut",
             serializer = SessionRowOut.serializer(),
             empty = SessionRowOut(),

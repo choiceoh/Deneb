@@ -219,6 +219,22 @@ export const setSessionRepo = (cfg: GatewayConfig, sessionKey: string, repoId: s
     repoId,
   });
 
+// What GitHub says about a conversation's branch. ★`state: "unknown"` means the
+// gateway could not ask (gh missing / not logged in) — distinct from "none",
+// which means it asked and the branch has no pull request.
+export interface SessionPR {
+  state: "unknown" | "none" | "running" | "failing" | "passing" | "merged" | "closed";
+  number?: number;
+  title?: string;
+  url?: string;
+  failing?: number;
+  pending?: number;
+  total?: number;
+}
+
+export const getSessionPR = (cfg: GatewayConfig, sessionKey: string) =>
+  callRpc<SessionPR>(cfg, "miniapp.sessions.pr.status", { sessionKey });
+
 export const getSessionRepo = (cfg: GatewayConfig, sessionKey: string) =>
   callRpc<{ bound: boolean; repoId: string; path?: string; name?: string }>(cfg, "miniapp.sessions.repo.get", {
     sessionKey,
