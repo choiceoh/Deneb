@@ -373,7 +373,11 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
                 <span className="cy-empty-sub">
                   {connected ? "에이전트 실행과 가벼운 코딩" : "Andromeda 본창에서 연결하면 이 창도 따라옵니다"}
                 </span>
-                <span className="cy-empty-hint">Ctrl+Shift+Space 어디서든 소환</span>
+                {/* The shortcut is worth surfacing, but "소환" framed this
+                    window as a launcher you call up and dismiss. It is a
+                    workspace now, so the hint offers a way back to it rather
+                    than describing what the surface is. */}
+                <span className="cy-empty-hint">Ctrl+Shift+Space 로 언제든 이 창으로</span>
               </div>
             ) : (
               <>
