@@ -13,18 +13,80 @@
 #     trivial edit while main moved elsewhere) lands as-is: no rebase, no CI
 #     re-run. main has no branch protection, so keep this surgical, not blanket.
 #   - delete the remote branch after landing
+#   - attach the CodeGraph blast-radius brief to the PR body (review evidence)
 #
 # Usage:
-#   scripts/dev/pr.sh watch <pr>   # watch checks; compact red summary; rc!=0 on red
-#   scripts/dev/pr.sh land  <pr>   # watch -> squash merge -> landed-verify -> cleanup
+#   scripts/dev/pr.sh watch  <pr>   # watch checks; compact red summary; rc!=0 on red
+#   scripts/dev/pr.sh land   <pr>   # watch -> squash merge -> landed-verify -> cleanup
+#   scripts/dev/pr.sh attach <pr>   # (re)attach the blast-radius brief only
 set -euo pipefail
 
 cmd="${1:-}"
 pr="${2:-}"
 if [ -z "$cmd" ] || [ -z "$pr" ]; then
-    echo "usage: $(basename "$0") {watch|land} <pr-number>" >&2
+    echo "usage: $(basename "$0") {watch|land|attach} <pr-number>" >&2
     exit 2
 fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# attach_impact_brief posts the deterministic CodeGraph blast radius of this
+# branch into the PR body, under replaceable markers.
+#
+# Why HERE and not in the agent's prompt: an agent asked to include its own
+# blast radius is an agent that can decide not to. This runs on the landing
+# path every agent already has to use, and pr.sh is a forbidden self-edit
+# surface for the L4 self-coding lane — so the accountability record is one the
+# lane cannot switch off for itself.
+#
+# Never fatal. A missing index, missing binary, or a gh failure degrades the
+# review evidence; it must not block a green PR from landing.
+attach_impact_brief() {
+    local pr="$1"
+    command -v gh >/dev/null 2>&1 || return 0
+    command -v python3 >/dev/null 2>&1 || return 0
+    [ -f "$SCRIPT_DIR/impact_brief.py" ] || return 0
+
+    # The brief is computed from the working tree (codegraph indexes files on
+    # disk), so it only describes THIS PR when the checkout sits at its head.
+    # Landing someone else's PR from an unrelated tree must not attach a brief
+    # about the wrong code.
+    local head_oid local_head root
+    head_oid="$(gh pr view "$pr" --json headRefOid -q .headRefOid 2>/dev/null || true)"
+    local_head="$(git rev-parse --quiet --verify HEAD 2>/dev/null || true)"
+    if [ -z "$head_oid" ] || [ "$head_oid" != "$local_head" ]; then
+        echo "PR #$pr: impact brief skipped (checkout is not at the PR head)" >&2
+        return 0
+    fi
+    root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    [ -n "$root" ] || return 0
+    git fetch origin main --quiet 2>/dev/null || true
+
+    local brief body
+    brief="$(python3 "$SCRIPT_DIR/impact_brief.py" --repo "$root" --range "origin/main...HEAD" 2>/dev/null || true)"
+    if [ -z "$brief" ]; then
+        echo "PR #$pr: impact brief unavailable (non-fatal)" >&2
+        return 0
+    fi
+    body="$(gh pr view "$pr" --json body -q .body 2>/dev/null || true)"
+    local merged
+    merged="$(BRIEF="$brief" BODY="$body" python3 -c '
+import os, sys
+sys.path.insert(0, os.environ["SCRIPT_DIR"])
+from impact_brief import splice_into_body
+sys.stdout.write(splice_into_body(os.environ["BODY"], os.environ["BRIEF"]))
+' 2>/dev/null || true)"
+    if [ -z "$merged" ]; then
+        echo "PR #$pr: impact brief splice failed (non-fatal)" >&2
+        return 0
+    fi
+    if printf '%s' "$merged" | gh pr edit "$pr" --body-file - >/dev/null 2>&1; then
+        echo "PR #$pr: impact brief attached"
+    else
+        echo "PR #$pr: impact brief attach failed (non-fatal)" >&2
+    fi
+}
+export SCRIPT_DIR
 
 watch_checks() {
     # gh pr checks --watch exits 0 only when every required check passes.
@@ -39,10 +101,18 @@ watch_checks() {
 }
 
 case "$cmd" in
+attach)
+    attach_impact_brief "$pr"
+    ;;
 watch)
+    # Deliberately NOT attaching here: watch is a cheap poll agents call
+    # repeatedly, and its no-extra-API-calls contract is pinned by
+    # test_pr_shell. land attaches before it starts waiting, which puts the
+    # brief on the PR while CI is still running.
     watch_checks
     ;;
 land)
+    attach_impact_brief "$pr"
     watch_checks
     # Multi-agent guard (2026-07-06 incident, PR #3219): the branch name is a
     # shared surface — a parallel session can replace the branch's commit
@@ -96,7 +166,7 @@ land)
     gh pr view "$pr" --json url -q .url
     ;;
 *)
-    echo "usage: $(basename "$0") {watch|land} <pr-number>" >&2
+    echo "usage: $(basename "$0") {watch|land|attach} <pr-number>" >&2
     exit 2
     ;;
 esac
