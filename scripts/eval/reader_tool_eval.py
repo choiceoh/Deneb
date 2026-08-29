@@ -123,23 +123,29 @@ def list_models() -> list:
 
 
 def check_models(names: list) -> list:
-    """Refuse a model the wormhole is not serving; flag the billed twins.
+    """Refuse a model that cannot actually answer; flag the billed twins.
 
-    A dead model pin does not fail — it silently routes elsewhere, and a run
-    scored against a different model than the one named is worse than no run.
+    Validation is a real one-token CALL, not a lookup in /v1/models. The
+    listing lies: it advertised `deepseek-v4-flash` while every request came
+    back `404 The model does not exist`, so a 236-question run burned itself
+    out against a model that was listed but not served. A dead pin does not
+    fail loudly on its own — it has to be probed.
+
     The `-api` suffixed ids are PAID cloud twins of local models; selecting one
-    by accident has gone unnoticed for weeks before, so it has to be loud.
+    by accident has gone unnoticed for weeks before, so it stays loud even when
+    the choice is deliberate.
     """
     warnings = []
-    try:
-        served = list_models()
-    except (urllib.error.URLError, OSError, KeyError, ValueError) as exc:
-        return [f"could not list wormhole models ({exc}); model names unverified"]
-    for name in names:
-        if name not in served:
+    for name in dict.fromkeys(names):
+        try:
+            call_model(name, [{"role": "user", "content": "ok"}],
+                       max_tokens=2000, timeout=120)
+        except urllib.error.HTTPError as exc:
             raise SystemExit(
-                f"model {name!r} is not served by the wormhole.\n"
-                f"available: {', '.join(served)}")
+                f"model {name!r} does not answer: HTTP {exc.code}. "
+                f"Listed models are not necessarily served — pick another.")
+        except (urllib.error.URLError, OSError, KeyError, ValueError) as exc:
+            raise SystemExit(f"model {name!r} probe failed: {exc}")
         if name.endswith("-api"):
             warnings.append(f"{name} is a BILLED cloud twin, not the local model")
     return warnings
