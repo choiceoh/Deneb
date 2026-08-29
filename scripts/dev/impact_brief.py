@@ -58,6 +58,12 @@ SOURCE_SUFFIXES = frozenset(
 # output (the source of truth is regenerated, not reviewed line by line).
 SKIP_PATH_PARTS = ("node_modules/", "/vendor/", "vendor/", "/build/", "/.gradle/")
 
+# The repo tells codegraph what NOT to index (codegraph.json "exclude"). Files in
+# that set have no symbol map BY DESIGN — warning about each one would train the
+# reader to skim past warnings that do matter, so they are summarized in one line
+# instead.
+CODEGRAPH_CONFIG = "codegraph.json"
+
 # A test file's symbols are a different kind of blast radius than production
 # ones: "these tests cover it" versus "this reaches code you did not touch".
 # Mixing them buries the second signal under the first.
@@ -133,6 +139,49 @@ class Brief:
             "degradations": self.degradations,
             "truncatedSymbols": self.truncated_symbols,
         }
+
+
+def _glob_to_re(pattern: str) -> re.Pattern[str]:
+    """Translate a gitignore-style glob into a full-match regex.
+
+    fnmatch cannot express `**` (its `*` crosses `/`), and every pattern in
+    codegraph.json depends on that distinction.
+    """
+    out: list[str] = []
+    i = 0
+    while i < len(pattern):
+        if pattern.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif pattern.startswith("**", i):
+            out.append(".*")
+            i += 2
+        elif pattern[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        elif pattern[i] == "?":
+            out.append("[^/]")
+            i += 1
+        else:
+            out.append(re.escape(pattern[i]))
+            i += 1
+    return re.compile("^" + "".join(out) + "$")
+
+
+def excluded_patterns(repo: Path) -> list[re.Pattern[str]]:
+    """Compiled `exclude` globs from codegraph.json, or [] when absent."""
+    try:
+        config = json.loads((repo / CODEGRAPH_CONFIG).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    raw = config.get("exclude")
+    if not isinstance(raw, list):
+        return []
+    return [_glob_to_re(pat) for pat in raw if isinstance(pat, str)]
+
+
+def is_excluded(path: str, patterns: list[re.Pattern[str]]) -> bool:
+    return any(pat.match(path) for pat in patterns)
 
 
 def _run(cmd: list[str], cwd: Path) -> tuple[int, str]:
@@ -301,16 +350,36 @@ def build_brief(
         if note := sync_index(binary, repo):
             degradations.append(note)
 
+    patterns = excluded_patterns(repo)
     candidates: list[tuple[str, str, str, int]] = []
     analyzed: list[str] = []
+    not_indexed: list[str] = []
+    excluded = 0
+    test_symbols = 0
     for path in source:
+        if is_excluded(path, patterns):
+            excluded += 1
+            continue
         symbols = file_symbols(binary, repo, path)
         if not symbols:
-            degradations.append(f"`{path}` 심볼 맵 없음 (신규 파일이거나 미인덱싱)")
+            not_indexed.append(path)
             continue
         analyzed.append(path)
-        for name, kind, start in symbols_for_lines(symbols, changed_lines(repo, rev_range, path)):
+        edited = symbols_for_lines(symbols, changed_lines(repo, rev_range, path))
+        if is_test_path(path):
+            # A test this change edits is the change's own verification, not code
+            # something else depends on. Listing it crowds real symbols out of the
+            # table (measured: 7 of 12 rows on this feature's own PR).
+            test_symbols += len(edited)
+            continue
+        for name, kind, start in edited:
             candidates.append((name, kind, path, start))
+    if excluded:
+        degradations.append(f"codegraph.json이 인덱싱에서 제외한 파일 {excluded}개는 분석 대상 밖")
+    for path in not_indexed:
+        degradations.append(f"`{path}` 심볼 맵 없음 (신규 파일이거나 미인덱싱)")
+    if test_symbols:
+        degradations.append(f"편집된 테스트 심볼 {test_symbols}개는 표에서 제외 (파급 대상이 아님)")
 
     truncated = max(0, len(candidates) - max_symbols)
     impacts = [
@@ -322,7 +391,9 @@ def build_brief(
     return Brief(rev_range, changed, analyzed, impacts, degradations, truncated)
 
 
-def render_markdown(brief: Brief, *, max_affected: int = DEFAULT_MAX_AFFECTED) -> str:
+def render_markdown(
+    brief: Brief, *, max_affected: int = DEFAULT_MAX_AFFECTED, depth: int = DEFAULT_DEPTH
+) -> str:
     out = [MARK_START, "## 변경 파급 범위 (CodeGraph)", ""]
     out.append(
         f"`{brief.range}` · 변경 파일 {len(brief.changed_files)}개 "
@@ -353,7 +424,7 @@ def render_markdown(brief: Brief, *, max_affected: int = DEFAULT_MAX_AFFECTED) -
         uncovered = [s.name for s in brief.symbols if not s.affected_tests and not s.note]
         if uncovered:
             out.append(
-                "테스트가 닿지 않는 편집 심볼: "
+                f"깊이 {depth} 안에서 테스트가 닿지 않는 편집 심볼: "
                 + ", ".join(f"`{n}`" for n in uncovered[:max_affected])
                 + (f" 외 {len(uncovered) - max_affected}개" if len(uncovered) > max_affected else "")
             )
@@ -409,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.format == "json":
         print(json.dumps(brief.to_dict(), ensure_ascii=False, indent=2))
     else:
-        print(render_markdown(brief, max_affected=args.max_affected))
+        print(render_markdown(brief, max_affected=args.max_affected, depth=args.depth))
     return 0
 
 

@@ -9,6 +9,8 @@ from impact_brief import (
     MARK_START,
     Brief,
     SymbolImpact,
+    _glob_to_re,
+    is_excluded,
     is_test_path,
     render_markdown,
     splice_into_body,
@@ -48,6 +50,34 @@ class TestPathTests(unittest.TestCase):
 
     def test_production_file(self) -> None:
         self.assertFalse(is_test_path("gateway-go/internal/a/b.go"))
+
+
+class ExcludeGlobTests(unittest.TestCase):
+    """codegraph.json patterns decide what has a symbol map at all."""
+
+    PATTERNS = [
+        _glob_to_re(p)
+        for p in ("scripts/audit/**", "**/*_gen.go", "**/node_modules/**", "**/testdata/**")
+    ]
+
+    def test_directory_prefix_glob(self) -> None:
+        self.assertTrue(is_excluded("scripts/audit/rsi_bench/process.py", self.PATTERNS))
+
+    def test_suffix_glob_anywhere(self) -> None:
+        self.assertTrue(is_excluded("gateway-go/internal/a/tool_schemas_gen.go", self.PATTERNS))
+
+    def test_nested_directory_glob(self) -> None:
+        self.assertTrue(is_excluded("andromeda/node_modules/x/y.ts", self.PATTERNS))
+
+    def test_star_does_not_cross_a_slash(self) -> None:
+        """`*` must stay within one path segment or every pattern over-matches."""
+        one_segment = [_glob_to_re("scripts/*")]
+        self.assertTrue(is_excluded("scripts/audit.go", one_segment))
+        self.assertFalse(is_excluded("scripts/audit/rsi.py", one_segment))
+        self.assertTrue(is_excluded("scripts/audit/rsi.py", [_glob_to_re("scripts/**")]))
+
+    def test_indexed_source_is_not_excluded(self) -> None:
+        self.assertFalse(is_excluded("gateway-go/internal/pipeline/chat/tools.go", self.PATTERNS))
 
 
 class SpliceTests(unittest.TestCase):
