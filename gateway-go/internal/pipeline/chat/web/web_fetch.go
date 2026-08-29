@@ -216,12 +216,7 @@ func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalA
 	// Singleflight: collapse concurrent fetches for the same URL into one request.
 	// The result is cached after the first fetch completes.
 	v, err := fetchGroup.do(targetURL, func() (any, error) {
-		maxBytes := int64(maxChars * 2)
-		if maxBytes > 5*1024*1024 {
-			maxBytes = 5 * 1024 * 1024
-		}
-
-		out, err := webFetchURLUncached(ctx, localAI, targetURL, maxBytes)
+		out, err := webFetchURLUncached(ctx, localAI, targetURL, rawFetchBudget(maxChars))
 		if err == nil && !out.Assess.HasError {
 			cache.Put(targetURL, out.Content)
 		}
@@ -243,6 +238,37 @@ func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalA
 	}
 	out.Content = applyFocusAndTruncation(out.Content, focus, maxChars)
 	return out, nil
+}
+
+// rawFetchBudget converts the caller's maxChars (how much extracted TEXT it
+// wants) into the transport's byte ceiling (how much raw HTML must come down to
+// produce it). The two are not the same size and the budget used to be derived
+// as maxChars*2, which is roughly the ratio for plain text and wildly wrong for
+// a web page: at the default 20,000 chars the fetch was capped at 40 KB, so any
+// content-rich page failed with content_too_large. The hint on that error then
+// told the model to "use maxChars to limit", which SHRINKS this budget — so
+// following the advice guaranteed the next attempt failed harder. Recorded
+// live: en.wikipedia.org/wiki/Rust_(programming_language) (1,019,427 bytes)
+// refused at limit 4000, then at 2000; a localhost endpoint walked
+// 40000 → 4000 → 2000 → 1000 the same way.
+//
+// The raw budget therefore has its own floor and ceiling. Downloading more than
+// the caller will read costs bandwidth, not context: applyFocusAndTruncation
+// still narrows the OUTPUT to maxChars afterwards.
+func rawFetchBudget(maxChars int) int64 {
+	const (
+		htmlToTextRatio = 50              // HTML markup per char of extracted text
+		floorBytes      = 2 * 1024 * 1024 // fits an article-length page
+		ceilingBytes    = 5 * 1024 * 1024 // unchanged transport ceiling
+	)
+	budget := int64(maxChars) * htmlToTextRatio
+	if budget < floorBytes {
+		budget = floorBytes
+	}
+	if budget > ceilingBytes {
+		budget = ceilingBytes
+	}
+	return budget
 }
 
 type webFetchAttempt struct {

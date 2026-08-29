@@ -504,7 +504,7 @@ func TestRetryabilityAndClassificationErrorMatrix(t *testing.T) {
 		{"http403", &media.MediaFetchError{Code: media.ErrHTTPError, Status: 403, Message: "forbidden"}, "http_403", false, "blocked"},
 		{"http429", &media.MediaFetchError{Code: media.ErrHTTPError, Status: 429, Message: "limited"}, "http_429", false, "Rate limited"},
 		{"http503", &media.MediaFetchError{Code: media.ErrHTTPError, Status: 503, Message: "down"}, "http_503", true, "Server error"},
-		{"too large", &media.MediaFetchError{Code: media.ErrMaxBytes, Message: "large"}, "content_too_large", false, "maxChars"},
+		{"too large", &media.MediaFetchError{Code: media.ErrMaxBytes, Message: "large"}, "content_too_large", false, "narrower URL"},
 		{"ssrf", &media.MediaFetchError{Code: media.ErrFetchFailed, Message: "SSRF blocked"}, "ssrf_blocked", false, "public URL"},
 		{"dns", &media.MediaFetchError{Code: media.ErrFetchFailed, Message: "no such host"}, "dns_failure", false, "typos"},
 		{"redirect", &media.MediaFetchError{Code: media.ErrFetchFailed, Message: "too many redirects"}, "redirect_loop", false, ""},
