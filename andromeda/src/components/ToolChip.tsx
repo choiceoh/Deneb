@@ -9,7 +9,14 @@ import { Icon } from "./Icon";
 
 // Humanize a raw tool id ("gmail.list_recent" → "gmail list recent") so the
 // chip reads without a per-tool label table we don't have client-side.
-function toolLabel(tool: string): string {
+// What to call this tool on screen. The gateway names it (toolport.ChatToolLabel)
+// so every surface says the same thing in the same language; this is Korean-first
+// product, and the desktop used to show "gmail" / "phone_read" while the phone
+// said "메일 확인". Falling back to the humanized identifier keeps an uncurated
+// tool — or an older gateway that sends no label — readable rather than blank.
+export function toolLabel(tool: string, label?: string): string {
+  const named = label?.trim();
+  if (named) return named;
   return tool.replace(/[._]/g, " ").replace(/\s+/g, " ").trim();
 }
 
@@ -88,7 +95,7 @@ export function ToolChip({ part }: { part: ToolPart }) {
           <Icon name="check" size={12} />
         )}
       </span>
-      <span className="tool-chip-name">{toolLabel(part.tool)}</span>
+      <span className="tool-chip-name">{toolLabel(part.tool, part.label)}</span>
       {part.detail ? <span className="tool-chip-detail">{part.detail}</span> : null}
       {/* What the call produced — the gateway authors this line so every client
           shows the same wording. Started chips have none yet. */}

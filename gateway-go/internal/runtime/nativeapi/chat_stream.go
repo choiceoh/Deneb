@@ -98,8 +98,13 @@ type toolStreamFrame struct {
 	State     string `json:"state"`
 	Tool      string `json:"tool"`
 	ToolUseID string `json:"toolUseId"`
-	Detail    string `json:"detail,omitempty"`
-	IsError   bool   `json:"isError,omitempty"`
+	// Label is the tool's Korean name (toolport.ChatToolLabel), so clients stop
+	// each keeping their own table — the phone had one and Andromeda showed the
+	// bare identifier. Empty for a tool with no curated entry; clients fall back
+	// to rendering the id. Older clients ignore the field.
+	Label   string `json:"label,omitempty"`
+	Detail  string `json:"detail,omitempty"`
+	IsError bool   `json:"isError,omitempty"`
 	// ResultSummary rides only on `completed` frames; older clients ignore it.
 	ResultSummary string `json:"resultSummary,omitempty"`
 	// ResultPreview is the expandable body for clients that offer one.
@@ -347,6 +352,7 @@ func writeChatStreamSSE(
 				State:         ev.State,
 				Tool:          ev.Tool,
 				ToolUseID:     ev.ToolUseID,
+				Label:         toolport.ChatToolLabel(ev.Tool),
 				Detail:        ev.Detail,
 				IsError:       ev.IsError,
 				ResultSummary: ev.ResultSummary,

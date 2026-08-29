@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { ToolChip, formatElapsed, previewLineClass } from "./ToolChip";
+import { ToolChip, formatElapsed, previewLineClass, toolLabel } from "./ToolChip";
 
 describe("ToolChip", () => {
   it("humanizes the tool id and displays its detail", () => {
@@ -106,5 +106,26 @@ describe("ToolChip duration", () => {
     // A running chip has a start but no end; a number mid-flight reads as final.
     const { container } = render(<ToolChip part={{ ...base, state: "started", startedAtMs: 1 }} />);
     expect(container.querySelector(".tool-chip-elapsed")).toBeNull();
+  });
+});
+
+describe("toolLabel", () => {
+  it("prefers the gateway's Korean name over the identifier", () => {
+    // Korean-first product: the desktop used to render "gmail" while the phone
+    // said "메일 확인" for the same call.
+    expect(toolLabel("gmail", "메일 확인")).toBe("메일 확인");
+  });
+
+  it("falls back to the humanized id when no label was sent", () => {
+    // An uncurated tool, or an older gateway — readable beats blank.
+    expect(toolLabel("phone_read")).toBe("phone read");
+    expect(toolLabel("gmail.list_recent", "  ")).toBe("gmail list recent");
+  });
+});
+
+describe("ToolChip labelling", () => {
+  it("renders the gateway name when one arrives", () => {
+    render(<ToolChip part={{ kind: "tool", id: "t1", tool: "gmail", state: "completed", label: "메일 확인" }} />);
+    expect(screen.getByText("메일 확인")).toBeInTheDocument();
   });
 });

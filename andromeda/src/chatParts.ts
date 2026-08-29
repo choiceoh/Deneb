@@ -44,6 +44,7 @@ export function upsertToolPart(turn: ChatTurn, ev: ChatToolEvent, now: number = 
     id: ev.toolUseId || `${ev.tool}-${parts.length}`,
     tool: ev.tool,
     state: ev.state || "started",
+    label: ev.label || prev?.label,
     detail: ev.detail || prevDetail,
     isError: ev.isError,
     resultSummary: ev.resultSummary || prev?.resultSummary,

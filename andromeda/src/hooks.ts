@@ -28,6 +28,8 @@ export interface ToolPart {
   id: string;
   tool: string;
   state: string; // "started" | "completed"
+  // Gateway-owned Korean name; the chip falls back to the raw id when absent.
+  label?: string;
   detail?: string;
   isError?: boolean;
   // What the call produced, in one gateway-authored line (completed only).
