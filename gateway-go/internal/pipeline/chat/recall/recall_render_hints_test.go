@@ -23,6 +23,11 @@ func TestSessionOpenHintGatedByReachability(t *testing.T) {
 		if !strings.Contains(block, "먼저 나열한 뒤") {
 			t.Fatalf("aggregation scaffold must render unconditionally:\n%s", block)
 		}
+		// The wiki open route rides the knowledge allow-lists every preset
+		// keeps — named regardless of the sessions/files reachability flags.
+		if !strings.Contains(block, `ref="w:`) {
+			t.Fatalf("wiki open route must render unconditionally:\n%s", block)
+		}
 	}
 }
 

@@ -1097,6 +1097,11 @@ func formatRecallEvidenceAt(evidence []recallEvidence, now time.Time, filesToolR
 	// an explicit reference date the reader cannot tell what age counts from.
 	sb.WriteString("기준일=" + now.In(recallRenderZone).Format("2006-01-02") + "\n")
 	sb.WriteString("사용자 메시지가 과거 맥락을 암시해 서버가 위키/일지/파일/세션 이력을 미리 검색했다. 아래 근거만 확실한 과거 맥락으로 사용하고, 근거가 부족하면 부족하다고 말하라. source=file 행은 보관된 파일의 일치 구절이며, 전체 내용은 " + fileOpenHint(filesToolReachable) + "로 열어볼 수 있다.")
+	// The wiki open route completes the escalation triad (wiki/session/file):
+	// a wiki row's ref IS the page path, and knowledge(op="read") rides the
+	// same allow-lists as the wiki surfaces every preset keeps — named
+	// unconditionally for the same reason the knowledge file route is.
+	sb.WriteString(" source=wiki 행의 ref는 위키 페이지 경로다. 발췌가 부족하면 knowledge(op=\"read\", ref=\"w:<그 행의 ref>\")로 페이지 전문을 열람하라.")
 	if sessionsToolReachable {
 		// The follow-up read route. Snippets are budget-cut excerpts; when the
 		// answer did not survive the cut, the model can pull the conversation
