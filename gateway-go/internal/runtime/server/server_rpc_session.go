@@ -160,6 +160,10 @@ func (s *Server) openPolarisTranscriptBridge(cached chat.TranscriptStore) (chat.
 		return nil, nil
 	}
 	s.polarisStore = polarisStore // read by the opt-in compaction tuner
+	// The legacy store owns the authoritative, un-mangled session-key list that
+	// warm-time hydration needs; this is the one place holding both.
+	polarisStore.SetSessionKeyLister(cached.ListKeys)
+	polarisStore.SetLogger(s.logger)
 	return polaris.NewBridge(cached, polarisStore, s.logger), polarisStore
 }
 
