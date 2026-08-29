@@ -43,8 +43,18 @@ import (
 )
 
 type koreanGoldCase struct {
-	Question  string   `json:"question"`
+	ID       string `json:"id"`
+	Category string `json:"category"`
+	Question string `json:"question"`
+	// GoldPaths scores RETRIEVAL: did the block carry the right page.
 	GoldPaths []string `json:"gold_paths"`
+	// MustContain scores the ANSWER, and until now nothing read it. The gold
+	// set has carried these tokens since it was written; the probe parsed them
+	// away, so the wiki plane measured only whether the page was found and
+	// never whether the model then answered from it. Exported for the reader
+	// stage (scripts/eval/wiki_reader_eval.py).
+	MustContain []string `json:"must_contain"`
+	MustNot     []string `json:"must_not"`
 }
 
 func TestKoreanRecallProbe(t *testing.T) {
@@ -88,6 +98,19 @@ func TestKoreanRecallProbe(t *testing.T) {
 		t.Fatal("gold set is empty")
 	}
 
+	// DENEB_PROBE_EXPORT freezes every case's rendered production block so a
+	// reader stage can score ANSWERS over the exact retrieval this run
+	// measured — the same reader-separation the session bench uses.
+	var exportFile *os.File
+	if path := strings.TrimSpace(os.Getenv("DENEB_PROBE_EXPORT")); path != "" {
+		f, err := os.Create(path)
+		if err != nil {
+			t.Fatalf("export: %v", err)
+		}
+		defer f.Close()
+		exportFile = f
+	}
+
 	hit := 0
 	durations := make([]time.Duration, 0, len(cases))
 	for _, c := range cases {
@@ -105,6 +128,14 @@ func TestKoreanRecallProbe(t *testing.T) {
 				found = true
 				break
 			}
+		}
+		if exportFile != nil {
+			line, _ := json.Marshal(map[string]any{
+				"id": c.ID, "category": c.Category, "question": c.Question,
+				"gold_paths": c.GoldPaths, "must_contain": c.MustContain,
+				"must_not": c.MustNot, "block": block, "gold_in_block": found,
+			})
+			_, _ = exportFile.Write(append(line, '\n'))
 		}
 		// DENEB_PROBE_DUMP_MISSES=<path>: append each miss as JSONL for
 		// offline diagnosis — which gold pages the block failed to carry.
