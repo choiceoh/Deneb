@@ -183,6 +183,16 @@ sidebar status / `[andromeda:rpc]` logs.
   the MSW service-worker gate delays mount past the load event and one-shot
   screenshots capture an empty body. For populated screens point plain dev at
   the dev gateway (`VITE_GATEWAY_URL`/`VITE_GATEWAY_TOKEN`).
+- **Width sweep (layout that only breaks at some sizes):**
+  `scripts/dev/andromeda-widths.sh "/?window=cygnus" /tmp/out` captures the same
+  screen at several widths (default 460/600/1100/1920) so you compare them side
+  by side. It starts and stops its **own** vite on a private port — deliberately
+  not reusing yours, because a leftover dev server serves the code it was
+  started with and silently "verifies" a build that no longer exists (hit for
+  real, 2026-08-29). It refuses to run if that port is already taken rather than
+  shoot a server it did not start. One screenshot at the design width does not
+  catch this class: the Cygnus surface broke at 460px, 480px and 1920px in a
+  single session, each found by hand.
 - **Headless BEHAVIOR verification (drive a real turn):**
   `node scripts/dev/andromeda-drive.mjs send "http://localhost:1422/?window=cygnus" <outdir> "<prompt>"`
   types into the composer via CDP, sends, and samples the working state

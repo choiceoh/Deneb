@@ -18,18 +18,22 @@ URL_PATH=${1:-/?window=cygnus}
 OUT=${2:-/tmp/andromeda-shot.png}
 SIZE=${3:-480x700}
 SIZE=${SIZE/x/,}
+# Which dev server to shoot. Defaults to the conventional :1420 you started by
+# hand; andromeda-widths.sh overrides it to a private port so it can guarantee
+# the server it captures is the one it just started from current source.
+PORT=${ANDROMEDA_DEV_PORT:-1420}
 
 CHROME=$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux/chrome 2>/dev/null | sort -V | tail -1 || true)
 if [ -z "$CHROME" ] || [ ! -x "$CHROME" ]; then
   echo "error: playwright chromium not found under ~/.cache/ms-playwright" >&2
   exit 1
 fi
-if ! curl -sf -o /dev/null --max-time 3 "http://localhost:1420/"; then
-  echo "error: vite dev server not responding on :1420 — run 'cd andromeda && pnpm dev' first" >&2
+if ! curl -sf -o /dev/null --max-time 3 "http://localhost:${PORT}/"; then
+  echo "error: vite dev server not responding on :${PORT} — run 'cd andromeda && pnpm dev' first" >&2
   exit 1
 fi
 
 "$CHROME" --headless=new --no-sandbox --disable-gpu --hide-scrollbars \
   --force-device-scale-factor=2 --window-size="$SIZE" --virtual-time-budget=6000 \
-  --screenshot="$OUT" "http://localhost:1420${URL_PATH}" 2>&1 | tail -1
+  --screenshot="$OUT" "http://localhost:${PORT}${URL_PATH}" 2>&1 | tail -1
 echo "$OUT"
