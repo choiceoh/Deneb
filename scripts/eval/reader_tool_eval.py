@@ -54,6 +54,7 @@ import os
 import pathlib
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -69,6 +70,12 @@ SEARCH_MAX_RESULTS = 20
 SEARCH_SNIPPET_BYTES = 400
 # The judge models reason first; a small allowance yields an EMPTY verdict.
 JUDGE_MAX_TOKENS = 3000
+
+# The wormhole restarts under normal operation (deploys, config reloads); a
+# 236-question run met two such restarts and lost 82 questions to
+# "Connection refused". A long run has to outlive its transport.
+RETRY_ATTEMPTS = 4
+RETRY_BACKOFF_S = 3.0
 
 DEFAULT_OPEN_BUDGET = 2
 DEFAULT_SEARCH_BUDGET = 2
@@ -123,42 +130,70 @@ def list_models() -> list:
 
 
 def check_models(names: list) -> list:
-    """Refuse a model the wormhole is not serving; flag the billed twins.
+    """Refuse a model that cannot actually answer; flag the billed twins.
 
-    A dead model pin does not fail — it silently routes elsewhere, and a run
-    scored against a different model than the one named is worse than no run.
+    Validation is a real one-token CALL, not a lookup in /v1/models. The
+    listing lies: it advertised `deepseek-v4-flash` while every request came
+    back `404 The model does not exist`, so a 236-question run burned itself
+    out against a model that was listed but not served. A dead pin does not
+    fail loudly on its own — it has to be probed.
+
     The `-api` suffixed ids are PAID cloud twins of local models; selecting one
-    by accident has gone unnoticed for weeks before, so it has to be loud.
+    by accident has gone unnoticed for weeks before, so it stays loud even when
+    the choice is deliberate.
     """
     warnings = []
-    try:
-        served = list_models()
-    except (urllib.error.URLError, OSError, KeyError, ValueError) as exc:
-        return [f"could not list wormhole models ({exc}); model names unverified"]
-    for name in names:
-        if name not in served:
+    for name in dict.fromkeys(names):
+        try:
+            call_model(name, [{"role": "user", "content": "ok"}],
+                       max_tokens=2000, timeout=120)
+        except urllib.error.HTTPError as exc:
             raise SystemExit(
-                f"model {name!r} is not served by the wormhole.\n"
-                f"available: {', '.join(served)}")
+                f"model {name!r} does not answer: HTTP {exc.code}. "
+                f"Listed models are not necessarily served — pick another.")
+        except (urllib.error.URLError, OSError, KeyError, ValueError) as exc:
+            raise SystemExit(f"model {name!r} probe failed: {exc}")
         if name.endswith("-api"):
             warnings.append(f"{name} is a BILLED cloud twin, not the local model")
     return warnings
 
 
+def should_retry(exc: BaseException) -> bool:
+    """Is this failure worth waiting out?
+
+    Transport faults and upstream 5xx are: the wormhole comes back. A 4xx is
+    not — an unserved model or a bad request will fail identically forever, and
+    retrying it just multiplies the wait before the run reports the real cause.
+    """
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code >= 500 or exc.code == 429
+    return isinstance(exc, (urllib.error.URLError, OSError, ValueError))
+
+
 def call_model(model: str, messages: list, max_tokens: int = 2000,
-               timeout: int = 300) -> str:
-    """One chat completion through the wormhole proxy. Raises on transport error."""
+               timeout: int = 300, attempts: int = RETRY_ATTEMPTS,
+               sleep=time.sleep) -> str:
+    """One chat completion through the wormhole, retried through a restart."""
     payload = json.dumps({
         "model": model, "messages": messages,
         "max_tokens": max_tokens, "stream": False,
     }).encode()
-    req = urllib.request.Request(
-        WORMHOLE_URL, data=payload,
-        headers={"Content-Type": "application/json",
-                 "Authorization": f"Bearer {wormhole_token()}"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        resp = json.load(r)
-    return (resp["choices"][0]["message"].get("content") or "").strip()
+    last = None
+    for attempt in range(max(1, attempts)):
+        try:
+            req = urllib.request.Request(
+                WORMHOLE_URL, data=payload,
+                headers={"Content-Type": "application/json",
+                         "Authorization": f"Bearer {wormhole_token()}"})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                resp = json.load(r)
+            return (resp["choices"][0]["message"].get("content") or "").strip()
+        except Exception as exc:  # noqa: BLE001 - re-raised below
+            last = exc
+            if not should_retry(exc) or attempt == attempts - 1:
+                raise
+            sleep(RETRY_BACKOFF_S * (2 ** attempt))
+    raise last  # unreachable; keeps the contract explicit
 
 
 # --- protocol (pure) --------------------------------------------------------- #
@@ -424,6 +459,22 @@ def run_question(rec: dict, hay: dict, model: str, open_budget: int,
         if opens >= open_budget and searches >= search_budget:
             served += "\n\n예산이 모두 소진됐다. 이제 반드시 ANSWER로 답하라."
         messages.append({"role": "user", "content": served})
+    if not answer and not error:
+        # Forced final answer. The escalation loop can end with the reader
+        # still spending turns on directives, and a question that reached the
+        # end without an ANSWER is not a wrong answer — it is a missing one,
+        # which costs the run a scored question (11 of 236 before this).
+        # One last call with the directives taken away.
+        messages.append({"role": "user", "content":
+                         "escalation은 끝났다. 더 이상 OPEN도 SEARCH도 할 수 없다. "
+                         "지금까지 본 것만으로 지금 답하라. 'ANSWER '로 시작하는 "
+                         "한 줄로만 답하고, 모르면 모른다고 답하라."})
+        try:
+            forced = call_model(model, messages)
+            verb, arg = parse_directive(forced)
+            answer = arg if verb == "ANSWER" else forced.strip()
+        except (urllib.error.URLError, OSError, KeyError, ValueError) as exc:
+            error = f"forced answer failed: {type(exc).__name__}: {exc}"
     if not answer and not error:
         error = "no answer produced"
     return {"qid": rec["qid"], "type": rec.get("type"), "question": rec["question"],

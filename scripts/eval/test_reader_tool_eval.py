@@ -12,6 +12,8 @@ actually cost a measured run when the original harness mishandled it.
 """
 
 import unittest
+import unittest.mock
+import urllib.error
 
 import reader_tool_eval as rte
 
@@ -256,6 +258,56 @@ class VerdictTests(unittest.TestCase):
         ])
         self.assertEqual(s["unscored"], 1)
         self.assertIn("UNSCORED", rte.format_summary("t", s))
+
+
+class RetryTests(unittest.TestCase):
+    """A long run has to outlive its transport.
+
+    The wormhole restarts under normal operation (deploys, config reloads). A
+    236-question run met two restarts and lost 82 questions to "Connection
+    refused" — the answers were never wrong, they were never obtained.
+    """
+
+    def test_transport_faults_are_retried(self):
+        self.assertTrue(rte.should_retry(urllib.error.URLError("refused")))
+        self.assertTrue(rte.should_retry(OSError("connection reset")))
+
+    def test_upstream_5xx_and_429_are_retried(self):
+        for code in (500, 502, 503, 429):
+            with self.subTest(code=code):
+                self.assertTrue(rte.should_retry(
+                    urllib.error.HTTPError("u", code, "m", {}, None)))
+
+    def test_client_errors_are_not_retried(self):
+        # An unserved model 404s identically forever; retrying only delays the
+        # run reporting the real cause.
+        for code in (400, 401, 404):
+            with self.subTest(code=code):
+                self.assertFalse(rte.should_retry(
+                    urllib.error.HTTPError("u", code, "m", {}, None)))
+
+    def test_call_model_gives_up_after_the_attempt_budget(self):
+        slept = []
+        with unittest.mock.patch.object(
+                rte.urllib.request, "urlopen",
+                side_effect=urllib.error.URLError("refused")), \
+             unittest.mock.patch.object(rte, "wormhole_token", return_value="t"):
+            with self.assertRaises(urllib.error.URLError):
+                rte.call_model("m", [{"role": "user", "content": "x"}],
+                               attempts=3, sleep=slept.append)
+        self.assertEqual(len(slept), 2)          # retries between 3 attempts
+        self.assertLess(slept[0], slept[1])      # backoff grows
+
+    def test_call_model_does_not_retry_a_404(self):
+        slept = []
+        with unittest.mock.patch.object(
+                rte.urllib.request, "urlopen",
+                side_effect=urllib.error.HTTPError("u", 404, "m", {}, None)), \
+             unittest.mock.patch.object(rte, "wormhole_token", return_value="t"):
+            with self.assertRaises(urllib.error.HTTPError):
+                rte.call_model("m", [{"role": "user", "content": "x"}],
+                               attempts=4, sleep=slept.append)
+        self.assertEqual(slept, [])
 
 
 if __name__ == "__main__":
