@@ -61,7 +61,7 @@ func TestBudgetTruncatedSnapshotIsNotFrozen(t *testing.T) {
 		t.Fatal("probe block carries no evidence rows")
 	}
 	// truncated=true is what Build now reports for a budget cut.
-	if ShouldFreeze(true, true, block) {
+	if shouldFreeze(true, true, block) {
 		t.Error("a budget-truncated snapshot was accepted for freezing")
 	}
 	// A complete snapshot still freezes — the guard must not swallow the good case.
@@ -69,7 +69,7 @@ func TestBudgetTruncatedSnapshotIsNotFrozen(t *testing.T) {
 	if dropped != 0 {
 		t.Fatalf("control set truncated unexpectedly: %d", dropped)
 	}
-	if !ShouldFreeze(true, false, full) {
+	if !shouldFreeze(true, false, full) {
 		t.Error("a complete snapshot was refused for freezing")
 	}
 }

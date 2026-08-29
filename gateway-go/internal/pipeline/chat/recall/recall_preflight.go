@@ -173,9 +173,10 @@ var recallStopWords = map[string]struct{}{
 
 var recallFenceTagPattern = regexp.MustCompile(`(?i)</?\s*recall-context\b[^>]*>`)
 
-// Build gathers and formats recall evidence for one turn. The second return
-// reports whether the shared deadline cut at least one source short: the
-// snapshot is usable now but must not be frozen (see ShouldFreeze).
+// Build gathers and formats uncached recall evidence for one turn. The second
+// return reports whether the shared deadline cut at least one source short:
+// the snapshot is usable now but must not be frozen (see shouldFreeze). Parent
+// chat orchestration should use BuildSnapshot so cache policy stays here.
 func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (out string, truncated bool) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -314,7 +315,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 					"session", params.SessionKey, "sources", collection.sourceSummary, "truncated", truncated)
 			}
 			if !deps.Briefcase {
-				StoreInjectedPaths(params.SessionKey, nil)
+				storeInjectedPaths(params.SessionKey, nil)
 			}
 			return currentFacts, truncated
 		}
@@ -325,7 +326,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 		// A turn that injected nothing must clear the citation candidates, or a
 		// previous turn's paths would be mis-attributed to this turn's answer.
 		if !deps.Briefcase {
-			StoreInjectedPaths(params.SessionKey, nil)
+			storeInjectedPaths(params.SessionKey, nil)
 		}
 		// Explicit recall tells the user nothing was found; silent auto-recall on a
 		// non-cue turn stays invisible so every-turn search adds no noise.
@@ -347,7 +348,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	if budgetDropped > 0 {
 		// The character budget cut rows the ranking chose. That is the same
 		// class of degradation as a deadline cut, so it must reach `truncated`
-		// too — otherwise ShouldFreeze pins a partial snapshot onto every later
+		// too — otherwise shouldFreeze pins a partial snapshot onto every later
 		// turn about this topic (first-write-wins, no expiry).
 		truncated = true
 	}
@@ -364,7 +365,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	// Best-effort telemetry — a ledger write must never affect the turn.
 	injected := recordRecallUtility(deps.Wiki, evidence, params.SessionKey, cue, logger)
 	if !deps.Briefcase {
-		StoreInjectedPaths(params.SessionKey, injected)
+		storeInjectedPaths(params.SessionKey, injected)
 	}
 	// Routing hint for query shapes page search cannot answer (aggregate/
 	// temporal/graph — recall_route.go): the wiki evidence above usually EXISTS

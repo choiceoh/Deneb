@@ -159,34 +159,7 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, se
 	if _, _, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
 		return ""
 	}
-	fingerprint := chatrecall.CueFingerprint(params.Message)
-	hasCue := fingerprint != ""
-	// A rewritten elliptical turn depends on the immediately preceding user
-	// message. The raw cue alone is not a safe cache key: repeating "그거 뭐였지?"
-	// after Alpha then Beta must not reuse Alpha's fact snapshot in Beta context.
-	cacheableCue := hasCue && !chatrecall.NeedsContextRewrite(params.Message)
-	var recallCacheGeneration uint64
-	// Hermes-style auto_recall: run the preflight every turn, not just cue turns.
-	// recall.Build searches wiki/diary/polaris/transcript and returns
-	// "" silently when there's no evidence, so non-cue turns add latency but no noise.
-	if hasCue && !deps.briefcaseMode {
-		if cacheableCue {
-			cached, ok, generation := chatrecall.CachedSnapshotWithGeneration(params.SessionKey, fingerprint)
-			recallCacheGeneration = generation
-			if ok {
-				// A snapshot-served turn still shows the model the pinned wiki
-				// evidence: re-arm the citation pass so later turns of a frozen
-				// conversation can earn cite events (recall_injected.go).
-				chatrecall.ArmSnapshotCitations(params.SessionKey, cached)
-				return cached
-			}
-		}
-		// Explicit recall: surface the recalling phase so the user sees the
-		// wiki/diary/transcript search. Silent auto-recall on no-cue turns
-		// stays invisible.
-		emitPhase(deps, params, "recalling", time.Now())
-	}
-	recallMemory, recallTruncated := chatrecall.Build(
+	return chatrecall.BuildSnapshot(
 		ctx,
 		chatrecall.Params{
 			SessionKey:    params.SessionKey,
@@ -219,12 +192,17 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, se
 			// hold; either one alone would drop the only copy the model gets.
 			SelfFactsInSystemPrompt: !deps.briefcaseMode && promptSnapshots.factDerivedContextAllowed(),
 		},
+		chatrecall.SnapshotOptions{
+			OnExplicitRecall: func(at time.Time) {
+				// Explicit recall: surface the recalling phase so the user sees
+				// the wiki/diary/transcript search. Silent auto-recall on no-cue
+				// turns stays invisible. Recall owns the cache decision; chat owns
+				// the user-visible phase.
+				emitPhase(deps, params, "recalling", at)
+			},
+		},
 		logger,
 	)
-	if !deps.briefcaseMode && cacheableCue && chatrecall.ShouldFreeze(hasCue, recallTruncated, recallMemory) {
-		chatrecall.StoreSnapshotIfGeneration(params.SessionKey, fingerprint, recallMemory, recallCacheGeneration)
-	}
-	return recallMemory
 }
 
 // loadTurnContextMessages assembles the transcript-backed message history for

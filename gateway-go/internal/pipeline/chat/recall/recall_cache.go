@@ -10,7 +10,7 @@
 // Cache key: (sessionKey, cueFingerprint).
 //
 //   - cueFingerprint is derived from the recall cue + sorted signal terms of
-//     the user message (see CueFingerprint). Two turns asking about the
+//     the user message (see cueFingerprint). Two turns asking about the
 //     same topic share a slot; two turns asking about different topics get
 //     independent slots. This kills the "first turn's recall freezes the
 //     entire session" failure mode where a turn-1 recall about topic A would
@@ -50,18 +50,18 @@ var recallSnapshotStore = struct {
 	generation uint64
 }{store: make(map[recallSnapshotKey]string)}
 
-// CachedSnapshot returns the frozen recall snapshot for (sessionKey,
+// cachedSnapshot returns the frozen recall snapshot for (sessionKey,
 // fingerprint) if one has been recorded, plus a hit/miss flag.
-func CachedSnapshot(sessionKey, fingerprint string) (string, bool) {
-	value, ok, _ := CachedSnapshotWithGeneration(sessionKey, fingerprint)
+func cachedSnapshot(sessionKey, fingerprint string) (string, bool) {
+	value, ok, _ := cachedSnapshotWithGeneration(sessionKey, fingerprint)
 	return value, ok
 }
 
-// CachedSnapshotWithGeneration returns the cache value and the invalidation
+// cachedSnapshotWithGeneration returns the cache value and the invalidation
 // generation observed atomically with that lookup. A caller that computes a
-// miss must pass the generation to StoreSnapshotIfGeneration so a concurrent
+// miss must pass the generation to storeSnapshotIfGeneration so a concurrent
 // fact correction cannot be followed by a stale in-flight refill.
-func CachedSnapshotWithGeneration(sessionKey, fingerprint string) (string, bool, uint64) {
+func cachedSnapshotWithGeneration(sessionKey, fingerprint string) (string, bool, uint64) {
 	if sessionKey == "" {
 		return "", false, 0
 	}
@@ -71,9 +71,9 @@ func CachedSnapshotWithGeneration(sessionKey, fingerprint string) (string, bool,
 	return v, ok, recallSnapshotStore.generation
 }
 
-// StoreSnapshot records value as the snapshot for (sessionKey,
+// storeSnapshot records value as the snapshot for (sessionKey,
 // fingerprint). First-write-wins per slot. Empty session or value is a no-op.
-func StoreSnapshot(sessionKey, fingerprint, value string) {
+func storeSnapshot(sessionKey, fingerprint, value string) {
 	if sessionKey == "" || value == "" {
 		return
 	}
@@ -86,10 +86,10 @@ func StoreSnapshot(sessionKey, fingerprint, value string) {
 	recallSnapshotStore.store[key] = value
 }
 
-// StoreSnapshotIfGeneration records a computed snapshot only when no global
+// storeSnapshotIfGeneration records a computed snapshot only when no global
 // invalidation happened after its cache miss. It returns whether the snapshot
 // was accepted (an existing first-write-wins value also returns false).
-func StoreSnapshotIfGeneration(sessionKey, fingerprint, value string, generation uint64) bool {
+func storeSnapshotIfGeneration(sessionKey, fingerprint, value string, generation uint64) bool {
 	if sessionKey == "" || value == "" {
 		return false
 	}
@@ -132,13 +132,13 @@ func ClearAll() {
 	recallSnapshotStore.store = make(map[recallSnapshotKey]string)
 }
 
-// ShouldFreeze decides whether a preflight result may be stored
+// shouldFreeze decides whether a preflight result may be stored
 // as the frozen snapshot for its (session, cue-fingerprint) slot. Snapshots
 // whose collection was cut by the preflight deadline stay turn-local: the
 // store is first-write-wins with no expiry, so freezing a degraded snapshot
 // would pin its gaps onto every later turn about the same topic instead of
 // letting the next turn retry the slow sources.
-func ShouldFreeze(hasCue, truncated bool, snapshot string) bool {
+func shouldFreeze(hasCue, truncated bool, snapshot string) bool {
 	return hasCue && !truncated && hasEvidence(snapshot)
 }
 
@@ -154,7 +154,7 @@ func hasEvidence(s string) bool {
 	return !strings.Contains(s, "source=none")
 }
 
-// CueFingerprint returns a stable identifier for the user's current
+// cueFingerprint returns a stable identifier for the user's current
 // recall intent based on the message's cue + signal terms.
 //
 //   - Empty string when the message has no recall cue — caller skips the
@@ -166,7 +166,7 @@ func hasEvidence(s string) bool {
 //
 // Two messages on the same topic produce the same fingerprint and share a
 // cache slot; different topics get different fingerprints.
-func CueFingerprint(message string) string {
+func cueFingerprint(message string) string {
 	if !hasCue(message) {
 		return ""
 	}
