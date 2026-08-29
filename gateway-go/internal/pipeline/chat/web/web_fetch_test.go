@@ -346,7 +346,7 @@ func TestClassifyFetchError_Hints(t *testing.T) {
 		{"SSRF", &media.MediaFetchError{Code: media.ErrFetchFailed, Message: "SSRF: blocked"}, "public URL"},
 		{"DNS", &media.MediaFetchError{Code: media.ErrFetchFailed, Message: "no such host"}, "typos"},
 		{"timeout", context.DeadlineExceeded, "Retry"},
-		{"content_too_large", &media.MediaFetchError{Code: media.ErrMaxBytes, Message: "too big"}, "maxChars"},
+		{"content_too_large", &media.MediaFetchError{Code: media.ErrMaxBytes, Message: "too big"}, "narrower URL"},
 		{"connection_refused", &media.MediaFetchError{Code: media.ErrFetchFailed, Message: "connection refused"}, "may be down"},
 	}
 	for _, tt := range tests {
@@ -834,5 +834,36 @@ func TestFetchCandidatePoolSize(t *testing.T) {
 	}
 	if got := fetchCandidatePoolSize(10, 4); got != 5 {
 		t.Fatalf("pool capped at 5=%d", got)
+	}
+}
+
+// TestOversizeHintNeverRecommendsMaxChars guards the 2026-08-29 finding: the
+// hint used to say "use maxChars to limit", but maxChars feeds rawFetchBudget,
+// so lowering it SHRINKS the budget the error came from. The model followed the
+// advice down 40000 → 4000 → 2000 → 1000, failing harder each time.
+func TestOversizeHintNeverRecommendsMaxChars(t *testing.T) {
+	hint := classifyFetchError(&media.MediaFetchError{Code: media.ErrMaxBytes, Message: "too big"}, "https://example.com").Hint
+	if strings.Contains(hint, "maxChars") {
+		t.Fatalf("the oversize hint must not send the model back to maxChars: %q", hint)
+	}
+}
+
+// TestRawFetchBudgetIsNotDerivedFromMaxCharsAlone: an article-length page has to
+// fit at the default maxChars. en.wikipedia.org/wiki/Rust_(programming_language)
+// is 1,019,427 bytes and was refused at a 40,000-byte budget.
+func TestRawFetchBudgetIsNotDerivedFromMaxCharsAlone(t *testing.T) {
+	const wikipediaRustBytes = 1_019_427
+	for _, maxChars := range []int{0, 1000, 2000, 20000} {
+		if got := rawFetchBudget(maxChars); got < wikipediaRustBytes {
+			t.Errorf("rawFetchBudget(%d) = %d, too small for an article-length page (%d)", maxChars, got, wikipediaRustBytes)
+		}
+	}
+	// The transport ceiling still holds — a huge maxChars must not uncap it.
+	if got := rawFetchBudget(10_000_000); got != 5*1024*1024 {
+		t.Errorf("rawFetchBudget ceiling = %d, want 5MiB", got)
+	}
+	// Lowering maxChars must never shrink the budget, which was the trap.
+	if rawFetchBudget(1000) > rawFetchBudget(20000) {
+		t.Error("a smaller maxChars must not yield a smaller raw budget")
 	}
 }

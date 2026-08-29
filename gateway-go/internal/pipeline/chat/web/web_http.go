@@ -149,7 +149,11 @@ func classifyFetchError(err error, url string) webFetchErr {
 			return webFetchErr{
 				Code: "content_too_large", Message: mfe.Message,
 				URL: url, Retryable: false,
-				Hint: "Too large. Use maxChars to limit, or fetch a specific section URL",
+				// NOT "use maxChars": maxChars shrinks the raw byte budget this
+				// error comes from, so lowering it makes the next attempt fail
+				// harder — the model walked 40000 → 4000 → 2000 → 1000 on that
+				// advice (2026-08-29). Point at the only moves that work.
+				Hint: "Page is larger than the fetch budget. Fetch a narrower URL (a section/print/mobile view or the underlying API), or search for the specific fact instead of pulling the whole page.",
 			}
 		case media.ErrFetchFailed:
 			code := "fetch_failed"
