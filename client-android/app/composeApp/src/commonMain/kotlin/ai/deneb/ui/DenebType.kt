@@ -86,9 +86,20 @@ object DenebType {
      * its SemiBold weight follows law 3 (a heading structures, so it takes weight), and
      * its tracking sits on the law-2 optical curve between subject (-0.015) and rowTitle
      * (-0.01). No lineHeight — density stays tight (law 4).
+     *
+     * Law 4 holds for styles that render on ONE line (rowTitle/meta/sectionLabel/
+     * button): there, an explicit lineHeight only inflates the box. It does NOT
+     * hold for styles that WRAP. Korean sits taller in its em box than Latin, so
+     * a font's default leading — tuned for Latin — packs Korean lines together:
+     * the SMS draft card (DenebType.snippet) renders two visibly cramped lines
+     * in the dark PNG. Frontier chat apps set 1.50 on everything (claude.ai
+     * 16/24 and 14/21, chatgpt.com 16/24, measured 2026-08-30), and Korean
+     * typography guidance puts the floor at 150–155%. So the four wrapping
+     * styles below carry an explicit ~1.5 lineHeight; the single-line ones
+     * deliberately still do not.
      */
     val cardTitle: TextStyle
-        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.015).em)
+        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 18.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.015).em)
 
     /** Tracked-caps section header — `.section-label` (12px / 600 / +0.08em, uppercased). */
     val sectionLabel: TextStyle
@@ -104,11 +115,11 @@ object DenebType {
 
     /** List-row secondary line — `.email-row-subject` (14px / 300). */
     val rowSubtitle: TextStyle
-        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 14.sp, fontWeight = FontWeight.Light, letterSpacing = (-0.005).em)
+        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 14.sp, lineHeight = 21.sp, fontWeight = FontWeight.Light, letterSpacing = (-0.005).em)
 
     /** Row snippet/preview — `.email-row-snippet` (12px / +0.005em). */
     val snippet: TextStyle
-        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 12.sp, fontWeight = FontWeight.Light, letterSpacing = 0.005.em)
+        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 12.sp, lineHeight = 18.sp, fontWeight = FontWeight.Light, letterSpacing = 0.005.em)
 
     /** Timestamp / meta caption — `.email-row-time` (12px / +0.02em, tabular). */
     val meta: TextStyle
@@ -129,5 +140,5 @@ object DenebType {
 
     /** Hint / muted label — `.tg-hint` (13px / 500 / +0.04em). */
     val hint: TextStyle
-        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 13.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.04.em)
+        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 13.sp, lineHeight = 19.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.04.em)
 }

@@ -798,4 +798,64 @@ class TurnProgressStateMachineTest {
             progress.footprint().orEmpty().split(" · "),
         )
     }
+
+    /**
+     * A slow tool used to freeze its row: the gateway sends started → completed
+     * with nothing in between, so a 49-second call (skill_lifecycle p95,
+     * measured 2026-08-30) left a motionless "…중" and no way to tell work from
+     * a hang. The row now counts, but only once it has run long enough to look
+     * stuck — a number on the median millisecond-long call would be noise.
+     */
+    @Test
+    fun aSlowToolRowStartsCountingSecondsAndAFastOneNeverDoes() = runTest {
+        val rows = history(user())
+        val progress = TurnProgress(rows, this)
+
+        progress.onTool(started())
+        val label = rows.value.last().toolName
+        assertFalse(label.orEmpty().contains("초"), "a just-started row must not show a count: $label")
+
+        advanceTimeBy(3_000)
+        runCurrent()
+        assertFalse(
+            rows.value.last().toolName.orEmpty().contains("초"),
+            "a tool that finishes quickly must never show a count",
+        )
+
+        advanceTimeBy(6_000)
+        runCurrent()
+        val counting = rows.value.last().toolName.orEmpty()
+        assertTrue(counting.contains("초"), "a long-running row should count: $counting")
+
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertNotEquals(counting, rows.value.last().toolName, "the count should keep moving")
+
+        // Completion hands the row to the continuity status ("결과 검토 중…"), so
+        // a row still exists — what must stop is the counting. A ticker that
+        // survived would keep stamping seconds over that status.
+        progress.onTool(completed())
+        advanceTimeBy(10_000)
+        runCurrent()
+        val labels = rows.value.progressRows().mapNotNull { it.toolName }
+        assertTrue(
+            labels.none { it.contains("초") },
+            "no row may keep counting after the tool completed: $labels",
+        )
+    }
+
+    /** clear() runs in ask()'s finally — a cancelled stream must not leave a ticker running. */
+    @Test
+    fun clearStopsAnyRunningElapsedTicker() = runTest {
+        val rows = history(user())
+        val progress = TurnProgress(rows, this)
+
+        progress.onTool(started())
+        advanceTimeBy(9_000)
+        runCurrent()
+        progress.clear()
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertTrue(rows.value.progressRows().isEmpty(), "clear() must leave no progress rows behind")
+    }
 }

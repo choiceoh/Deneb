@@ -11,6 +11,7 @@ import ai.deneb.ui.chat.composables.DenebSessionDrawerSheet
 import ai.deneb.ui.chat.composables.ErrorMessage
 import ai.deneb.ui.chat.composables.HeartbeatBanner
 import ai.deneb.ui.chat.composables.PendingSmsBanners
+import ai.deneb.ui.chat.composables.QuestionInput
 import ai.deneb.ui.chat.composables.ServiceSelector
 import ai.deneb.ui.chat.composables.WorkReportBanner
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.ic_service_anthropic
@@ -197,3 +199,55 @@ internal fun chatStatesBody(scheme: ColorScheme) {
  * uncovered. previewChatActions() above stays, ready for the day the list gets a
  * testable seam.
  */
+
+/**
+ * The chat composer — idle, with text, and mid-stream.
+ *
+ * It had no fixture at all until 2026-08-30, which made the app's single most
+ * used control the one thing PNG review could not see. `QuestionInput` takes
+ * only plain parameters, so nothing structural was in the way; it was simply
+ * missing, and a frontier-design comparison that wanted to judge the input's
+ * surface treatment had nothing to look at.
+ */
+@Composable
+internal fun chatInputBody(scheme: ColorScheme) {
+    MaterialTheme(colorScheme = scheme) {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.width(412.dp)) {
+                DenebSectionLabel("입력 — 비어 있음", Modifier.padding(start = 24.dp, top = 16.dp))
+                QuestionInput(
+                    files = persistentListOf(),
+                    addFile = {},
+                    removeFile = {},
+                    ask = {},
+                    supportedFileExtensions = persistentListOf("pdf", "png"),
+                    textState = TextFieldValue(""),
+                    onTextStateChange = {},
+                )
+
+                DenebSectionLabel("입력 — 긴 한국어", Modifier.padding(start = 24.dp, top = 24.dp))
+                QuestionInput(
+                    files = persistentListOf(),
+                    addFile = {},
+                    removeFile = {},
+                    ask = {},
+                    supportedFileExtensions = persistentListOf("pdf", "png"),
+                    textState = TextFieldValue("곡성공장 현장 미팅 자료랑 자재 반입 일정 정리해서 내일 오전까지 보내줘"),
+                    onTextStateChange = {},
+                )
+
+                DenebSectionLabel("입력 — 응답 중", Modifier.padding(start = 24.dp, top = 24.dp))
+                QuestionInput(
+                    files = persistentListOf(),
+                    addFile = {},
+                    removeFile = {},
+                    ask = {},
+                    supportedFileExtensions = persistentListOf("pdf", "png"),
+                    textState = TextFieldValue(""),
+                    onTextStateChange = {},
+                    isLoading = true,
+                )
+            }
+        }
+    }
+}

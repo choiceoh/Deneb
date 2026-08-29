@@ -221,6 +221,8 @@ fun main() {
     renderScreen("mail_light.png", "mail", LightColorScheme, 840, 1100)
     renderScreen("chat_states_dark.png", "chat_states", DarkColorScheme, 824, 2300)
     renderScreen("chat_states_light.png", "chat_states", LightColorScheme, 824, 2300)
+    renderScreen("chat_input_dark.png", "chat_input", DarkColorScheme, 824, 900)
+    renderScreen("chat_input_light.png", "chat_input", LightColorScheme, 824, 900)
     renderScreen("session_drawer_dark.png", "session_drawer", DarkColorScheme, 720, 1440)
     renderScreen("session_drawer_search_dark.png", "session_drawer_search", DarkColorScheme, 720, 1440)
     renderScreen("session_drawer_actions_dark.png", "session_drawer_actions", DarkColorScheme, 720, 1440)
