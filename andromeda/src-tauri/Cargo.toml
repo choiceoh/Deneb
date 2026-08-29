@@ -32,7 +32,7 @@ tauri-plugin-global-shortcut = "2"
 # encode/downscale. image is png-only to keep the build lean.
 enigo = "0.6"
 image = { version = "0.25", default-features = false, features = ["png"] }
-base64 = "0.22"
+base64 = "0.23"
 
 # X11 screen capture (GetImage) — enigo links x11rb already; declared so the
 # capture path can use it directly. Wayland falls back to CLI tools at runtime.
