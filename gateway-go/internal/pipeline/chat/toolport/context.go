@@ -29,7 +29,29 @@ const (
 	ctxKeyToolDryRun
 	ctxKeyBlackboard
 	ctxKeyTurnQuery
+	ctxKeyWorkspaceDir
 )
+
+// WithWorkspaceDir pins the directory a run's tools work in, overriding the
+// one they were registered with. Tools are registered ONCE at handler
+// construction (chat_pipeline.go), so without this a per-request workspace
+// could steer the prompt's context files but never the commands — exec kept
+// running in the server-wide workspace no matter what the request asked for.
+//
+// Set only when a request names a workspace explicitly: the prompt path and the
+// tool-registration path resolve their defaults through different helpers
+// (leafbind vs configresolve), so defaulting here could silently move where
+// commands run.
+func WithWorkspaceDir(ctx context.Context, dir string) context.Context {
+	return context.WithValue(ctx, ctxKeyWorkspaceDir, dir)
+}
+
+// WorkspaceDirFromContext returns the run-scoped workspace, or "" when the run
+// did not name one (the caller then keeps its registered default).
+func WorkspaceDirFromContext(ctx context.Context) string {
+	dir, _ := ctx.Value(ctxKeyWorkspaceDir).(string)
+	return dir
+}
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
 func WithDeliveryContext(ctx context.Context, d *DeliveryContext) context.Context {
