@@ -16,7 +16,7 @@
        rsi-bench rsi-bench-check rsi-bench-deep rsi-bench-test rsi-bench-baseline \
        bench-check bench-refresh \
        runtime-health runtime-health-test python-test python-lint shell-lint shell-behavior-test doc-ref-lint state-register \
-       preview native-smoke \
+       preview render-golden-check render-golden-update native-smoke \
        info
 
 # Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
@@ -630,6 +630,18 @@ preview:
 	cd $(KOTLIN_APP_DIR) && ./gradlew :composeApp:renderPreviews --console=plain
 	@echo "Previews rendered to /tmp/deneb-render/*.png"
 
+# Pixel regression gate over those previews. `preview` draws them; this compares
+# them to the committed goldens, because drawing 117 PNGs nobody diffs cannot
+# catch a two-pixel shift. Failures write golden|fresh|amplified strips to
+# /tmp/deneb-render-diff so the change can be judged, not guessed at.
+render-golden-check:
+	python3 scripts/dev/render-golden.py check
+
+# Accept the current render as the new baseline. The resulting PNG diff is the
+# review artifact: an intended visual change shows up in the PR as before/after.
+render-golden-update:
+	python3 scripts/dev/render-golden.py update
+
 # Boot the live desktop app and walk the key screens (OCR anchors + screenshots),
 # flagging render-time crashes that compile + unit tests miss (e.g. #1959's
 # LazyColumn duplicate-key crash). READ-ONLY against the gateway. Needs the live
@@ -663,6 +675,8 @@ info:
 	@echo ""
 	@echo "  Verification & live testing:"
 	@echo "  make preview      - Render Compose previews to PNG (/tmp/deneb-render, headless)"
+	@echo "  make render-golden-check  - Diff those previews against committed goldens"
+	@echo "  make render-golden-update - Accept the current render as the new goldens"
 	@echo "  make native-smoke - Live-app OCR smoke walk (Xvfb + gateway; pre-release gate)"
 	@echo "  scripts/dev/native-app.sh - Drive the live desktop app (start/shot/tap/type/stop)"
 	@echo "  scripts/dev/live-test.sh  - Gateway live test (restart/smoke/chat/logs-errors)"
