@@ -347,22 +347,23 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
   // GitHub's verdict on this conversation's branch. Polled rather than pushed:
   // check state moves on GitHub's clock, not ours. The gateway caches for a
   // minute, so this costs about one API call per open conversation per minute.
-  const [pr, setPr] = useState<SessionPR | null>(null);
+  // Keyed by the conversation it describes, so switching threads cannot show
+  // the previous thread's badge while the new fetch is in flight — and so the
+  // effect never has to setState synchronously just to clear it.
+  const [prFor, setPrFor] = useState<{ key: string; value: SessionPR } | null>(null);
+  const pr = prFor && prFor.key === sessionKey ? prFor.value : null;
   useEffect(() => {
-    if (!connected || !sessionKey) {
-      setPr(null);
-      return;
-    }
+    if (!connected || !sessionKey) return;
     let cancelled = false;
     const read = () => {
       void getSessionPR(cfg, sessionKey)
         .then((r) => {
-          if (!cancelled) setPr(r);
+          if (!cancelled) setPrFor({ key: sessionKey, value: r });
         })
         .catch(() => {
           // An older gateway has no such method — show nothing rather than a
           // permanent "확인 불가", which would read as a real GitHub problem.
-          if (!cancelled) setPr(null);
+          if (!cancelled) setPrFor(null);
         });
     };
     read();
