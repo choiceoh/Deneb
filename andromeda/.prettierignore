@@ -8,6 +8,11 @@ public/mockServiceWorker.js
 # Generated from the gateway's //deneb:wire structs (pnpm gen:wire) — DO NOT EDIT.
 src/gen
 
+# Tauri's generated ACL/capability schemas (written by `cargo build`, gitignored).
+# Not source, and format:check failed for anyone who built the Rust shell before
+# running the lane gate locally.
+src-tauri/gen
+
 # Ephemeral git worktrees from Claude Code sessions — not source to format.
 .claude
 
