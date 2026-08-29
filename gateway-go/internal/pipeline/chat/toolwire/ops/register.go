@@ -85,7 +85,7 @@ func RegisterRuntimeOpsTools(registry toolport.ToolRegistrar, set RuntimeOpsTool
 	})
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "observe",
-		Description: "Self-diagnosis: why a turn was slow/failed, tool-usage stats, improvement-loop health. Observe your OWN runtime via the in-process observation plane: action=turn (runId → a past run's tokens/tools/cache + its captured logs), action=logs (recent log ring; filter by runId/session/level/contains), action=behavior (cross-session tool usage / proactive funnel / background-job health over N days, plus the local vLLM engine's prefix-cache hit rate), action=effort (adaptive effort-router scorecard: routed-off vs kept-on, escalation rate, savings), action=proactive (proactive-card engagement: FTR / over-intervention rate by source), action=health (self-improvement machinery digest: loop liveness, skill-decision mix, dreamer backlog, no-op frontier, silent-failure counts — same data as the loopback /api/observatory, read mid-reasoning).",
+		Description: "자기진단·상태 관찰·모니터링 — \"왜 느렸어\"·\"게이트웨이 상태 봐줘\"·\"도구 사용 통계\"·\"개선 루프 건강\". Self-diagnosis: why a turn was slow/failed, tool-usage stats, improvement-loop health. Observe your OWN runtime via the in-process observation plane: action=turn (runId → a past run's tokens/tools/cache + its captured logs), action=logs (recent log ring; filter by runId/session/level/contains), action=behavior (cross-session tool usage / proactive funnel / background-job health over N days, plus the local vLLM engine's prefix-cache hit rate), action=effort (adaptive effort-router scorecard: routed-off vs kept-on, escalation rate, savings), action=proactive (proactive-card engagement: FTR / over-intervention rate by source), action=health (self-improvement machinery digest: loop liveness, skill-decision mix, dreamer backlog, no-op frontier, silent-failure counts — same data as the loopback /api/observatory, read mid-reasoning).",
 		InputSchema: schema.ObserveToolSchema(),
 		Fn:          set.Observe,
 		Deferred:    true,
@@ -111,7 +111,7 @@ func RegisterRuntimeOpsTools(registry toolport.ToolRegistrar, set RuntimeOpsTool
 	// powerful; fetch_tools when a turn needs interactive web control.
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "browser",
-		Description: "사용자 PC의 실제 Chrome 브라우저를 자연어로 조작한다 (Page Agent 브리지). " +
+		Description: "사용자 PC의 실제 크롬(Chrome) 브라우저를 자연어로 조작한다 (Page Agent 브리지) — \"크롬으로 열어봐\"·\"로그인해서 봐줘\"·\"브라우저로 클릭해\". " +
 			"로그인된 SaaS·SPA처럼 `web`(HTTP fetch)으로 못 읽는 화면을 클릭·입력·스크롤한다. " +
 			"action=status (허브 연결/작업 중 여부) · execute (task=자연어 지시, 블로킹) · stop (진행 중 작업 중단). " +
 			"\"이 사이트에서 …해줘\" · \"로그인한 페이지에서 폼 채워\" 류에 사용. DENEB_BROWSER_URL 미설정 시 연동 꺼짐.",

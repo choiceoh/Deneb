@@ -120,6 +120,11 @@ func (f *fakeFetchRegistry) DeferredCatalogRevision() uint64 {
 	return f.revision
 }
 
+func (f *fakeFetchRegistry) HasTool(name string) bool {
+	_, ok := f.defs[name]
+	return ok
+}
+
 func (f *fakeFetchRegistry) registerForTest(def toolport.ToolDef) {
 	f.defs[def.Name] = def
 	f.revision++
@@ -634,5 +639,72 @@ func TestFetchTools_PresetRejectsDisallowedQueryResults(t *testing.T) {
 	}
 	if !strings.Contains(out, "No deferred tools match") {
 		t.Fatalf("expected disallowed tool hidden from query results, got: %s", out)
+	}
+}
+
+// TestFetchTools_EagerToolIsReportedAsAlreadyOnWire covers the audit finding
+// that motivated HasTool: an eager tool used to come back as "not found or not
+// a deferred tool", which reads as "no such tool" and talks the model out of a
+// surface it already holds. Across the transcript history the model fetched
+// mail_archive 30 times, watch 15, write 3 and edit 2 — all eager throughout.
+func TestFetchTools_EagerToolIsReportedAsAlreadyOnWire(t *testing.T) {
+	reg := &fakeFetchRegistry{defs: map[string]toolport.ToolDef{
+		"mail_archive": {Name: "mail_archive", Description: "Read mail"}, // eager
+		"cron":         {Name: "cron", Description: "Schedule jobs", Deferred: true},
+	}}
+	activation := toolport.NewDeferredActivation()
+	ctx := toolport.WithDeferredActivation(context.Background(), activation)
+
+	out, err := ToolFetchTools(reg)(ctx, mustJSON(t, map[string]any{"names": []string{"mail_archive"}}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "already in your tools array") {
+		t.Fatalf("want an already-on-wire line, got: %q", out)
+	}
+	if strings.Contains(out, "not found") {
+		t.Fatalf("an eager tool must not be reported as missing, got: %q", out)
+	}
+	if got := activation.ActivatedNames(); len(got) != 0 {
+		t.Fatalf("nothing to activate for an eager tool, got %v", got)
+	}
+}
+
+// TestFetchTools_UnknownNameSuggestsNearestTools keeps a hallucinated tool name
+// from costing a turn: the model asked for autoresearch and analyze in the
+// transcript history, neither of which has ever existed.
+func TestFetchTools_UnknownNameSuggestsNearestTools(t *testing.T) {
+	reg := &fakeFetchRegistry{defs: map[string]toolport.ToolDef{
+		"research_panel": {Name: "research_panel", Description: "research panel for deep questions", Deferred: true},
+		"cron":           {Name: "cron", Description: "schedule jobs", Deferred: true},
+	}}
+	ctx := toolport.WithDeferredActivation(context.Background(), toolport.NewDeferredActivation())
+
+	out, err := ToolFetchTools(reg)(ctx, mustJSON(t, map[string]any{"names": []string{"research"}}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "not found") {
+		t.Fatalf("want the not-found line, got: %q", out)
+	}
+	if !strings.Contains(out, "closest available: research_panel") {
+		t.Fatalf("want a research_panel suggestion, got: %q", out)
+	}
+}
+
+// TestFetchTools_UnknownNameWithNoNearMatchStaysQuiet: a suggestion is a hint,
+// not an obligation — an unmatchable name must not invent one.
+func TestFetchTools_UnknownNameWithNoNearMatchStaysQuiet(t *testing.T) {
+	reg := &fakeFetchRegistry{defs: map[string]toolport.ToolDef{
+		"cron": {Name: "cron", Description: "schedule jobs", Deferred: true},
+	}}
+	ctx := toolport.WithDeferredActivation(context.Background(), toolport.NewDeferredActivation())
+
+	out, err := ToolFetchTools(reg)(ctx, mustJSON(t, map[string]any{"names": []string{"zzzznope"}}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(out, "closest available") {
+		t.Fatalf("no near match should mean no hint, got: %q", out)
 	}
 }

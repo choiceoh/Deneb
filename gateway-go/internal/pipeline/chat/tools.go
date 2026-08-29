@@ -853,6 +853,15 @@ func (r *ToolRegistry) DeferredCatalogRevision() uint64 {
 	return r.catalogRev
 }
 
+// HasTool reports whether a name is registered, deferred or eager. fetch_tools
+// uses it to tell "already on the wire" apart from "no such tool".
+func (r *ToolRegistry) HasTool(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.tools[name]
+	return ok
+}
+
 // DeferredToolDef returns the ToolDef for a deferred tool, or false if not found/not deferred.
 func (r *ToolRegistry) DeferredToolDef(name string) (ToolDef, bool) {
 	r.mu.RLock()

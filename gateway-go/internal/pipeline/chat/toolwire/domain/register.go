@@ -98,7 +98,7 @@ func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiD
 		// not be reachable from untrusted-content turns. Deferred: rare + destructive.
 		registry.RegisterTool(toolport.ToolDef{
 			Name: "wiki_forget",
-			Description: "위키 페이지를 영구 삭제(잊기) — 오정보·프라이버시로 사실을 지운다. path=페이지 경로, reason=사유(감사 로그 기록). " +
+			Description: "위키 페이지를 영구 삭제 — \"잊어버려\"·\"잊어줘\"·\"그 페이지 지워줘\". 오정보·프라이버시로 사실을 지운다. path=페이지 경로, reason=사유(감사 로그 기록). " +
 				"close(아카이브)·supersedes(소프트 강등)와 달리 실제 제거해 검색·회상에서 사라진다. 파괴적이므로 먼저 wiki search로 정확한 경로를 확인하라. " +
 				"거래 원장 페이지(프로젝트/거래/…)는 재무 감사 기록이라 거부된다.",
 			InputSchema: schema.WikiForgetToolSchema(),
@@ -117,7 +117,7 @@ func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiD
 func RegisterPersonaTools(registry toolport.ToolRegistrar, workspaceDir string) {
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "preference",
-		Description: "사용자의 서 있는 선호·행동 규칙을 SOUL.md(페르소나)에 영구 저장한다 (append-only). " +
+		Description: "사용자의 서 있는 선호·행동 규칙을 SOUL.md(페르소나)에 영구 저장한다 (append-only) — \"앞으로 이렇게 해줘\"·\"계속 지켜\"·\"기억해서 항상\"·\"다음부터는\". " +
 			"사용자가 '앞으로는 …해줘/…하지 마'처럼 지속 적용될 행동 방침을 말하면 이걸로 rule 한 줄을 남긴다. " +
 			"추가만 가능하고 삭제·수정은 사용자만 SOUL.md 편집으로 할 수 있다 — 에이전트가 자기 규칙을 지우지 못하게 하는 의도적 비대칭. " +
 			"반영은 다음 세션부터. 일회성 사실은 wiki, 사용자 개인정보는 wiki 사용자 카테고리를 쓰고, 이건 '어떻게 행동할지'에만 쓴다.",
@@ -142,7 +142,7 @@ func RegisterNotebookTool(registry toolport.ToolRegistrar, deps *tooldeps.Notebo
 	// it. Description front-loads the WHEN so the 80-rune deferred summary is useful.
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "notebook",
-		Description: "딜/프로젝트 자료(메일·문서·메모)를 한데 모아 그 자료만으로 출처 추적 가능한 인용 브리핑을 만들 때 쓰는 NotebookLM식 노트북. action=create (노트북 생성) | list (목록) | show (자료 보기) | add_source (자료 핀: kind=wiki 위키페이지 또는 kind=note 붙여넣기 텍스트) | remove_source (자료 제거) | delete (노트북 삭제) | brief (핀된 자료에만 근거해 [S1] 형식 인용 브리핑 생성).",
+		Description: "노트북 — \"이 자료들로 노트북 만들어줘\"·\"이 문서들만 근거로 브리핑\". 딜/프로젝트 자료(메일·문서·메모)를 한데 모아 그 자료만으로 출처 추적 가능한 인용 브리핑을 만드는 NotebookLM식 묶음. action=create (노트북 생성) | list (목록) | show (자료 보기) | add_source (자료 핀: kind=wiki 위키페이지 또는 kind=note 붙여넣기 텍스트) | remove_source (자료 제거) | delete (노트북 삭제) | brief (핀된 자료에만 근거해 [S1] 형식 인용 브리핑 생성).",
 		InputSchema: schema.NotebookToolSchema(),
 		Fn:          notebooktool.ToolNotebook(deps),
 		Deferred:    true,

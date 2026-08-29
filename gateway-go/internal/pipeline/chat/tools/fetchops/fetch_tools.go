@@ -25,6 +25,10 @@ import (
 type FetchToolsRegistry interface {
 	DeferredToolDef(name string) (toolport.ToolDef, bool)
 	DeferredSummaries() []toolport.DeferredToolSummary
+	// HasTool reports whether the name is registered at all, deferred or not.
+	// Without it a fetch for an eager tool is indistinguishable from a fetch
+	// for a tool that does not exist — see resolveFetchTool.
+	HasTool(name string) bool
 }
 
 type fetchToolsCatalogRevisioner interface {
@@ -74,7 +78,9 @@ func runFetchTools(ctx context.Context, input json.RawMessage, registry FetchToo
 	}
 
 	activation := toolport.DeferredActivationFromContext(ctx)
-	report, err := buildFetchToolsReport(ctx, names, registry, access, activation)
+	report, err := buildFetchToolsReport(ctx, names, registry, access, activation, func(name string) []string {
+		return suggestFetchToolNames(ctx, name, catalog, access, semantic, reranker)
+	})
 	if err != nil {
 		return "", err
 	}
@@ -316,11 +322,16 @@ func appendSubstringMatches(names []string, query string, docs []searchDoc) []st
 	return names
 }
 
+// fetchToolSuggestionLimit bounds the "closest available" hint on an unknown
+// name. Three is enough to redirect and short enough to stay one line.
+const fetchToolSuggestionLimit = 3
+
 type fetchToolDecision uint8
 
 const (
 	fetchToolUnavailable fetchToolDecision = iota
 	fetchToolNotFound
+	fetchToolAlreadyOnWire
 	fetchToolAlreadyActive
 	fetchToolActivate
 )
@@ -342,6 +353,13 @@ func resolveFetchTool(
 	}
 	def, ok := registry.DeferredToolDef(name)
 	if !ok {
+		// An eager tool is already in the tools array. Reporting it as "not
+		// found" reads as "no such tool" and talks the model out of a surface it
+		// already holds — measured across the transcript history: mail_archive
+		// was fetched 30 times, watch 15, write 3, edit 2, all eager throughout.
+		if registry.HasTool(name) {
+			return fetchToolResolution{name: name, decision: fetchToolAlreadyOnWire}
+		}
 		return fetchToolResolution{name: name, decision: fetchToolNotFound}
 	}
 	// The active snapshot only advances between turns. A same-turn duplicate
@@ -356,6 +374,12 @@ type fetchToolsReport struct {
 	output        strings.Builder
 	activated     []string
 	alreadyActive []string
+	// suggest offers the closest catalog entries for a name that matches no
+	// registered tool. The model invents tool names it wishes existed
+	// (autoresearch, analyze in the transcript history); a dead end there costs
+	// a turn, a near match costs none. Injected so the report stays free of the
+	// search stack; nil simply omits the hint.
+	suggest func(string) []string
 	// inlineSchemas writes each activated tool's full JSON schema into the tool
 	// RESULT text. That is only useful when the tools array cannot be changed
 	// mid-turn (no DeferredActivation in context) — when activation works, the
@@ -372,8 +396,9 @@ func buildFetchToolsReport(
 	registry FetchToolsRegistry,
 	access fetchToolAccess,
 	activation *toolport.DeferredActivation,
+	suggest func(string) []string,
 ) (*fetchToolsReport, error) {
-	report := &fetchToolsReport{inlineSchemas: activation == nil}
+	report := &fetchToolsReport{inlineSchemas: activation == nil, suggest: suggest}
 	for _, name := range names {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -388,7 +413,15 @@ func (r *fetchToolsReport) add(resolution fetchToolResolution) {
 	case fetchToolUnavailable:
 		fmt.Fprintf(&r.output, "- %s: not available under the current tool preset\n", resolution.name)
 	case fetchToolNotFound:
-		fmt.Fprintf(&r.output, "- %s: not found or not a deferred tool\n", resolution.name)
+		fmt.Fprintf(&r.output, "- %s: not found or not a deferred tool", resolution.name)
+		if r.suggest != nil {
+			if hints := r.suggest(resolution.name); len(hints) > 0 {
+				fmt.Fprintf(&r.output, " — closest available: %s", strings.Join(hints, ", "))
+			}
+		}
+		r.output.WriteString("\n")
+	case fetchToolAlreadyOnWire:
+		fmt.Fprintf(&r.output, "- %s: already in your tools array — call it directly, no fetch needed\n", resolution.name)
 	case fetchToolAlreadyActive:
 		r.alreadyActive = append(r.alreadyActive, resolution.name)
 	case fetchToolActivate:
@@ -404,6 +437,23 @@ func (r *fetchToolsReport) writeSchema(def toolport.ToolDef) {
 		fmt.Fprintf(&r.output, "```json\n%s\n```\n", schemaJSON)
 	}
 	r.output.WriteString("\n")
+}
+
+// suggestFetchToolNames runs the ordinary catalog search over an unknown name,
+// dropping the name itself so a partial match cannot suggest what was asked for.
+func suggestFetchToolNames(ctx context.Context, name string, catalog *fetchToolSearchCatalog, access fetchToolAccess, semantic *fetchToolSemanticSearch, reranker FetchToolReranker) []string {
+	hits := selectFetchToolNames(ctx, fetchToolsRequest{Query: name}, catalog, access, semantic, reranker)
+	out := make([]string, 0, fetchToolSuggestionLimit)
+	for _, hit := range hits {
+		if hit == name {
+			continue
+		}
+		out = append(out, hit)
+		if len(out) == fetchToolSuggestionLimit {
+			break
+		}
+	}
+	return out
 }
 
 func (r *fetchToolsReport) finalize(ctx context.Context, activation *toolport.DeferredActivation) (string, error) {
