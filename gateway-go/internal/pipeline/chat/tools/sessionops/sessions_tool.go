@@ -362,7 +362,7 @@ func toolSessionsHistory(transcript toolport.TranscriptStore) toolport.ToolFunc 
 
 // toolSessionsSearch returns a tool function that searches across session transcripts.
 func toolSessionsSearch(transcript toolport.TranscriptStore) toolport.ToolFunc {
-	return func(_ context.Context, input json.RawMessage) (string, error) {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Query      string           `json:"query"`
 			MaxResults artifact.FlexInt `json:"maxResults"`
@@ -402,7 +402,8 @@ func toolSessionsSearch(transcript toolport.TranscriptStore) toolport.ToolFunc {
 			}
 			expanded = len(results) > 0
 		}
-		if len(results) == 0 {
+		semantic := semanticSessionMatches(ctx, transcript, query, results)
+		if len(results) == 0 && len(semantic) == 0 {
 			return fmt.Sprintf("No matches found for %q across session transcripts.", query), nil
 		}
 
@@ -419,7 +420,10 @@ func toolSessionsSearch(transcript toolport.TranscriptStore) toolport.ToolFunc {
 		}
 
 		for _, r := range results {
-			fmt.Fprintf(&sb, "### Session: %s\n", r.SessionKey)
+			// The conversation's date on the header: enumeration-style questions
+			// ("how many X since May") need to FILTER the listed conversations
+			// by time, and match snippets rarely carry it.
+			fmt.Fprintf(&sb, "### Session: %s%s\n", r.SessionKey, sessionMatchDate(r))
 			for _, m := range r.Matches {
 				// Context layout: [before, after] when both exist,
 				// [after] when index==0, [before] when last message.
@@ -446,8 +450,58 @@ func toolSessionsSearch(transcript toolport.TranscriptStore) toolport.ToolFunc {
 				sb.WriteString("\n")
 			}
 		}
+		if len(semantic) > 0 {
+			sb.WriteString("### 의미 일치 대화 (요약 기반 — 키워드가 달라도 같은 주제):\n")
+			for _, h := range semantic {
+				date := ""
+				if h.At > 0 {
+					date = time.UnixMilli(h.At).Format("2006-01-02") + " · "
+				}
+				fmt.Fprintf(&sb, "- %s (%s점수 %.2f): %s\n", h.SessionKey, date, h.Score, h.Snippet)
+			}
+		}
 		return sb.String(), nil
 	}
+}
+
+// sessionMatchDate renders the conversation date for a search-result header,
+// taken from the first match's message timestamp ("" when unknown).
+func sessionMatchDate(r toolport.SearchResult) string {
+	for _, m := range r.Matches {
+		if m.Message.Timestamp > 0 {
+			return " (" + time.UnixMilli(m.Message.Timestamp).Format("2006-01-02") + ")"
+		}
+	}
+	return ""
+}
+
+// semanticSessionMatches asks the transcript store's OPTIONAL meaning-search
+// capability for summary-level matches, excluding the current session and any
+// session the keyword results already cover. Degrades to nil when the store
+// does not offer the capability or the semantic index is disabled.
+func semanticSessionMatches(ctx context.Context, transcript toolport.TranscriptStore, query string, keyword []toolport.SearchResult) []toolport.SemanticSessionHit {
+	searcher, ok := transcript.(toolport.SemanticSessionSearcher)
+	if !ok {
+		return nil
+	}
+	hits := searcher.SearchSessionsSemantic(ctx, toolport.SessionKeyFromContext(ctx), query, 5)
+	if len(hits) == 0 {
+		return nil
+	}
+	covered := make(map[string]struct{}, len(keyword))
+	for _, r := range keyword {
+		covered[r.SessionKey] = struct{}{}
+	}
+	// Fresh slice, not hits[:0]: an implementation may hand back a cached
+	// slice and filtering in place would corrupt it for the next caller.
+	out := make([]toolport.SemanticSessionHit, 0, len(hits))
+	for _, h := range hits {
+		if _, dup := covered[h.SessionKey]; dup {
+			continue
+		}
+		out = append(out, h)
+	}
+	return out
 }
 
 var sessionSearchStopWords = map[string]struct{}{

@@ -116,3 +116,49 @@ func TestSessionsHistoryExactKeyAndAbbreviationStillWork(t *testing.T) {
 		}
 	}
 }
+
+// semanticFakeTranscript layers the OPTIONAL meaning-search capability on the
+// history fake so the merge path is exercised through the real type assertion.
+type semanticFakeTranscript struct {
+	historyFakeTranscript
+	results []toolport.SearchResult
+	hits    []toolport.SemanticSessionHit
+}
+
+func (f *semanticFakeTranscript) Search(string, int) ([]toolport.SearchResult, error) {
+	return f.results, nil
+}
+
+func (f *semanticFakeTranscript) SearchSessionsSemantic(_ context.Context, _, _ string, _ int) []toolport.SemanticSessionHit {
+	return f.hits
+}
+
+func TestSessionsSearchMergesSemanticAndDatesHeaders(t *testing.T) {
+	fake := &semanticFakeTranscript{
+		results: []toolport.SearchResult{{
+			SessionKey: "client:kw",
+			Matches: []toolport.MatchedMsg{{
+				Index:   0,
+				Message: toolport.NewTextChatMessage("user", "요가 수업 등록했어", 1684540800000), // 2023-05-20
+			}},
+		}},
+		hits: []toolport.SemanticSessionHit{
+			{SessionKey: "client:kw", Snippet: "중복 — 키워드가 이미 찾음", At: 1, Score: 0.9},
+			{SessionKey: "client:sem", Snippet: "필라테스 체험 후기", At: 1684627200000, Score: 0.81},
+		},
+	}
+	out, err := toolSessionsSearch(fake)(context.Background(),
+		sessionSearchJSON(t, map[string]any{"action": "search", "query": "운동 수업"}))
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if !strings.Contains(out, "### Session: client:kw (2023-05-2") {
+		t.Fatalf("keyword session header must carry the conversation date:\n%s", out)
+	}
+	if !strings.Contains(out, "의미 일치 대화") || !strings.Contains(out, "client:sem") {
+		t.Fatalf("semantic section must render un-covered sessions:\n%s", out)
+	}
+	if strings.Count(out, "client:kw") != 1 {
+		t.Fatalf("semantic hits covered by keyword results must dedup:\n%s", out)
+	}
+}
