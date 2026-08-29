@@ -217,6 +217,16 @@ func resolveHistoryKey(transcript toolport.TranscriptStore, raw string) (key str
 	return key, anchor, candidates
 }
 
+// firstTimestamp returns the first nonzero message timestamp in the slice.
+func firstTimestamp(msgs []toolport.ChatMessage) int64 {
+	for _, m := range msgs {
+		if m.Timestamp > 0 {
+			return m.Timestamp
+		}
+	}
+	return 0
+}
+
 // toolSessionsHistory returns a tool function that retrieves session transcript history.
 func toolSessionsHistory(transcript toolport.TranscriptStore) toolport.ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
@@ -288,8 +298,17 @@ func toolSessionsHistory(transcript toolport.TranscriptStore) toolport.ToolFunc 
 				}
 			}
 			var sb strings.Builder
-			fmt.Fprintf(&sb, "Session %q — messages %d..%d of %d (window around #%d):\n\n",
-				sessionKey, start+1, end, total, anchor)
+			// The conversation's date belongs in the header: an opened window
+			// otherwise LOSES the temporal context the recall row carried —
+			// the reader confirms WHAT happened and erases WHEN (measured on
+			// temporal-reasoning: opens fired on 26/64 questions yet the
+			// category lagged its ceiling until the date was restored here).
+			dateNote := ""
+			if ts := firstTimestamp(all[start:end]); ts > 0 {
+				dateNote = " (" + time.UnixMilli(ts).Format("2006-01-02") + ")"
+			}
+			fmt.Fprintf(&sb, "Session %q%s — messages %d..%d of %d (window around #%d):\n\n",
+				sessionKey, dateNote, start+1, end, total, anchor)
 			budget := 24000
 			for i, msg := range all[start:end] {
 				content := msg.SearchableText()
