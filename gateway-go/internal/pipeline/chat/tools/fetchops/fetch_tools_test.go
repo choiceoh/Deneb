@@ -536,8 +536,8 @@ func TestFetchTools_InlinesSchemaWhenActivationIsUnavailable(t *testing.T) {
 func TestFetchTools_MixedSelectionReportsSchemaActivationAndErrors(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolport.ToolDef{
-			"contacts": {
-				Name:        "contacts",
+			"people": {
+				Name:        "people",
 				Description: "Find people",
 				Deferred:    true,
 			},
@@ -561,14 +561,14 @@ func TestFetchTools_MixedSelectionReportsSchemaActivationAndErrors(t *testing.T)
 		},
 	}
 	activation := toolport.NewDeferredActivation()
-	activation.Seed([]string{"contacts"})
+	activation.Seed([]string{"people"})
 	collector := toolmeta.NewCollector()
 	ctx := toolport.WithToolPreset(context.Background(), "researcher")
 	ctx = toolport.WithDeferredActivation(ctx, activation)
 	ctx = toolmeta.WithCollector(ctx, collector)
 
 	out, err := ToolFetchTools(reg)(ctx, mustJSON(t, map[string]any{
-		"names": []string{"cron", "graphify", "contacts", "mail_archive"},
+		"names": []string{"cron", "graphify", "people", "mail_archive"},
 		"query": "schedule jobs",
 	}))
 	if err != nil {
@@ -583,21 +583,21 @@ func TestFetchTools_MixedSelectionReportsSchemaActivationAndErrors(t *testing.T)
 		"## mail_archive\n" +
 		"Read mail\n" +
 		"\n" +
-		"Already active (schema loaded, no re-fetch needed): contacts. Call them directly.\n" +
+		"Already active (schema loaded, no re-fetch needed): people. Call them directly.\n" +
 		"Activated 1 tool(s): mail_archive. You can now call them directly."
 	if out != want {
 		t.Fatalf("output:\n--- got ---\n%s\n--- want ---\n%s", out, want)
 	}
 
-	if got := activation.ActivatedNames(); !slices.Equal(got, []string{"contacts", "mail_archive"}) {
-		t.Fatalf("activated names = %v, want [contacts mail_archive]", got)
+	if got := activation.ActivatedNames(); !slices.Equal(got, []string{"people", "mail_archive"}) {
+		t.Fatalf("activated names = %v, want [people mail_archive]", got)
 	}
 	var metadataNames []string
 	if !toolmeta.Get(collector.JSON(), "activatedTools", &metadataNames) {
 		t.Fatalf("activatedTools metadata missing: %s", collector.JSON())
 	}
-	if !slices.Equal(metadataNames, []string{"mail_archive", "contacts"}) {
-		t.Fatalf("activatedTools metadata = %v, want [mail_archive contacts]", metadataNames)
+	if !slices.Equal(metadataNames, []string{"mail_archive", "people"}) {
+		t.Fatalf("activatedTools metadata = %v, want [mail_archive people]", metadataNames)
 	}
 }
 

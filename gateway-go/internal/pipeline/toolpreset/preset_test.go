@@ -49,7 +49,7 @@ func TestAllowedTools_Researcher(t *testing.T) {
 	for _, name := range []string{
 		"read", "grep", "read_spillover", "web",
 		"wiki", "knowledge", "polaris",
-		"mail_archive", "contacts", "graphify", "blackboard", "fetch_tools",
+		"mail_archive", "people", "graphify", "blackboard", "fetch_tools",
 	} {
 		if _, ok := allowed[name]; !ok {
 			t.Errorf("researcher preset should include %q", name)
@@ -84,7 +84,7 @@ func TestAllowedTools_WikiScout(t *testing.T) {
 	// surfaces and file reads must be unreachable from the same turn so a
 	// prompt-injected page cannot steer internal reads or leak them.
 	for _, name := range []string{
-		"mail_archive", "contacts", "graphify", "polaris", "knowledge",
+		"mail_archive", "people", "graphify", "polaris", "knowledge",
 		"read", "grep", "read_spillover",
 		"write", "edit", "exec", "process",
 		"message", "send_file", "sessions_spawn",
@@ -111,7 +111,7 @@ func TestAllowedTools_NotiDigest(t *testing.T) {
 	// could read private data and persist it through a wiki write.
 	for _, name := range []string{
 		"web",
-		"mail_archive", "contacts", "graphify", "polaris", "knowledge",
+		"mail_archive", "people", "graphify", "polaris", "knowledge",
 		"read", "grep", "read_spillover",
 		"write", "edit", "exec", "process",
 		"message", "send_file", "sessions_spawn",
@@ -131,7 +131,7 @@ func TestAllowedTools_WikiResearch(t *testing.T) {
 	for _, name := range []string{
 		"read", "grep", "read_spillover",
 		"wiki", "knowledge", "polaris",
-		"mail_archive", "contacts", "graphify", "fetch_tools",
+		"mail_archive", "people", "graphify", "fetch_tools",
 	} {
 		if _, ok := allowed[name]; !ok {
 			t.Errorf("wiki-research preset should include %q", name)
@@ -216,7 +216,7 @@ func TestAllowedTools_Coding(t *testing.T) {
 	// inside an external repo worktree, and no spawn (children would not
 	// inherit the worktree binding).
 	for _, name := range []string{
-		"mail_archive", "contacts", "graphify", "wiki", "knowledge", "polaris",
+		"mail_archive", "people", "graphify", "wiki", "knowledge", "polaris",
 		"message", "send_file", "cron", "gateway", "calendar", "skills",
 		"sessions_spawn", "subagents", "sessions",
 	} {
@@ -232,7 +232,7 @@ func TestAllowedTools_Briefcase(t *testing.T) {
 		t.Fatal("briefcase preset should return non-nil allowed set")
 	}
 	for _, name := range []string{
-		"mail_archive", "contacts", "files", "calendar", "todo",
+		"mail_archive", "people", "files", "calendar", "todo",
 		"phone_read", "phone_write", "wiki", "knowledge", "polaris", "notebook",
 		"read", "grep", "write", "edit",
 	} {

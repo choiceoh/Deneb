@@ -52,7 +52,7 @@ const maxToolDetailRunes = 48
 // (no single arg reads as a useful hint).
 var toolDetailKeys = map[string][]string{
 	"calendar":     {"summary"},
-	"contacts":     {"query"},
+	"people":       {"query"},
 	"edit":         {"file_path"},
 	"exec":         {"command"},
 	"files":        {"query", "path"},
@@ -67,3 +67,13 @@ var toolDetailKeys = map[string][]string{
 }
 
 // truncateDetail caps s to maxRunes runes, appending an ellipsis when cut.
+
+// DetailedToolNames returns every tool name the detail-key map covers. See
+// LabelledToolNames for why this is exported.
+func DetailedToolNames() []string {
+	out := make([]string, 0, len(toolDetailKeys))
+	for name := range toolDetailKeys {
+		out = append(out, name)
+	}
+	return out
+}
