@@ -151,6 +151,36 @@ func schemaText(schema map[string]any) string {
 	return b.String()
 }
 
+// TestFleetRegistersOnlyWithAConfiguredControlPlane is the browser rule applied
+// to its twin. The puppet-seat sweep (2026-08-30) walked the whole tool surface
+// and fleet answered "플릿 연동이 꺼져 있습니다" — the same dead surface browser was
+// gated for the day before, missed then only because DENEB_SPARKFLEET_URL
+// happened to be set on that host.
+func TestFleetRegistersOnlyWithAConfiguredControlPlane(t *testing.T) {
+	registered := func(deps *tooldeps.CoreToolDeps) bool {
+		reg := &discoveryRegistry{defs: map[string]toolport.ToolDef{}}
+		RegisterCoreTools(reg, deps)
+		_, ok := reg.defs["fleet"]
+		return ok
+	}
+
+	if registered(&tooldeps.CoreToolDeps{WorkspaceDir: t.TempDir()}) {
+		t.Error("fleet must not register without a control-plane URL")
+	}
+	if registered(&tooldeps.CoreToolDeps{
+		WorkspaceDir: t.TempDir(),
+		Fleet:        tooldeps.FleetDeps{BaseURL: func() string { return "  " }},
+	}) {
+		t.Error("a blank control-plane URL is still unconfigured")
+	}
+	if !registered(&tooldeps.CoreToolDeps{
+		WorkspaceDir: t.TempDir(),
+		Fleet:        tooldeps.FleetDeps{BaseURL: func() string { return "http://127.0.0.1:2" }},
+	}) {
+		t.Error("fleet must register once the control plane is configured")
+	}
+}
+
 // TestBrowserRegistersOnlyWithAConfiguredBridge pins the 2026-08-29 sweep for
 // tools that exist but cannot work. Without DENEB_BROWSER_URL every browser
 // call answers "브라우저 연동이 꺼져 있습니다", so an unconfigured deployment was
