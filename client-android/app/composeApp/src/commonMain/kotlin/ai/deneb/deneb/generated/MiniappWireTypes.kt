@@ -76,6 +76,15 @@ data class CalendarProposalOut(
 
 @Immutable
 @Serializable
+data class CodeRepoOut(
+    val id: String = "",
+    val name: String = "",
+    val path: String = "",
+    val addedAtMs: Long = 0L,
+)
+
+@Immutable
+@Serializable
 data class ContactRow(
     val name: String = "",
     val phones: List<String> = emptyList(),

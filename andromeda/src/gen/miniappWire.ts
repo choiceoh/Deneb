@@ -59,6 +59,13 @@ export interface CalendarProposalOut {
   sourceFrom?: string
 }
 
+export interface CodeRepoOut {
+  id?: string
+  name?: string
+  path?: string
+  addedAtMs?: number
+}
+
 export interface ContactRow {
   name?: string
   phones?: string[]

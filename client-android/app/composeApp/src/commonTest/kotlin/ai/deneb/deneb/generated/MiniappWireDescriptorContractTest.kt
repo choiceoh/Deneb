@@ -85,6 +85,12 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("id", "title", "start", "allDay", "kind", "sourceSubject", "sourceFrom"),
         ),
         contract(
+            name = "CodeRepoOut",
+            serializer = CodeRepoOut.serializer(),
+            empty = CodeRepoOut(),
+            fields = listOf("id", "name", "path", "addedAtMs"),
+        ),
+        contract(
             name = "ContactRow",
             serializer = ContactRow.serializer(),
             empty = ContactRow(),

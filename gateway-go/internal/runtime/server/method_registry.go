@@ -14,6 +14,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -56,6 +58,9 @@ import (
 	handlercheckpoint "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/checkpoint"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
 	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/coderepo"
+	minicoderepos "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/coderepos"
 	minifiles "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/files"
 	miniknowledge "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/knowledge"
 	minimodule "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/module"
@@ -446,6 +451,7 @@ func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities 
 		// miniapp.models.* is deliberately registered in registerLateMethods:
 		// the picker snapshots the model registry and chat handler at creation.
 		s.earlyFileMethods(),
+		s.earlyCodeRepoMethods(),
 	}
 }
 
@@ -775,6 +781,16 @@ func (s *Server) earlyMiniappGatewayMethods(hub *rpcutil.GatewayHub) map[string]
 // earlyFileMethods wires local file operations and the late-bound semantic
 // index. Mutations invalidate stale vectors immediately; the periodic indexer
 // repopulates them with current content.
+// earlyCodeRepoMethods wires the operator's code-repository allowlist — what a
+// conversation may be pointed at, and where the agent may later get a worktree.
+// The production checkout is passed as a protected path: a deploy timer owns
+// it, so it must be un-registerable rather than merely discouraged.
+func (s *Server) earlyCodeRepoMethods() map[string]rpcutil.HandlerFunc {
+	return minicoderepos.Methods(minicoderepos.CodeReposDeps{
+		Store: coderepo.New(config.ResolveStateDir(), protectedRepoRoots()),
+	})
+}
+
 func (s *Server) earlyFileMethods() map[string]rpcutil.HandlerFunc {
 	return minifiles.FilesBrowseMethods(minifiles.FilesBrowseDeps{
 		Store: localFileStoreOrNil(s.logger),
@@ -995,4 +1011,31 @@ func (s *Server) earlyProviderMethods() []map[string]rpcutil.HandlerFunc {
 			Providers: s.providers,
 		}),
 	}
+}
+
+// protectedRepoRoots lists repository roots the agent must never be pointed at.
+//
+// The gateway's own checkout is production: an auto-deploy timer pulls, builds,
+// and hot-swaps there, and CLAUDE.md forbids agent branches, worktrees, and
+// manual builds in it. Resolved from the running process's working directory
+// (the same way /update finds its repo root) so this holds wherever the gateway
+// is deployed, rather than hard-coding one operator's path.
+func protectedRepoRoots() []string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	// Bounded: this runs during startup wiring, and a wedged git must not hold
+	// the gateway's registration phase open.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", wd, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return nil
+	}
+	root := strings.TrimSpace(string(out))
+	if root == "" {
+		return nil
+	}
+	return []string{root}
 }
