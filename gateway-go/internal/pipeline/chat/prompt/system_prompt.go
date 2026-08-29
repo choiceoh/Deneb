@@ -24,7 +24,7 @@ var toolCategories = []struct {
 	{"Workflow", []string{"blackboard", "goal"}},
 	{"Routine", []string{"cron"}},
 	{"Schedule", []string{"calendar"}},
-	{"Sessions", []string{"sessions", "sessions_spawn", "subagents"}},
+	{"Sessions", []string{"sessions", "sessions_spawn"}},
 	{"Media", []string{"send_file"}},
 }
 

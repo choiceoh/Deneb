@@ -45,7 +45,6 @@ func allSchemaCases() []schemaCase {
 		{name: "gateway", build: schema.GatewayToolSchema},
 		{name: "sessions", build: schema.SessionsToolSchema},
 		{name: "sessions_spawn", build: schema.SessionsSpawnToolSchema},
-		{name: "subagents", build: schema.SubagentsToolSchema},
 		{name: "send_file", build: schema.SendFileToolSchema},
 		{name: "chart", build: schema.ChartToolSchema},
 		{name: "diagram", build: schema.DiagramToolSchema},
@@ -356,7 +355,7 @@ func TestEditSchemaRequiresOneEditMode(t *testing.T) {
 
 func TestActionEnumsAreNonEmptyUniqueAndDocumented(t *testing.T) {
 	actionSchemas := []string{
-		"process", "cron", "message", "gateway", "sessions", "subagents",
+		"process", "cron", "message", "gateway", "sessions",
 		"files", "skills", "wiki", "notebook", "contacts", "calendar", "polaris",
 		"observe", "fleet", "browser", "groupware", "workfeed", "goal", "blackboard", "mail_archive",
 	}
@@ -499,11 +498,11 @@ func TestRegisterCoreToolsDeferredPolicyContractMatchesOperationalIntent(t *test
 	RegisterCoreTools(reg, &tooldeps.CoreToolDeps{WorkspaceDir: t.TempDir()})
 	deferred := map[string]bool{
 		"read": false, "write": false, "grep": false, "exec": false, "web": false,
-		"sessions_spawn": false, "heartbeat_update": false, "goal": false, "blackboard": false,
+		"sessions_spawn": false, "heartbeat_update": false, "goal": true, "blackboard": false,
 		"mail_archive": false, "transcribe": true, "ocr": true, "org": true,
-		"office": false, // eager: document work is a core operator workflow
+		"office": true, // deferred 2026-08-29: largest eager schema, zero recorded calls
 		"edit":   true, "gateway": true, "observe": true, "fleet": true, "browser": true, "groupware": false,
-		"graphify": true, "process": true, "sessions": true, "subagents": true,
+		"graphify": true, "process": true, "sessions": true,
 		"message": true, "todo": true, "cron": true, "files": true,
 		"morning_letter": true, "evening_letter": true,
 		"send_file": true, "chart": true, "diagram": true, "watch": true,
@@ -553,7 +552,7 @@ func TestRegistrationGroupsEnforceExactNamesWithoutCrossGroupDuplicates(t *testi
 		{name: "phone", run: func(r *mockRegistrar) { ops.RegisterPhoneTools(r, nil) }, want: []string{"phone_read", "phone_write"}},
 		{name: "process", run: func(r *mockRegistrar) { RegisterProcessTools(r, &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()}) }, want: []string{"exec", "process"}},
 		{name: "web", run: func(r *mockRegistrar) { RegisterWebTools(r, nil) }, want: []string{"web", "browse"}},
-		{name: "session", run: func(r *mockRegistrar) { RegisterSessionTools(r, &tooldeps.SessionDeps{}) }, want: []string{"sessions", "sessions_spawn", "subagents"}},
+		{name: "session", run: func(r *mockRegistrar) { RegisterSessionTools(r, &tooldeps.SessionDeps{}) }, want: []string{"sessions", "sessions_spawn"}},
 		{name: "chrono", run: func(r *mockRegistrar) { RegisterChronoTools(r) }, want: []string{"message", "heartbeat_update"}},
 		{name: "workflow", run: func(r *mockRegistrar) {
 			workflow.RegisterTools(r, workflow.ToolSet{Goal: noop, Blackboard: noop})

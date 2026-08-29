@@ -71,13 +71,18 @@ func RegisterGraphTool(registry toolport.ToolRegistrar, workspaceDir string) {
 	})
 }
 
-// RegisterCodeSearchTool registers the eager `code_search` tool — semantic
+// RegisterCodeSearchTool registers the deferred `code_search` tool — semantic
 // (concept) code search: Nemotron embeddings over symbols/repository chunks,
 // RRF-fused with BM25+FTS and reranked by XProvence. It is the sibling of codegraph_explore:
 // CodeGraph resolves structure/relations from a KNOWN symbol; code_search finds
-// "where is the code that does X" when the symbol name is unknown. Eager (small
-// schema, one required field) so it sits on the wire without a fetch round-trip,
-// matching codegraph_explore's always-available ergonomics.
+// "where is the code that does X" when the symbol name is unknown.
+//
+// Deferred (prompt audit 2026-08-29): it shipped eager to match
+// codegraph_explore's always-available ergonomics, but across the recorded
+// transcript history it was never called once — Deneb's runtime agent is a
+// chief-of-staff, and the coding sessions that would want it reach CodeGraph
+// through their own MCP wiring instead. A code question can afford the
+// fetch_tools round trip.
 func RegisterCodeSearchTool(registry toolport.ToolRegistrar, workspaceDir string) {
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "code_search",
@@ -87,6 +92,7 @@ func RegisterCodeSearchTool(registry toolport.ToolRegistrar, workspaceDir string
 			"더 깊은 전체 호출 그래프가 필요할 때만 codegraph_node/explore로 이어서 파고들라.",
 		InputSchema: schema.CodeSearchToolSchema(),
 		Fn:          surface.ToolCodeSearch(workspaceDir),
+		Deferred:    true,
 	})
 }
 
@@ -94,10 +100,11 @@ func RegisterCodeSearchTool(registry toolport.ToolRegistrar, workspaceDir string
 // Office documents (.docx/.xlsx/.pptx) through the officecli binary, with no
 // Office install required.
 //
-// Eager (not Deferred): the operator's core workflow is document work — reading
-// received .xlsx/.docx, filling templates, extracting figures — so the tool
-// should be on the wire without a fetch_tools round-trip. Its schema is compact
-// (one enum + three fields), unlike graphify's ~1,200-token coaching block.
+// Deferred (prompt audit 2026-08-29): it was eager on the theory that document
+// work is the operator's core workflow, but it is the single largest eager
+// schema at ~2,090 wire bytes and the recorded transcript history holds zero
+// calls. Document turns are explicit ("이 엑셀 봐줘"), so they can pay one
+// fetch_tools round trip instead of taxing every other turn.
 //
 // NOTE on mutation classification: office is deliberately NOT added to
 // toolport.mutationTools. That set invalidates the workspace grep cache after a
@@ -116,6 +123,7 @@ func RegisterOfficeTool(registry toolport.ToolRegistrar, workspaceDir string) {
 			"정확한 verb·요소·--prop 키는 command=help로 조회(예: args=[\"xlsx\",\"set\",\"cell\"]).",
 		InputSchema: schema.OfficeToolSchema(),
 		Fn:          surface.ToolOffice(workspaceDir),
+		Deferred:    true,
 	})
 }
 

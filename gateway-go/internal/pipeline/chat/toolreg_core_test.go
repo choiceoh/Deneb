@@ -24,7 +24,7 @@ func TestRegisterCoreToolsCreatesExpectedToolSet(t *testing.T) {
 		"message",
 		"cron", "gateway", "observe", "fleet", "heartbeat_update",
 		"sessions", "sessions_spawn",
-		"subagents", "fetch_tools",
+		"fetch_tools",
 		"blackboard",
 		// Standing preference surface — must stay registered even without a wiki store.
 		"preference",

@@ -88,7 +88,6 @@ var coreSections = []coreSection{
 		{"sessions", "Session management (list/history/search/send)", []ToolProfileID{ProfileCoding, ProfileMessaging}},
 		{"sessions_spawn", "Spawn sub-agent", []ToolProfileID{ProfileCoding}},
 		{"sessions_yield", "End turn to receive sub-agent results", []ToolProfileID{ProfileCoding}},
-		{"subagents", "Manage sub-agents", []ToolProfileID{ProfileCoding}},
 	}},
 	{"messaging", "Messaging", []coreTool{
 		{"message", "Send messages", []ToolProfileID{ProfileMessaging}},

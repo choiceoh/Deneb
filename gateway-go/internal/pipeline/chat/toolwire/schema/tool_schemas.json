@@ -626,14 +626,26 @@
   "properties": {
    "action": {
     "type": "string",
-    "description": "Session action",
+    "description": "Session action. list/history/search/send/stats work on sessions; result/kill/steer work on this session's own sub-agents ('result' pulls a finished sub-agent's output on demand, complementing the automatic completion notification).",
     "enum": [
      "list",
      "history",
      "search",
      "send",
-     "stats"
+     "stats",
+     "result",
+     "kill",
+     "steer"
     ]
+   },
+   "scope": {
+    "type": "string",
+    "enum": [
+     "all",
+     "children"
+    ],
+    "description": "list action scope: 'all' (default) lists every session, 'children' lists only the sub-agents this session spawned.",
+    "default": "all"
    },
    "days": {
     "type": "number",
@@ -675,9 +687,13 @@
     "minimum": 1,
     "maximum": 100
    },
+   "target": {
+    "type": "string",
+    "description": "Target sub-agent index, label, or session key (result/kill/steer). Optional when exactly one sub-agent exists."
+   },
    "message": {
     "type": "string",
-    "description": "Message to send (send action)"
+    "description": "Message to send (send action) or steering message (steer action)"
    },
    "around": {
     "type": "number",
@@ -723,29 +739,6 @@
   "required": [
    "task"
   ]
- },
- {
-  "name": "subagents",
-  "properties": {
-   "action": {
-    "type": "string",
-    "description": "Sub-agent management action. 'result' returns a finished sub-agent's output (pull a result on demand, complementing the automatic completion notification).",
-    "enum": [
-     "list",
-     "result",
-     "kill",
-     "steer"
-    ]
-   },
-   "target": {
-    "type": "string",
-    "description": "Target sub-agent index, label, or session key (for result/kill/steer). Optional when exactly one sub-agent exists."
-   },
-   "message": {
-    "type": "string",
-    "description": "Steering message for steer action"
-   }
-  }
  },
  {
   "name": "send_file",
@@ -1237,21 +1230,6 @@
     "type": "string",
     "description": "Search query (search), page path (read/write — SEVERAL pages via paths), category name (index), diary entry body (log), or 캡처할 http(s) URL (ingest). 프로젝트 write paths follow fixed layout: 프로젝트/<이름>/대표.md (대표페이지), 프로젝트/<이름>/로그.md (진행 로그 — 사건·소식은 여기에 append), 프로젝트/<이름>/기자재/<문서>.md, 프로젝트/<이름>/자료/ (외부 소스 — 직접 쓰지 말고 ingest 액션 사용)"
    },
-   "plan": {
-    "type": "string",
-    "description": "search 전용 타입 질의 계획. 줄마다 lex:, vec:, hyde:, intent:, scope: 연산자를 사용한다. 첫 검색절은 기본 2배 가중치이며 scope는 결과 제한 전에 경로 prefix를 필터링한다. 예: 'lex: 대한전선 계약 일정\\nvec: payment milestone\\nintent: 대한전선 계약\\nscope: 프로젝트/대한전선'"
-   },
-   "scopes": {
-    "type": "array",
-    "items": {
-     "type": "string"
-    },
-    "description": "search 전용 위키 경로 prefix 필터. 예: ['프로젝트/대한전선', '업무/계약']"
-   },
-   "intent": {
-    "type": "string",
-    "description": "search 전용 원래 사용자 의도. 후보를 새로 들이지 않고 애매한 순위만 보정한다"
-   },
    "paths": {
     "type": "array",
     "items": {
@@ -1428,16 +1406,6 @@
     "description": "read 전용 반환 줄 수(기본 120, 최대 400)",
     "minimum": 1,
     "maximum": 400
-   },
-   "explain": {
-    "type": "boolean",
-    "description": "search 전용 검색 신호·융합·rerank 진단 포함",
-    "default": false
-   },
-   "rerank": {
-    "type": "boolean",
-    "description": "search 전용 선택적 reranker 강제 실행. 기본은 상위 후보가 애매할 때만 실행",
-    "default": false
    },
    "limit": {
     "type": "integer",

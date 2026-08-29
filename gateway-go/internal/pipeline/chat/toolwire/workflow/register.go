@@ -29,15 +29,22 @@ func Register(registry toolport.ToolRegistrar) {
 
 // RegisterTools registers workflow tools from an already-wired tool set.
 func RegisterTools(registry toolport.ToolRegistrar, set ToolSet) {
-	// Standing goal (Ralph loop). Eager: the agent must discover it to set a
-	// goal on a multi-step request. Once set, the server's goalTask advances it
+	// Standing goal (Ralph loop). Once set, the server's goalTask advances it
 	// one run per idle tick, judges completion with the lightweight model, and a
 	// per-goal idempotency ledger blocks repeated destructive actions.
+	//
+	// Deferred (prompt audit 2026-08-29): it was eager so the agent could
+	// discover it and volunteer a goal on a multi-step request. It never did —
+	// zero calls across the recorded transcript history — so the eager slot was
+	// buying no behavior at ~770 wire bytes a turn. If standing goals should
+	// actually fire, the lever is the prompt that decides to set one, not the
+	// tool's placement.
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "goal",
 		Description: "다단계·장기 작업을 여러 턴에 걸쳐 끝까지 진행해야 할 때 표준 목표(standing goal)를 설정·관리한다. action=set(목표 설정) | subgoal(완료 기준 추가) | status | pause | resume | stop. 설정하면 사용자가 자리를 비운 동안 자동으로 한 단계씩 진행하고 완료를 판정한다. 이미 실행한 작업은 멱등 가드로 중복되지 않는다.",
 		InputSchema: schema.GoalToolSchema(),
 		Fn:          set.Goal,
+		Deferred:    true,
 	})
 
 	// Typed blackboard: fail-closed I/O contracts for multi-tool workflows.

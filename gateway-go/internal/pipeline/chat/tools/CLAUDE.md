@@ -13,7 +13,7 @@
   `filesystem/read.go`의 `ToolRead`, `filesystem/fs_search.go`의
   `ToolGrep`가 workspace 파일 경계를 소유한다.
 - `runtimeops/exec.go`의 `ToolExec`, `ToolProcess`가 실행 표면을 소유한다.
-  `sessionops/`는 `sessions`/`sessions_spawn`/`subagents`, `fetchops/`는
+  `sessionops/`는 `sessions`(피어 세션 + 서브에이전트 제어)/`sessions_spawn`, `fetchops/`는
   `fetch_tools`, `phoneops/`는 `phone_read`/`phone_write`, `gatewayops/`는
   `gateway`/`heartbeat_update`, `hostops/`는 `browser`/`fleet`/`solarflow`/
   `workstation`을 소유한다. `browseops/`는 `browse`, `officeops/`는 `office`,
