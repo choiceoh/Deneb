@@ -11,7 +11,7 @@
 #   Go      generate-check  go-fmt  go-vet  go-lint  go-test
 #   Audit   runtime-health-test  health-v2-test
 #   Kotlin  kotlin-spotless  kotlin-detekt  kotlin-desktop-smoke-test
-#           kotlin-android-compile
+#           kotlin-android-compile  render-golden-check
 #
 # The Go, Kotlin, and audit lanes run in parallel (gradle JVM startup is the long
 # pole), so wall-clock is roughly the slowest selected lane, not their sum.
@@ -54,7 +54,11 @@ BASE_REF="${CI_CHECK_BASE:-origin/main}"
 
 # --- Gate definitions (gate name == make target) -----------------------------
 GO_GATES=(generate-check go-fmt go-vet go-lint go-test)
-KOTLIN_GATES=(kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile)
+# render-golden-check diffs the preview PNGs against committed goldens. It is a
+# Kotlin gate and not an audit one because a two-pixel type shift is a defect the
+# same way a compile error is — and the three native defects found on 2026-08-30
+# were all invisible to every other gate here.
+KOTLIN_GATES=(kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile render-golden-check)
 # health-v2-check is OUT of the gate (operator decision 2026-07-18): the
 # git-window pillar ratchet false-reds unrelated PRs (five-pillar drops on a
 # one-file systemd diff, while CI stayed green) and a gate that cries wolf
@@ -241,6 +245,8 @@ offenders() {
       grep -E '\.kt:[0-9]+:[0-9]+:|Analysis failed with' "$log" ;;
     kotlin-desktop-smoke-test)
       grep -E '^(> Task .*FAILED|[[:space:]]*at |[[:space:]]*Caused by:|[[:space:]]*Suppressed:|FAILURE: Build failed with an exception\.|.*Test.*FAILED|.*> .* FAILED$)' "$log" ;;
+    render-golden-check)
+      grep -E '^  (CHANGED|MISSING|NEW) |changed · |renderPreviews failed|no goldens in' "$log" ;;
     kotlin-android-compile)
       # kotlinc diagnostics ("e: file://...kt:line:col msg") + the failing task +
       # the build-failure banner. Drop the linux-aarch64 Kotlin/Native host warning
@@ -258,6 +264,7 @@ fixhint() {
   case "$1" in
     go-fmt)          echo "fix: make fmt" ;;
     kotlin-spotless) echo "fix: (cd client-android/app && ./gradlew spotlessApply)" ;;
+    render-golden-check) echo "look: /tmp/deneb-render-diff (golden|fresh|diff) · if intended: make render-golden-update" ;;
     generate-check)  echo "fix: make generate" ;;
   esac
 }
