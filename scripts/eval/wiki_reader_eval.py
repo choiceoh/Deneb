@@ -49,6 +49,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -84,7 +85,18 @@ Rules:
   not know. A wrong specific answer is worse than an honest one.
 - Answer in Korean. Be brief: the answer, not an essay."""
 
+JUDGE_REFERENCE_BYTES = 24_000
+
+DERIVE_SYSTEM = """You are given a question and the wiki pages that contain its
+answer. Write the answer, and nothing else.
+
+Be specific: names, figures, dates. If the pages do not actually answer the
+question, reply exactly: 답 없음.
+Answer in Korean, in at most three sentences."""
+
 JUDGE_SYSTEM = """You grade one answer to a question about a work wiki.
+
+You are given a REFERENCE ANSWER. Compare the candidate to it.
 
 Reply with exactly one line: CORRECT or INCORRECT, then a space, then a short
 reason (under 15 words).
@@ -181,22 +193,38 @@ def oracle_block(wiki_dir: str, gold_paths: list) -> str:
 
 
 # --- deterministic scoring (pure) -------------------------------------------- #
-def token_verdict(answer: str, must_contain: list, must_not: list):
-    """(verdict, reason) from the gold tokens, or (None, "") when there are none.
+def _normalize(text: str) -> str:
+    """Fold the formatting differences a token was never meant to catch.
 
-    Deterministic scoring is preferred over the judge wherever the gold set
-    supplies tokens: it costs nothing, cannot drift, and cannot be lenient on
-    its own output. "a|b" means either alternative satisfies the requirement.
+    "1500" must match "1,500V": the gold tokens were written as facts, not as
+    literal strings, and a thousands separator is not a wrong answer. Measured:
+    token-scored cases ran 13.5 points below judge-scored ones on the same run,
+    which is the signature of a scorer that is harsh rather than a reader that
+    is wrong.
+    """
+    return re.sub(r"[\s,()·・]", "", (text or "").lower())
+
+
+def token_verdict(answer: str, must_contain: list, must_not: list):
+    """(verdict, reason) from the gold tokens.
+
+    Tokens may CONFIRM but never CONDEMN. A hit is strong evidence the answer
+    is right and costs nothing; a miss is weak evidence of anything — the fact
+    can be phrased a dozen ways the token author did not anticipate — so a miss
+    returns None and defers to the judge. This is the same rule that keeps
+    UNSCORED out of INCORRECT: a crude check must not get to fail a run.
     """
     if not must_contain and not must_not:
         return (None, "")
-    text = (answer or "")
-    for group in must_contain or []:
-        if not any(alt.strip() and alt.strip() in text for alt in str(group).split("|")):
-            return ("INCORRECT", f"missing required token: {group}")
+    answer_norm = _normalize(answer)
     for banned in must_not or []:
-        if str(banned).strip() and str(banned).strip() in text:
+        token = _normalize(str(banned))
+        if token and token in answer_norm:
             return ("INCORRECT", f"contains forbidden token: {banned}")
+    for group in must_contain or []:
+        alternatives = [_normalize(alt) for alt in str(group).split("|")]
+        if not any(alt and alt in answer_norm for alt in alternatives):
+            return (None, f"token miss ({group}) — deferred to judge")
     return ("CORRECT", "all required tokens present")
 
 
@@ -268,20 +296,66 @@ def run_case(rec: dict, wiki_dir: str, model: str, read_budget: int,
             "error": error}
 
 
-def judge_case(out: dict, judge_model: str) -> tuple:
+def derive_reference(rec: dict, wiki_dir: str, model: str) -> str:
+    """Answer one question from the gold pages, before any candidate exists.
+
+    This is what makes the ORACLE run judgeable. There, the reader is served
+    the gold pages and the judge was served the same gold pages, so a verdict
+    could only ask "is this consistent with these pages" — which a wrong answer
+    drawn from the same pages passes. Deriving the answer FIRST, from the pages
+    alone, gives the judge something to compare against instead of something to
+    check consistency with, and the same frozen reference then grades every run
+    identically.
+    """
+    pages = oracle_block(wiki_dir, rec.get("gold_paths"))
+    raw = pages.encode()
+    if len(raw) > JUDGE_REFERENCE_BYTES:
+        pages = raw[:JUDGE_REFERENCE_BYTES].decode("utf-8", "ignore")
+    return call_model(model, [{"role": "system", "content": DERIVE_SYSTEM},
+                              {"role": "user", "content":
+                               f"질문: {rec['question']}\n\n--- 페이지 ---\n{pages}"}],
+                      max_tokens=3000)
+
+
+def load_references(path: str) -> dict:
+    refs = {}
+    if not path or not os.path.exists(path):
+        return refs
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            if line.strip():
+                row = json.loads(line)
+                refs[str(row.get("id"))] = row.get("reference") or ""
+    return refs
+
+
+def judge_case(out: dict, judge_model: str, wiki_dir: str = "",
+               reference: str = "") -> tuple:
     if not out.get("answer"):
         return ("UNSCORED", f"reader failed: {out.get('error') or 'empty answer'}")
     verdict, reason = token_verdict(out["answer"], out.get("must_contain"),
                                     out.get("must_not"))
     if verdict is not None:
         return (verdict, "tokens: " + reason)
-    user = (f"질문: {out['question']}\n\n"
-            f"기준(정답이 있는 위키 경로): {out.get('gold_paths')}\n\n"
+    token_note = f" [{reason}]" if reason else ""
+    if reference:
+        body = f"--- 기준 답 ---\n{reference}"
+    else:
+        # No frozen reference: fall back to the gold pages. Correct for the
+        # retrieval run, where reader and judge see different things, but NOT
+        # independent for the oracle run, where they see the same pages.
+        pages = oracle_block(wiki_dir, out.get("gold_paths"))
+        raw = pages.encode()
+        if len(raw) > JUDGE_REFERENCE_BYTES:
+            pages = raw[:JUDGE_REFERENCE_BYTES].decode("utf-8", "ignore") + "\n…(기준 잘림)"
+        body = f"--- 기준 페이지 ---\n{pages}"
+    user = (f"질문: {out['question']}\n\n{body}\n\n"
             f"채점할 답: {out['answer']}")
     try:
-        return parse_verdict(call_model(
+        label, why = parse_verdict(call_model(
             judge_model, [{"role": "system", "content": JUDGE_SYSTEM},
                           {"role": "user", "content": user}], max_tokens=3000))
+        return (label, why + token_note)
     except Exception as exc:  # noqa: BLE001
         return ("UNSCORED", f"judge failed: {type(exc).__name__}: {exc}")
 
@@ -297,6 +371,8 @@ def main() -> int:
     ap.add_argument("--read-budget", type=int, default=READ_BUDGET)
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--references",
+                    help="frozen reference answers JSONL; derived if absent")
     ap.add_argument("--out")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
@@ -314,10 +390,40 @@ def main() -> int:
     print(f"{len(records)} cases; {tokened} scored deterministically by tokens, "
           f"{len(records) - tokened} by the judge", file=sys.stderr)
 
+    # Reference answers are derived ONCE, from the gold pages, before any
+    # candidate exists — and frozen, so every run is graded against identical
+    # references and runs stay comparable to each other.
+    references = load_references(args.references)
+    if args.references and len(references) < len(records):
+        missing = [r for r in records if str(r.get("id")) not in references]
+        print(f"deriving {len(missing)} reference answers (once)...", file=sys.stderr)
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max(1, args.workers)) as pool:
+            futures = {pool.submit(derive_reference, r, args.wiki, args.judge_model): r
+                       for r in missing}
+            for fut in concurrent.futures.as_completed(futures):
+                rec = futures[fut]
+                try:
+                    references[str(rec.get("id"))] = fut.result()
+                except Exception as exc:  # noqa: BLE001
+                    print(f"  derive failed for {rec.get('id')}: {exc}", file=sys.stderr)
+        with open(args.references, "a", encoding="utf-8") as fh:
+            for rec in missing:
+                ref = references.get(str(rec.get("id")))
+                if ref:
+                    fh.write(json.dumps({"id": rec.get("id"),
+                                         "question": rec["question"],
+                                         "reference": ref}, ensure_ascii=False) + "\n")
+        blank = sum(1 for r in records
+                    if references.get(str(r.get("id")), "").strip() in ("", "답 없음"))
+        print(f"references ready ({len(references)}; {blank} say the pages do "
+              f"not answer the question)", file=sys.stderr)
+
     def score_one(rec):
         out = run_case(rec, args.wiki, args.model, args.read_budget,
                        args.oracle, args.verbose)
-        label, reason = judge_case(out, args.judge_model)
+        label, reason = judge_case(out, args.judge_model, args.wiki,
+                                   references.get(str(rec.get("id")), ""))
         out["verdict_label"] = label
         out["correct"] = label == "CORRECT"
         out["verdict"] = reason

@@ -104,16 +104,33 @@ class OracleBlockTests(unittest.TestCase):
 
 
 class TokenVerdictTests(unittest.TestCase):
-    """The gold set has carried these tokens all along; nothing read them."""
+    """The gold set has carried these tokens all along; nothing read them.
+
+    Tokens may CONFIRM but never CONDEMN. A hit is strong evidence and costs
+    nothing; a miss is weak evidence of anything, because the fact can be
+    phrased a dozen ways the token author did not anticipate. Measured on the
+    first real run: token-scored cases ran 13.5 points below judge-scored ones,
+    the signature of a harsh scorer rather than a wrong reader.
+    """
 
     def test_all_required_tokens_present_is_correct(self):
         v, _ = wre.token_verdict("Deviation 승인 대기입니다", ["Deviation"], [])
         self.assertEqual(v, "CORRECT")
 
-    def test_a_missing_token_is_incorrect(self):
-        v, why = wre.token_verdict("잘 모르겠습니다", ["Deviation"], [])
-        self.assertEqual(v, "INCORRECT")
-        self.assertIn("Deviation", why)
+    def test_thousands_separator_does_not_fail_a_right_answer(self):
+        # "KEC 기준 직류 최대 전압은 1,500V입니다" against token "1500" was
+        # scored INCORRECT before normalization.
+        v, _ = wre.token_verdict("최대 전압은 1,500V입니다", ["1500"], [])
+        self.assertEqual(v, "CORRECT")
+
+    def test_spacing_and_punctuation_are_folded(self):
+        v, _ = wre.token_verdict("참여 종결 되었습니다", ["참여종결"], [])
+        self.assertEqual(v, "CORRECT")
+
+    def test_a_token_miss_defers_to_the_judge_instead_of_condemning(self):
+        verdict, why = wre.token_verdict("전혀 다른 이야기", ["Deviation"], [])
+        self.assertIsNone(verdict)
+        self.assertIn("deferred", why)
 
     def test_pipe_means_either_alternative_satisfies(self):
         for answer in ("참여 종결되었습니다", "계약 유효 상태"):
@@ -121,16 +138,111 @@ class TokenVerdictTests(unittest.TestCase):
                 v, _ = wre.token_verdict(answer, ["참여 종결|계약 유효"], [])
                 self.assertEqual(v, "CORRECT")
 
-    def test_forbidden_token_is_incorrect(self):
+    def test_forbidden_token_still_condemns(self):
+        # must_not is an explicit prohibition, not a guess at phrasing.
         v, why = wre.token_verdict("취소되었습니다", [], ["취소"])
         self.assertEqual(v, "INCORRECT")
         self.assertIn("forbidden", why)
 
     def test_no_tokens_defers_to_the_judge(self):
-        # 81 of the 198 gold cases have no tokens; they must reach the judge
-        # rather than being scored correct by default.
         verdict, _ = wre.token_verdict("무슨 답이든", [], [])
         self.assertIsNone(verdict)
+
+
+class JudgeReferenceTests(unittest.TestCase):
+    """The judge must see the reference CONTENT, not a list of paths.
+
+    It was handed `gold_paths` and said so in its own verdicts — "Reference
+    missing; cannot verify specific claims like 191.78억" — which means the 81
+    token-less cases were graded on a guess.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "프로젝트").mkdir()
+        (self.root / "프로젝트" / "a.md").write_text(
+            "공급가액 191.78억", encoding="utf-8")
+
+    def test_reference_carries_the_page_text(self):
+        captured = {}
+
+        def fake_call(model, messages, **kw):
+            captured["user"] = messages[-1]["content"]
+            return "CORRECT 일치"
+
+        original = wre.call_model
+        wre.call_model = fake_call
+        self.addCleanup(lambda: setattr(wre, "call_model", original))
+        label, _ = wre.judge_case(
+            {"question": "공급가액?", "answer": "191.78억",
+             "gold_paths": ["프로젝트/a"]},
+            "any-model", str(self.root))
+        self.assertEqual(label, "CORRECT")
+        self.assertIn("공급가액 191.78억", captured["user"])
+        self.assertNotIn("gold_paths", captured["user"])
+
+
+class ReferenceIndependenceTests(unittest.TestCase):
+    """The oracle run is only judgeable against a DERIVED reference.
+
+    There the reader is served the gold pages and the judge was served the same
+    gold pages, so a verdict could only ask "is this consistent with these
+    pages" — which a wrong answer drawn from those same pages passes. Deriving
+    the answer first, from the pages alone, gives the judge something to
+    compare against rather than something to check consistency with.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "프로젝트").mkdir()
+        (self.root / "프로젝트" / "a.md").write_text(
+            "공급가액 191.78억", encoding="utf-8")
+
+    def _capture(self, reference):
+        seen = {}
+
+        def fake_call(model, messages, **kw):
+            seen["user"] = messages[-1]["content"]
+            seen["system"] = messages[0]["content"]
+            return "CORRECT 동일"
+
+        original = wre.call_model
+        wre.call_model = fake_call
+        self.addCleanup(lambda: setattr(wre, "call_model", original))
+        wre.judge_case({"question": "공급가액?", "answer": "191.78억",
+                        "gold_paths": ["프로젝트/a"]},
+                       "m", str(self.root), reference)
+        return seen
+
+    def test_a_reference_answer_replaces_the_source_pages(self):
+        seen = self._capture("공급가액은 191.78억이다.")
+        self.assertIn("기준 답", seen["user"])
+        self.assertNotIn("기준 페이지", seen["user"])
+
+    def test_without_a_reference_it_falls_back_to_the_pages(self):
+        seen = self._capture("")
+        self.assertIn("기준 페이지", seen["user"])
+
+    def test_derive_sees_only_the_pages_and_never_a_candidate(self):
+        seen = {}
+
+        def fake_call(model, messages, **kw):
+            seen["user"] = messages[-1]["content"]
+            return "공급가액은 191.78억이다."
+
+        original = wre.call_model
+        wre.call_model = fake_call
+        self.addCleanup(lambda: setattr(wre, "call_model", original))
+        out = wre.derive_reference({"question": "공급가액?",
+                                    "gold_paths": ["프로젝트/a"]},
+                                   str(self.root), "m")
+        self.assertIn("191.78억", out)
+        self.assertIn("공급가액 191.78억", seen["user"])
+        self.assertNotIn("채점", seen["user"])
 
 
 class ParseDirectiveTests(unittest.TestCase):
