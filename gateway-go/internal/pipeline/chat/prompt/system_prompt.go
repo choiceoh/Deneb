@@ -173,6 +173,7 @@ func buildStaticPrompt(params SystemPromptParams, eagerSet, toolSet toolNameSet)
 		// authored would reach the user only as the parent's quoted text.
 		s.WriteString("### 보고 형식\n")
 		s.WriteString("네 응답은 사용자가 아니라 **부모 에이전트**가 읽는다. `deneb-ui`·`deneb-html` 펜스를 쓰지 마라 — 평문이나 짧은 마크다운으로, 부모가 그대로 인용할 수 있게 사실과 근거만 보고한다.\n\n")
+		writeImplementerCodegraphContract(&s, params.ToolPreset)
 	} else {
 		writeRichAnswerContract(&s)
 	}

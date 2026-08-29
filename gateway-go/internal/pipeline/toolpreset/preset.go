@@ -67,8 +67,17 @@ var selfReviewTools = toSet(
 // reviewer is told to check existing skills via skills(action=list) before
 // choosing evolve vs genesis, and without the main prompt's deferred-tool
 // listing it would not even learn the fetch_tools escape hatch.
+// PresetImplementer preloads the two codegraph tools its procedure names.
+// Same reasoning as self-review: a step the preset REQUIRES must not sit behind
+// a fetch_tools dance the model routinely skips. Only impact + node are
+// preloaded (blast radius before an edit, precise symbol body) — the remaining
+// four stay deferred and reachable via fetch_tools, so the turn-1 tool array
+// grows by two, not six. Names absent from the registry (codegraph not
+// configured, or MCP discovery still in flight) are dropped by
+// DeferredLLMTools, so this is safe on a host without the server.
 var preloadedDeferred = map[Preset][]string{
-	PresetSelfReview: {"skill_lifecycle", "skills"},
+	PresetSelfReview:  {"skill_lifecycle", "skills"},
+	PresetImplementer: {"codegraph_impact", "codegraph_node"},
 }
 
 // PreloadedDeferredTools returns the deferred tools to load as active (callable
@@ -145,9 +154,27 @@ var notiDigestTools = toSet(
 	"fetch_tools",
 )
 
+// codegraphTools are the external codegraph MCP tools (registered by
+// externalmcp from DENEB_MCP_SERVERS as codegraph_<kind>). Listed by name for
+// the same reason every other deferred tool is: the allow-list gates the
+// deferred prompt listing, fetch_tools activation, AND Execute — absent here,
+// an implementer child could not see or call them at all. Measured 2026-08-29:
+// zero codegraph_* calls across the whole agent-log window, because the preset
+// made them unreachable, not because the model declined them.
+//
+// Deliberately NOT folded into researcherTools: that set is the base for the
+// autonomous wiki-research preset, which has no business navigating source. The
+// symbol graph belongs to the lane that edits code.
+var codegraphTools = toSet(
+	"codegraph_impact", "codegraph_callers", "codegraph_callees",
+	"codegraph_node", "codegraph_search", "codegraph_explore",
+)
+
 // implementerTools: researcher + file mutation + shell — the "do the work"
 // preset for delegated changes that end in artifacts, not just findings.
-var implementerTools = union(researcherTools, toSet(
+// codegraph rides along: the dependency graph is what keeps an edit from being
+// made blind (see impactFirstProcedure in the chat prompt).
+var implementerTools = union(researcherTools, codegraphTools, toSet(
 	"edit", "process", // deferred — loaded via fetch_tools
 	"write", "exec",
 ))

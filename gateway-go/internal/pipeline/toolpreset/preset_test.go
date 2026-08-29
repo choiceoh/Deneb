@@ -171,6 +171,25 @@ func TestAllowedTools_Implementer(t *testing.T) {
 			t.Errorf("implementer preset should include %q", name)
 		}
 	}
+	// ...plus the symbol graph. The allow-list gates the deferred listing,
+	// fetch_tools activation AND Execute, so a codegraph tool missing here is
+	// invisible and uncallable — which is how the editing lane came to make
+	// zero codegraph calls despite the server being configured.
+	for _, name := range []string{
+		"codegraph_impact", "codegraph_callers", "codegraph_callees",
+		"codegraph_node", "codegraph_search", "codegraph_explore",
+	} {
+		if _, ok := allowed[name]; !ok {
+			t.Errorf("implementer preset should include %q", name)
+		}
+	}
+	// The symbol graph belongs to the lane that edits code, not to the
+	// autonomous internal-research presets derived from researcher.
+	for _, preset := range []Preset{PresetResearcher, PresetWikiResearch, PresetWikiScout, PresetNotiDigest} {
+		if _, ok := AllowedTools(preset)["codegraph_impact"]; ok {
+			t.Errorf("%q should not carry codegraph tools", preset)
+		}
+	}
 	for _, name := range []string{"message", "send_file", "cron", "gateway", "sessions_spawn", "subagents"} {
 		if _, ok := allowed[name]; ok {
 			t.Errorf("implementer preset should NOT include %q", name)
