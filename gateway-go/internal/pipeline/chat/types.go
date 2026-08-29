@@ -2,10 +2,11 @@ package chat
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/modelport"
 )
 
-// Type aliases — all wire types are defined in toolport/ (the leaf package).
-// These aliases preserve backward compatibility for external consumers.
+// Type aliases preserve backward compatibility for external consumers while
+// the owning contracts live in focused leaf packages.
 
 // BroadcastFunc sends an event to all matching subscribers.
 type BroadcastFunc = toolport.BroadcastFunc
@@ -26,10 +27,10 @@ type DraftEditFunc = toolport.DraftEditFunc
 type MessageDeleter = toolport.MessageDeleter
 
 // ProviderConfig holds credentials and endpoint for an LLM provider.
-type ProviderConfig = toolport.ProviderConfig
+type ProviderConfig = modelport.ProviderConfig
 
 // RoutingConfig is the deneb.json per-model effort-router tuning block.
-type RoutingConfig = toolport.RoutingConfig
+type RoutingConfig = modelport.RoutingConfig
 
 // DeliveryContext carries channel routing information for a chat message.
 type DeliveryContext = toolport.DeliveryContext

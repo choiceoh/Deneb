@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/modelport"
 )
 
 func TestExtractModelFromDefaultsBoundaryMatrix(t *testing.T) {
@@ -169,7 +169,7 @@ func TestConvertRoutingConfigBoundaryMatrix(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var input chatport.RoutingConfig
+			var input modelport.RoutingConfig
 			if err := json.Unmarshal([]byte(tc.raw), &input); err != nil {
 				t.Fatal(err)
 			}
@@ -191,7 +191,7 @@ func TestConvertRoutingConfigBoundaryMatrix(t *testing.T) {
 }
 
 func TestConvertRoutingConfigPreservesOutputAfterInputMutation(t *testing.T) {
-	var input chatport.RoutingConfig
+	var input modelport.RoutingConfig
 	if err := json.Unmarshal([]byte(`{"enabled":true,"maxSimpleRunes":10}`), &input); err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestConvertRoutingConfigPreservesOutputAfterInputMutation(t *testing.T) {
 		t.Fatal("nil conversion")
 	}
 	before, _ := json.Marshal(got)
-	input = chatport.RoutingConfig{}
+	input = modelport.RoutingConfig{}
 	after, _ := json.Marshal(got)
 	if string(before) != string(after) {
 		t.Errorf("conversion container aliased input: before=%s after=%s", before, after)

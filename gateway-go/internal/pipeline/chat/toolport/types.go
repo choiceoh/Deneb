@@ -68,12 +68,6 @@ type MessageDeleter func(ctx context.Context, delivery *DeliveryContext, msgID s
 // On subsequent calls, it edits the message with the given ID.
 type DraftEditFunc func(ctx context.Context, delivery *DeliveryContext, msgID string, text string) (newMsgID string, err error)
 
-// ProviderConfig is the stable provider configuration owned by chatport.
-type ProviderConfig = chatport.ProviderConfig
-
-// RoutingConfig is the stable routing override owned by chatport.
-type RoutingConfig = chatport.RoutingConfig
-
 // DeliveryContext is the stable channel-routing contract owned by chatport.
 type DeliveryContext = chatport.DeliveryContext
 

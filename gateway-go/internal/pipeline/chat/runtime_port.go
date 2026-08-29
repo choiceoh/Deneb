@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/modelport"
 )
 
 // ErrRuntimeDraining tells callers to retry after the gateway restart. It is
@@ -16,7 +17,7 @@ var ErrRuntimeDraining = errors.New("chat runtime is draining for restart")
 var (
 	_ chatport.SyncRunner       = (*Handler)(nil)
 	_ chatport.SyncStreamRunner = (*Handler)(nil)
-	_ chatport.ModelController  = (*Handler)(nil)
+	_ modelport.ModelController = (*Handler)(nil)
 )
 
 // ChatReady reports whether the concrete handler behind a chatport interface
