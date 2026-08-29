@@ -232,6 +232,18 @@ body.cygnus-window {
   }
 }
 
+/* One wider step for the rail on a large window. 200px is sized for the narrow
+ * end of the docked range; on a maximized workspace it is a thin sliver that
+ * truncates thread titles for no reason, while the conversation beside it is
+ * already capped at its readable measure — so the extra width would otherwise
+ * go to empty gutter. Kept to a single step: the rail is a list, not a pane
+ * that should grow without limit. */
+@media (min-width: 1280px) {
+  .cy-rail {
+    width: 260px;
+  }
+}
+
 .cy-scrim {
   position: absolute;
   inset: 0;
