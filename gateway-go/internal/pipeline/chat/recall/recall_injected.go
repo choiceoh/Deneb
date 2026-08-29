@@ -27,10 +27,10 @@ var recallInjectedStore = struct {
 	store map[string][]string // session key → last preflight's injected wiki paths
 }{store: make(map[string][]string)}
 
-// StoreInjectedPaths replaces the pending citation candidates for the
+// storeInjectedPaths replaces the pending citation candidates for the
 // session. Empty paths clears the slot — a turn that injected nothing must
 // not let a previous turn's paths be attributed to its answer.
-func StoreInjectedPaths(sessionKey string, paths []string) {
+func storeInjectedPaths(sessionKey string, paths []string) {
 	if sessionKey == "" {
 		return
 	}
@@ -49,7 +49,7 @@ func StoreInjectedPaths(sessionKey string, paths []string) {
 // TestArmSnapshotCitationsRoundTrip).
 var snapshotWikiRefPattern = regexp.MustCompile(`(?m)^- source=(wiki|org) ref="([^"]+)"`)
 
-// ArmSnapshotCitations re-arms the end-of-turn citation pass for a turn served
+// armSnapshotCitations re-arms the end-of-turn citation pass for a turn served
 // from the frozen snapshot cache. A cache hit skips Build entirely, so without
 // this the SECOND and later turns of a pinned-topic conversation — exactly the
 // turns most likely to keep using the pinned evidence — could never earn cite
@@ -57,7 +57,7 @@ var snapshotWikiRefPattern = regexp.MustCompile(`(?m)^- source=(wiki|org) ref="(
 // exposure was already counted when the snapshot was built; only the use half
 // needs re-arming. Org rows count only when they point at a real page, the
 // same rule isLedgerPage applies on the evidence structs.
-func ArmSnapshotCitations(sessionKey, snapshot string) {
+func armSnapshotCitations(sessionKey, snapshot string) {
 	if sessionKey == "" || snapshot == "" {
 		return
 	}
@@ -73,13 +73,13 @@ func ArmSnapshotCitations(sessionKey, snapshot string) {
 		paths = append(paths, m[2])
 	}
 	if len(paths) > 0 {
-		StoreInjectedPaths(sessionKey, paths)
+		storeInjectedPaths(sessionKey, paths)
 	}
 }
 
-// TakeInjectedPaths returns and clears the session's pending candidates —
+// takeInjectedPaths returns and clears the session's pending candidates —
 // consume-once, so one answer gets exactly one citation pass.
-func TakeInjectedPaths(sessionKey string) []string {
+func takeInjectedPaths(sessionKey string) []string {
 	if sessionKey == "" {
 		return nil
 	}
@@ -98,7 +98,7 @@ func TakeInjectedPaths(sessionKey string) []string {
 // stale paths never leak into a later turn. Best-effort: a ledger failure is
 // Warn-logged and never affects delivery.
 func RecordAnswerCitations(store *wiki.Store, sessionKey, answer string, logger *slog.Logger) {
-	injected := TakeInjectedPaths(sessionKey)
+	injected := takeInjectedPaths(sessionKey)
 	if store == nil || len(injected) == 0 {
 		return
 	}

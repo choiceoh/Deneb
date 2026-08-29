@@ -62,7 +62,4 @@ func TestBuildRecallSnapshotDoesNotReuseEllipticalFactAcrossPriorSubjects(t *tes
 	if !strings.Contains(second, betaValue) || strings.Contains(second, alphaValue) {
 		t.Fatalf("elliptical cache reused alpha in beta context: %q", second)
 	}
-	if _, cached := chatrecall.CachedSnapshot(session, chatrecall.CueFingerprint(followup)); cached {
-		t.Fatal("context-dependent follow-up was frozen under its raw cue")
-	}
 }

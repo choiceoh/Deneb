@@ -1080,7 +1080,7 @@ func fileOpenHint(filesToolReachable bool) string {
 // formatRecallEvidenceAt renders the evidence block and reports how many rows
 // the character budget cut. The count matters beyond this turn: a snapshot the
 // budget shortened is degraded exactly the way a deadline-cut one is, and
-// ShouldFreeze must not pin it onto every later turn about the same topic.
+// shouldFreeze must not pin it onto every later turn about the same topic.
 func formatRecallEvidenceAt(evidence []recallEvidence, now time.Time, filesToolReachable, sessionsToolReachable bool) (string, int) {
 	var sb strings.Builder
 	sb.WriteString(recallContextOpenTag)

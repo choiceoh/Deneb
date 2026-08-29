@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Renderer↔parser round-trip: ArmSnapshotCitations must recover from a
+// Renderer↔parser round-trip: armSnapshotCitations must recover from a
 // RENDERED snapshot exactly the paths the ledger scores (isLedgerPage's
 // rule) — wiki rows and org rows that point at real pages, never session
 // rows or org placeholders. Pins the row shape the parser depends on.
@@ -18,8 +18,8 @@ func TestArmSnapshotCitationsRoundTrip(t *testing.T) {
 	}
 	block, _ := formatRecallEvidenceAt(evidence, time.Now(), true, true)
 
-	ArmSnapshotCitations("client:roundtrip", block)
-	got := TakeInjectedPaths("client:roundtrip")
+	armSnapshotCitations("client:roundtrip", block)
+	got := takeInjectedPaths("client:roundtrip")
 	want := map[string]bool{"프로젝트/pl1-hnm-epc-001/대표.md": true, "인물/임형철.md": true}
 	if len(got) != len(want) {
 		t.Fatalf("want exactly the ledger pages, got %v", got)
@@ -29,7 +29,7 @@ func TestArmSnapshotCitationsRoundTrip(t *testing.T) {
 			t.Fatalf("unexpected path %q in %v", p, got)
 		}
 	}
-	if again := TakeInjectedPaths("client:roundtrip"); len(again) != 0 {
+	if again := takeInjectedPaths("client:roundtrip"); len(again) != 0 {
 		t.Fatalf("candidates must stay consume-once, got %v", again)
 	}
 }

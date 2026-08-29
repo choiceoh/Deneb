@@ -16,11 +16,11 @@ func resetRecallSnapshotStore(t *testing.T) {
 func TestRecallSnapshot_RoundTrip(t *testing.T) {
 	resetRecallSnapshotStore(t)
 
-	if _, ok := CachedSnapshot("s1", "fp"); ok {
+	if _, ok := cachedSnapshot("s1", "fp"); ok {
 		t.Fatalf("expected cache miss before store")
 	}
-	StoreSnapshot("s1", "fp", "<recall-context> source=wiki ... </recall-context>")
-	got, ok := CachedSnapshot("s1", "fp")
+	storeSnapshot("s1", "fp", "<recall-context> source=wiki ... </recall-context>")
+	got, ok := cachedSnapshot("s1", "fp")
 	if !ok || got == "" {
 		t.Fatalf("expected cache hit after store, got ok=%v value=%q", ok, got)
 	}
@@ -29,8 +29,8 @@ func TestRecallSnapshot_RoundTrip(t *testing.T) {
 func TestRecallSnapshot_StoreEmptyIgnored(t *testing.T) {
 	resetRecallSnapshotStore(t)
 
-	StoreSnapshot("s1", "fp", "")
-	if _, ok := CachedSnapshot("s1", "fp"); ok {
+	storeSnapshot("s1", "fp", "")
+	if _, ok := cachedSnapshot("s1", "fp"); ok {
 		t.Errorf("empty value should not be cached")
 	}
 }
@@ -38,8 +38,8 @@ func TestRecallSnapshot_StoreEmptyIgnored(t *testing.T) {
 func TestRecallSnapshot_EmptySessionKeyIgnored(t *testing.T) {
 	resetRecallSnapshotStore(t)
 
-	StoreSnapshot("", "fp", "anything")
-	if _, ok := CachedSnapshot("", "fp"); ok {
+	storeSnapshot("", "fp", "anything")
+	if _, ok := cachedSnapshot("", "fp"); ok {
 		t.Errorf("empty session key should not produce a hit")
 	}
 }
@@ -47,13 +47,13 @@ func TestRecallSnapshot_EmptySessionKeyIgnored(t *testing.T) {
 func TestRecallSnapshot_Clear(t *testing.T) {
 	resetRecallSnapshotStore(t)
 
-	StoreSnapshot("s1", "fpA", "value-A")
-	StoreSnapshot("s1", "fpB", "value-B")
+	storeSnapshot("s1", "fpA", "value-A")
+	storeSnapshot("s1", "fpB", "value-B")
 	ClearSession("s1")
-	if _, ok := CachedSnapshot("s1", "fpA"); ok {
+	if _, ok := cachedSnapshot("s1", "fpA"); ok {
 		t.Errorf("expected miss after clear (fpA)")
 	}
-	if _, ok := CachedSnapshot("s1", "fpB"); ok {
+	if _, ok := cachedSnapshot("s1", "fpB"); ok {
 		t.Errorf("expected miss after clear (fpB) — clear must wipe all fingerprints for session")
 	}
 	// Idempotent.
@@ -64,19 +64,19 @@ func TestRecallSnapshot_Clear(t *testing.T) {
 func TestRecallSnapshotPreservesPerSessionIsolation(t *testing.T) {
 	resetRecallSnapshotStore(t)
 
-	StoreSnapshot("s1", "fp", "value-1")
-	StoreSnapshot("s2", "fp", "value-2")
-	if v, _ := CachedSnapshot("s1", "fp"); v != "value-1" {
+	storeSnapshot("s1", "fp", "value-1")
+	storeSnapshot("s2", "fp", "value-2")
+	if v, _ := cachedSnapshot("s1", "fp"); v != "value-1" {
 		t.Errorf("s1: want value-1, got %q", v)
 	}
-	if v, _ := CachedSnapshot("s2", "fp"); v != "value-2" {
+	if v, _ := cachedSnapshot("s2", "fp"); v != "value-2" {
 		t.Errorf("s2: want value-2, got %q", v)
 	}
 	ClearSession("s1")
-	if _, ok := CachedSnapshot("s1", "fp"); ok {
+	if _, ok := cachedSnapshot("s1", "fp"); ok {
 		t.Errorf("s1 should be gone")
 	}
-	if _, ok := CachedSnapshot("s2", "fp"); !ok {
+	if _, ok := cachedSnapshot("s2", "fp"); !ok {
 		t.Errorf("s2 should still be cached")
 	}
 }
@@ -86,16 +86,16 @@ func TestRecallSnapshotPreservesPerFingerprintIsolation(t *testing.T) {
 
 	// Same session, different cue fingerprints → independent slots so a
 	// turn about topic A does not leak its recall into a turn about topic B.
-	StoreSnapshot("s1", "topic-a", "value-A")
-	StoreSnapshot("s1", "topic-b", "value-B")
-	if v, _ := CachedSnapshot("s1", "topic-a"); v != "value-A" {
+	storeSnapshot("s1", "topic-a", "value-A")
+	storeSnapshot("s1", "topic-b", "value-B")
+	if v, _ := cachedSnapshot("s1", "topic-a"); v != "value-A" {
 		t.Errorf("topic-a: want value-A, got %q", v)
 	}
-	if v, _ := CachedSnapshot("s1", "topic-b"); v != "value-B" {
+	if v, _ := cachedSnapshot("s1", "topic-b"); v != "value-B" {
 		t.Errorf("topic-b: want value-B, got %q", v)
 	}
 	// A third fingerprint with no entry must miss.
-	if _, ok := CachedSnapshot("s1", "topic-c"); ok {
+	if _, ok := cachedSnapshot("s1", "topic-c"); ok {
 		t.Errorf("topic-c should miss")
 	}
 }
@@ -103,15 +103,15 @@ func TestRecallSnapshotPreservesPerFingerprintIsolation(t *testing.T) {
 func TestRecallSnapshot_FirstWriteWins(t *testing.T) {
 	resetRecallSnapshotStore(t)
 
-	StoreSnapshot("s1", "fp", "first")
-	StoreSnapshot("s1", "fp", "second") // must be ignored — first-write-wins per slot
-	if v, _ := CachedSnapshot("s1", "fp"); v != "first" {
+	storeSnapshot("s1", "fp", "first")
+	storeSnapshot("s1", "fp", "second") // must be ignored — first-write-wins per slot
+	if v, _ := cachedSnapshot("s1", "fp"); v != "first" {
 		t.Errorf("expected first write to survive, got %q", v)
 	}
 	// After explicit clear, the next store wins again.
 	ClearSession("s1")
-	StoreSnapshot("s1", "fp", "third")
-	if v, _ := CachedSnapshot("s1", "fp"); v != "third" {
+	storeSnapshot("s1", "fp", "third")
+	if v, _ := cachedSnapshot("s1", "fp"); v != "third" {
 		t.Errorf("expected post-clear store to take effect, got %q", v)
 	}
 }
@@ -127,15 +127,15 @@ func TestRecallCueFingerprint_NoCueReturnsEmpty(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := CueFingerprint(tc.message); got != "" {
-				t.Errorf("CueFingerprint(%q) = %q, want empty", tc.message, got)
+			if got := cueFingerprint(tc.message); got != "" {
+				t.Errorf("cueFingerprint(%q) = %q, want empty", tc.message, got)
 			}
 		})
 	}
 }
 
 func TestRecallCueFingerprintReturnsCueOnlyForVagueReference(t *testing.T) {
-	got := CueFingerprint("그거 뭐였지?")
+	got := cueFingerprint("그거 뭐였지?")
 	if got != "cue-only" {
 		t.Errorf("vague-cue message should map to cue-only slot, got %q", got)
 	}
@@ -145,8 +145,8 @@ func TestRecallCueFingerprintReturnsUniqueFingerprintPerTopic(t *testing.T) {
 	// Different topical messages must produce different fingerprints so a
 	// turn about topic A does not hit the cache slot of an earlier turn
 	// about topic B. This is the core anti-poisoning property.
-	a := CueFingerprint("전에 chat pipeline 어떻게 됐지?")
-	b := CueFingerprint("전에 telegram 봇 설정 어떻게 했지?")
+	a := cueFingerprint("전에 chat pipeline 어떻게 됐지?")
+	b := cueFingerprint("전에 telegram 봇 설정 어떻게 했지?")
 	if a == "" || b == "" {
 		t.Fatalf("expected both messages to produce non-empty fingerprints, got a=%q b=%q", a, b)
 	}
@@ -159,8 +159,8 @@ func TestRecallCueFingerprintReturnsSameValueForSameMessage(t *testing.T) {
 	// Same message produces the same fingerprint every time (sorted terms
 	// make the output deterministic regardless of token order).
 	msg := "전에 chat pipeline 정리한 거"
-	first := CueFingerprint(msg)
-	second := CueFingerprint(msg)
+	first := cueFingerprint(msg)
+	second := cueFingerprint(msg)
 	if first == "" {
 		t.Fatalf("expected non-empty fingerprint, got empty")
 	}
@@ -221,8 +221,8 @@ func TestShouldFreezeRecallSnapshotReturnsExpectedDecision(t *testing.T) {
 		{"empty snapshot never freezes", true, false, "", false},
 	}
 	for _, tc := range cases {
-		if got := ShouldFreeze(tc.hasCue, tc.truncated, tc.snapshot); got != tc.want {
-			t.Errorf("%s: ShouldFreeze(%v, %v, %q) = %v, want %v",
+		if got := shouldFreeze(tc.hasCue, tc.truncated, tc.snapshot); got != tc.want {
+			t.Errorf("%s: shouldFreeze(%v, %v, %q) = %v, want %v",
 				tc.name, tc.hasCue, tc.truncated, tc.snapshot, got, tc.want)
 		}
 	}
@@ -231,12 +231,12 @@ func TestShouldFreezeRecallSnapshotReturnsExpectedDecision(t *testing.T) {
 func TestRecallSnapshot_ClearAllSessions(t *testing.T) {
 	ClearAll()
 	t.Cleanup(ClearAll)
-	StoreSnapshot("client:main", "fact", "old-main")
-	StoreSnapshot("cron:daily", "fact", "old-cron")
+	storeSnapshot("client:main", "fact", "old-main")
+	storeSnapshot("cron:daily", "fact", "old-cron")
 
 	ClearAll()
 	for _, session := range []string{"client:main", "cron:daily"} {
-		if _, ok := CachedSnapshot(session, "fact"); ok {
+		if _, ok := cachedSnapshot(session, "fact"); ok {
 			t.Fatalf("snapshot for %q survived global fact invalidation", session)
 		}
 	}
@@ -245,18 +245,18 @@ func TestRecallSnapshot_ClearAllSessions(t *testing.T) {
 func TestRecallSnapshot_GlobalClearRejectsInflightStaleRefill(t *testing.T) {
 	ClearAll()
 	t.Cleanup(ClearAll)
-	_, _, generation := CachedSnapshotWithGeneration("client:main", "fact")
+	_, _, generation := cachedSnapshotWithGeneration("client:main", "fact")
 
 	ClearAll()
-	if StoreSnapshotIfGeneration("client:main", "fact", "stale-before-correction", generation) {
+	if storeSnapshotIfGeneration("client:main", "fact", "stale-before-correction", generation) {
 		t.Fatal("pre-invalidation computation refilled the cleared recall cache")
 	}
-	if _, ok := CachedSnapshot("client:main", "fact"); ok {
+	if _, ok := cachedSnapshot("client:main", "fact"); ok {
 		t.Fatal("stale in-flight snapshot survived generation fence")
 	}
 
-	_, _, generation = CachedSnapshotWithGeneration("client:main", "fact")
-	if !StoreSnapshotIfGeneration("client:main", "fact", "fresh-after-correction", generation) {
+	_, _, generation = cachedSnapshotWithGeneration("client:main", "fact")
+	if !storeSnapshotIfGeneration("client:main", "fact", "fresh-after-correction", generation) {
 		t.Fatal("current-generation snapshot was rejected")
 	}
 }

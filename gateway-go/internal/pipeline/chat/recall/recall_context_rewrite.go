@@ -55,12 +55,6 @@ func needsContextRewrite(message string) bool {
 	return false
 }
 
-// NeedsContextRewrite exposes the transcript-dependence gate to the chat-level
-// snapshot cache without exporting the rewrite implementation itself.
-func NeedsContextRewrite(message string) bool {
-	return needsContextRewrite(message)
-}
-
 // lastPriorUserTurn returns the most recent earlier user message of the
 // session, or "". The current inbound message (already persisted ahead of
 // preflight) is skipped by exact text match; the persisted form carries a
