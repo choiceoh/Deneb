@@ -48,6 +48,16 @@ describe("CygnusApp", () => {
     expect(localStorage.getItem("cygnus.theme")).toContain("dark");
   });
 
+  it("offers no tray-fold-only dismissal in the titlebar", () => {
+    // Cygnus is a workspace, so the titlebar carries real window management
+    // (WindowControls: minimize/maximize/close) instead of the old hide-only
+    // "트레이로 접기" button. Those controls render only inside Tauri — jsdom is
+    // the web build — so what is assertable here is that the launcher-era
+    // dismissal is gone rather than that the cluster is present.
+    render(<CygnusApp />);
+    expect(screen.queryByRole("button", { name: "트레이로 접기" })).toBeNull();
+  });
+
   it("keeps the docked thread rail up by default and remembers being closed", async () => {
     stubMatchMedia(true);
     const user = userEvent.setup();

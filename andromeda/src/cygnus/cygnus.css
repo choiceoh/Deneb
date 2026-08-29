@@ -144,6 +144,20 @@ body.cygnus-window {
   font-size: 13px;
   padding: 0;
 }
+/* Shared frameless window controls (WindowControls) sitting in this titlebar
+ * rather than the workstation's vertical nav rail: drop the rail's bottom
+ * margin and give the cluster a little air from the surface's own buttons. */
+.cygnus-root .win-ctls {
+  margin-bottom: 0;
+  margin-left: 4px;
+  align-items: center;
+}
+.cygnus-root .win-ctl {
+  height: 26px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+
 .cy-tbtn:hover {
   color: var(--ink);
   background: var(--row-hover);

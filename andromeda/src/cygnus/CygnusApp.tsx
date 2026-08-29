@@ -7,7 +7,7 @@ import { type GatewayConfig, loadConfig, saveConfig } from "@/gateway";
 import { useEvents, useChat } from "@/hooks";
 import { parseUiSubmission } from "@/markdown/denebUiParse";
 import { getString, setString } from "@/storage";
-import { isTauri, readDesktopToken } from "@/tauri";
+import { readDesktopToken } from "@/tauri";
 import { useAttachPipeline, useComposerBehavior, useModels, useSessionDraft } from "@/useChatSurface";
 import { useFileDrop } from "@/useFileDrop";
 import { useSessions } from "@/useSessions";
@@ -21,15 +21,26 @@ import { LiveDot } from "@/components/LiveDot";
 import { ModelPicker } from "@/components/ModelPicker";
 import { SessionDrawer } from "@/components/SessionDrawer";
 import { UiSubmissionBubble } from "@/components/UiSubmission";
+import { WindowControls } from "@/components/WindowControls";
 // The coding surface's mono voice — bundled so the real shell (webkit on
 // Linux/macOS/Windows) doesn't fall back to a chunky system mono.
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "./cygnus.css";
 
-// Cygnus — the agent companion window. Andromeda stays the 업무비서 workstation;
-// this summonable surface is for DRIVING the agent: kicking off tasks, light
-// coding runs, watching tool calls stream. Same gateway, same shared chat
+// Cygnus — the agent workspace window. Andromeda stays the 업무비서 workstation;
+// this surface is for DRIVING the agent: kicking off tasks, light coding runs,
+// watching tool calls stream.
+//
+// Positioning (operator call, 2026-08-29): a WORKSPACE, not a summon-and-
+// dismiss launcher. It was built on the Perplexity Portable Computer shell's
+// summonable pattern (480px, tray + global shortcut), but that size is what
+// forced the thread list into a scrim overlay — the surface is somewhere the
+// operator stays, so the list docks and the window manages like any other
+// (minimize/maximize/close). The tray and the global shortcut remain as
+// conveniences for reaching it, not as its identity.
+//
+// Same gateway, same shared chat
 // modules (useChat/AssistantBody/ChatComposer — the parity rule), its own
 // session namespace (client:cygnus:*) and its own light-first token skin
 // (cygnus.css re-values the workstation token names under .cygnus-root).
@@ -64,13 +75,6 @@ function useDockedRail(): boolean {
 // Empty-state starters: what this surface is FOR, in the user's own words. They
 // fill the composer (never send on their own) so the phrasing stays editable.
 const CYGNUS_STARTERS = ["레포 상태 요약", "이 폴더 TODO 찾기", "스크립트 하나 짜줘"];
-
-// Hide (not close) the companion window — the tray/global shortcut re-summons.
-async function hideSelf(): Promise<void> {
-  if (!isTauri()) return;
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  await getCurrentWindow().hide();
-}
 
 export function CygnusApp() {
   // Same config bootstrap as the workstation App: shared localStorage + desktop
@@ -309,11 +313,13 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
         <button className="cy-tbtn" onClick={toggleTheme} title="테마 전환" aria-label="테마 전환">
           {theme === "dark" ? "☾" : "☀"}
         </button>
-        {isTauri() && (
-          <button className="cy-tbtn" onClick={() => void hideSelf()} title="트레이로 접기" aria-label="트레이로 접기">
-            ⌄
-          </button>
-        )}
+        {/* Workspace window management, not just dismissal. Cygnus is
+            frameless like the workstation, so without these there is no way to
+            minimize or MAXIMIZE it at all — the window could only be summoned
+            and hidden, which is what made it read as a launcher. Same shared
+            cluster the workstation nav rail uses (close still hides to tray:
+            the CloseRequested handler is app-wide). */}
+        <WindowControls />
       </header>
 
       <div className="cy-body">
