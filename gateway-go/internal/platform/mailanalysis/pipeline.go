@@ -84,6 +84,20 @@ type PipelineDeps struct {
 	// was never snapshotted. nil → fall back to the graphify subprocess.
 	SenderFactsFn func(ctx context.Context, displayName string) string
 
+	// TopicFactsFn recalls what the wiki already holds ABOUT THIS MAIL'S
+	// SUBJECT — the past material an analyst would look up before reading a
+	// new message on a running deal.
+	//
+	// SenderFactsFn answers "who is this person to us" from the identity
+	// graph, which is a different question with a different right tool. The
+	// MemoryContext struct has carried a TopicFacts slot since the pipeline
+	// was written and it was always passed empty, so arrival analysis knew the
+	// sender and the thread but not the project: a "JA Solar 견적 회신" landed
+	// with no prior quotes, no decision history, no contract terms.
+	//
+	// nil disables it; the pipeline never blocks on this.
+	TopicFactsFn func(ctx context.Context, subject, body string) string
+
 	// CounterpartyProjectsFn returns the linked project names for an active
 	// counterparty mail domain (wiki-derived, cached server-side), nil/empty
 	// otherwise. Enriches the party anchor's side labels — "외부(domain · 활성
@@ -344,7 +358,16 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 		defer wg.Done()
 		memCtx = extractSenderContext(stage1Ctx, deps, msg) // best-effort
 	}()
+	var topicFacts string
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		topicFacts = extractTopicContext(stage1Ctx, deps, msg) // best-effort
+	}()
 	wg.Wait()
+	// Written after Wait: memCtx is produced by a sibling goroutine, so
+	// assigning into it inside one would race the other's write.
+	memCtx.TopicFacts = topicFacts
 
 	// Stage 2: final analysis combining all context.
 	stage2Ctx, cancel := context.WithTimeout(ctx, stage2Timeout)
