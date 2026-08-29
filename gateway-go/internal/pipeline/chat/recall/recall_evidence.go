@@ -233,6 +233,24 @@ func recallWikiEvidenceResult(ctx context.Context, store *wiki.Store, queries []
 		return evidence, err
 	}
 	queryLabel := queries[0]
+	// Cohesion gate (experimental, default off). Neither an absolute nor a
+	// relative score floor separates noise from answers — an out-of-domain
+	// query still maps onto the corpus and scores its nearest pages
+	// confidently, so both populations sit in one band (measured on a
+	// 32-question stratified sample plus four out-of-domain probes: absolute
+	// 0.6 cost 17.1pp of answers and removed no noise; relative 0.85 removed 5
+	// noise rows for 6.2pp).
+	//
+	// Cohesion asks what the score cannot: do the hits AGREE with each other. A
+	// real subject concentrates; a query the wiki cannot answer scatters,
+	// because the engine returns the nearest thing in each direction rather
+	// than one thing. On "지금 브랜치 뭐야?" it returned six rows over six
+	// distinct areas.
+	//
+	// Agreement is read from the AUTHORED GRAPH, not the path string. A
+	// path-prefix version was measured and rejected: it reads 인물/김대희 and
+	// 프로젝트/pl2-dsv as unrelated because their folders differ, so it scored
+	// real answers as scattered and cost two thirds of them (90.6% → 31.2%).
 	kept := 0
 	for _, r := range report.Results {
 		if r.FactID != "" {
@@ -1263,10 +1281,61 @@ func recallConfidence(ev recallEvidence) string {
 	}
 	switch ev.Kind {
 	case "wiki":
-		if ev.Score >= 1.10 {
+		// Score = 0.80 source prior + the fused relevance term, so these bars
+		// read as relevance 0.80 / 0.60 on the search score.
+		//
+		// The bar used to sit at relevance 0.30, where the label was a
+		// constant: measured over the gold set, 100% of gold rows AND 99.1% of
+		// non-gold rows cleared it, and "high" carried 5.7pp of information
+		// over the base rate. The same defect the diary branch below already
+		// records — a threshold at the prior itself labels everything high.
+		//
+		// Distributions (347 gold rows, 1020 non-gold, top-8 per question):
+		//
+		//	gold   p10 0.62  p25 0.74  p50 0.94
+		//	other  p25 0.56  p50 0.69  p75 0.85
+		//
+		// They overlap, so no bar separates them — but they separate FURTHER
+		// up, which is what a label is for:
+		//
+		//	bar    gold-high  other-high  precision
+		//	0.30      100.0%       99.1%      25.6%   <- old
+		//	0.60       92.5%       66.8%      32.0%
+		//	0.80       69.2%       30.1%      43.9%   <- high
+		//
+		// This changes NO rows — a demoted row is still rendered, it just stops
+		// claiming authority it does not have. That is the whole reason to
+		// prefer it. Six row-DROPPING gates were built and measured on this
+		// axis first, on a 32-question stratified sample plus four
+		// out-of-domain probes ("지금 브랜치 뭐야?" and friends, which draw
+		// 태양광 회의록); all six are rejected, and the numbers are here so the
+		// next reader does not rebuild them:
+		//
+		//	gate                          answers   noise rows (of 12)
+		//	absolute score floor 0.6      -17.1pp   12  (removed none)
+		//	relative floor 0.85            -6.2pp    7
+		//	path-prefix cohesion 0.34     -59.4pp    0
+		//	graph cohesion 0.34           -40.6pp    3
+		//	prefix AND graph 0.34         -25.0pp    3
+		//	+ query coverage (3-way)         0pp    12  (never fires)
+		//
+		// They fail for one reason: an out-of-domain query still maps onto this
+		// corpus and its nearest pages score confidently, so noise and answers
+		// occupy the same band on every result-side signal. Discrimination
+		// measured as AUC over gold vs non-gold rows: bm25 backend 0.77, semantic
+		// 0.73, the cross-encoder's own raw score 0.72, the fused score 0.72 —
+		// and validity, intent rank and graph backend sit at 0.50, contributing
+		// nothing. Nothing here separates the two populations well enough to cut
+		// on; the query side does not either (브랜치 and 날씨 both occur in a
+		// 916-page wiki that also holds system notes and morning letters).
+		switch {
+		case ev.Score >= 1.60:
 			return "high"
+		case ev.Score >= 1.40:
+			return "medium"
+		default:
+			return "low"
 		}
-		return "medium"
 	case "diary":
 		// Score = 0.70 source prior + a 0-1 relevance term (cosine on the
 		// semantic path, normalized BM25 on the lexical one). The bar used to
