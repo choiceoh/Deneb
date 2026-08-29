@@ -118,7 +118,7 @@ func TestKoreanRecallProbe(t *testing.T) {
 	// failures were this. answer-in-block is the honest companion: are the
 	// must_contain tokens actually IN the block. Both are reported; optimizing
 	// against the path metric alone optimizes against a false pass.
-	hit, answerHit, answerable := 0, 0, 0
+	hit, answerHit, answerable, wikiRows := 0, 0, 0, 0
 	durations := make([]time.Duration, 0, len(cases))
 	for _, c := range cases {
 		start := time.Now()
@@ -136,6 +136,7 @@ func TestKoreanRecallProbe(t *testing.T) {
 				break
 			}
 		}
+		wikiRows += strings.Count(block, "- source=wiki")
 		if len(c.MustContain) > 0 {
 			answerable++
 			if blockCarriesTokens(block, c.MustContain) {
@@ -170,8 +171,17 @@ func TestKoreanRecallProbe(t *testing.T) {
 	if answerable > 0 {
 		answerPct = 100 * float64(answerHit) / float64(answerable)
 	}
-	t.Logf("KOREAN_PROBE n=%d gold-in-block=%.1f%% answer-in-block=%.1f%% (n=%d) median=%v p90=%v max=%v (deadline %v)",
-		len(cases), 100*float64(hit)/float64(len(cases)), answerPct, answerable,
+	// Rows carried, not just hits: production runs this pipeline at two very
+	// different budgets — a cue turn renders ~6 wiki rows, the no-cue turns
+	// that phone-event lives on render ~3.5 — and a metric that does not say
+	// which budget it measured cannot be compared across lanes. Sweep the
+	// budget with DENEB_RECALL_MAX_EVIDENCE.
+	rowsPerCase := 0.0
+	if len(cases) > 0 {
+		rowsPerCase = float64(wikiRows) / float64(len(cases))
+	}
+	t.Logf("KOREAN_PROBE n=%d gold-in-block=%.1f%% answer-in-block=%.1f%% (n=%d) wiki-rows/q=%.1f median=%v p90=%v max=%v (deadline %v)",
+		len(cases), 100*float64(hit)/float64(len(cases)), answerPct, answerable, rowsPerCase,
 		durations[len(durations)/2], durations[(len(durations)*9)/10],
 		durations[len(durations)-1], recallPreflightTimeout)
 }
