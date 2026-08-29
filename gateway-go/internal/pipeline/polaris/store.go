@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -36,6 +37,40 @@ type Store struct {
 	// with the keyword message search. Bounded to resident sessions, so it never
 	// grows unbounded the way per-message vectors would.
 	summarySem *embedindex.Index
+
+	// sessionKeys lists every session key the transcript layer knows, in the
+	// authoritative un-mangled form. Filenames cannot serve as the source:
+	// pathutil.SafeFileName rewrites "/" to "_", so "kimi/k3" would come back
+	// as "kimi_k3" and the key the model is shown would no longer resolve.
+	// nil (the default) leaves warm-time hydration off.
+	sessionKeys func() ([]string, error)
+
+	logger *slog.Logger // optional; nil silences hydration reporting
+}
+
+// SetLogger wires the store's optional logger. Only warm-time hydration uses
+// it today: "semantic index warmed" alone cannot distinguish a full index from
+// an empty one, which is how the startup warm reported success while embedding
+// nothing for months.
+func (s *Store) SetLogger(logger *slog.Logger) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.logger = logger
+}
+
+// SetSessionKeyLister wires the authoritative session-key source used to
+// hydrate sessions before a semantic warm. Wired at assembly from the legacy
+// transcript store, which owns the un-mangled key list.
+func (s *Store) SetSessionKeyLister(list func() ([]string, error)) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sessionKeys = list
 }
 
 // messageRecord is the on-disk JSONL format for a single message.

@@ -409,7 +409,7 @@ func toolSessionsSearch(transcript toolport.TranscriptStore) toolport.ToolFunc {
 			}
 			expanded = len(results) > 0
 		}
-		semantic := semanticSessionMatches(ctx, transcript, query, results)
+		semantic := semanticSessionMatches(ctx, transcript, query, maxResults, results)
 		if len(results) == 0 && len(semantic) == 0 {
 			return fmt.Sprintf("No matches found for %q across session transcripts.", query), nil
 		}
@@ -486,12 +486,23 @@ func sessionMatchDate(r toolport.SearchResult) string {
 // capability for summary-level matches, excluding the current session and any
 // session the keyword results already cover. Degrades to nil when the store
 // does not offer the capability or the semantic index is disabled.
-func semanticSessionMatches(ctx context.Context, transcript toolport.TranscriptStore, query string, keyword []toolport.SearchResult) []toolport.SemanticSessionHit {
+func semanticSessionMatches(ctx context.Context, transcript toolport.TranscriptStore, query string, maxResults int, keyword []toolport.SearchResult) []toolport.SemanticSessionHit {
 	searcher, ok := transcript.(toolport.SemanticSessionSearcher)
 	if !ok {
 		return nil
 	}
-	hits := searcher.SearchSessionsSemantic(ctx, toolport.SessionKeyFromContext(ctx), query, 5)
+	// Scaled to the keyword arm's budget, not a fixed 5. The semantic arm exists
+	// to surface the instances keyword search misses, so capping it an order of
+	// magnitude tighter hides exactly what it was added to find — the same way a
+	// low search-result cap hides instances from a counting question.
+	limit := maxResults / 2
+	if limit < 5 {
+		limit = 5
+	}
+	if limit > 20 {
+		limit = 20
+	}
+	hits := searcher.SearchSessionsSemantic(ctx, toolport.SessionKeyFromContext(ctx), query, limit)
 	if len(hits) == 0 {
 		return nil
 	}

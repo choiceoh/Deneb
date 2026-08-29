@@ -21,6 +21,7 @@ package polaris
 
 import (
 	"context"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -58,13 +59,135 @@ func (s *Store) closeSummarySem() {
 	}
 }
 
-// WarmSemanticIndex synchronously embeds the resident sessions' semantic nodes.
-// Polaris was the only semantic index with no warm target registered beside
-// mail/workfeed/wiki, so its first search after a session loads returned nothing
-// while RefreshAsync was still filling. Named to match the other stores so the
-// server's warmer list reads uniformly.
+// WarmSemanticIndex hydrates the most recently active sessions, then embeds
+// their semantic nodes.
+//
+// The hydration step is the point. This warmer runs at STARTUP, when the
+// resident set is empty, so warming it alone embedded nothing and still logged
+// "semantic index warmed" — the index only ever filled with whatever sessions
+// the process later happened to touch. That left the two cross-session arms
+// asymmetric in a way that silently defeats the semantic one: the keyword arm
+// searches every transcript on disk (FileTranscriptStore.Search walks
+// ListKeys), while the semantic arm saw only resident sessions. A question
+// whose instances share no keyword — the exact shape the semantic arm exists
+// for — was therefore invisible after every restart.
+//
+// Bounded by recency rather than unbounded: warmSessionHydrationLimit caps how
+// many sessions are pulled in, so a long-lived corpus cannot grow the resident
+// set (or the embedding bill on each restart, since the session index keeps no
+// on-disk vector cache) without limit.
 func (s *Store) WarmSemanticIndex(ctx context.Context) error {
-	return s.warmSummarySem(ctx)
+	hydrated := s.hydrateRecentSessions(warmSessionHydrationLimit())
+	err := s.warmSummarySem(ctx)
+	// Report the sizes: "semantic index warmed" on its own cannot tell a full
+	// index from an empty one, which is exactly how this warm reported success
+	// while embedding nothing.
+	s.mu.Lock()
+	logger, resident := s.logger, len(s.sessions)
+	s.mu.Unlock()
+	if logger != nil {
+		logger.Info("polaris: semantic warm",
+			"hydrated", hydrated, "residentSessions", resident, "vectors", s.semanticItemCount())
+	}
+	return err
+}
+
+// semanticItemCount reports how many vectors the summary index would hold for
+// the resident set — the number that distinguishes a warmed index from a warm
+// that found nothing to embed.
+func (s *Store) semanticItemCount() int {
+	if s == nil || s.summarySem == nil {
+		return 0
+	}
+	return len(s.summaryItems())
+}
+
+// warmSessionHydrationLimit is how many recently-active sessions warm-time
+// hydration pulls in. Override with DENEB_POLARIS_WARM_SESSIONS (0 disables
+// hydration and restores the resident-only behavior).
+//
+// Hydrated sessions stay resident for the process lifetime, so this cap is a
+// standing memory cost, not a startup one. Measured against the operator's
+// corpus (325 sessions, 40MB of transcripts), heap and indexed vectors do not
+// grow together:
+//
+//	limit    heap     vectors
+//	20        3 MB        89
+//	40       17 MB       189
+//	60       28 MB       298
+//	80       36 MB       362   <- default
+//	120     187 MB      1136
+//	320     312 MB      2288
+//
+// The knee is real: a handful of very large transcripts (a long-running dream
+// session and friends) sit just past 80, so raising the cap to 120 costs 5x
+// the memory for 3x the vectors. 80 buys most of the reachable corpus at a
+// size that cannot push this host into the earlyoom territory that has killed
+// the embedding sidecar before.
+func warmSessionHydrationLimit() int {
+	if raw := strings.TrimSpace(os.Getenv("DENEB_POLARIS_WARM_SESSIONS")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n >= 0 {
+			return n
+		}
+	}
+	return 80
+}
+
+// hydrateRecentSessions makes the `limit` most recently active sessions
+// resident so the semantic warm has something to embed. Ordering is by the
+// message file's modification time, newest first: recall reaches for recent
+// conversations far more often than old ones, and the cap has to spend itself
+// somewhere. Returns how many sessions it added.
+func (s *Store) hydrateRecentSessions(limit int) int {
+	if s == nil || limit <= 0 {
+		return 0
+	}
+	s.mu.Lock()
+	list := s.sessionKeys
+	s.mu.Unlock()
+	if list == nil {
+		return 0
+	}
+	keys, err := list()
+	if err != nil || len(keys) == 0 {
+		return 0
+	}
+
+	type keyAge struct {
+		key string
+		mod int64
+	}
+	aged := make([]keyAge, 0, len(keys))
+	for _, k := range keys {
+		// Stat outside the lock: this touches every session file and the store
+		// mutex guards every append on the live turn path.
+		info, statErr := os.Stat(s.messagesPath(k))
+		if statErr != nil {
+			continue
+		}
+		aged = append(aged, keyAge{key: k, mod: info.ModTime().UnixMilli()})
+	}
+	sort.Slice(aged, func(i, j int) bool {
+		if aged[i].mod != aged[j].mod {
+			return aged[i].mod > aged[j].mod
+		}
+		return aged[i].key < aged[j].key // stable for equal mtimes
+	})
+	if len(aged) > limit {
+		aged = aged[:limit]
+	}
+
+	added := 0
+	for _, a := range aged {
+		s.mu.Lock()
+		_, resident := s.sessions[a.key]
+		if !resident {
+			s.ensureSession(a.key)
+			added++
+		}
+		s.mu.Unlock()
+	}
+	return added
 }
 
 // warmSummarySem synchronously embeds resident sessions' summaries. Not called at
