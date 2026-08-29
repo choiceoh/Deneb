@@ -1912,6 +1912,19 @@ input[type="checkbox"] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Step cost — metadata, so it sits last, never shrinks away, and stays quieter
+   than the result it trails. Tabular figures keep the column from twitching as
+   digits change on a live turn. */
+.tool-chip-elapsed {
+  margin-left: auto;
+  padding-left: 8px;
+  flex: 0 0 auto;
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  opacity: 0.75;
+  white-space: nowrap;
+}
 .tool-chip-ico {
   display: inline-flex;
   flex: 0 0 auto;

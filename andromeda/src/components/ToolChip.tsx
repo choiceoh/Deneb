@@ -23,6 +23,18 @@ export function previewLineClass(line: string): string {
   return "";
 }
 
+// How long a finished call took, in the units a coding surface reads fastest:
+// milliseconds below a second (a 40ms cache hit and a 900ms one are different
+// facts), seconds above it. Exported for its unit test.
+export function formatElapsed(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}초`;
+  const m = Math.floor(ms / 60_000);
+  const s = Math.round((ms % 60_000) / 1000);
+  return s ? `${m}분 ${s}초` : `${m}분`;
+}
+
 function PreviewBody({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   const lines = text.split("\n");
@@ -81,6 +93,12 @@ export function ToolChip({ part }: { part: ToolPart }) {
       {/* What the call produced — the gateway authors this line so every client
           shows the same wording. Started chips have none yet. */}
       {part.resultSummary ? <span className="tool-chip-result">{part.resultSummary}</span> : null}
+      {/* What the step cost, trailing the row. Only on finished calls we timed
+          ourselves — a restored transcript carries no duration and must not
+          invent one. */}
+      {done && part.elapsedMs !== undefined ? (
+        <span className="tool-chip-elapsed">{formatElapsed(part.elapsedMs)}</span>
+      ) : null}
     </>
   );
   // Without a preview the chip stays a plain row; with one it becomes a
