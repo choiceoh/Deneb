@@ -11,9 +11,13 @@
 # POST /api/hooks/fleet), which shares the proactive cooldown gate — so a stuck
 # fault notifies once rather than every cycle. Read-only against the switch.
 #
-# Thresholds sit against measured normals (2026-08-09, post fan-tuning):
-# cpu 51C, switch-chip 62C, board 36-39C, fans 3.9-4.3K RPM, psu1 37.7W. The
+# Thresholds sit against measured normals (2026-08-29, post 200G + fan re-tune):
+# cpu 46-49C, switch-chip 63C, board 38-43C, fans 7.4-7.8K RPM, psu1 41W. The
 # chip's overtemp shutdown is 115C, so 85C is a wide early warning.
+#
+# The older 3.9-4.8K RPM baseline (2026-08-09) is no longer reachable: the 08-09
+# 200G cutover (two ports at 200G-baseCR4) raised psu draw 37.7W -> 41W+, and
+# holding the chip at 63C now costs ~7.5K RPM. Do not treat 4.8K as the target.
 #
 # ALWAYS exits 0 (release-and-deploy.md): a red unit invites an operator to
 # disable the timer, which would silently end the monitoring this script exists
@@ -26,9 +30,22 @@ SWITCH_VIA="${CRS812_VIA:-srv2}"   # the switch mgmt net is reachable from srv2 
 CPU_TEMP_MAX="${CRS812_CPU_TEMP_MAX:-85}"
 SWITCH_TEMP_MAX="${CRS812_SWITCH_TEMP_MAX:-85}"
 FAN_RPM_MIN="${CRS812_FAN_RPM_MIN:-1000}"
-# Sustained high RPM = the loud-fan regression (2026-08-29: fan-target-temp had
-# drifted 65→63C, pinning fans at ~10.4K while every state read "ok" — the
-# lower-bound-only check was blind to it). Tuned-normal is 3.9–4.8K.
+# Sustained high RPM = the fan-control oscillation (2026-08-29). Root cause is a
+# ZERO proportional band: fan-target-temp == fan-full-speed-temp (both 65C) makes
+# the controller bang-bang — idle below the threshold, 100% the instant it is
+# touched. That stayed hidden while the chip sat at 62C and never reached 65C;
+# after the 200G cutover it does, and the loop hunts between 5K and 13.8K.
+#
+# Do NOT "fix" loud fans by raising fan-target-temp to 65C — that CREATES the
+# oscillation (an 08-29 morning attempt did exactly that and made it worse).
+# The fix is a proportional band: keep full-speed at 65C and set target BELOW it
+# (64C in production -> steady 7.4-7.8K at 63C). Widening upward is impossible;
+# both knobs cap at 65C (`out of range (-273..65)`).
+#
+# Signature to distinguish: in the 30-minute samples below, oscillation shows RPM
+# INVERSELY correlated with temperature (a high-RPM sample is the moment just
+# after a full-speed slam dropped the temp). Real high load reads the other way.
+# Tuned-normal is 7.4-7.8K; the 9K bound catches a return to hunting.
 FAN_RPM_MAX="${CRS812_FAN_RPM_MAX:-9000}"
 
 alert() { # level, title, message
@@ -68,7 +85,7 @@ psu1_state="$(value_of psu1-state)"
 for fan in fan1 fan2 fan3 fan4; do
     rpm="$(value_of "${fan}-speed")"
     [[ -n "$rpm" && "$rpm" -lt "$FAN_RPM_MIN" ]] && faults+=("${fan} ${rpm}RPM (하한 ${FAN_RPM_MIN})")
-    [[ -n "$rpm" && "$rpm" -gt "$FAN_RPM_MAX" ]] && faults+=("${fan} ${rpm}RPM 과속 — 소음/팬튜닝 되돌림 의심 (상한 ${FAN_RPM_MAX}, fan-target-temp 확인)")
+    [[ -n "$rpm" && "$rpm" -gt "$FAN_RPM_MAX" ]] && faults+=("${fan} ${rpm}RPM 과속 — 팬 제어 발진 의심 (상한 ${FAN_RPM_MAX}). target=full-speed=65C면 비례 구간 0 → target을 64C로. 65C로 올리지 말 것")
 done
 
 cpu_temp="$(value_of cpu-temperature)"
