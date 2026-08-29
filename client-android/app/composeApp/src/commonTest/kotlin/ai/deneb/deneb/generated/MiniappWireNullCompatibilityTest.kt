@@ -3424,6 +3424,48 @@ class MiniappWireNullCompatibilityTest {
             field = "sessionKey",
         ),
         nullContract(
+            name = "SessionPROut.state",
+            serializer = SessionPROut.serializer(),
+            empty = SessionPROut(),
+            field = "state",
+        ),
+        nullContract(
+            name = "SessionPROut.number",
+            serializer = SessionPROut.serializer(),
+            empty = SessionPROut(),
+            field = "number",
+        ),
+        nullContract(
+            name = "SessionPROut.title",
+            serializer = SessionPROut.serializer(),
+            empty = SessionPROut(),
+            field = "title",
+        ),
+        nullContract(
+            name = "SessionPROut.url",
+            serializer = SessionPROut.serializer(),
+            empty = SessionPROut(),
+            field = "url",
+        ),
+        nullContract(
+            name = "SessionPROut.failing",
+            serializer = SessionPROut.serializer(),
+            empty = SessionPROut(),
+            field = "failing",
+        ),
+        nullContract(
+            name = "SessionPROut.pending",
+            serializer = SessionPROut.serializer(),
+            empty = SessionPROut(),
+            field = "pending",
+        ),
+        nullContract(
+            name = "SessionPROut.total",
+            serializer = SessionPROut.serializer(),
+            empty = SessionPROut(),
+            field = "total",
+        ),
+        nullContract(
             name = "SessionRowOut.key",
             serializer = SessionRowOut.serializer(),
             empty = SessionRowOut(),

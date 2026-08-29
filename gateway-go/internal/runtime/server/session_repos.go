@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 
@@ -223,4 +224,52 @@ func (s *Server) dropStoredSessionRepo(key string) {
 	if path, err := sessionReposStorePath(); err == nil {
 		_ = saveSessionRepos(path, snapshot)
 	}
+}
+
+// prStatusTTL bounds how often GitHub is asked about one branch. The UI polls
+// while a conversation is open, and check state does not move faster than this
+// — an uncached call per render would spend rate limit on an unchanged answer.
+const prStatusTTL = 60 * time.Second
+
+type prStatusEntry struct {
+	status  coderepo.PRStatus
+	fetched time.Time
+}
+
+// SessionPullRequest reports the state of the pull request for a conversation's
+// branch, or an unknown/none status when there is nothing to report.
+//
+// Unbound conversations return "none" rather than "unknown": there is no branch,
+// so there is genuinely no pull request — nothing failed to be determined.
+func (s *Server) SessionPullRequest(ctx context.Context, sessionKey string) coderepo.PRStatus {
+	repoID := s.BoundSessionRepo(sessionKey)
+	if repoID == "" || s.codeRepos == nil {
+		return coderepo.PRStatus{State: coderepo.PRStateNone}
+	}
+	repo, ok := s.codeRepos.Lookup(repoID)
+	if !ok {
+		return coderepo.PRStatus{State: coderepo.PRStateNone}
+	}
+
+	s.prStatusMu.Lock()
+	if e, hit := s.prStatus[sessionKey]; hit && time.Since(e.fetched) < prStatusTTL {
+		s.prStatusMu.Unlock()
+		return e.status
+	}
+	s.prStatusMu.Unlock()
+
+	status := coderepo.PullRequestFor(ctx, repo.Path, coderepo.BranchFor(sessionKey))
+
+	// Do not cache "unknown": it usually means a transient failure (network,
+	// gh not yet authenticated), and caching it would keep showing a stale
+	// question mark for a minute after the cause cleared.
+	if status.State != coderepo.PRStateUnknown {
+		s.prStatusMu.Lock()
+		if s.prStatus == nil {
+			s.prStatus = map[string]prStatusEntry{}
+		}
+		s.prStatus[sessionKey] = prStatusEntry{status: status, fetched: time.Now()}
+		s.prStatusMu.Unlock()
+	}
+	return status
 }

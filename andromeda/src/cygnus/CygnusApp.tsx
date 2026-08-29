@@ -6,6 +6,8 @@ import { useDesktopChrome } from "@/desktopChrome";
 import {
   type CodeRepo,
   type GatewayConfig,
+  type SessionPR,
+  getSessionPR,
   getSessionRepo,
   listRepos,
   loadConfig,
@@ -28,6 +30,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Icon } from "@/components/Icon";
 import { LiveDot } from "@/components/LiveDot";
 import { ModelPicker } from "@/components/ModelPicker";
+import { PRStatusBadge } from "@/components/PRStatusBadge";
 import { RepoPicker } from "@/components/RepoPicker";
 import { SessionDrawer } from "@/components/SessionDrawer";
 import { UiSubmissionBubble } from "@/components/UiSubmission";
@@ -341,6 +344,36 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
     await bindRepo(repo.id); // registering to work somewhere means working there
   }
 
+  // GitHub's verdict on this conversation's branch. Polled rather than pushed:
+  // check state moves on GitHub's clock, not ours. The gateway caches for a
+  // minute, so this costs about one API call per open conversation per minute.
+  // Keyed by the conversation it describes, so switching threads cannot show
+  // the previous thread's badge while the new fetch is in flight — and so the
+  // effect never has to setState synchronously just to clear it.
+  const [prFor, setPrFor] = useState<{ key: string; value: SessionPR } | null>(null);
+  const pr = prFor && prFor.key === sessionKey ? prFor.value : null;
+  useEffect(() => {
+    if (!connected || !sessionKey) return;
+    let cancelled = false;
+    const read = () => {
+      void getSessionPR(cfg, sessionKey)
+        .then((r) => {
+          if (!cancelled) setPrFor({ key: sessionKey, value: r });
+        })
+        .catch(() => {
+          // An older gateway has no such method — show nothing rather than a
+          // permanent "확인 불가", which would read as a real GitHub problem.
+          if (!cancelled) setPrFor(null);
+        });
+    };
+    read();
+    const timer = setInterval(read, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [cfg, connected, sessionKey, repoId]);
+
   const sessionLabel = sessions.find((s) => s.key === sessionKey)?.label || "새 스레드";
 
   return (
@@ -358,6 +391,7 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
             onRegister={addRepo}
           />
         ) : null}
+        <PRStatusBadge pr={pr} />
         <span className="cy-sp" data-tauri-drag-region />
         <button
           className="cy-tbtn"

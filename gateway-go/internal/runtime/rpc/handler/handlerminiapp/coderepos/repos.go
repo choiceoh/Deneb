@@ -7,6 +7,7 @@
 package coderepos
 
 import (
+	"context"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
@@ -24,6 +25,22 @@ type CodeReposDeps struct {
 	// BoundRepo reports the repo a conversation is currently bound to ("" for
 	// the default workspace).
 	BoundRepo func(sessionKey string) string
+	// PullRequest reports what GitHub says about the conversation's branch.
+	// Optional: without it the surface simply does not advertise the method.
+	PullRequest func(ctx context.Context, sessionKey string) coderepo.PRStatus
+}
+
+//deneb:wire
+type sessionPROut struct {
+	// State is one of: unknown | none | running | failing | passing | merged |
+	// closed. ★"unknown" (could not ask) is distinct from "none" (asked, no PR).
+	State   string `json:"state"`
+	Number  int    `json:"number,omitempty"`
+	Title   string `json:"title,omitempty"`
+	URL     string `json:"url,omitempty"`
+	Failing int    `json:"failing,omitempty"`
+	Pending int    `json:"pending,omitempty"`
+	Total   int    `json:"total,omitempty"`
 }
 
 //deneb:wire
@@ -122,6 +139,24 @@ func Methods(deps CodeReposDeps) map[string]rpcutil.HandlerFunc {
 		}
 		return out, nil
 	})
+	if deps.PullRequest != nil {
+		type keyParams struct {
+			SessionKey string `json:"sessionKey"`
+		}
+		m["miniapp.sessions.pr.status"] = rpcutil.BindHandlerCtx[keyParams](
+			func(ctx context.Context, p keyParams) (any, error) {
+				key := strings.TrimSpace(p.SessionKey)
+				if key == "" {
+					return nil, rpcerr.MissingParam("sessionKey")
+				}
+				st := deps.PullRequest(ctx, key)
+				return sessionPROut{
+					State: string(st.State), Number: st.Number, Title: st.Title,
+					URL: st.URL, Failing: st.Failing, Pending: st.Pending, Total: st.Total,
+				}, nil
+			},
+		)
+	}
 	if deps.BoundRepo != nil {
 		type keyParams struct {
 			SessionKey string `json:"sessionKey"`

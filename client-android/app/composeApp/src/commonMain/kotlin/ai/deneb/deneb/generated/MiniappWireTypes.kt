@@ -1002,6 +1002,18 @@ data class SessionFocusResult(
 
 @Immutable
 @Serializable
+data class SessionPROut(
+    val state: String = "",
+    val number: Int = 0,
+    val title: String = "",
+    val url: String = "",
+    val failing: Int = 0,
+    val pending: Int = 0,
+    val total: Int = 0,
+)
+
+@Immutable
+@Serializable
 data class SessionRowOut(
     val key: String = "",
     val kind: String = "",
