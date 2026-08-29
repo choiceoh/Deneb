@@ -16,6 +16,11 @@ type sessionRowOut struct {
 	StartedAtMs *int64 `json:"startedAtMs,omitempty"`
 	RuntimeMs   *int64 `json:"runtimeMs,omitempty"`
 	TotalTokens *int64 `json:"totalTokens,omitempty"`
+	// TurnRunning marks a conversation the agent is working in right now, so a
+	// drawer can tell a live thread from a finished one without opening it. The
+	// single-session transcript reply has carried this for a while; the list did
+	// not, which is why every row read as idle no matter what was running.
+	TurnRunning bool `json:"turnRunning,omitempty"`
 }
 
 type transcriptAttachmentOut struct {

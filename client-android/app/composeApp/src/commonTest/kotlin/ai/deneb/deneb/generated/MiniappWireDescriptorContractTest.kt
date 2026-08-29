@@ -562,7 +562,7 @@ class MiniappWireDescriptorContractTest {
             name = "SessionRowOut",
             serializer = SessionRowOut.serializer(),
             empty = SessionRowOut(),
-            fields = listOf("key", "kind", "status", "channel", "model", "label", "pinned", "updatedAtMs", "startedAtMs", "runtimeMs", "totalTokens"),
+            fields = listOf("key", "kind", "status", "channel", "model", "label", "pinned", "updatedAtMs", "startedAtMs", "runtimeMs", "totalTokens", "turnRunning"),
         ),
         contract(
             name = "SessionSearchHitOut",

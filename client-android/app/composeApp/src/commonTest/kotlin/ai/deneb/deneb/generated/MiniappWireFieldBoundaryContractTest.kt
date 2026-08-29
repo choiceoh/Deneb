@@ -4629,6 +4629,14 @@ class MiniappWireFieldBoundaryContractTest {
             expectation = Expectation.Exact,
         ),
         fieldContract(
+            name = "SessionRowOut.turnRunning",
+            serializer = SessionRowOut.serializer(),
+            field = "turnRunning",
+            valid = JsonPrimitive(true),
+            invalid = JsonPrimitive(1),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
             name = "SessionSearchHitOut.sessionKey",
             serializer = SessionSearchHitOut.serializer(),
             field = "sessionKey",

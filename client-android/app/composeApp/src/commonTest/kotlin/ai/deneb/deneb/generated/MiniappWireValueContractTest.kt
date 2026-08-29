@@ -3614,6 +3614,11 @@ class MiniappWireValueContractTest {
                     value = JsonPrimitive(Long.MAX_VALUE),
                     expectation = Expectation.Exact,
                 ),
+                fieldValue(
+                    name = "turnRunning",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
             ),
             invalidField = "key",
             invalidValue = JsonObject(emptyMap()),

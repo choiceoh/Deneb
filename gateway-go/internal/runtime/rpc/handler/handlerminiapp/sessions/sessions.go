@@ -397,6 +397,11 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 				StartedAtMs: s.StartedAt,
 				RuntimeMs:   s.RuntimeMs,
 				TotalTokens: s.TotalTokens,
+				// Same liveness test the single-session transcript reply uses,
+				// so a row and the conversation it opens never disagree. Read
+				// off the listed snapshot rather than a second Manager lookup:
+				// that keeps the whole page consistent with one another.
+				TurnRunning: s.Status == session.StatusRunning,
 			})
 		}
 		payload := map[string]any{

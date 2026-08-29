@@ -136,7 +136,16 @@ export function SessionDrawer({
                   />
                 ) : (
                   <button type="button" className="session-row-main" onClick={() => onSelect(s.key)} disabled={busy}>
-                    <span className="session-row-title">{s.pinned ? `핀 · ${title}` : title}</span>
+                    <span className="session-row-title">
+                      {/* A working conversation announces itself in the list, so
+                          you can tell a live thread from a finished one without
+                          opening it. Labelled for assistive tech — the pulse
+                          alone is invisible to a screen reader. */}
+                      {s.turnRunning ? (
+                        <span className="session-row-live" role="img" aria-label="작업 중" title="작업 중" />
+                      ) : null}
+                      {s.pinned ? `핀 · ${title}` : title}
+                    </span>
                     {home ? <span className="session-row-hint">선제 보고가 모이는 업무 홈</span> : null}
                     {/* Model and time as separate spans (the separator is drawn
                         in CSS) so a surface skin can style them apart — the

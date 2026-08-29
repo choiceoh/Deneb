@@ -266,6 +266,27 @@ const sessions: SessionRow[] = [
 ];
 
 describe("SessionDrawer", () => {
+  it("marks a conversation the agent is working in", () => {
+    // The drawer's job here is to tell a live thread from a finished one
+    // WITHOUT opening it — the mark is the only signal that does that.
+    const { container } = render(
+      <SessionDrawer
+        sessions={[{ key: "client:main:live", label: "도는 중", turnRunning: true }, ...sessions]}
+        currentKey="client:main"
+        busy={false}
+        error=""
+        onSelect={() => {}}
+        onDelete={() => {}}
+        onNew={() => {}}
+      />,
+    );
+    // Exactly one row is running, so exactly one mark — an idle row must not
+    // borrow it.
+    expect(container.querySelectorAll(".session-row-live")).toHaveLength(1);
+    // The pulse is invisible to a screen reader without this.
+    expect(screen.getByRole("img", { name: "작업 중" })).toBeInTheDocument();
+  });
+
   it("shows accessible empty state when session list is empty", () => {
     render(
       <SessionDrawer
