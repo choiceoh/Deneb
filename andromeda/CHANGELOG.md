@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.0.121](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.120...andromeda-v0.0.121) (2026-08-29)
+
+
+### ✨ Features
+
+* **andromeda:** Cygnus 라이트 퍼스트 전환·구체 제거 + 헤드리스 GUI 검증 루프 ([#4872](https://github.com/choiceoh/Deneb/issues/4872)) ([8a78a8a](https://github.com/choiceoh/Deneb/commit/8a78a8a4bf5c6b264eb99a03010a509ccabd659e))
+* **andromeda:** Cygnus 에이전트 컴패니언 창 — 트레이·글로벌 단축키 소환형 표면 ([#4868](https://github.com/choiceoh/Deneb/issues/4868)) ([f878386](https://github.com/choiceoh/Deneb/commit/f878386921e3eef3df00276b869e21618a49bfdf))
+* **andromeda:** 열었더니 돌고 있는 턴을 받아낸다 (foreign-turn watch) ([#4896](https://github.com/choiceoh/Deneb/issues/4896)) ([35f1b91](https://github.com/choiceoh/Deneb/commit/35f1b9111f0d116165b70389b8c4831ccc7ac3ee))
+* **chat:** 관전 창에 게이트웨이 페이즈 내레이션 (statusHint) ([#4908](https://github.com/choiceoh/Deneb/issues/4908)) ([2a28519](https://github.com/choiceoh/Deneb/commit/2a2851938aa72d38d746eca926dbbb728dffc131))
+* **chat:** 복원된 대화가 툴 칩을 되찾는다 (toolTrace) ([#4890](https://github.com/choiceoh/Deneb/issues/4890)) ([b097972](https://github.com/choiceoh/Deneb/commit/b09797245dd0d9936cb691797a423beddf0ef6dc))
+* **chat:** 실시간 관전 — 다른 기기의 턴이 라이브로 흐른다 (spectate) ([#4904](https://github.com/choiceoh/Deneb/issues/4904)) ([abfabed](https://github.com/choiceoh/Deneb/commit/abfabeda9e26fb4636c928160ba6def908a0b6ef))
+* **chat:** 완료된 툴칩에 결과 한 줄 요약을 싣는다 ([#4882](https://github.com/choiceoh/Deneb/issues/4882)) ([2a30d07](https://github.com/choiceoh/Deneb/commit/2a30d0740fa18f6f2d0d61ac78b348e938d4b579))
+* **chat:** 툴칩을 펼치면 결과 본문을 보여준다 ([#4885](https://github.com/choiceoh/Deneb/issues/4885)) ([755530d](https://github.com/choiceoh/Deneb/commit/755530df6b13d0f6617bca1fa62bcfcec44e9043))
+* **fleet:** 플릿에서 벤치를 제거하고 레시피 제어를 AI 전용으로 전환 ([#4874](https://github.com/choiceoh/Deneb/issues/4874)) ([55aed7b](https://github.com/choiceoh/Deneb/commit/55aed7b44c362fe43b8d6923d4da15e7a186f689))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** Cygnus 3차 복기 — 소환 즉시 타이핑·데스크톱 크롬 공유 훅 ([#4871](https://github.com/choiceoh/Deneb/issues/4871)) ([5557b12](https://github.com/choiceoh/Deneb/commit/5557b126583bf032182c92b1aefc5c7a0b3ec3f6))
+* **andromeda:** Cygnus 창 식별 삼중화 + 퍼플렉시티 대조 폴리싱 ([#4875](https://github.com/choiceoh/Deneb/issues/4875)) ([0d2517a](https://github.com/choiceoh/Deneb/commit/0d2517a1e6edb577d9360cf6861e2bd7e6998142))
+* **andromeda:** 완료된 툴칩이 실행 힌트를 잃던 것 수리 + Cygnus 갭 4종 ([#4880](https://github.com/choiceoh/Deneb/issues/4880)) ([847eeed](https://github.com/choiceoh/Deneb/commit/847eeed60a542ef6693307971e2b64b63617f72e))
+* **chat:** Cygnus 폴리시 4종 — 세션 제목 상속·요약 링거·diff 프리뷰·차트 쿨-우선 ([#4887](https://github.com/choiceoh/Deneb/issues/4887)) ([886bb15](https://github.com/choiceoh/Deneb/commit/886bb15508819d6a785315b8610df02d11a940c4))
+* **chat:** 복원 경험 마감 — 네이티브 작업 내역 복원·죽은 재생성 버튼·고아 파일 정리 ([#4894](https://github.com/choiceoh/Deneb/issues/4894)) ([35e4e66](https://github.com/choiceoh/Deneb/commit/35e4e661489017c1068a2ddc87e9ef605313c496))
+
 ## [0.0.120](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.119...andromeda-v0.0.120) (2026-08-24)
 
 
