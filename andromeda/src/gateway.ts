@@ -204,6 +204,8 @@ export interface SessionRow {
   startedAtMs?: number;
   runtimeMs?: number;
   totalTokens?: number;
+  // A turn is running in this conversation right now.
+  turnRunning?: boolean;
 }
 
 // One transcript message. Mirrors handlerminiapp.transcriptMsgOut (sessions.go).

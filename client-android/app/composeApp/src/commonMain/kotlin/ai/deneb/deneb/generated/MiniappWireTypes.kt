@@ -1005,6 +1005,7 @@ data class SessionRowOut(
     val startedAtMs: Long? = null,
     val runtimeMs: Long? = null,
     val totalTokens: Long? = null,
+    val turnRunning: Boolean = false,
 )
 
 @Immutable

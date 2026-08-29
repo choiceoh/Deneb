@@ -2440,6 +2440,21 @@ input[type="checkbox"] {
     opacity: 0.4;
   }
 }
+/* A conversation the agent is working in, marked in the drawer list. Borrows the
+ * live-dot's pulse so motion stays one vocabulary, but keeps its own class and
+ * accent: LiveDot means "gateway connected", and reusing it here would make one
+ * mark say two different things. Leads the title, so the eye finds it first. */
+.session-row-live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: 0 0 auto;
+  margin-right: 5px;
+  vertical-align: baseline;
+  background: var(--accent);
+  animation: pulse 2.4s ease-in-out infinite;
+}
 
 /* dense data grid */
 .dgrid {

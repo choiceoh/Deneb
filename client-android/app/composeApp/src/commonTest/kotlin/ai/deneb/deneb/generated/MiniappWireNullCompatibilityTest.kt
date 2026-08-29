@@ -3466,6 +3466,12 @@ class MiniappWireNullCompatibilityTest {
             field = "totalTokens",
         ),
         nullContract(
+            name = "SessionRowOut.turnRunning",
+            serializer = SessionRowOut.serializer(),
+            empty = SessionRowOut(),
+            field = "turnRunning",
+        ),
+        nullContract(
             name = "SessionSearchHitOut.sessionKey",
             serializer = SessionSearchHitOut.serializer(),
             empty = SessionSearchHitOut(),

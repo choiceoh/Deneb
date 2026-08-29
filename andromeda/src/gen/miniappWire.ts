@@ -830,6 +830,7 @@ export interface SessionRowOut {
   startedAtMs?: number
   runtimeMs?: number
   totalTokens?: number
+  turnRunning?: boolean
 }
 
 export interface SessionSearchHitOut {
