@@ -59,7 +59,6 @@ import (
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
 	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/coderepo"
 	minicoderepos "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/coderepos"
 	minifiles "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/files"
 	miniknowledge "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/knowledge"
@@ -786,8 +785,15 @@ func (s *Server) earlyMiniappGatewayMethods(hub *rpcutil.GatewayHub) map[string]
 // The production checkout is passed as a protected path: a deploy timer owns
 // it, so it must be un-registerable rather than merely discouraged.
 func (s *Server) earlyCodeRepoMethods() map[string]rpcutil.HandlerFunc {
+	// Shared instance (initCodeRepos): the run path resolves bindings against
+	// the same registrations these methods write.
+	if s.codeRepos == nil {
+		s.initCodeRepos()
+	}
 	return minicoderepos.Methods(minicoderepos.CodeReposDeps{
-		Store: coderepo.New(config.ResolveStateDir(), protectedRepoRoots()),
+		Store:     s.codeRepos,
+		Bind:      s.BindSessionRepo,
+		BoundRepo: s.BoundSessionRepo,
 	})
 }
 

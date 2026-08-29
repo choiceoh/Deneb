@@ -22,6 +22,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/coderepo"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
@@ -115,6 +116,14 @@ type ServerRuntime struct {
 	resumeMu       sync.Mutex
 	markerStore    *sessionstore.RunMarkerStore
 	runMarkerUnsub func()
+
+	// Code-repository allowlist and the session → repo bindings resolved
+	// against it. One store instance: the RPC surface and the run path must
+	// see the same registrations, and separate instances would diverge
+	// between a register call and the next reload.
+	codeRepos      *coderepo.Store
+	sessionReposMu sync.Mutex
+	sessionRepos   map[string]string
 
 	// cacheHealth holds the rolling vLLM prefix-cache hit-ratio samples surfaced
 	// on /health and /status. gpuHealth caches the latest nvidia-smi reading for

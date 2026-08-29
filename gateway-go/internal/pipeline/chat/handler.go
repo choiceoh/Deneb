@@ -45,6 +45,7 @@ type Handler struct {
 	memory               MemoryDeps
 	dreamTurnFn          func(ctx context.Context)                             // optional; increments dream turn via autonomous
 	preferenceSignalFn   func()                                                // optional; notes a 선호-tagged diary capsule for accelerated dreaming
+	sessionWorkspaceFn   func(sessionKey string) string                        // optional; per-conversation repository binding
 	projectSignalFn      func()                                                // optional; notes a deal-number diary capsule (견적/단가/카톡 보고) for the same cadence
 	deliverablePublisher func(text string) (bool, error)                       // optional; auto-publishes a document-analysis deliverable to the work feed
 	translateThinking    func(ctx context.Context, text string) (string, bool) // optional; renders the 🧠 blockquote into Korean
@@ -205,7 +206,11 @@ type HandlerConfig struct {
 	Memory             MemoryDeps
 	DreamTurnFn        func(ctx context.Context) // optional; increments dream turn via autonomous
 	PreferenceSignalFn func()                    // optional; notes a 선호-tagged diary capsule so the dreamer consolidates it on the accelerated cadence
-	ProjectSignalFn    func()                    // optional; notes a deal-number diary capsule (견적/단가/카톡 보고) for the same cadence
+	// SessionWorkspaceFn resolves the directory a conversation's runs work in,
+	// or "" for the server-wide default. Optional; a gateway without the code
+	// repository allowlist wired simply never overrides the default.
+	SessionWorkspaceFn func(sessionKey string) string
+	ProjectSignalFn    func() // optional; notes a deal-number diary capsule (견적/단가/카톡 보고) for the same cadence
 	// DeliverablePublisher files a document-analysis turn's final response as a
 	// doc_analysis work-feed card (server-side auto safety net). Optional; nil disables.
 	DeliverablePublisher func(text string) (bool, error)
@@ -345,6 +350,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		memory:               cfg.Memory,
 		dreamTurnFn:          cfg.DreamTurnFn,
 		preferenceSignalFn:   cfg.PreferenceSignalFn,
+		sessionWorkspaceFn:   cfg.SessionWorkspaceFn,
 		projectSignalFn:      cfg.ProjectSignalFn,
 		deliverablePublisher: cfg.DeliverablePublisher,
 		translateThinking:    cfg.TranslateThinking,
