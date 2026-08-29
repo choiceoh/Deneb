@@ -579,8 +579,8 @@ func SessionsToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Session action",
-				"enum":        []string{"list", "history", "search", "send", "stats"},
+				"description": "Session action. list/history/search/send/stats work on sessions; result/kill/steer work on this session's own sub-agents ('result' pulls a finished sub-agent's output on demand, complementing the automatic completion notification).",
+				"enum":        []string{"list", "history", "search", "send", "stats", "result", "kill", "steer"},
 			},
 			"around": map[string]any{
 				"type":        "number",
@@ -616,15 +616,25 @@ func SessionsToolSchema() map[string]any {
 			},
 			"message": map[string]any{
 				"type":        "string",
-				"description": "Message to send (send action)",
+				"description": "Message to send (send action) or steering message (steer action)",
 			},
 			"query": map[string]any{
 				"type":        "string",
 				"description": "Search keyword (search action)",
 			},
+			"scope": map[string]any{
+				"type":        "string",
+				"description": "list action scope: 'all' (default) lists every session, 'children' lists only the sub-agents this session spawned.",
+				"default":     "all",
+				"enum":        []string{"all", "children"},
+			},
 			"sessionKey": map[string]any{
 				"type":        "string",
 				"description": "Target session key (history/send actions). history는 회상 근거의 세션 ref 꼬리(예: \"s38#2/user\")도 받는다 — 저장된 키 목록에 접미사 매칭으로 해소하고, #뒤 번호는 창 중심으로 쓴다",
+			},
+			"target": map[string]any{
+				"type":        "string",
+				"description": "Target sub-agent index, label, or session key (result/kill/steer). Optional when exactly one sub-agent exists.",
 			},
 		},
 		"required": []string{"action"},
@@ -655,27 +665,6 @@ func SessionsSpawnToolSchema() map[string]any {
 			},
 		},
 		"required": []string{"task"},
-	}
-}
-
-func SubagentsToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"description": "Sub-agent management action. 'result' returns a finished sub-agent's output (pull a result on demand, complementing the automatic completion notification).",
-				"enum":        []string{"list", "result", "kill", "steer"},
-			},
-			"message": map[string]any{
-				"type":        "string",
-				"description": "Steering message for steer action",
-			},
-			"target": map[string]any{
-				"type":        "string",
-				"description": "Target sub-agent index, label, or session key (for result/kill/steer). Optional when exactly one sub-agent exists.",
-			},
-		},
 	}
 }
 
@@ -1117,11 +1106,6 @@ func WikiToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Upcoming deadline in YYYY-MM-DD (write action): payment due, delivery, or milestone date. Surfaced by the morning letter deadline scan.",
 			},
-			"explain": map[string]any{
-				"type":        "boolean",
-				"description": "search 전용 검색 신호·융합·rerank 진단 포함",
-				"default":     false,
-			},
 			"force": map[string]any{
 				"type":        "boolean",
 				"description": "write action: 새 문서 생성 시 유사 문서가 발견되면 기본적으로 생성이 거부되고 기존 경로가 안내된다. 안내된 문서가 정말 별개 주제일 때만 force=true로 생성을 강행",
@@ -1141,10 +1125,6 @@ func WikiToolSchema() map[string]any {
 				"description": "Page importance 0.0-1.0 (write action, default: 0.5)",
 				"minimum":     0,
 				"maximum":     1,
-			},
-			"intent": map[string]any{
-				"type":        "string",
-				"description": "search 전용 원래 사용자 의도. 후보를 새로 들이지 않고 애매한 순위만 보정한다",
 			},
 			"kinds": map[string]any{
 				"type":        "array",
@@ -1173,10 +1153,6 @@ func WikiToolSchema() map[string]any {
 					"type": "string",
 				},
 			},
-			"plan": map[string]any{
-				"type":        "string",
-				"description": "search 전용 타입 질의 계획. 줄마다 lex:, vec:, hyde:, intent:, scope: 연산자를 사용한다. 첫 검색절은 기본 2배 가중치이며 scope는 결과 제한 전에 경로 prefix를 필터링한다. 예: 'lex: 대한전선 계약 일정\\nvec: payment milestone\\nintent: 대한전선 계약\\nscope: 프로젝트/대한전선'",
-			},
 			"program": map[string]any{
 				"type":        "string",
 				"description": "write 전용(프로젝트 대표페이지): 사업군(프로그램) — 한 벤처의 워크스트림인 형제 프로젝트들을 묶는 축 (예: '비금-130mw' — 케이블·커넥터·EPC 폴더가 공유). client(거래처) 아래의 중간 우산. 짧은 한글 슬러그, 기존 프로그램에 합류할 땐 기존 표기를 그대로 재사용(검색으로 확인). 단독 딜은 생략",
@@ -1192,18 +1168,6 @@ func WikiToolSchema() map[string]any {
 			"related": map[string]any{
 				"type":        "array",
 				"description": "Related page topics (write action)",
-				"items": map[string]any{
-					"type": "string",
-				},
-			},
-			"rerank": map[string]any{
-				"type":        "boolean",
-				"description": "search 전용 선택적 reranker 강제 실행. 기본은 상위 후보가 애매할 때만 실행",
-				"default":     false,
-			},
-			"scopes": map[string]any{
-				"type":        "array",
-				"description": "search 전용 위키 경로 prefix 필터. 예: ['프로젝트/대한전선', '업무/계약']",
 				"items": map[string]any{
 					"type": "string",
 				},
@@ -1320,21 +1284,22 @@ func NotebookToolSchema() map[string]any {
 	}
 }
 
-func ContactsToolSchema() map[string]any {
+func PeopleToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "lookup: 전화번호로 인물 찾기 (정규화·+82↔0·뒷자리 폴백). search: 이름·회사·이메일·번호 부분일치 검색 (최대 20건, 초과 시 표시). by_company: 회사명으로 소속 인물 전체 열거 (이름순, 최대 50명).",
-				"enum":        []string{"lookup", "search", "by_company"},
+				"description": "find (기본): 이름·회사로 주소록·조직도·그룹웨어를 한 번에 조회해 세 출처를 함께 반환. phone: 전화번호 → 사람 (주소록만 가능). company: 회사명 → 그 회사 소속으로 등록된 사람 전체. tree: 조직도 트리 (query 생략 시 전체, 주면 그 팀·회사 부분).",
+				"default":     "find",
+				"enum":        []string{"find", "phone", "company", "tree"},
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "조회할 전화번호 (lookup) 또는 검색어 — 이름/회사/이메일/번호 일부 (search).",
+				"description": "사람 이름(find) · 전화번호(phone) · 회사명(company) · 팀·회사명(tree, 생략 가능)",
 			},
 		},
-		"required": []string{"action", "query"},
+		"required": []string{"action"},
 	}
 }
 
@@ -2134,18 +2099,6 @@ func MarketToolSchema() map[string]any {
 	}
 }
 
-func OrgToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"query": map[string]any{
-				"type":        "string",
-				"description": "이름 검색어 (사람/팀/회사, 부분 일치). 생략하면 전체 조직도",
-			},
-		},
-	}
-}
-
 func GoalToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -2371,12 +2324,12 @@ func ToolMaxOutputs() map[string]int {
 	return map[string]int{
 		"browser":     32000,
 		"calendar":    8000,
-		"contacts":    8000,
 		"deal_ledger": 8000,
 		"exec":        32000,
 		"groupware":   32000,
 		"notebook":    24000,
 		"office":      32000,
+		"people":      8000,
 		"solarflow":   32000,
 		"wiki":        20000,
 	}

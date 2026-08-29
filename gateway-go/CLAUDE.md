@@ -44,6 +44,16 @@ enforced by code review + snapshot test):
 2. Implement handler in `internal/pipeline/chat/tools/` (or a subpackage: `runtimeops/`, `routine/`, `mailarchive/`, `codeaction/`, …)
 3. Register in `internal/pipeline/chat/toolwire/core/register.go` (appropriate Register*Tools function)
 
+**Deferred tools live or die by their description.** A deferred tool is reachable
+only through `fetch_tools`, whose lexical floor is a whole-token match against
+that description — so it must carry the words a Korean turn actually types,
+inflected ("그려줘", not only "그린다"), including transliterations ("크롬" next to
+"Chrome"). The 2026-08-29 audit found 8 deferred tools that no realistic Korean
+query could reach, every one of them with zero recorded calls. Add trigger
+phrasing up front and extend
+`internal/pipeline/chat/toolwire/deferred_discovery_test.go`, which fails when a
+description drifts away from its triggers — nothing else notices.
+
 ### Working with Generated Files
 
 Several files in this module are machine-generated. **Never edit them by hand.**

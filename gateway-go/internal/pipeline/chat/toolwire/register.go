@@ -1,6 +1,7 @@
 package toolwire
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/wire"
 )
 
@@ -17,8 +18,8 @@ func RegisterCalendarTool(registry wire.ToolRegistrar, calDeps *wire.CalendarDep
 	wire.RegisterCalendarTool(registry, calDeps)
 }
 
-func RegisterContactsTool(registry wire.ToolRegistrar, contactsDeps *wire.ContactsDeps) {
-	wire.RegisterContactsTool(registry, contactsDeps)
+func RegisterPeopleTool(registry wire.ToolRegistrar, contactsDeps *wire.ContactsDeps, wikiStore *wiki.Store) {
+	wire.RegisterPeopleTool(registry, contactsDeps, wikiStore)
 }
 
 func RegisterWikiTools(registry wire.ToolRegistrar, wikiDeps *wire.WikiDeps, workspaceDir string, sessionCacheFlush wire.SessionCacheFlushFn) {

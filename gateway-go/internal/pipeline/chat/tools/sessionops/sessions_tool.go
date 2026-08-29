@@ -30,17 +30,33 @@ func Truncate(s string, maxLen int) string {
 
 // --- unified sessions tool ---
 
-// ToolSessions creates the unified sessions tool with action dispatch (list/history/search/send).
+// ToolSessions creates the unified sessions tool with action dispatch.
+//
+// It owns both planes of the session surface: peer sessions (list/history/
+// search/send/stats) and this session's own children (scope="children" on list,
+// plus result/kill/steer). They were two tools until the 2026-08-29 audit found
+// the boundary had eroded — `subagents` was literally the session list filtered
+// by SpawnedBy, over the same Manager and the same SessionDeps, so "which tool
+// lists sessions" was a routing question with no principled answer. One tool,
+// one scope switch. Spawning stays its own tool: it mutates, and the prompt
+// directs delegation by name.
 func ToolSessions(d *tooldeps.SessionDeps) toolport.ToolFunc {
+	subagents := ToolSubagents(d)
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action string `json:"action"`
+			Scope  string `json:"scope"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("parse input: %w", err)
 		}
 		switch p.Action {
 		case "list":
+			// scope=children reuses the subagent lister, which filters the same
+			// Manager.List() by SpawnedBy and renders child status/steer hints.
+			if strings.EqualFold(strings.TrimSpace(p.Scope), "children") {
+				return subagents(ctx, input)
+			}
 			return toolSessionsList(d.Manager)(ctx, input)
 		case "history":
 			return toolSessionsHistory(d.Transcript)(ctx, input)
@@ -50,8 +66,10 @@ func ToolSessions(d *tooldeps.SessionDeps) toolport.ToolFunc {
 			return toolSessionsSend(d)(ctx, input)
 		case "stats":
 			return toolSessionsStats(d)(ctx, input)
+		case "result", "kill", "steer":
+			return subagents(ctx, input)
 		default:
-			return "action은 list, history, search, send, stats 중 하나를 지정하세요.", nil
+			return "action은 list, history, search, send, stats, result, kill, steer 중 하나를 지정하세요 (list는 scope=children으로 내 서브에이전트만).", nil
 		}
 	}
 }

@@ -85,7 +85,7 @@ func RegisterRuntimeOpsTools(registry toolport.ToolRegistrar, set RuntimeOpsTool
 	})
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "observe",
-		Description: "Self-diagnosis: why a turn was slow/failed, tool-usage stats, improvement-loop health. Observe your OWN runtime via the in-process observation plane: action=turn (runId → a past run's tokens/tools/cache + its captured logs), action=logs (recent log ring; filter by runId/session/level/contains), action=behavior (cross-session tool usage / proactive funnel / background-job health over N days, plus the local vLLM engine's prefix-cache hit rate), action=effort (adaptive effort-router scorecard: routed-off vs kept-on, escalation rate, savings), action=proactive (proactive-card engagement: FTR / over-intervention rate by source), action=health (self-improvement machinery digest: loop liveness, skill-decision mix, dreamer backlog, no-op frontier, silent-failure counts — same data as the loopback /api/observatory, read mid-reasoning).",
+		Description: "자기진단·상태 관찰·모니터링 — \"왜 느렸어\"·\"게이트웨이 상태 봐줘\"·\"도구 사용 통계\"·\"개선 루프 건강\". Self-diagnosis: why a turn was slow/failed, tool-usage stats, improvement-loop health. Observe your OWN runtime via the in-process observation plane: action=turn (runId → a past run's tokens/tools/cache + its captured logs), action=logs (recent log ring; filter by runId/session/level/contains), action=behavior (cross-session tool usage / proactive funnel / background-job health over N days, plus the local vLLM engine's prefix-cache hit rate), action=effort (adaptive effort-router scorecard: routed-off vs kept-on, escalation rate, savings), action=proactive (proactive-card engagement: FTR / over-intervention rate by source), action=health (self-improvement machinery digest: loop liveness, skill-decision mix, dreamer backlog, no-op frontier, silent-failure counts — same data as the loopback /api/observatory, read mid-reasoning).",
 		InputSchema: schema.ObserveToolSchema(),
 		Fn:          set.Observe,
 		Deferred:    true,
@@ -111,7 +111,7 @@ func RegisterRuntimeOpsTools(registry toolport.ToolRegistrar, set RuntimeOpsTool
 	// powerful; fetch_tools when a turn needs interactive web control.
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "browser",
-		Description: "사용자 PC의 실제 Chrome 브라우저를 자연어로 조작한다 (Page Agent 브리지). " +
+		Description: "사용자 PC의 실제 크롬(Chrome) 브라우저를 자연어로 조작한다 (Page Agent 브리지) — \"크롬으로 열어봐\"·\"로그인해서 봐줘\"·\"브라우저로 클릭해\". " +
 			"로그인된 SaaS·SPA처럼 `web`(HTTP fetch)으로 못 읽는 화면을 클릭·입력·스크롤한다. " +
 			"action=status (허브 연결/작업 중 여부) · execute (task=자연어 지시, 블로킹) · stop (진행 중 작업 중단). " +
 			"\"이 사이트에서 …해줘\" · \"로그인한 페이지에서 폼 채워\" 류에 사용. DENEB_BROWSER_URL 미설정 시 연동 꺼짐.",
@@ -221,15 +221,20 @@ type WorkstationDeps struct {
 // RegisterWorkstationTool registers the desktop workstation-control tool. The
 // command travels over the events push channel (Kind=workspace) to connected
 // Andromeda clients, which validate + execute it through their command bus and
-// show a visible "화면 조정" nudge. Eager (not Deferred): the tool exists for
-// interactive "화면에 띄워줘/나란히 보여줘" turns, where a fetch_tools round
-// trip would cost more than the small schema does.
+// show a visible "화면 조정" nudge.
+//
+// Deferred (prompt audit 2026-08-29): it was eager so the model could volunteer
+// a screen unprompted ("묻지 말고 띄우고"). Over 12 days with the desktop in
+// heavy use (92 cygnus sessions) it was never called once, so the eager slot
+// was buying no proactivity at ~1,200 wire bytes a turn. An explicit "띄워줘"
+// turn can afford the fetch_tools round trip.
 func RegisterWorkstationTool(registry toolport.ToolRegistrar, deps WorkstationDeps) {
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "workstation",
 		Description: "데스크톱 워크스테이션(Andromeda)의 화면을 직접 조종한다 — 자료를 말로만 설명하지 말고 화면에 띄워라. action: open(화면 열기, view 또는 위키 path) | split(분할 추가, view — 최대 3분할) | close(분할 닫기) | focus(포커스) | layout(분할 일괄 지정, views=\"mail,calendar\") | wiki(위키 페이지, path) | spotlight(항목 강조 — view+ref를 열고 하이라이트, '여기 보세요') | prefill(할일 초안 — view=todo+title(+due,note)로 모달을 채워 열기, 저장은 사용자 클릭). view 키: today|projects|todo|notebook|mail|calendar|wiki|search|people|crons|fleet|workfeed|approvals|groupware|skills|rsi|observe. search는 query로 검색어 주입, mail/approvals는 open/split에 date(YYYY-MM-DD)를 더해 그 날짜 페이지로 점프. 쓰는 시점: ① 사용자가 '보여줘/띄워줘/나란히' 요청 ② 특정 프로젝트·문서·메일을 논의 중이면 관련 화면을 선제 오픈(예: 프로젝트 얘기 → layout \"wiki,mail\" + wiki path) — 묻지 말고 띄우고 한 줄로 알릴 것 ③ 모바일에서 '데스크톱에 준비해놔' 원격 예약 ④ 답변에서 특정 항목을 짚을 때 spotlight ⑤ 대화에서 할일이 도출되면 prefill로 초안 제시. '워룸' 요청 = layout으로 위키+메일+피드 3분할. 데스크톱 앱이 연결돼 있어야 한다(미연결이면 조용히 생략하고 말로 답).",
 		InputSchema: schema.WorkstationToolSchema(),
 		Fn:          hostops.ToolWorkstation(hostops.WorkstationCommandFunc(deps.Send), hostops.WorkstationUsageHintFunc(deps.Hint)),
+		Deferred:    true,
 	})
 }
 
@@ -272,29 +277,31 @@ func RegisterProcessTools(registry toolport.ToolRegistrar, d *tooldeps.ProcessDe
 
 // RegisterSessionTools registers session management tools.
 func RegisterSessionTools(registry toolport.ToolRegistrar, d *tooldeps.SessionDeps) {
+	// One session tool, two planes. The former `subagents` tool folded in here
+	// (2026-08-29 audit): it was Manager.List() filtered by SpawnedBy — a subset
+	// of this tool's own list — sharing the same SessionDeps, so the split only
+	// ever posed a routing question. list+scope=children replaces it, and
+	// result/kill/steer moved across unchanged.
+	//
+	// Deferred (2026-07-09, still true): the Sub-Agents prompt section tells the
+	// model NOT to poll for child completions — those auto-deliver via the notify
+	// relay (subagent_notify.go). What is left is the edge-case steer/kill of a
+	// running child and the occasional peer-session lookup, so that rare turn
+	// fetches the tool.
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "sessions",
-		Description: "Sessions: list / history / search / send — other sessions' message logs, transcript keyword search, cross-session messaging",
+		Description: "Sessions: list (scope=children면 내가 띄운 서브에이전트만) / history / search / send / stats, 그리고 서브에이전트 제어 result / kill / steer — 다른 세션의 메시지 로그, 트랜스크립트 키워드 검색, 세션 간 메시징",
 		InputSchema: schema.SessionsToolSchema(),
 		Fn:          sessionops.ToolSessions(d),
 		Deferred:    true,
 	})
+	// sessions_spawn stays eager and separate: it mutates (the others only read
+	// or steer), and the prompt directs delegation by name — 10 calls over the
+	// audited 12 days, so the frictionless slot is earning its place.
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "sessions_spawn",
 		Description: "Spawn a sub-agent to work in parallel — use for long tasks, research, or when the user is waiting. Faster than doing it yourself",
 		InputSchema: schema.SessionsSpawnToolSchema(),
 		Fn:          sessionops.ToolSessionsSpawn(d),
-	})
-	// Deferred (2026-07-09): the Sub-Agents prompt section tells the model NOT to
-	// poll with subagents — child completions auto-deliver via the notify relay
-	// (subagent_notify.go). Its only live use is the edge-case steer/kill of a
-	// running child, so that rare turn fetches it. sessions_spawn stays eager: the
-	// prompt directs delegation by name and it must stay frictionless.
-	registry.RegisterTool(toolport.ToolDef{
-		Name:        "subagents",
-		Description: "Monitor and control sub-agents: list status, steer with messages, or kill. Defaults to list",
-		InputSchema: schema.SubagentsToolSchema(),
-		Fn:          sessionops.ToolSubagents(d),
-		Deferred:    true,
 	})
 }

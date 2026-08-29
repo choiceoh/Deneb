@@ -627,7 +627,7 @@ func TestBuildSystemPromptGroupwareTriggers(t *testing.T) {
 		ToolDefs: []ToolDef{
 			{Name: "groupware"},
 			{Name: "calendar"},
-			{Name: "contacts"},
+			{Name: "people"},
 		},
 	}
 	prompt := BuildSystemPrompt(params)

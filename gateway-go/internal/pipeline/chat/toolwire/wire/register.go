@@ -6,6 +6,8 @@ package wire
 import (
 	"context"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/wikitool"
@@ -77,8 +79,8 @@ func RegisterCalendarTool(registry toolport.ToolRegistrar, calDeps *tooldeps.Cal
 	chrono.RegisterCalendarTool(registry, calDeps)
 }
 
-func RegisterContactsTool(registry toolport.ToolRegistrar, contactsDeps *tooldeps.ContactsDeps) {
-	domain.RegisterContactsTool(registry, contactsDeps)
+func RegisterPeopleTool(registry toolport.ToolRegistrar, contactsDeps *tooldeps.ContactsDeps, wikiStore *wiki.Store) {
+	domain.RegisterPeopleTool(registry, contactsDeps, wikiStore)
 }
 
 func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiDeps, workspaceDir string, sessionCacheFlush SessionCacheFlushFn) {

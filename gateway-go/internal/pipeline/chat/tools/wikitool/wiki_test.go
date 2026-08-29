@@ -176,14 +176,19 @@ func TestWikiReadRangeReturnsNumberedAbsoluteLines(t *testing.T) {
 	}
 }
 
-func TestWikiSearchTypedPlanReturnsLineRangeAndScope(t *testing.T) {
+// TestWikiSearchReturnsLineRange covers the tool-layer search after the typed
+// plan knobs left the schema (prompt audit 2026-08-29): a plain query still
+// returns w: refs with line addresses. The typed-plan machinery keeps its own
+// coverage in internal/domain/wiki (query_plan_test.go, fact_search_test.go)
+// and in the miniapp knowledge handler, which is where plans are built now.
+func TestWikiSearchReturnsLineRange(t *testing.T) {
 	store := newTestWikiStore(t)
-	out, err := wikiSearchWithPlan(context.Background(), store, "", "lex: redact\nscope: phase-2-summary", "", nil, 5, false, false)
+	out, err := wikiSearch(context.Background(), store, "redact", 5)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "w:phase-2-summary") || !strings.Contains(out, "L") || strings.Contains(out, "deneb-architecture") {
-		t.Fatalf("plan output = %q", out)
+	if !strings.Contains(out, "w:phase-2-summary") || !strings.Contains(out, "L") {
+		t.Fatalf("search output = %q", out)
 	}
 }
 

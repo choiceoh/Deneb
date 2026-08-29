@@ -18,13 +18,13 @@ var toolCategories = []struct {
 	{"File", []string{"read", "write", "edit", "grep"}},
 	{"Exec", []string{"exec", "process"}},
 	{"Web", []string{"web"}},
-	{"Business", []string{"groupware", "org", "contacts", "deal_ledger", "market"}},
+	{"Business", []string{"groupware", "people", "deal_ledger", "market"}},
 	{"Memory", []string{"wiki", "polaris"}},
 	{"System", []string{"message", "gateway"}},
 	{"Workflow", []string{"blackboard", "goal"}},
 	{"Routine", []string{"cron"}},
 	{"Schedule", []string{"calendar"}},
-	{"Sessions", []string{"sessions", "sessions_spawn", "subagents"}},
+	{"Sessions", []string{"sessions", "sessions_spawn"}},
 	{"Media", []string{"send_file"}},
 }
 

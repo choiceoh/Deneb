@@ -237,12 +237,13 @@ func (b *codeActionBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	argsJSON, err := json.Marshal(req.Args)
+	tool, args := retargetContacts(req.Tool, req.Args)
+	argsJSON, err := json.Marshal(args)
 	if err != nil {
 		writeBridgeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	result, err := b.invoker.Execute(b.ctx, req.Tool, argsJSON)
+	result, err := b.invoker.Execute(b.ctx, tool, argsJSON)
 	if err != nil {
 		writeBridgeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -499,6 +500,30 @@ func dealsStructured(store *wiki.Store, args map[string]any) (any, error) {
 		out = append(out, r)
 	}
 	return out, nil
+}
+
+// retargetContacts keeps the published `deneb.contacts(action, query)` script
+// API working after the 2026-08-29 audit folded the contacts tool into `people`.
+// Scripts (and the skills built on them) still say contacts; the bridge renames
+// the call and maps the two actions onto the facade. The as_json path never
+// comes through here — it reads the store directly in structuredResult.
+func retargetContacts(tool string, args map[string]any) (string, map[string]any) {
+	if tool != "contacts" {
+		return tool, args
+	}
+	out := make(map[string]any, len(args)+1)
+	for k, v := range args {
+		out[k] = v
+	}
+	switch action, _ := args["action"].(string); action {
+	case "lookup":
+		out["action"] = "phone"
+	case "by_company", "company":
+		out["action"] = "company"
+	default: // search, and the empty default
+		out["action"] = "find"
+	}
+	return "people", out
 }
 
 // contactsStructured answers a read-only contacts call with []tooldeps.Contact

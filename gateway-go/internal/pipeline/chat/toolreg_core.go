@@ -38,9 +38,10 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// synthesis (딜/프로젝트 브리핑). Active when the notebook store is wired.
 	toolwire.RegisterNotebookTool(registry, &deps.Notebook)
 
-	// Contacts address-book lookup (phone lookup + name/company search).
-	// Active when the contacts store is wired (native-client contacts sync).
-	toolwire.RegisterContactsTool(registry, &deps.Contacts)
+	// people: one entry point over the address book, the org chart, and the live
+	// groupware HR area. Active when the contacts store is wired (native-client
+	// contacts sync); the wiki store lets the groupware leg enrich 인물 pages.
+	toolwire.RegisterPeopleTool(registry, &deps.Contacts, deps.Wiki.Store)
 
 	// Calendar (read merged Google + local; write local). Active when either a
 	// Google client factory or a local store is wired. Chat-side twin of the

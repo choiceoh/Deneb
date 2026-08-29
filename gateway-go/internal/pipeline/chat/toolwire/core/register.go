@@ -71,13 +71,18 @@ func RegisterGraphTool(registry toolport.ToolRegistrar, workspaceDir string) {
 	})
 }
 
-// RegisterCodeSearchTool registers the eager `code_search` tool — semantic
+// RegisterCodeSearchTool registers the deferred `code_search` tool — semantic
 // (concept) code search: Nemotron embeddings over symbols/repository chunks,
 // RRF-fused with BM25+FTS and reranked by XProvence. It is the sibling of codegraph_explore:
 // CodeGraph resolves structure/relations from a KNOWN symbol; code_search finds
-// "where is the code that does X" when the symbol name is unknown. Eager (small
-// schema, one required field) so it sits on the wire without a fetch round-trip,
-// matching codegraph_explore's always-available ergonomics.
+// "where is the code that does X" when the symbol name is unknown.
+//
+// Deferred (prompt audit 2026-08-29): it shipped eager to match
+// codegraph_explore's always-available ergonomics, but across the recorded
+// transcript history it was never called once — Deneb's runtime agent is a
+// chief-of-staff, and the coding sessions that would want it reach CodeGraph
+// through their own MCP wiring instead. A code question can afford the
+// fetch_tools round trip.
 func RegisterCodeSearchTool(registry toolport.ToolRegistrar, workspaceDir string) {
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "code_search",
@@ -87,6 +92,7 @@ func RegisterCodeSearchTool(registry toolport.ToolRegistrar, workspaceDir string
 			"더 깊은 전체 호출 그래프가 필요할 때만 codegraph_node/explore로 이어서 파고들라.",
 		InputSchema: schema.CodeSearchToolSchema(),
 		Fn:          surface.ToolCodeSearch(workspaceDir),
+		Deferred:    true,
 	})
 }
 
@@ -94,10 +100,11 @@ func RegisterCodeSearchTool(registry toolport.ToolRegistrar, workspaceDir string
 // Office documents (.docx/.xlsx/.pptx) through the officecli binary, with no
 // Office install required.
 //
-// Eager (not Deferred): the operator's core workflow is document work — reading
-// received .xlsx/.docx, filling templates, extracting figures — so the tool
-// should be on the wire without a fetch_tools round-trip. Its schema is compact
-// (one enum + three fields), unlike graphify's ~1,200-token coaching block.
+// Deferred (prompt audit 2026-08-29): it was eager on the theory that document
+// work is the operator's core workflow, but it is the single largest eager
+// schema at ~2,090 wire bytes and the recorded transcript history holds zero
+// calls. Document turns are explicit ("이 엑셀 봐줘"), so they can pay one
+// fetch_tools round trip instead of taxing every other turn.
 //
 // NOTE on mutation classification: office is deliberately NOT added to
 // toolport.mutationTools. That set invalidates the workspace grep cache after a
@@ -116,6 +123,7 @@ func RegisterOfficeTool(registry toolport.ToolRegistrar, workspaceDir string) {
 			"정확한 verb·요소·--prop 키는 command=help로 조회(예: args=[\"xlsx\",\"set\",\"cell\"]).",
 		InputSchema: schema.OfficeToolSchema(),
 		Fn:          surface.ToolOffice(workspaceDir),
+		Deferred:    true,
 	})
 }
 
@@ -143,7 +151,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	if deps.ConsultPanel != nil {
 		registry.RegisterTool(toolport.ToolDef{
 			Name:        "research_panel",
-			Description: "딥리서치·고위험 의사결정의 교차검증용 — 하나의 질문을 가동 중(헬시)인 모든 모델에게 병렬로 던져 모델별 답을 모아 온다(이종 모델 패널 팬아웃). 반환된 모델별 답을 당신이 직접 종합하라 — 서로 다른 계열이 합의하면 강한 신뢰, 모순은 명시하고, 자신만만한 답에 닻 내리지 말 것. 단순 사실질문엔 쓰지 마라(비용이 모델 수만큼 N배). models로 특정 모델만 지정 가능, 비우면 전체.",
+			Description: "딥리서치·고위험 의사결정의 교차검증용 — \"깊게 조사해줘\"·\"심층 조사\"·\"여러 모델에게 물어봐\". 하나의 질문을 가동 중(헬시)인 모든 모델에게 병렬로 던져 모델별 답을 모아 온다(이종 모델 패널 팬아웃). 반환된 모델별 답을 당신이 직접 종합하라 — 서로 다른 계열이 합의하면 강한 신뢰, 모순은 명시하고, 자신만만한 답에 닻 내리지 말 것. 단순 사실질문엔 쓰지 마라(비용이 모델 수만큼 N배). models로 특정 모델만 지정 가능, 비우면 전체.",
 			InputSchema: schema.ResearchPanelToolSchema(),
 			Fn:          surface.ToolResearchPanel(deps.ConsultPanel),
 			Deferred:    true,
@@ -175,17 +183,10 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		})
 	}
 
-	// Org chart (read-only): the operator-curated group→company→team tree with
-	// 직급/직책. Deferred; loads {stateDir}/org.json on demand — empty file just
-	// reports unset, so no dep/nil-guard needed.
-	registry.RegisterTool(toolport.ToolDef{
-		Name: "org",
-		Description: "큐레이션 조직도(읽기 전용, org.json) — '1팀 팀장 누구'·'회사 조직 어떻게 되지'·직급/직책. " +
-			"query로 사람/팀/회사 검색, 생략 시 전체 트리. 라이브 휴대폰·부서·생년월일은 groupware(area=people); 번호↔이름은 contacts.",
-		InputSchema: schema.OrgToolSchema(),
-		Fn:          surface.ToolOrg(),
-		Deferred:    true,
-	})
+	// The org chart is no longer its own tool: it is one of the three sources
+	// behind `people` (registered from toolwire/domain), so "1팀 팀장 누구" and
+	// "이 번호 누구" reach the same entry point instead of asking the model to
+	// pick a store first. orgops.ToolOrg still backs it there.
 
 	// NOTE: fetch_tools and code_action are registered by
 	// RegisterRegistryBridgeTools (called from chat.RegisterCoreTools) because

@@ -45,7 +45,6 @@ func allSchemaCases() []schemaCase {
 		{name: "gateway", build: schema.GatewayToolSchema},
 		{name: "sessions", build: schema.SessionsToolSchema},
 		{name: "sessions_spawn", build: schema.SessionsSpawnToolSchema},
-		{name: "subagents", build: schema.SubagentsToolSchema},
 		{name: "send_file", build: schema.SendFileToolSchema},
 		{name: "chart", build: schema.ChartToolSchema},
 		{name: "diagram", build: schema.DiagramToolSchema},
@@ -56,7 +55,7 @@ func allSchemaCases() []schemaCase {
 		{name: "wiki_forget", build: schema.WikiForgetToolSchema},
 		{name: "preference", build: schema.PreferenceToolSchema},
 		{name: "notebook", build: schema.NotebookToolSchema},
-		{name: "contacts", build: schema.ContactsToolSchema},
+		{name: "people", build: schema.PeopleToolSchema},
 		{name: "calendar", build: schema.CalendarToolSchema},
 		{name: "polaris", build: schema.PolarisToolSchema},
 		{name: "knowledge", build: schema.KnowledgeToolSchema},
@@ -76,7 +75,6 @@ func allSchemaCases() []schemaCase {
 		{name: "transcribe", build: schema.TranscribeToolSchema},
 		{name: "ocr", build: schema.OcrToolSchema},
 		{name: "market", build: schema.MarketToolSchema},
-		{name: "org", build: schema.OrgToolSchema},
 		{name: "goal", build: schema.GoalToolSchema},
 		{name: "blackboard", build: schema.BlackboardToolSchema},
 		{name: "mail_archive", build: schema.MailArchiveToolSchema},
@@ -356,8 +354,8 @@ func TestEditSchemaRequiresOneEditMode(t *testing.T) {
 
 func TestActionEnumsAreNonEmptyUniqueAndDocumented(t *testing.T) {
 	actionSchemas := []string{
-		"process", "cron", "message", "gateway", "sessions", "subagents",
-		"files", "skills", "wiki", "notebook", "contacts", "calendar", "polaris",
+		"process", "cron", "message", "gateway", "sessions",
+		"files", "skills", "wiki", "notebook", "people", "calendar", "polaris",
 		"observe", "fleet", "browser", "groupware", "workfeed", "goal", "blackboard", "mail_archive",
 	}
 	byName := make(map[string]schemaCase)
@@ -427,7 +425,7 @@ func TestToolMaxOutputsContractAndFreshMap(t *testing.T) {
 	want := map[string]int{
 		"browser":     32000,
 		"calendar":    8000,
-		"contacts":    8000,
+		"people":      8000,
 		"deal_ledger": 8000,
 		"exec":        32000,
 		"groupware":   32000,
@@ -481,7 +479,7 @@ func TestRegisterCoreToolsWithMinimalDependenciesHasValidUniqueContracts(t *test
 	}
 	for _, eager := range []string{
 		"read", "write", "grep", "exec", "web", "sessions_spawn", "heartbeat_update",
-		"goal", "blackboard", "mail_archive", "transcribe", "ocr", "org", "message",
+		"goal", "blackboard", "mail_archive", "transcribe", "ocr", "message",
 	} {
 		if !seen[eager] {
 			t.Errorf("minimal core missing %q", eager)
@@ -499,11 +497,11 @@ func TestRegisterCoreToolsDeferredPolicyContractMatchesOperationalIntent(t *test
 	RegisterCoreTools(reg, &tooldeps.CoreToolDeps{WorkspaceDir: t.TempDir()})
 	deferred := map[string]bool{
 		"read": false, "write": false, "grep": false, "exec": false, "web": false,
-		"sessions_spawn": false, "heartbeat_update": false, "goal": false, "blackboard": false,
-		"mail_archive": false, "transcribe": true, "ocr": true, "org": true,
-		"office": false, // eager: document work is a core operator workflow
+		"sessions_spawn": false, "heartbeat_update": false, "goal": true, "blackboard": false,
+		"mail_archive": false, "transcribe": true, "ocr": true,
+		"office": true, // deferred 2026-08-29: largest eager schema, zero recorded calls
 		"edit":   true, "gateway": true, "observe": true, "fleet": true, "browser": true, "groupware": false,
-		"graphify": true, "process": true, "sessions": true, "subagents": true,
+		"graphify": true, "process": true, "sessions": true,
 		"message": true, "todo": true, "cron": true, "files": true,
 		"morning_letter": true, "evening_letter": true,
 		"send_file": true, "chart": true, "diagram": true, "watch": true,
@@ -553,7 +551,7 @@ func TestRegistrationGroupsEnforceExactNamesWithoutCrossGroupDuplicates(t *testi
 		{name: "phone", run: func(r *mockRegistrar) { ops.RegisterPhoneTools(r, nil) }, want: []string{"phone_read", "phone_write"}},
 		{name: "process", run: func(r *mockRegistrar) { RegisterProcessTools(r, &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()}) }, want: []string{"exec", "process"}},
 		{name: "web", run: func(r *mockRegistrar) { RegisterWebTools(r, nil) }, want: []string{"web", "browse"}},
-		{name: "session", run: func(r *mockRegistrar) { RegisterSessionTools(r, &tooldeps.SessionDeps{}) }, want: []string{"sessions", "sessions_spawn", "subagents"}},
+		{name: "session", run: func(r *mockRegistrar) { RegisterSessionTools(r, &tooldeps.SessionDeps{}) }, want: []string{"sessions", "sessions_spawn"}},
 		{name: "chrono", run: func(r *mockRegistrar) { RegisterChronoTools(r) }, want: []string{"message", "heartbeat_update"}},
 		{name: "workflow", run: func(r *mockRegistrar) {
 			workflow.RegisterTools(r, workflow.ToolSet{Goal: noop, Blackboard: noop})
@@ -593,7 +591,7 @@ func TestOptionalRegistrationsSkipUnavailableDependencies(t *testing.T) {
 	}{
 		{name: "polaris nil", run: func(r *mockRegistrar) { recall.RegisterPolarisTools(r, nil, nil) }},
 		{name: "knowledge nil", run: func(r *mockRegistrar) { recall.RegisterKnowledgeTool(r, nil) }},
-		{name: "contacts empty", run: func(r *mockRegistrar) { RegisterContactsTool(r, &tooldeps.ContactsDeps{}) }},
+
 		{name: "calendar empty", run: func(r *mockRegistrar) { RegisterCalendarTool(r, &tooldeps.CalendarDeps{}) }},
 		{name: "wiki empty", run: func(r *mockRegistrar) { RegisterWikiTools(r, &tooldeps.WikiDeps{}, t.TempDir(), nil) }},
 		{name: "notebook nil", run: func(r *mockRegistrar) { RegisterNotebookTool(r, nil) }},

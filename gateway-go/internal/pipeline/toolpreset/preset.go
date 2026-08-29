@@ -96,7 +96,7 @@ func PreloadedDeferredTools(preset Preset) []string {
 // invisible and uncallable for the preset. (mail_archive is eager but the same
 // naming requirement applies — an eager tool absent from the list is dropped too.)
 //
-// No spawn preset includes sessions_spawn/subagents: a restricted child
+// No spawn preset includes sessions_spawn or the sessions control surface: a restricted child
 // spawning a preset-less (= unrestricted) grandchild would defeat the
 // sandbox. Fan-out stays possible from the unrestricted parent. message and
 // send_file are also excluded — sub-agents report back through the

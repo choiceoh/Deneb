@@ -79,8 +79,9 @@ func TestToolsCatalogReturnsExpectedCoreToolCount(t *testing.T) {
 	for _, g := range groups {
 		total += len(g.(map[string]any)["tools"].([]any))
 	}
-	if total != 15 {
-		t.Errorf("got %d, want 15 core tools", total)
+	// 14 since the 2026-08-29 audit folded `subagents` into `sessions`.
+	if total != 14 {
+		t.Errorf("got %d, want 14 core tools", total)
 	}
 }
 

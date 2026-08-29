@@ -132,7 +132,7 @@ func TestUntrustedToolGate_CodeActionWikiOnlyDoesNotTaint(t *testing.T) {
 
 func TestReadsExternalOrigin(t *testing.T) {
 	external := []string{"web", "browse", "browser", "research_panel", "watch", "mail_archive", "ocr"}
-	internal := []string{"read", "wiki", "files", "market", "calendar", "contacts", "office", "exec", "grep", "todo"}
+	internal := []string{"read", "wiki", "files", "market", "calendar", "people", "office", "exec", "grep", "todo"}
 	for _, tool := range external {
 		if !readsExternalOrigin(tool) {
 			t.Errorf("readsExternalOrigin(%q) = false, want true", tool)

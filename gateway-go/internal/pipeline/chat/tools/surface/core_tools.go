@@ -5,7 +5,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/graphifyops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/messageops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/officeops"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/orgops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/recallops"
 )
 
@@ -15,7 +14,6 @@ var (
 	ToolGraphify      = graphifyops.ToolGraphify
 	ToolCodeSearch    = codesearchtool.ToolCodeSearch
 	ToolOffice        = officeops.ToolOffice
-	ToolOrg           = orgops.ToolOrg
 	ToolMessage       = messageops.ToolMessage
 	ToolResearchPanel = recallops.ToolResearchPanel
 )

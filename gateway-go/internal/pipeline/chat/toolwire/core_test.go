@@ -63,7 +63,6 @@ func TestRegisterSessionToolsContracts(t *testing.T) {
 
 	assertRegisteredContract(t, registeredTool(t, reg, "sessions"), true)
 	assertRegisteredContract(t, registeredTool(t, reg, "sessions_spawn"), false)
-	assertRegisteredContract(t, registeredTool(t, reg, "subagents"), true)
 }
 
 func TestRegisterHeartbeatContract(t *testing.T) {

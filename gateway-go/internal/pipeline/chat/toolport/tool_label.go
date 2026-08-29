@@ -41,7 +41,6 @@ var chatToolLabels = map[string]string{
 	"sessions":         "세션 확인",
 	"sessions_spawn":   "보조 세션 시작",
 	"skills":           "스킬 확인",
-	"subagents":        "하위 작업 진행",
 	"watch":            "감시 작업 설정",
 	"web":              "웹 검색",
 	"wiki":             "기억 검색",

@@ -23,10 +23,7 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 		var p struct {
 			Action     string   `json:"action"`
 			Query      string   `json:"query"`
-			Plan       string   `json:"plan"`
 			Paths      []string `json:"paths"`
-			Scopes     []string `json:"scopes"`
-			Intent     string   `json:"intent"`
 			Title      string   `json:"title"`
 			ID         string   `json:"id"`
 			Summary    string   `json:"summary"`
@@ -51,8 +48,6 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 			Limit      int      `json:"limit"`
 			Date       string   `json:"date"`
 			Force      bool     `json:"force"`
-			Explain    bool     `json:"explain"`
-			Rerank     bool     `json:"rerank"`
 			Project    string   `json:"project"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
@@ -66,7 +61,7 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 
 		switch p.Action {
 		case "search":
-			return wikiSearchWithPlan(ctx, d.Store, p.Query, p.Plan, p.Intent, p.Scopes, p.Limit, p.Explain, p.Rerank)
+			return wikiSearch(ctx, d.Store, p.Query, p.Limit)
 		case "read":
 			if len(p.Paths) > 0 {
 				return wikiReadBatchRange(ctx, d.Store, p.Paths, p.Section, p.FromLine, p.MaxLines)
@@ -104,41 +99,23 @@ func orDash(s string) string {
 	return s
 }
 
+// wikiSearch runs the plain wiki search behind the chat tool.
+//
+// The typed query-plan knobs (plan/scopes/intent/explain/rerank) used to be
+// model-settable here. Prompt audit 2026-08-29: across 736 recorded wiki calls
+// (274 of them searches) the model never once set any of the five — ~695 wire
+// bytes of schema for zero uses — so they left the tool schema. The plan
+// machinery itself stays: wiki.ParseQueryPlan / Store.SearchPlan still back the
+// miniapp knowledge RPC, which builds plans in code rather than by prompting.
 func wikiSearch(ctx context.Context, store *wiki.Store, query string, limit int) (string, error) {
-	return wikiSearchWithPlan(ctx, store, query, "", "", nil, limit, false, false)
-}
-
-func wikiSearchWithPlan(ctx context.Context, store *wiki.Store, query, planText, intent string, scopes []string, limit int, explain, forceRerank bool) (string, error) {
-	if strings.TrimSpace(planText) == "" && query == "" {
-		return "query 또는 plan은 필수입니다.", nil
-	}
 	if query == "" {
-		query = planText
+		return "query는 필수입니다.", nil
 	}
 	if limit <= 0 {
 		limit = 10
 	}
 
-	var (
-		results []wiki.SearchResult
-		err     error
-	)
-	if strings.TrimSpace(planText) != "" || len(scopes) > 0 || strings.TrimSpace(intent) != "" || explain || forceRerank {
-		plan := wiki.ParseQueryPlan(planText)
-		if len(plan.Clauses) == 0 {
-			plan = wiki.ParseQueryPlan(query)
-		}
-		if strings.TrimSpace(intent) != "" {
-			plan.Intent = strings.TrimSpace(intent)
-		}
-		plan.Scopes = append(plan.Scopes, scopes...)
-		plan.Explain = explain
-		plan.ForceRerank = forceRerank
-		report, searchErr := store.SearchPlan(ctx, plan, limit)
-		results, err = report.Results, searchErr
-	} else {
-		results, err = store.Search(ctx, query, limit)
-	}
+	results, err := store.Search(ctx, query, limit)
 	if err != nil {
 		return fmt.Sprintf("위키 검색 실패: %v", err), nil
 	}

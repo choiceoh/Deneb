@@ -85,10 +85,9 @@ var coreSections = []coreSection{
 		{"memory", "Unified memory (search, get, set, forget, status)", []ToolProfileID{ProfileCoding}},
 	}},
 	{"sessions", "Sessions", []coreTool{
-		{"sessions", "Session management (list/history/search/send)", []ToolProfileID{ProfileCoding, ProfileMessaging}},
+		{"sessions", "Session management (list/history/search/send) + sub-agent result/kill/steer", []ToolProfileID{ProfileCoding, ProfileMessaging}},
 		{"sessions_spawn", "Spawn sub-agent", []ToolProfileID{ProfileCoding}},
 		{"sessions_yield", "End turn to receive sub-agent results", []ToolProfileID{ProfileCoding}},
-		{"subagents", "Manage sub-agents", []ToolProfileID{ProfileCoding}},
 	}},
 	{"messaging", "Messaging", []coreTool{
 		{"message", "Send messages", []ToolProfileID{ProfileMessaging}},

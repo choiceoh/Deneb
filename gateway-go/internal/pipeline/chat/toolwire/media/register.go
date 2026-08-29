@@ -38,7 +38,7 @@ func RegisterExtractionTools(registry toolport.ToolRegistrar, asrHotwords func()
 	// tesseract fallback; born-digital PDFs via pdftotext). Deferred.
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "ocr",
-		Description: "디스크의 이미지·스캔 PDF·오피스 문서에서 텍스트를 추출한다(OCR) — 영수증 사진·스캔 계약서·팩스 PDF를 읽어야 할 때 사용. read 도구는 바이너리를 그대로 덤프하므로 이미지/스캔물은 반드시 이 도구로. 파일스토어 파일은 files action=analyze로도 가능.",
+		Description: "이미지에서 텍스트 추출·글자 인식(OCR) — \"사진 속 글자 읽어줘\"·\"스캔본 텍스트로\". 디스크의 이미지·스캔 PDF·오피스 문서가 대상이며 영수증 사진·스캔 계약서·팩스 PDF를 읽어야 할 때 사용. read 도구는 바이너리를 그대로 덤프하므로 이미지/스캔물은 반드시 이 도구로. 파일스토어 파일은 files action=analyze로도 가능.",
 		InputSchema: schema.OcrToolSchema(),
 		Fn:          artifact.ToolOCR(),
 		Deferred:    true,
@@ -51,14 +51,14 @@ func RegisterExtractionTools(registry toolport.ToolRegistrar, asrHotwords func()
 func RegisterMediaTools(registry toolport.ToolRegistrar, workspaceDir string, spill tooldeps.SpilloverStore) {
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "send_file",
-		Description: "Send a file to the user (auto-detects: photo/video/audio/document). Max 50 MB",
+		Description: "파일을 사용자에게 보내준다 — \"보내줘\"·\"전송해줘\"·\"첨부해줘\"·\"파일로 줘\". 사진/영상/음성/문서를 자동 판별한다. chart·diagram이 만든 PNG도 이걸로 보내야 실제로 보인다. 최대 50 MB.",
 		InputSchema: schema.SendFileToolSchema(),
 		Fn:          artifact.ToolSendFile(),
 		Deferred:    true,
 	})
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "chart",
-		Description: "숫자 데이터를 보기 좋은 차트 이미지(PNG)로 그린다 — 추이(line)·누적(area)·비교(bar)·구성비(doughnut). " +
+		Description: "숫자 데이터를 차트·그래프 이미지(PNG)로 그려준다 — \"그래프 그려줘\"·\"차트로 보여줘\". 추이(line)·누적(area)·비교(bar)·구성비(doughnut). " +
 			"표로 나열하기보다 한눈에 들어오는 게 나을 때(월별 추이, 거래처별 비교, 단계별 비율 등) 사용하라. " +
 			"막대 위에 추세선을 얹는 콤보도 가능(한 시리즈에 type:line). " +
 			"렌더된 PNG 경로를 돌려주므로, 그 경로를 send_file(type:\"photo\")로 사용자에게 전송해야 실제로 보인다.",
@@ -68,7 +68,7 @@ func RegisterMediaTools(registry toolport.ToolRegistrar, workspaceDir string, sp
 	})
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "diagram",
-		Description: "구조·흐름·일정을 다이어그램 이미지(PNG)로 그린다 — 절차/관계/상태도는 flowchart(노드+화살표), 일정은 gantt(작업별 기간 막대), 연혁/이력/로드맵은 timeline(시점별 사건). " +
+		Description: "구조·흐름·일정을 다이어그램 그림(PNG)으로 그려준다 — \"조직도 그려줘\"·\"흐름도 그려줘\"·\"도식으로 보여줘\". 절차/관계/조직도/상태도는 flowchart(노드+화살표), 일정은 gantt(작업별 기간 막대), 연혁/이력/로드맵은 timeline(시점별 사건). " +
 			"인허가 절차, 결재 흐름, 프로젝트 일정, 회사 연혁처럼 말이나 표보다 그림이 나은 걸 설명할 때 쓴다. " +
 			"숫자 비교·추이는 diagram이 아니라 chart를 써라. " +
 			"렌더된 PNG 경로를 돌려주므로, 그 경로를 send_file(type:\"photo\")로 사용자에게 전송해야 실제로 보인다.",

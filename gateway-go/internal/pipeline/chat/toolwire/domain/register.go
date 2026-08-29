@@ -2,10 +2,14 @@ package domain
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/groupwareops"
 	mailtool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/mailarchive"
 	notebooktool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/notebook"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/orgops"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/peopleops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/personaops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/skilltool"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/wikitool"
@@ -17,29 +21,47 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	RegisterMailArchiveTool(registry, deps)
 }
 
-// RegisterContactsTool registers the address-book lookup tool (phone lookup +
-// name/company search) over the contacts store mirrored from the native client's
-// contacts sync. Skipped when the store isn't wired so the agent doesn't see a
-// dead surface; a nil/empty store would otherwise reply "주소록이 비어 있습니다".
-func RegisterContactsTool(registry toolport.ToolRegistrar, contactsDeps *tooldeps.ContactsDeps) {
-	if contactsDeps.Store == nil {
-		return
+// RegisterPeopleTool registers the unified person-lookup tool. It replaces the
+// separate `contacts` and `org` tools (2026-08-29 audit): three stores answered
+// person questions — the synced address book, the curated org.json tree, and
+// Amaranth's live HR area — and the model had to guess which one held the
+// answer before it could ask. `people` fans out instead, so one call covers all
+// three and the caller never routes.
+//
+// Always registered, unlike the address-book tool it absorbed. That tool was
+// gated on a wired contacts store, but the org chart never was — so gating the
+// merged tool the same way would leave a gateway without a synced address book
+// (a fresh install, or the dev instance) with no person surface at all. The
+// facade degrades per source instead: a nil contacts leg drops its section and
+// answers the two address-book-only actions with a clear reason.
+//
+// Eager, unlike the two deferred tools it replaces. Live check on the first
+// deferred build: asked "김성훈 씨 연락처랑 어느 팀인지", the model never
+// fetched people at all — it reached for eager `groupware` (which owns HR as
+// one of nine areas), then code_action, and burned five turns. A person tool
+// that has to be fetched loses every race against an eager tool that can half
+// answer, so the facade only pays off on the wire. It is cheap enough to sit
+// there: ~460 schema bytes, among the smallest eager tools.
+//
+// ASR hotword injection and wiki person enrichment read the store server-side
+// and are unaffected either way.
+func RegisterPeopleTool(registry toolport.ToolRegistrar, contactsDeps *tooldeps.ContactsDeps, wikiStore *wiki.Store) {
+	var contacts toolport.ToolFunc
+	if contactsDeps.Store != nil {
+		contacts = wikitool.ToolContacts(contactsDeps)
 	}
-	// Deferred (2026-07-09): the person wiki now carries 연락처 for the people the
-	// user keeps pages for, so contacts' meeting-prep/context role is covered there
-	// (wiki/knowledge/org). Its surviving unique value is full address-book coverage
-	// + reverse phone lookup (번호→사람, normalized) — an occasional "이 번호 누구야"
-	// turn that fetches on demand. code_action's bridge still exposes it zero-hop.
-	// ASR hotword injection and wiki person enrichment read the store server-side,
-	// unaffected. Description leads with the trigger so the 80-rune summary is useful.
 	registry.RegisterTool(toolport.ToolDef{
-		Name: "contacts",
-		Description: "'이 번호 누구?'·'010-xxxx 누구야'·'OOO 연락처/번호'처럼 주소록을 물으면 짐작 말고 호출 — " +
-			"전화번호로 인물 찾기(lookup) 또는 이름·회사로 검색(search). " +
-			"네이티브 클라이언트가 동기화한 연락처 전체를 조회한다.",
-		InputSchema: schema.ContactsToolSchema(),
-		Fn:          wikitool.ToolContacts(contactsDeps),
-		Deferred:    true,
+		Name: "people",
+		Description: "사람 조회 한 입구 — '이 번호 누구?'·'OOO 연락처'·'1팀 팀장 누구'·'김○○ 부서/휴대폰'은 짐작 말고 호출. " +
+			"find(기본)는 주소록·조직도·그룹웨어를 한 번에 훑어 세 출처를 함께 돌려준다 " +
+			"(각각 번호·회사 / 조직 위치·직급 / 라이브 부서·휴대폰). " +
+			"phone=번호→사람, company=회사 소속 전원, tree=조직도.",
+		InputSchema: schema.PeopleToolSchema(),
+		Fn: peopleops.ToolPeople(peopleops.Sources{
+			Contacts:  contacts,
+			Org:       orgops.ToolOrg(),
+			Groupware: groupwareops.ToolGroupware(wikiStore),
+		}),
 	})
 }
 
@@ -76,7 +98,7 @@ func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiD
 		// not be reachable from untrusted-content turns. Deferred: rare + destructive.
 		registry.RegisterTool(toolport.ToolDef{
 			Name: "wiki_forget",
-			Description: "위키 페이지를 영구 삭제(잊기) — 오정보·프라이버시로 사실을 지운다. path=페이지 경로, reason=사유(감사 로그 기록). " +
+			Description: "위키 페이지를 영구 삭제 — \"잊어버려\"·\"잊어줘\"·\"그 페이지 지워줘\". 오정보·프라이버시로 사실을 지운다. path=페이지 경로, reason=사유(감사 로그 기록). " +
 				"close(아카이브)·supersedes(소프트 강등)와 달리 실제 제거해 검색·회상에서 사라진다. 파괴적이므로 먼저 wiki search로 정확한 경로를 확인하라. " +
 				"거래 원장 페이지(프로젝트/거래/…)는 재무 감사 기록이라 거부된다.",
 			InputSchema: schema.WikiForgetToolSchema(),
@@ -95,7 +117,7 @@ func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiD
 func RegisterPersonaTools(registry toolport.ToolRegistrar, workspaceDir string) {
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "preference",
-		Description: "사용자의 서 있는 선호·행동 규칙을 SOUL.md(페르소나)에 영구 저장한다 (append-only). " +
+		Description: "사용자의 서 있는 선호·행동 규칙을 SOUL.md(페르소나)에 영구 저장한다 (append-only) — \"앞으로 이렇게 해줘\"·\"계속 지켜\"·\"기억해서 항상\"·\"다음부터는\". " +
 			"사용자가 '앞으로는 …해줘/…하지 마'처럼 지속 적용될 행동 방침을 말하면 이걸로 rule 한 줄을 남긴다. " +
 			"추가만 가능하고 삭제·수정은 사용자만 SOUL.md 편집으로 할 수 있다 — 에이전트가 자기 규칙을 지우지 못하게 하는 의도적 비대칭. " +
 			"반영은 다음 세션부터. 일회성 사실은 wiki, 사용자 개인정보는 wiki 사용자 카테고리를 쓰고, 이건 '어떻게 행동할지'에만 쓴다.",
@@ -120,7 +142,7 @@ func RegisterNotebookTool(registry toolport.ToolRegistrar, deps *tooldeps.Notebo
 	// it. Description front-loads the WHEN so the 80-rune deferred summary is useful.
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "notebook",
-		Description: "딜/프로젝트 자료(메일·문서·메모)를 한데 모아 그 자료만으로 출처 추적 가능한 인용 브리핑을 만들 때 쓰는 NotebookLM식 노트북. action=create (노트북 생성) | list (목록) | show (자료 보기) | add_source (자료 핀: kind=wiki 위키페이지 또는 kind=note 붙여넣기 텍스트) | remove_source (자료 제거) | delete (노트북 삭제) | brief (핀된 자료에만 근거해 [S1] 형식 인용 브리핑 생성).",
+		Description: "노트북 — \"이 자료들로 노트북 만들어줘\"·\"이 문서들만 근거로 브리핑\". 딜/프로젝트 자료(메일·문서·메모)를 한데 모아 그 자료만으로 출처 추적 가능한 인용 브리핑을 만드는 NotebookLM식 묶음. action=create (노트북 생성) | list (목록) | show (자료 보기) | add_source (자료 핀: kind=wiki 위키페이지 또는 kind=note 붙여넣기 텍스트) | remove_source (자료 제거) | delete (노트북 삭제) | brief (핀된 자료에만 근거해 [S1] 형식 인용 브리핑 생성).",
 		InputSchema: schema.NotebookToolSchema(),
 		Fn:          notebooktool.ToolNotebook(deps),
 		Deferred:    true,
