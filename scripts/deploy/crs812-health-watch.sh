@@ -26,6 +26,10 @@ SWITCH_VIA="${CRS812_VIA:-srv2}"   # the switch mgmt net is reachable from srv2 
 CPU_TEMP_MAX="${CRS812_CPU_TEMP_MAX:-85}"
 SWITCH_TEMP_MAX="${CRS812_SWITCH_TEMP_MAX:-85}"
 FAN_RPM_MIN="${CRS812_FAN_RPM_MIN:-1000}"
+# Sustained high RPM = the loud-fan regression (2026-08-29: fan-target-temp had
+# drifted 65→63C, pinning fans at ~10.4K while every state read "ok" — the
+# lower-bound-only check was blind to it). Tuned-normal is 3.9–4.8K.
+FAN_RPM_MAX="${CRS812_FAN_RPM_MAX:-9000}"
 
 alert() { # level, title, message
     curl -fsS -m 10 -X POST "$GATEWAY/api/hooks/fleet" \
@@ -64,12 +68,18 @@ psu1_state="$(value_of psu1-state)"
 for fan in fan1 fan2 fan3 fan4; do
     rpm="$(value_of "${fan}-speed")"
     [[ -n "$rpm" && "$rpm" -lt "$FAN_RPM_MIN" ]] && faults+=("${fan} ${rpm}RPM (하한 ${FAN_RPM_MIN})")
+    [[ -n "$rpm" && "$rpm" -gt "$FAN_RPM_MAX" ]] && faults+=("${fan} ${rpm}RPM 과속 — 소음/팬튜닝 되돌림 의심 (상한 ${FAN_RPM_MAX}, fan-target-temp 확인)")
 done
 
 cpu_temp="$(value_of cpu-temperature)"
 [[ -n "$cpu_temp" && "$cpu_temp" -ge "$CPU_TEMP_MAX" ]] && faults+=("CPU ${cpu_temp}°C (임계 ${CPU_TEMP_MAX})")
 switch_temp="$(value_of switch-temperature)"
 [[ -n "$switch_temp" && "$switch_temp" -ge "$SWITCH_TEMP_MAX" ]] && faults+=("스위치칩 ${switch_temp}°C (임계 ${SWITCH_TEMP_MAX})")
+
+# Always leave a one-line trend sample in the journal (fault or not): the
+# 08-29 "yesterday it was quiet" episode had no way to answer "what changed
+# and when" — 30-minute temp/RPM samples make the next step-change datable.
+echo "crs812-health-watch: sample switch=${switch_temp:-?}C cpu=${cpu_temp:-?}C fan=$(value_of fan1-speed)/$(value_of fan2-speed)/$(value_of fan3-speed)/$(value_of fan4-speed)rpm psu=$(value_of psu1-power)W" >&2
 
 if ((${#faults[@]} == 0)); then
     exit 0
