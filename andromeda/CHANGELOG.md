@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.0.123](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.122...andromeda-v0.0.123) (2026-08-29)
+
+
+### ✨ Features
+
+* **andromeda:** Cygnus에서 작업할 저장소를 고른다 ([#4932](https://github.com/choiceoh/Deneb/issues/4932)) ([c55b30d](https://github.com/choiceoh/Deneb/commit/c55b30d91d615cbf8f78a65ef32b7114f9ddafb2))
+* **chat:** 대화의 PR·CI 상태를 배지로 ([#4934](https://github.com/choiceoh/Deneb/issues/4934)) ([2c93636](https://github.com/choiceoh/Deneb/commit/2c93636261b5892b582df0bcc2d53939b80ce14d))
+* **chat:** 툴 이름을 게이트웨이가 짓는다 — 데스크톱이 영문 식별자를 노출하던 것 ([#4924](https://github.com/choiceoh/Deneb/issues/4924)) ([0eb31bf](https://github.com/choiceoh/Deneb/commit/0eb31bfc00933bcf864ad0c791e425e3bd055111))
+* **gateway:** 코드 레포 등록 목록 — 에이전트가 일할 수 있는 곳을 운영자가 정한다 ([#4927](https://github.com/choiceoh/Deneb/issues/4927)) ([c347440](https://github.com/choiceoh/Deneb/commit/c3474401b4e4a353c558683af7d15b457d31eaee))
+
 ## [0.0.122](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.121...andromeda-v0.0.122) (2026-08-29)
 
 
