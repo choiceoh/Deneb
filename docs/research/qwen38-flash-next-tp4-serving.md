@@ -99,6 +99,28 @@ per-rank buffers left KV at -8.39 GiB; clearing that needs GPU_MEM ~0.71 on
 the floor node, above the startup-check ceiling). Fusion failed the same way
 at -5.96 GiB. Both are the planner's static-term blind spot, not engine bugs.
 
+### Ecosystem watch (NVIDIA forum deep sweep, 2026-08-29)
+
+Independent GB10 serving engines are racing this exact problem; none is
+adoptable today, all are worth rechecking in a few weeks:
+
+- **ds4-on-spark** (antirez/ds4 fork, hand-written CUDA backend): the
+  headline "1x Spark dsv4 59 tok/s" dissolves on reading — it is a 12-request
+  aggregate on a **2-bit** quant; C=1 is 28 tok/s (12K ctx) vs our 4-node 86
+  at the canonical ~4.7-bit. Not a threat. What IS notable: 1M-token context
+  on one box, and Qwen3.8-Flash-Next support in progress via SSD-backed PLE.
+- **veloGB10** (Rust, sm_121a-specific kernels, narrow vetted-checkpoint
+  list): claims Qwen3.8-27B 75 tok/s on ONE node (DFlash2 speculation, code
+  workload) with 8-24h soak tests — but the author states quality is
+  untested. Flash-Next support "upcoming". Candidate engine if a 27B
+  assistant tier ever gets a node.
+- **DFlash2 beat vLLM+MTP on 27B** (community bench) — independent
+  confirmation that the remaining acceptance lever is drafter replacement,
+  matching our closed acceptance axis.
+- **Switchless ring clusters**: dsv4 TP4 at ~56 tok/s direct-connect — our
+  switched 200G fabric (86) outperforms it; nothing to import, topology
+  validated.
+
 Upstream watch (NVIDIA forum, 2026-08-28): the PLE quantization-detection bug
 our `DENEB_PLE_FORCE_FP8_EMBED` overlay works around was fixed upstream via a
 dtype check instead of isinstance - retire that overlay on the next image
