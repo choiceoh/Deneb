@@ -68,7 +68,8 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
 }
 
-// Cygnus — the summonable agent companion window (tray menu + global shortcut).
+// Cygnus — the agent workspace window, reachable from the tray menu and a
+// global shortcut (it is a place to work, not a summon-and-dismiss launcher).
 // Same Vite bundle as the workstation; the init script flags which UI mounts
 // (src/cygnus/windowKind.ts). Created lazily on first summon; afterwards the
 // shortcut toggles hide/show, and window-close hides like the main window.
@@ -95,18 +96,19 @@ fn toggle_cygnus_window(app: &tauri::AppHandle) {
     let built = WebviewWindowBuilder::new(app, "cygnus", WebviewUrl::App("index.html?window=cygnus".into()))
         .initialization_script("window.__CYGNUS__ = true;")
         .title("Cygnus")
-        // Wide enough that the thread rail docks beside the conversation (the
-        // 560px breakpoint in cygnus.css) instead of covering it — the list is
-        // a standing part of this surface, not a popup.
-        //
-        // The MINIMUM carries that intent, not just the default: window-state
+        // A workspace default, not a summon default (operator call, 2026-08-29):
+        // Cygnus is somewhere you stay, so it opens at a working size and can be
+        // maximized from its own titlebar (WindowControls). Applies only to a
+        // FIRST creation — window-state restores the last size after this.
+        .inner_size(1100.0, 760.0)
+        // The minimum is what actually holds the docked thread rail (the 560px
+        // breakpoint in cygnus.css), because the default cannot: window-state
         // restores the last geometry with an unconditional set_size, so anyone
-        // who used Cygnus before the docked rail would come back at 480px —
-        // under the breakpoint, silently back to an overlay, with the feature
-        // invisible. A minimum above the breakpoint is what the window manager
-        // clamps that restore against. 600 (not 560) leaves slack so rounding
-        // or a scrollbar can't land the webview a pixel under the query.
-        .inner_size(720.0, 700.0)
+        // who used Cygnus before the rail landed would come back at 480px —
+        // under the breakpoint, silently an overlay again, feature invisible.
+        // A minimum above the breakpoint is what that restore gets clamped
+        // against. 600 (not 560) leaves slack so rounding or a scrollbar can't
+        // land the webview a pixel under the query.
         .min_inner_size(600.0, 520.0)
         .decorations(false)
         .transparent(true)
