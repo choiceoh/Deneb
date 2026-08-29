@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -326,6 +327,9 @@ func finishToolCall(
 		"outputBytes", len(block.Content),
 		"isError", block.IsError,
 	}
+	if action := toolCallAction(tc.Input.Bytes()); action != "" {
+		logFields = append(logFields, "action", action)
+	}
 	if block.IsError {
 		head := block.Content
 		if len(head) > 120 {
@@ -335,6 +339,41 @@ func finishToolCall(
 	}
 	logger.Info("tool complete", logFields...)
 	return block
+}
+
+// toolCallAction returns the sub-action a multiplexed tool was invoked with, or
+// "" for a single-purpose tool.
+//
+// 29 of the registered tools multiplex on one field (26 on `action`, plus
+// knowledge's `op` and phone_read's `what`), and the tool-complete line recorded
+// none of it: the log could say wiki took 19s but not whether that was a search,
+// a write, or an index rebuild. Every latency question this repo has asked of
+// the logs has had to stop there.
+//
+// Only the enum-shaped discriminators are read. exec's `command` is skipped on
+// purpose — it is a whole shell line, which belongs in the agent detail log, not
+// as a structured field that could carry a path or a credential.
+func toolCallAction(input []byte) string {
+	if len(input) == 0 {
+		return ""
+	}
+	var probe struct {
+		Action string `json:"action"`
+		Op     string `json:"op"`
+		What   string `json:"what"`
+	}
+	if err := json.Unmarshal(input, &probe); err != nil {
+		return ""
+	}
+	for _, v := range []string{probe.Action, probe.Op, probe.What} {
+		if v = strings.TrimSpace(v); v != "" {
+			if len(v) > 32 { // an enum value never runs long; a stray free-text field might
+				v = v[:32]
+			}
+			return v
+		}
+	}
+	return ""
 }
 
 // toolCallSegment is a contiguous range of one turn's tool calls that executes
