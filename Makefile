@@ -324,6 +324,7 @@ python-test:
 	  mods=$$(for f in test_*.py; do rest=$${f#test_codebase_health_v2}; if [ "$$rest" = "$$f" ]; then printf '%s ' "$${f%.py}"; fi; done); \
 	  python3 -m unittest $$mods -v
 	@python3 -m unittest discover -s scripts/dev -p 'test_*.py' -v
+	@python3 -m unittest discover -s scripts/eval -p 'test_*.py' -v
 
 # Static analysis for support, audit, and deployment Python. CI installs the
 # hash-locked toolchain from requirements-dev.lock before invoking this target.
