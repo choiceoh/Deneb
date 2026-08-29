@@ -58,6 +58,9 @@ func TestEventsMethodsReturnsAliasSurfaceAndBroadcastNilWithoutBroadcaster(t *te
 		"sessions.messages.unsubscribe",
 		"sessions.tools.subscribe",
 		"sessions.tools.unsubscribe",
+		// Client-bridge (miniapp.*) aliases for the desktop spectate surface.
+		"miniapp.sessions.events.subscribe",
+		"miniapp.sessions.events.unsubscribe",
 	}
 	if len(methods) != len(want) {
 		t.Fatalf("method count = %d, want %d: %#v", len(methods), len(want), methods)

@@ -35,9 +35,12 @@ type MailAttachmentClient interface {
 
 // Config is the client HTTP surface's complete runtime contract.
 type Config struct {
-	Dispatcher                  *rpc.Dispatcher
-	ChatHandler                 chatport.SyncStreamRunner
-	PushHub                     *nativepush.Hub
+	Dispatcher  *rpc.Dispatcher
+	ChatHandler chatport.SyncStreamRunner
+	PushHub     *nativepush.Hub
+	// GatewayBroadcaster attaches desktop event streams to the gateway event
+	// plane (agent.event spectate frames); nil disables the attach.
+	GatewayBroadcaster          nativeeventsapi.GatewayBroadcaster
 	ShutdownContext             context.Context
 	Logger                      *slog.Logger
 	AttachmentFactory           func() (MailAttachmentClient, error)
@@ -75,6 +78,7 @@ func RegisterRoutes(mux *http.ServeMux, cfg Config) {
 		PushHub:         cfg.PushHub,
 		ShutdownContext: cfg.ShutdownContext,
 		Logger:          cfg.Logger,
+		Broadcaster:     cfg.GatewayBroadcaster,
 	})
 	nativeAttachmentHandler := nativeattachmentapi.New(nativeattachmentapi.Config{
 		Logger:            cfg.Logger,

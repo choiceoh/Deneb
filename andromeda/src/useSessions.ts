@@ -8,6 +8,7 @@ import {
   deleteSession,
   focusSession,
   pinSession,
+  callRpc,
   recentSessions,
   recoverTurnAnswer,
   renameSession as renameSessionRpc,
@@ -16,6 +17,8 @@ import {
   setModel as persistModel,
 } from "@/gateway";
 import { type AssistantPart, type ChatTurn } from "@/hooks";
+import { onEventsHello, onGatewayEvent } from "@/events";
+import { upsertToolPart } from "./chatParts";
 import { errText } from "@/format";
 import { getString, setString } from "@/storage";
 
@@ -35,7 +38,11 @@ export function useSessions(
   cfg: GatewayConfig,
   connected: boolean,
   busy: boolean,
-  chat: { clear: () => void; setTurns: (turns: ChatTurn[]) => void },
+  chat: {
+    clear: () => void;
+    setTurns: (turns: ChatTurn[]) => void;
+    patchTurns?: (fn: (turns: ChatTurn[]) => ChatTurn[]) => void;
+  },
   opts?: {
     mainKey?: string;
     filter?: string;
@@ -336,9 +343,67 @@ export function useSessions(
   // working sparkle, poll through the shared recovery helper, and reload the
   // transcript (answer + tool chips + footprint in one shot) when it lands.
   const runningWatch = useRef<AbortController | null>(null);
+  const spectateStop = useRef<(() => void) | null>(null);
   function stopRunningWatch() {
     runningWatch.current?.abort();
     runningWatch.current = null;
+    spectateStop.current?.();
+    spectateStop.current = null;
+  }
+
+  // Live spectate: while the foreign turn runs, subscribe this events-stream
+  // connection to the session's agent events (tool.start/tool.end/run.end) and
+  // render them as chips on the placeholder — the same activity the owning
+  // stream shows, arriving live instead of after the fact. The transcript
+  // reload on run.end (or the poll fallback) still delivers the answer text.
+  function startSpectate(key: string, placeholderId: string): () => void {
+    let stopped = false;
+    let subscribedConn: string | null = null;
+    const subscribe = (connId: string) => {
+      subscribedConn = connId;
+      void callRpc(cfg, "miniapp.sessions.events.subscribe", { connId, sessionKey: key }).catch(() => {
+        subscribedConn = null; // legacy gateway without the event plane — poll fallback covers us
+      });
+    };
+    // Fires immediately when the stream is already up, and again on reconnect
+    // (a fresh connId voids server-side subscriptions — resubscribe).
+    const offHello = onEventsHello((connId) => {
+      if (!stopped) subscribe(connId);
+    });
+    const offGateway = onGatewayEvent((frame) => {
+      if (stopped || frame.event !== "agent.event") return;
+      const p = frame.payload;
+      if (p.sessionKey !== key) return;
+      const kind = typeof p.kind === "string" ? p.kind : "";
+      const inner = (p.payload && typeof p.payload === "object" ? p.payload : {}) as Record<string, unknown>;
+      if (kind === "tool.start" || kind === "tool.end") {
+        const ev = {
+          state: kind === "tool.start" ? "started" : "completed",
+          tool: typeof inner.tool === "string" ? inner.tool : "",
+          toolUseId: typeof inner.toolUseId === "string" ? inner.toolUseId : "",
+          detail: typeof inner.detail === "string" ? inner.detail : undefined,
+          resultSummary: typeof inner.summary === "string" ? inner.summary : undefined,
+          isError: inner.isError === true || undefined,
+        };
+        if (!ev.tool) return;
+        chat.patchTurns?.((turns) => turns.map((t) => (t.id === placeholderId ? upsertToolPart(t, ev) : t)));
+        return;
+      }
+      if (kind === "run.end") {
+        // Faster than the next 3s poll — and loadTranscript stops this spectate.
+        void loadTranscript(key).catch(() => {});
+      }
+    });
+    return () => {
+      stopped = true;
+      offHello();
+      offGateway();
+      if (subscribedConn) {
+        void callRpc(cfg, "miniapp.sessions.events.unsubscribe", { connId: subscribedConn, sessionKey: key }).catch(
+          () => {},
+        );
+      }
+    };
   }
   // A live send in this surface takes over the stream — the watcher's reload
   // would clobber the streaming turn. Unmount must not leak the poll either.
@@ -385,6 +450,7 @@ export function useSessions(
         canRegenerate: false,
       });
       watchRunningTurn(key, lastUser?.content ?? "");
+      spectateStop.current = startSpectate(key, `running-${key}`);
     }
     chat.setTurns(turns);
     const hidden = total - messages.length;

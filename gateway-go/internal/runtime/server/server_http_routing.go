@@ -28,10 +28,11 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/cron/run", s.handleCronRun)
 	mux.HandleFunc("POST /api/event/ingest", func(w http.ResponseWriter, r *http.Request) { phoneEventHandler().ServeHTTP(w, r) })
 	clientRoutes := gatewayhttp.Config{
-		PushHub:           s.pushHub,
-		ShutdownContext:   s.ShutdownCtx(),
-		Logger:            s.logger,
-		AttachmentFactory: s.newMiniappMailAttachmentClient,
+		PushHub:            s.pushHub,
+		GatewayBroadcaster: s.broadcaster,
+		ShutdownContext:    s.ShutdownCtx(),
+		Logger:             s.logger,
+		AttachmentFactory:  s.newMiniappMailAttachmentClient,
 		GroupwareAttachmentDownload: func(ctx context.Context, docID, attachment string) (string, string, []byte, error) {
 			cfg, ok := groupware.FromEnv()
 			if !ok {

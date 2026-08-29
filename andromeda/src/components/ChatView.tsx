@@ -40,6 +40,7 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
     selectVariant,
     clear,
     setTurns,
+    patchTurns,
   } = useChat(cfg);
   // 마지막 사용자 메시지만 편집-재전송 가능 (마지막 교환 대체 시맨틱).
   const [editingMsg, setEditingMsg] = useState<string | null>(null);
@@ -71,7 +72,7 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
     cfg,
     connected,
     busy || attaching,
-    { clear, setTurns },
+    { clear, setTurns, patchTurns },
     {
       mainKey: "client:main",
       // channel scopes the recent list server-side so autonomous sessions

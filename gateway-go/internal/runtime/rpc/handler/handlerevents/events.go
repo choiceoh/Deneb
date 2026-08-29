@@ -121,6 +121,12 @@ func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 		// Tool event routing.
 		"sessions.tools.subscribe":   subscribeToolEvents,
 		"sessions.tools.unsubscribe": unsubscribeToolEvents,
+
+		// Miniapp-namespace aliases: the client-token HTTP bridge only admits
+		// miniapp.* methods, and the spectate surface (desktop foreign-turn
+		// watch) subscribes through that bridge.
+		"miniapp.sessions.events.subscribe":   subscribeMessages,
+		"miniapp.sessions.events.unsubscribe": unsubscribeMessages,
 	}
 }
 

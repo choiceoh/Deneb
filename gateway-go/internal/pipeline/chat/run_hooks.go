@@ -126,18 +126,29 @@ func wireStreamHooks(
 	})
 
 	// Gateway event subscription: emit tool.start / tool.end for SSE clients.
+	// Payloads carry the live chip's material (toolUseId for pairing, the
+	// started-frame detail hint, the completed-frame summary) so a spectating
+	// surface renders the same chips the owning stream shows. Same digest
+	// helpers as the stream — wording stays identical everywhere.
 	if deps.callbacks.emitAgentFn != nil {
-		hc.OnToolStart(func(name, _ string, _ []byte) {
+		// OnToolEmit, not OnToolStart: the latter's second param is the model's
+		// thinking text, not the tool_use id (live-probe caught "Just run pwd."
+		// riding as toolUseId).
+		hc.OnToolEmit(func(name, toolUseID string, input []byte) {
 			deps.callbacks.emitAgentFn("tool.start", params.SessionKey, params.ClientRunID, map[string]any{
-				"tool": name,
-				"ts":   time.Now().UnixMilli(),
+				"tool":      name,
+				"toolUseId": toolUseID,
+				"detail":    toolport.ToolStreamDetail(name, input),
+				"ts":        time.Now().UnixMilli(),
 			})
 		})
-		hc.OnToolResult(func(name, _, _ string, isErr bool) {
+		hc.OnToolResult(func(name, toolUseID, result string, isErr bool) {
 			deps.callbacks.emitAgentFn("tool.end", params.SessionKey, params.ClientRunID, map[string]any{
-				"tool":    name,
-				"isError": isErr,
-				"ts":      time.Now().UnixMilli(),
+				"tool":      name,
+				"toolUseId": toolUseID,
+				"isError":   isErr,
+				"summary":   toolport.SummarizeToolResult(result),
+				"ts":        time.Now().UnixMilli(),
 			})
 		})
 	}

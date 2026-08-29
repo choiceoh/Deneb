@@ -103,6 +103,9 @@ export interface ChatState {
   selectVariant: (dir: -1 | 1) => void;
   clear: () => void;
   setTurns: (turns: ChatTurn[]) => void;
+  // Functional in-place update for live external mutations (the foreign-turn
+  // spectate upserting chips into its placeholder) — setTurns replaces wholesale.
+  patchTurns: (fn: (turns: ChatTurn[]) => ChatTurn[]) => void;
 }
 
 // Drives one Deneb chat/stream turn: streams delta into text parts, tool frames
@@ -514,6 +517,7 @@ export function useChat(cfg: GatewayConfig): ChatState {
     selectVariant,
     clear,
     setTurns: setTurnsExternal,
+    patchTurns: (fn) => setTurns((prev) => fn(prev)),
   };
 }
 
