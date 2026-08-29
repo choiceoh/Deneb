@@ -279,6 +279,14 @@ func (s *searchDB) queryMaxRarity(query string) float64 {
 	return s.idx.QueryMaxRarity(query)
 }
 
+// queryConjunctionRarity mirrors queryMaxRarity for the token CONJUNCTION —
+// see textsearch.QueryConjunctionRarity and the gate comment at the call site.
+func (s *searchDB) queryConjunctionRarity(query string) float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.idx.QueryConjunctionRarity(query)
+}
+
 // TokenRarity reports how distinctive a single token is in the indexed
 // corpus (0 = common/absent, 1 = rare), for consumers that need a
 // page-attribution guard — the recall citation pass uses it to refuse
@@ -541,8 +549,19 @@ func (s *Store) SearchWithOptions(ctx context.Context, query string, limit int, 
 	if rarityFloor <= 0 {
 		rarityFloor = bm25RarityFloorValue()
 	}
+	// Conjunction escape: a query whose tokens are each corpus-common can
+	// still be precise when they CO-OCCUR in few pages ("해남 신재생단지" —
+	// both tokens common in a solar wiki, the pair nearly unique). Without
+	// this, a max-rarity-only gate silently un-searches the best-documented
+	// subjects: the more pages a project accumulates, the more common its own
+	// vocabulary becomes. Measured on the Korean probe's residual misses:
+	// 4 of 7 real misses were multi-token queries with zero rendered rows
+	// because every token individually sat under the floor. Single-token
+	// queries are unaffected (conjunction == the token itself), and tokens
+	// that never co-occur return 0 — the common-word leak stays gated.
 	commonOnlyQuery := len(bm25) > 0 && s.fts.docCount() >= bm25GateMinCorpus &&
-		s.fts.queryMaxRarity(query) < rarityFloor
+		s.fts.queryMaxRarity(query) < rarityFloor &&
+		s.fts.queryConjunctionRarity(query) < rarityFloor
 
 	var sem []SearchResult
 	if mode != SearchModeBM25 {

@@ -587,6 +587,72 @@ func (idx *Index) QueryMaxRarity(query string) float64 {
 	return maxR
 }
 
+// QueryConjunctionRarity returns the corpus rarity of the query's token
+// CONJUNCTION — how rare it is for one document to contain ALL of the query's
+// matchable tokens — on the same idf(df)/idf(1) scale as QueryMaxRarity. It
+// answers the question per-token rarity cannot: a query whose every token is
+// corpus-common can still be a precise query when the tokens CO-OCCUR in few
+// documents ("해남 신재생단지" in a solar wiki — both tokens common, the pair
+// nearly unique). Heavily-documented topics make their own vocabulary common,
+// so a max-rarity gate alone silently un-searches exactly the best-documented
+// subjects. Tokens absent from the corpus contribute nothing (they cannot have
+// produced hits); a query with no matchable tokens, or whose matchable tokens
+// never co-occur (df_conj=0 — every lexical hit matched only a subset, the
+// common-word leak shape), returns 0.
+func (idx *Index) QueryConjunctionRarity(query string) float64 {
+	tokens := tokenize(query)
+	if len(tokens) == 0 {
+		return 0
+	}
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	var inter map[string]struct{}
+	for _, tok := range tokens {
+		docs := idx.matchingDocs(strings.ToLower(strings.TrimSpace(tok)))
+		if len(docs) == 0 {
+			continue
+		}
+		if inter == nil {
+			inter = make(map[string]struct{}, len(docs))
+			for id := range docs {
+				inter[id] = struct{}{}
+			}
+			continue
+		}
+		for id := range inter {
+			if _, ok := docs[id]; !ok {
+				delete(inter, id)
+			}
+		}
+		if len(inter) == 0 {
+			return 0
+		}
+	}
+	if inter == nil {
+		return 0
+	}
+	df := float64(len(inter))
+	n := float64(len(idx.docs))
+	if n <= 1 {
+		return 0
+	}
+	idfOf := func(d float64) float64 {
+		return math.Log(1 + (n-d+0.5)/(d+0.5))
+	}
+	base := idfOf(1)
+	if base <= 0 {
+		return 0
+	}
+	r := idfOf(df) / base
+	if r < 0 {
+		return 0
+	}
+	if r > 1 {
+		r = 1
+	}
+	return r
+}
+
 // matchingDocs returns all document IDs matching a token. Latin and numeric
 // tokens stay exact. Hangul resolves via index-time expansion keys (exact,
 // particle-stripped base, substrings ≥ 2 runes) plus a query-side particle

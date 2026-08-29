@@ -104,13 +104,19 @@ type indexedRecallSourceResult struct {
 
 var recallCuePhrases = []string{
 	"기억", "회상", "전에", "저번", "지난번", "예전에", "아까", "방금", "그때",
-	"말했던", "말한", "했던", "해둔", "정리했던", "논의했던", "이어", "이어서", "계속",
+	"말했던", "말한", "했던", "해둔", "정리했던", "논의했던", "이어서", "계속",
 	"문맥", "컨텍스트", "뭐였", "뭐더라", "뭘 했", "그거", "그 프로젝트", "그 방향",
 }
 
 var recallCueSubstrings = []string{
 	"기억", "했던", "말했던", "말한", "해둔", "정리했던", "논의했던",
-	"이어", "이어서", "계속", "뭐였", "뭐더라",
+	// Bare "이어" was removed from both cue lists: as a 2-rune substring it
+	// fires INSIDE nouns (금호타이어, 이어폰) — a bare-entity lookup message
+	// became cue=true and, worse, isRecallCueToken ate the entity itself as a
+	// stopword, leaving an EMPTY query list (measured on the Korean probe:
+	// "금호타이어" → queries=[] → zero evidence). "이어서" stays and covers
+	// the real continuation phrasing; "계속" covers the rest.
+	"이어서", "계속", "뭐였", "뭐더라",
 }
 
 var recallStopWords = map[string]struct{}{
