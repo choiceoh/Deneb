@@ -260,6 +260,21 @@ body.cygnus-window {
   gap: 8px;
   overscroll-behavior: contain;
 }
+
+/* Readable measure. Same rule (and same 860px) the workstation applies when its
+ * Deneb panel widens — see .ai-expanded/.ai-bottom in styles.css. Cygnus never
+ * inherited it because at the old 480px summon size nothing could exceed the
+ * measure; once the window became a workspace that can be maximized, a line ran
+ * the full ~1890px. Below 860 the cap is wider than the surface, so narrow
+ * windows are unaffected. The rail is deliberately excluded: it is a fixed
+ * column, not prose. (.cy-foot carries the same cap at its own rule below —
+ * it sets a margin shorthand later in this file, which would win over an
+ * inline-margin declared up here.) */
+.cy-transcript {
+  width: 100%;
+  max-width: 860px;
+  margin-inline: auto;
+}
 .cy-empty {
   flex: 1;
   display: flex;
@@ -418,7 +433,13 @@ body.cygnus-window {
  * the card itself (single ring — no chrome-in-chrome). */
 .cy-foot {
   flex: none;
-  margin: 0 10px 10px;
+  /* Centred on the same 860px measure as the transcript, so the composer stays
+     aligned with the conversation instead of stretching across a maximized
+     window. width keeps the 10px side gutter that the old shorthand gave at
+     widths below the cap, where auto margins have nothing to distribute. */
+  width: calc(100% - 20px);
+  max-width: 860px;
+  margin: 0 auto 10px;
   padding: 7px 10px 6px;
   display: flex;
   flex-direction: column;
