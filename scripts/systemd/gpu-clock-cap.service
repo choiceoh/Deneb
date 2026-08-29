@@ -1,0 +1,23 @@
+# Reapply the fleet GPU clock cap at every boot.
+#
+# Why: `nvidia-smi -lgc` does not survive a reboot — the GPU returns to its
+# default application clock (2418 MHz on GB10).
+# 2026-08-28: 2000 MHz after a simultaneous reboot-under-load (peak draw).
+# 2026-08-29: 1600 MHz — late-summer chassis heat; 2000 still ran the
+# package too hot next to the CRS812. Decode is memory-bound on 273 GB/s
+# so the cut hits prefill more than tokens/s.
+#
+# The retry loop absorbs driver-readiness ordering instead of guessing an
+# After= target alone. nvidia-persistenced is the usual predecessor.
+[Unit]
+Description=Lock GPU clocks to 1600 MHz (fleet thermal cap)
+After=nvidia-persistenced.service
+Wants=nvidia-persistenced.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash -c 'for i in $(seq 1 30); do /usr/bin/nvidia-smi -lgc 0,1600 && exit 0; sleep 10; done; echo "gpu-clock-cap: nvidia-smi never became ready" >&2; exit 1'
+
+[Install]
+WantedBy=multi-user.target
