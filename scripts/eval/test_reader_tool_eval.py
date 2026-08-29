@@ -310,5 +310,80 @@ class RetryTests(unittest.TestCase):
         self.assertEqual(slept, [])
 
 
+class ReadingStrategyTests(unittest.TestCase):
+    """Chain-of-Note is the ceiling lever, so its prompt has to stay intact.
+
+    The benchmark's own paper measures reading strategy under ORACLE retrieval
+    — evidence handed over whole — where it moved GPT-4o 0.870 -> 0.924. That
+    is the setting this harness found itself in: 76.7 against a 77.5 oracle,
+    with retrieval and escalation already spent.
+    """
+
+    def test_con_adds_notes_and_keeps_the_protocol(self):
+        con = rte.READER_SYSTEM_CON
+        self.assertIn("NOTE <ref>", con)
+        for directive in ("OPEN <ref>", "SEARCH <query>", "ANSWER <text>"):
+            self.assertIn(directive, con)
+
+    def test_con_does_not_ask_for_notes_on_an_escalation(self):
+        # Notes in front of an OPEN would break parse_directive's first-verb
+        # scan and spend the turn on nothing.
+        self.assertIn("alone with no notes", rte.READER_SYSTEM_CON)
+
+    def test_direct_reading_is_unchanged(self):
+        self.assertNotIn("NOTE <ref>", rte.READER_SYSTEM)
+
+    def test_notes_before_an_answer_still_parse_as_the_answer(self):
+        reply = ("NOTE s3 | 자전거 세 대를 소유\n"
+                 "NOTE s7 | NONE\n"
+                 "ANSWER 세 대입니다.")
+        verb, arg = rte.parse_directive(reply)
+        self.assertEqual(verb, "ANSWER")
+        self.assertIn("세 대", arg)
+
+
+class OracleTests(unittest.TestCase):
+    """The ceiling has to be re-measured whenever the reader or judge changes.
+
+    A ceiling recorded under one reader says nothing about another; comparing a
+    new reading strategy against a stale oracle is how a run convinces itself
+    it broke through when it only moved.
+    """
+
+    def setUp(self):
+        self.hay = {
+            "sessions": [[{"role": "user", "content": "관계 없는 잡담"}],
+                         [{"role": "user", "content": "자전거 세 대를 소유"},
+                          {"role": "assistant", "content": "세 대군요"}]],
+            "dates": ["2023-05-20", "2023-06-11"],
+            "labels": ["cl:lm:q1:s0", "cl:lm:q1:s1"],
+            "gold_indices": [1],
+        }
+
+    def test_serves_only_the_evidence_sessions_whole(self):
+        out = rte.oracle_block({}, self.hay, self.hay["gold_indices"])
+        self.assertIn("자전거 세 대를 소유", out)
+        self.assertIn("세 대군요", out)          # the WHOLE session, not a snippet
+        self.assertNotIn("관계 없는 잡담", out)  # and nothing else
+
+    def test_reference_date_anchors_temporal_questions(self):
+        # The retrieval block carries 기준일=; an oracle without it handicaps
+        # temporal questions exactly where the retrieval run is not.
+        hay = dict(self.hay, question_date="2023-06-20")
+        self.assertIn("기준일=2023-06-20", rte.oracle_block({}, hay, [1]))
+
+    def test_header_carries_label_and_date(self):
+        out = rte.oracle_block({}, self.hay, [1])
+        self.assertIn("cl:lm:q1:s1", out)
+        self.assertIn("2023-06-11", out)
+
+    def test_missing_evidence_degrades_instead_of_raising(self):
+        self.assertIn("없음", rte.oracle_block({}, None, []))
+        self.assertIn("없음", rte.oracle_block({}, self.hay, []))
+
+    def test_out_of_range_index_is_skipped(self):
+        self.assertIn("없음", rte.oracle_block({}, self.hay, [99]))
+
+
 if __name__ == "__main__":
     unittest.main()
