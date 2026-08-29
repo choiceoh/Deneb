@@ -29,9 +29,10 @@ var dryRunSafeTools = map[string]struct{}{
 // agent-logs): 23 all-read-only multi-tool turns wasted 124s of wall time on
 // serial waits — web+web research turns alone ran 50s+ that parallel
 // execution halves.
+//
+// contacts left this list on 2026-08-29 together with the tool itself: it folded into `people`, which is NOT parallel-safe — its groupware leg enriches and can create 인물 wiki pages, so two same-turn calls could race the same page.
 var parallelSafeTools = map[string]struct{}{
 	"code_search":    {},
-	"contacts":       {},
 	"grep":           {},
 	"mail_archive":   {},
 	"polaris":        {},

@@ -44,7 +44,14 @@ func ToolGrep(defaultDir string, extraSearchRoots ...string) toolport.ToolFunc {
 
 		searchPath := defaultDir
 		if p.Path != "" {
-			searchPath = artifact.ResolvePathWithRoots(p.Path, defaultDir, extraSearchRoots)
+			resolved, clamped := artifact.ResolvePathWithRootsContained(p.Path, defaultDir, extraSearchRoots)
+			// Same clamp as read: outside the jail the resolver returns the
+			// workspace ROOT, so grep would silently search the whole workspace
+			// and report the hits as if they came from the requested path.
+			if clamped {
+				return "", fmt.Errorf("%q is outside this tool's reach (workspace %s plus the curated read roots) — grep cannot search it", p.Path, defaultDir)
+			}
+			searchPath = resolved
 		}
 
 		// Defaults and caps.

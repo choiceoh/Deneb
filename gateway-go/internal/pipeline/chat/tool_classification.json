@@ -15,11 +15,10 @@
   },
   "parallelSafeTools": {
     "_type": "map[string]struct{}",
-    "_doc": "parallelSafeTools are read-only tools whose same-turn calls may execute\nCONCURRENTLY (executor.go parallel turn path): no workspace/external\nmutation, no cross-call ordering the model could rely on. Default-deny —\nany tool absent here keeps the whole turn sequential, as do calls carrying\n$ref (same-turn result piping). Action-multiplexed tools (wiki, calendar,\ntodo, ...) stay out entirely: their mutating/read-only split lives in an\nargument, and fetch_tools stays out because it mutates the run's deferred\ntool activation state. Measured motivation (2026-07-07, 3d of prod\nagent-logs): 23 all-read-only multi-tool turns wasted 124s of wall time on\nserial waits — web+web research turns alone ran 50s+ that parallel\nexecution halves.",
+    "_doc": "parallelSafeTools are read-only tools whose same-turn calls may execute\nCONCURRENTLY (executor.go parallel turn path): no workspace/external\nmutation, no cross-call ordering the model could rely on. Default-deny —\nany tool absent here keeps the whole turn sequential, as do calls carrying\n$ref (same-turn result piping). Action-multiplexed tools (wiki, calendar,\ntodo, ...) stay out entirely: their mutating/read-only split lives in an\nargument, and fetch_tools stays out because it mutates the run's deferred\ntool activation state. Measured motivation (2026-07-07, 3d of prod\nagent-logs): 23 all-read-only multi-tool turns wasted 124s of wall time on\nserial waits — web+web research turns alone ran 50s+ that parallel\nexecution halves.\n\ncontacts left this list on 2026-08-29 together with the tool itself: it folded into `people`, which is NOT parallel-safe — its groupware leg enriches and can create 인물 wiki pages, so two same-turn calls could race the same page.",
     "_values": {
       "web": true,
       "mail_archive": true,
-      "contacts": true,
       "read": true,
       "grep": true,
       "read_spillover": true,
