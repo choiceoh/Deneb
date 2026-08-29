@@ -1,5 +1,5 @@
 {
-  "_keep_policy": "RSI Bench 1.2 baseline. One-way ratchet across overall and ratcheted Process and Utility metrics. Never lower floors or accept new high/critical findings merely to make --check pass.",
+  "_keep_policy": "RSI Bench 1.3 baseline. One-way ratchet across overall and ratcheted Process and Utility metrics. Never lower floors or accept new high/critical findings merely to make --check pass. The 1.2->1.3 migration ADDED process.impact-first and preserved every other floor at its 1.2 value on purpose: --migrate-rubric rewrites the snapshot wholesale, which would have silently reset the acceptor-trust/confirm-honesty/timescale-turn drops that predate it.",
   "domains": {
     "process": 52.3,
     "utility": 42.3
@@ -11,6 +11,7 @@
     "process.acceptor-trust": 55.0,
     "process.anti-collapse": 48.0,
     "process.confirm-honesty": 55.0,
+    "process.impact-first": 25.0,
     "process.judge-fuel": 45.0,
     "process.preference-collapse": 52.0,
     "process.probe-coverage": 60.0,
@@ -24,15 +25,15 @@
   },
   "profile": "fast",
   "provenance": {
-    "migration": "initial-or-update",
-    "reason": "rsi-bench-1.2 baseline write"
+    "migration": "1.2.0->1.3.0 add-pillar",
+    "reason": "rsi-bench-1.3: process.impact-first added; all prior floors preserved"
   },
   "ratcheted_domains": [
     "process",
     "utility"
   ],
   "revision": "c02a23719b75dfab02a2805d985cfc92f687a424+dirty",
-  "rubric_version": "1.2.0",
+  "rubric_version": "1.3.0",
   "schema_version": 1,
   "tolerances": {
     "domain": 1.0,

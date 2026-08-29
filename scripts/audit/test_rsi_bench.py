@@ -26,7 +26,7 @@ from rsi_bench.model import (
     Report,
     geometric_composite,
 )
-from rsi_bench.process import evaluate_process
+from rsi_bench.process import BOOTSTRAP, evaluate_process
 from rsi_bench.utility import evaluate_utility, score_closure_land
 
 
@@ -258,7 +258,7 @@ class ClosureWindowTests(unittest.TestCase):
 
 class ProcessUtilityTests(unittest.TestCase):
     def test_rubric_version(self) -> None:
-        self.assertEqual(RUBRIC_VERSION, "1.2.0")
+        self.assertEqual(RUBRIC_VERSION, "1.3.0")
 
     def test_unmeasured_rate_floor(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -269,9 +269,13 @@ class ProcessUtilityTests(unittest.TestCase):
             process = evaluate_process(root, cache=None, data=data)
             acceptor = next(m for m in process.metrics if m.id == "acceptor-trust")
             self.assertEqual(acceptor.score, UNMEASURED_RATE_FLOOR)
-            self.assertEqual(len(process.metrics), 9)
+            self.assertEqual(len(process.metrics), 10)
             self.assertTrue(any(m.id == "swap-consistency" for m in process.metrics))
             self.assertTrue(any(m.id == "ability-transfer" for m in process.metrics))
+            # An isolated data dir must not read production agent-logs: with no
+            # coding artifacts in the fixture, impact-first stays at bootstrap.
+            impact = next(m for m in process.metrics if m.id == "impact-first")
+            self.assertEqual(impact.score, BOOTSTRAP["impact-first"])
 
     def test_utility_metric_count(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
