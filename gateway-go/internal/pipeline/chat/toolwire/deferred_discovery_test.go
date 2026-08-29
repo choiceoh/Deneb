@@ -49,7 +49,10 @@ func (d *discoveryRegistry) DeferredSummaries() []toolport.DeferredToolSummary {
 // which is what a gateway without the embedder falls back to.
 func TestDeferredToolsStayReachableByKoreanQuery(t *testing.T) {
 	registry := &discoveryRegistry{defs: map[string]toolport.ToolDef{}}
-	RegisterCoreTools(registry, &tooldeps.CoreToolDeps{WorkspaceDir: t.TempDir()})
+	RegisterCoreTools(registry, &tooldeps.CoreToolDeps{
+		WorkspaceDir: t.TempDir(),
+		Browser:      tooldeps.BrowserDeps{BaseURL: func() string { return "http://127.0.0.1:1" }},
+	})
 
 	RegisterPersonaTools(registry, t.TempDir())
 
@@ -104,7 +107,10 @@ func TestDeferredToolsStayReachableByKoreanQuery(t *testing.T) {
 // already held.
 func TestFetchToolsDoesNotDenyEagerTools(t *testing.T) {
 	registry := &discoveryRegistry{defs: map[string]toolport.ToolDef{}}
-	RegisterCoreTools(registry, &tooldeps.CoreToolDeps{WorkspaceDir: t.TempDir()})
+	RegisterCoreTools(registry, &tooldeps.CoreToolDeps{
+		WorkspaceDir: t.TempDir(),
+		Browser:      tooldeps.BrowserDeps{BaseURL: func() string { return "http://127.0.0.1:1" }},
+	})
 
 	var eager []string
 	for name, def := range registry.defs {

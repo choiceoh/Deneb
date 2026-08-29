@@ -150,3 +150,34 @@ func schemaText(schema map[string]any) string {
 	walk(schema)
 	return b.String()
 }
+
+// TestBrowserRegistersOnlyWithAConfiguredBridge pins the 2026-08-29 sweep for
+// tools that exist but cannot work. Without DENEB_BROWSER_URL every browser
+// call answers "브라우저 연동이 꺼져 있습니다", so an unconfigured deployment was
+// advertising a surface that can only refuse — and it had never been called
+// once in the recorded history. The address book already followed this rule
+// ("do not show the agent a dead surface"); browser did not.
+func TestBrowserRegistersOnlyWithAConfiguredBridge(t *testing.T) {
+	registered := func(deps *tooldeps.CoreToolDeps) bool {
+		reg := &discoveryRegistry{defs: map[string]toolport.ToolDef{}}
+		RegisterCoreTools(reg, deps)
+		_, ok := reg.defs["browser"]
+		return ok
+	}
+
+	if registered(&tooldeps.CoreToolDeps{WorkspaceDir: t.TempDir()}) {
+		t.Error("browser must not register without a bridge URL")
+	}
+	if registered(&tooldeps.CoreToolDeps{
+		WorkspaceDir: t.TempDir(),
+		Browser:      tooldeps.BrowserDeps{BaseURL: func() string { return "   " }},
+	}) {
+		t.Error("a blank bridge URL is still unconfigured")
+	}
+	if !registered(&tooldeps.CoreToolDeps{
+		WorkspaceDir: t.TempDir(),
+		Browser:      tooldeps.BrowserDeps{BaseURL: func() string { return "http://127.0.0.1:1" }},
+	}) {
+		t.Error("browser must register once the bridge is configured")
+	}
+}

@@ -494,7 +494,12 @@ func TestRegisterCoreToolsWithMinimalDependenciesHasValidUniqueContracts(t *test
 
 func TestRegisterCoreToolsDeferredPolicyContractMatchesOperationalIntent(t *testing.T) {
 	reg := &mockRegistrar{}
-	RegisterCoreTools(reg, &tooldeps.CoreToolDeps{WorkspaceDir: t.TempDir()})
+	// browser registers only with a configured Page Agent bridge (2026-08-29);
+	// this contract is about the deferral policy, not the gate, so give it one.
+	RegisterCoreTools(reg, &tooldeps.CoreToolDeps{
+		WorkspaceDir: t.TempDir(),
+		Browser:      tooldeps.BrowserDeps{BaseURL: func() string { return "http://127.0.0.1:1" }},
+	})
 	deferred := map[string]bool{
 		"read": false, "write": false, "grep": false, "exec": false, "web": false,
 		"sessions_spawn": false, "heartbeat_update": false, "goal": true, "blackboard": false,
