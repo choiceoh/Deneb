@@ -499,6 +499,7 @@ func TestRegisterCoreToolsDeferredPolicyContractMatchesOperationalIntent(t *test
 	RegisterCoreTools(reg, &tooldeps.CoreToolDeps{
 		WorkspaceDir: t.TempDir(),
 		Browser:      tooldeps.BrowserDeps{BaseURL: func() string { return "http://127.0.0.1:1" }},
+		Fleet:        tooldeps.FleetDeps{BaseURL: func() string { return "http://127.0.0.1:2" }},
 	})
 	deferred := map[string]bool{
 		"read": false, "write": false, "grep": false, "exec": false, "web": false,

@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
@@ -11,6 +13,10 @@ func TestRegisterCoreToolsCreatesExpectedToolSet(t *testing.T) {
 	registry := NewToolRegistry()
 	deps := &CoreToolDeps{
 		WorkspaceDir: "/tmp/test-workspace",
+		// fleet and browser register only when their host integration is
+		// configured (2026-08-30); this contract is about the tool set, not the gate.
+		Fleet:   tooldeps.FleetDeps{BaseURL: func() string { return "http://127.0.0.1:2" }},
+		Browser: tooldeps.BrowserDeps{BaseURL: func() string { return "http://127.0.0.1:1" }},
 	}
 	RegisterCoreTools(registry, deps)
 	if got := registry.ToolProvenanceRoot(); got != deps.WorkspaceDir {
