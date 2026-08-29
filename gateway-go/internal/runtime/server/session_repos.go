@@ -13,6 +13,7 @@ package server
 // to the default rather than keep working somewhere the operator revoked.
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -146,7 +147,52 @@ func (s *Server) BindSessionRepo(sessionKey, repoID string) error {
 	if err != nil {
 		return err
 	}
-	return saveSessionRepos(path, snapshot)
+	if err := saveSessionRepos(path, snapshot); err != nil {
+		return err
+	}
+
+	// Give the conversation its own worktree at BIND time (operator decision),
+	// so it always works in the same isolated tree rather than depending on
+	// when it first writes. Failure to create is reported: a binding whose
+	// worktree does not exist would silently run in the repo itself.
+	if repoID == "" {
+		return nil
+	}
+	repo, ok := s.codeRepos.Lookup(repoID)
+	if !ok {
+		return nil
+	}
+	wt := coderepo.WorktreePath(config.ResolveStateDir(), repoID, sessionKey)
+	return coderepo.EnsureWorktree(context.Background(), repo.Path, wt, coderepo.BranchFor(sessionKey))
+}
+
+// releaseSessionWorktree removes a conversation's worktree when the
+// conversation goes away.
+//
+// Two guards, both required. Only client:cygnus:* conversations are cleaned up
+// automatically (operator decision): Cygnus threads are the disposable coding
+// surface, while a 업무 conversation's tree is not something a delete sweep
+// should decide about. And RemoveWorktree itself refuses while the tree holds
+// uncommitted work — automatic cleanup eating changes is not recoverable, so a
+// leftover directory is the better failure.
+func (s *Server) releaseSessionWorktree(sessionKey string) {
+	if !session.IsCompanionWorkSession(sessionKey) {
+		return
+	}
+	repoID := s.BoundSessionRepo(sessionKey)
+	if repoID == "" || s.codeRepos == nil {
+		return
+	}
+	repo, ok := s.codeRepos.Lookup(repoID)
+	if !ok {
+		return
+	}
+	wt := coderepo.WorktreePath(config.ResolveStateDir(), repoID, sessionKey)
+	if err := coderepo.RemoveWorktree(context.Background(), repo.Path, wt); err != nil {
+		// Not an error the operator must act on — the tree is intentionally
+		// preserved. Say so rather than failing silently.
+		s.logger.Info("session worktree kept", "session", sessionKey, "reason", err)
+	}
 }
 
 // BoundSessionRepo reports the repository id a conversation is bound to, or ""
@@ -155,4 +201,26 @@ func (s *Server) BoundSessionRepo(sessionKey string) string {
 	s.sessionReposMu.Lock()
 	defer s.sessionReposMu.Unlock()
 	return s.sessionRepos[sessionKey]
+}
+
+// dropStoredSessionRepo forgets a deleted conversation's repository binding.
+//
+// A method, not a free function, because the binding lives in TWO places: the
+// in-memory map the run path reads and the sidecar on disk. Clearing only the
+// file would leave a deleted conversation still resolving to a workspace until
+// the next restart.
+func (s *Server) dropStoredSessionRepo(key string) {
+	s.sessionReposMu.Lock()
+	if s.sessionRepos != nil {
+		delete(s.sessionRepos, key)
+	}
+	snapshot := make(map[string]string, len(s.sessionRepos))
+	for k, v := range s.sessionRepos {
+		snapshot[k] = v
+	}
+	s.sessionReposMu.Unlock()
+
+	if path, err := sessionReposStorePath(); err == nil {
+		_ = saveSessionRepos(path, snapshot)
+	}
 }
