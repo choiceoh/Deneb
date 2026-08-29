@@ -635,3 +635,64 @@ func TestWikiReadWrite_RejectsPathEscape(t *testing.T) {
 		t.Errorf("expected category rejection, got: %q", out)
 	}
 }
+
+// TestProjectAxisGapNoticeFiresOnlyOnRepPagesWithGaps covers the advisory added
+// after the 2026-08-29 audit found the 대표페이지 axes filled 3–30% of the time
+// (client 1 of 30 writes) with nothing ever reporting the gap. The notice must
+// name what is missing, license the blank rather than demand a guess, stay
+// silent on a complete page, and never fire on a non-대표 page.
+func TestProjectAxisGapNoticeFiresOnlyOnRepPagesWithGaps(t *testing.T) {
+	full := &wiki.Page{Meta: wiki.Frontmatter{
+		Stage: "계약협의", Kinds: []string{"태양광"}, Client: "금호타이어", Sites: []string{"전북 군산시 옥구읍 수산리"},
+	}}
+	bare := &wiki.Page{Meta: wiki.Frontmatter{}}
+
+	for _, tc := range []struct {
+		name, path string
+		page       *wiki.Page
+		want       []string
+		quiet      bool
+	}{
+		{
+			name: "rep page missing everything", path: "프로젝트/비금-130mw/대표.md", page: bare,
+			want: []string{"stage", "kinds", "client", "sites", "추측 금지"},
+		},
+		{name: "rep page fully filled", path: "프로젝트/비금-130mw/대표.md", page: full, quiet: true},
+		{name: "project log page", path: "프로젝트/비금-130mw/로그.md", page: bare, quiet: true},
+		{name: "person page", path: "인물/김성훈.md", page: bare, quiet: true},
+		{name: "nil page", path: "프로젝트/비금-130mw/대표.md", page: nil, quiet: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := projectAxisGapNotice(tc.path, tc.page)
+			if tc.quiet {
+				if got != "" {
+					t.Fatalf("want silence, got %q", got)
+				}
+				return
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(got, w) {
+					t.Errorf("notice missing %q: %s", w, got)
+				}
+			}
+		})
+	}
+}
+
+// TestProjectAxisGapNoticeReadsPersistedMeta: a partial update that omits an
+// axis the page already carries must stay quiet — the notice reads the merged
+// frontmatter, not the request, so re-sending only a body cannot look like a
+// regression.
+func TestProjectAxisGapNoticeReadsPersistedMeta(t *testing.T) {
+	page := &wiki.Page{Meta: wiki.Frontmatter{
+		Stage: "시공", Kinds: []string{"기자재/모듈"}, Client: "기아", Sites: []string{"전남 해남군 산이면"},
+	}}
+	if got := projectAxisGapNotice("프로젝트/해남/대표.md", page); got != "" {
+		t.Fatalf("a page carrying every axis must be quiet, got %q", got)
+	}
+	page.Meta.Client = ""
+	got := projectAxisGapNotice("프로젝트/해남/대표.md", page)
+	if !strings.Contains(got, "client") || strings.Contains(got, "stage") {
+		t.Fatalf("want only the client gap, got %q", got)
+	}
+}

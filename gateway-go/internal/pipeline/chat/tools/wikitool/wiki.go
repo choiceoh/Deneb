@@ -418,7 +418,7 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsBook tooldeps.Con
 	marked, failed := markSupersededPages(store, req.supersedes, path)
 	note := autoRecordPeople(store, contactsBook, page, req.category)
 	result := formatWikiWriteResult(path, req, note, existed, logAppend, marked, failed)
-	return result + wikiReplacedBodyNotice(replaced, page, logAppend), nil
+	return result + projectAxisGapNotice(path, page) + wikiReplacedBodyNotice(replaced, page, logAppend), nil
 }
 
 func validateWikiWrite(req wikiWriteRequest) string {
@@ -664,6 +664,50 @@ func formatWikiWriteResult(path string, req wikiWriteRequest, note string, exist
 		result += "\n⚠️ " + strings.Join(notes, "\n⚠️ ")
 	}
 	return result
+}
+
+// projectAxisGapNotice names the 프로젝트 대표페이지 axes that came out of a
+// write still empty.
+//
+// The axes are not decoration: 진행상황 모아보기 groups by client, the recall
+// anchor resolves a 거래처 mention to that client's projects, meeting matching
+// keys off sites, and 현장 상세 문서 is gated on stage. All four are optional
+// in the schema and nothing ever said they were missing, so they simply were —
+// measured 2026-08-29 across 30 대표페이지 writes: stage 9, kinds 7, sites 6,
+// client 1. A grouping axis filled 3% of the time is a feature that does not
+// run, and the write that could have filled it succeeded silently every time.
+//
+// Advisory, never a rejection: the write already happened, and an axis the
+// agent cannot verify must stay empty (추측 금지 — an invented 거래처 poisons the
+// grouping worse than an absent one). So the notice licenses the blank
+// explicitly and only fires when something is actually missing. program is
+// deliberately not listed: "단독 딜은 생략" makes empty the correct answer for
+// most projects, so nagging would manufacture false programs.
+//
+// Reads the PERSISTED frontmatter, not the request, so a partial update that
+// omits an axis the page already carries stays quiet.
+func projectAxisGapNotice(path string, page *wiki.Page) string {
+	if page == nil || !wiki.IsProjectRepPage(path) {
+		return ""
+	}
+	var missing []string
+	if strings.TrimSpace(page.Meta.Stage) == "" {
+		missing = append(missing, "stage(사업 단계)")
+	}
+	if len(page.Meta.Kinds) == 0 {
+		missing = append(missing, "kinds(프로젝트 특성)")
+	}
+	if strings.TrimSpace(page.Meta.Client) == "" {
+		missing = append(missing, "client(거래처 — 진행상황 그룹핑·회상 앵커의 키)")
+	}
+	if len(page.Meta.Sites) == 0 {
+		missing = append(missing, "sites(현장 — 미팅·메일 매칭 키)")
+	}
+	if len(missing) == 0 {
+		return ""
+	}
+	return "\n⚠️ 대표페이지 축 미기입: " + strings.Join(missing, " · ") +
+		". 이미 아는 값이 있으면 이어서 write로 채우고, 확인되지 않은 값은 비워 둘 것(추측 금지)."
 }
 
 // appendProjectLogSection appends a write's content to a project 로그.md body
