@@ -58,3 +58,20 @@ func TestSessionDecaySpreadsBudgetAcrossConversations(t *testing.T) {
 			picked[1].Source, picked[2].Source)
 	}
 }
+
+// Bare-entity lookups must survive cue tokenization: the 2-rune cue "이어"
+// used to fire INSIDE 금호타이어, flagging the message as a cue turn and
+// eating the entity as a stopword — queries came back EMPTY and recall
+// rendered nothing (Korean probe, measured). "이어서" still cues.
+func TestBareEntitySurvivesCueTokenization(t *testing.T) {
+	if hasCue("금호타이어") {
+		t.Fatalf("a noun containing 이어 must not read as a recall cue")
+	}
+	queries := searchQueries("금호타이어")
+	if len(queries) == 0 || !strings.Contains(strings.Join(queries, " "), "금호타이어") {
+		t.Fatalf("the entity must survive as a query, got %v", queries)
+	}
+	if !hasCue("아까 하던 얘기 이어서 계속해줘") {
+		t.Fatalf("이어서 must still cue")
+	}
+}
