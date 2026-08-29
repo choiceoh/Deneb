@@ -270,6 +270,17 @@ func MeetingPagePath(project, filename string) string {
 	return wiki.MeetingPagePath(project, filename)
 }
 
+// MeetingSlug forwards the 회의록 filename slug rule.
+func MeetingSlug(name string) string {
+	return wiki.MeetingSlug(name)
+}
+
+// MeetingPageCoveringSlug forwards the "is this meeting already written up"
+// scan so mail-arrival can ask it without importing the wiki implementation.
+func MeetingPageCoveringSlug(pages []string, slug string) string {
+	return wiki.MeetingPageCoveringSlug(pages, slug)
+}
+
 func ProjectNameOf(relPath string) (string, bool) {
 	return wiki.ProjectNameOf(relPath)
 }

@@ -63,7 +63,7 @@ func run() error {
 	wikiDir := flag.String("wiki-dir", filepath.Join(home, ".deneb", "wiki"), "wiki root")
 	diaryDir := flag.String("diary-dir", filepath.Join(home, ".deneb", "memory", "diary"), "diary root")
 	apply := flag.Bool("apply", false, "execute (default: dry-run)")
-	only := flag.String("only", "", "run a single pass (jamo|related|numbers|unusable)")
+	only := flag.String("only", "", "run a single pass (jamo|related|numbers|unusable|themes|stubedges|spammail|foldsites|autoflowdup)")
 	flag.Parse()
 
 	store, err := wiki.NewStore(*wikiDir, *diaryDir)
@@ -91,6 +91,7 @@ func run() error {
 		{"stubedges", stripStubRelatedEdges},
 		{"spammail", deleteSelfDeclaredSpamMail},
 		{"foldsites", foldSitePagesIntoProject},
+		{"autoflowdup", deleteAutoFlowDuplicates},
 	}
 	for _, p := range passes {
 		if *only != "" && *only != p.name {
@@ -1111,4 +1112,60 @@ func mergeStrings(a, b []string) []string {
 		}
 	}
 	return a
+}
+
+// deleteAutoFlowDuplicates removes 메일분석 pages whose meeting already has a
+// 회의록 page. Plaud reaches the wiki twice for one recording — the MCP polling
+// service writes the deep meeting page, and Plaud's cloud mails a
+// [Plaud-AutoFlow] notice whose analysis becomes a second page. The work feed
+// already collapsed the duplicate card; the wiki did not until #4950, so the
+// corpus carries the backlog this pass clears.
+//
+// The gate that now prevents new ones (server.autoFlowMeetingCovered) uses the
+// same two facts and the same slug rule — the sender AND the subject prefix,
+// neither of which reads the model's output.
+//
+// Only pages whose meeting is ACTUALLY covered are deleted. When no 회의록 page
+// exists the mail page is the only record of that meeting (the MCP path never
+// ran, or could not authenticate) and it stays — 5 of the 33 in the corpus.
+func deleteAutoFlowDuplicates(store *wiki.Store, apply bool, rep *report) error {
+	paths, err := store.ListPages("프로젝트")
+	if err != nil {
+		return err
+	}
+	var kept int
+	for _, rp := range paths {
+		if !strings.Contains(filepath.ToSlash(rp), "/메일분석/") {
+			continue
+		}
+		page, err := store.ReadPage(rp)
+		if err != nil || page == nil {
+			continue
+		}
+		from := provenanceFrom(page.Body)
+		if !strings.Contains(strings.ToLower(from), "no-reply@plaud.ai") {
+			continue
+		}
+		name, ok := strings.CutPrefix(strings.TrimSpace(page.Meta.Title), "[Plaud-AutoFlow]")
+		if !ok {
+			continue
+		}
+		covered := wiki.MeetingPageCoveringSlug(paths, wiki.MeetingSlug(strings.TrimSpace(name)))
+		if covered == "" {
+			kept++
+			rep.note("  유지(회의록 없음): %s", truncRunes(strings.TrimSpace(name), 60))
+			continue
+		}
+		if !apply {
+			rep.add("would delete %s\n      ← 덮은 회의록 %s", rp, covered)
+			continue
+		}
+		if err := store.DeletePage(rp); err != nil {
+			rep.fail("autoflowdup %s: %v", rp, err)
+			continue
+		}
+		rep.add("deleted %s\n      ← 덮은 회의록 %s", rp, covered)
+	}
+	rep.note("  회의록 없어 유지: %d장", kept)
+	return nil
 }

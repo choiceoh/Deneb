@@ -15,11 +15,9 @@
 package server
 
 import (
-	"path/filepath"
-	"regexp"
 	"strings"
 
-	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 )
 
 const (
@@ -31,13 +29,7 @@ const (
 	// anything.
 	autoFlowSender        = "no-reply@plaud.ai"
 	autoFlowSubjectPrefix = "[Plaud-AutoFlow]"
-
-	meetingDirSegment = "/회의록/"
 )
-
-// meetingIDSuffixRe matches the recording-id tail meetingFilename appends to the
-// slug (first 8 chars of the Plaud file ID).
-var meetingIDSuffixRe = regexp.MustCompile(`^-[0-9a-f]{8}$`)
 
 // meetingPageLister is the sliver of the wiki store this file needs. Narrow on
 // purpose: both call sites hold a *wiki.Store, and a test needs no more.
@@ -79,7 +71,7 @@ func autoFlowMeetingCovered(store meetingPageLister, from, subject string) strin
 	if !ok || store == nil {
 		return ""
 	}
-	slug := runtimemeeting.MeetingSlug(name)
+	slug := wiki.MeetingSlug(name)
 	if slug == "" {
 		return ""
 	}
@@ -90,18 +82,5 @@ func autoFlowMeetingCovered(store meetingPageLister, from, subject string) strin
 		// gate must never produce.
 		return ""
 	}
-	for _, p := range pages {
-		p = filepath.ToSlash(p)
-		if !strings.Contains(p, meetingDirSegment) || !strings.HasSuffix(p, ".md") {
-			continue
-		}
-		stem := strings.TrimSuffix(filepath.Base(p), ".md")
-		if !strings.HasPrefix(stem, slug) {
-			continue
-		}
-		if tail := stem[len(slug):]; tail == "" || meetingIDSuffixRe.MatchString(tail) {
-			return p
-		}
-	}
-	return ""
+	return wiki.MeetingPageCoveringSlug(pages, slug)
 }

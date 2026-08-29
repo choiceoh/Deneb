@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // Fixed document slots inside a project folder.
@@ -386,4 +387,74 @@ func mailAnalysisMsgID(relPath string) string {
 		p = p[i+1:]
 	}
 	return strings.TrimSuffix(p, ".md")
+}
+
+// meetingSlugRunes bounds the slug the same way the filename builder does.
+const meetingSlugRunes = 48
+
+// meetingIDSuffixRe matches the recording-id tail appended after the slug (the
+// first 8 characters of the Plaud file ID).
+var meetingIDSuffixRe = regexp.MustCompile(`^-[0-9a-f]{8}$`)
+
+// MeetingSlug renders a recording name as the filename slug used under 회의록/:
+// unicode letters and digits joined by single hyphens, bounded.
+//
+// It lives here, beside MeetingPagePath, because the two are halves of one rule
+// — where a meeting page goes and what it is called. The mail-arrival path needs
+// the SAME slug to recognize that a Plaud AutoFlow notice describes a meeting
+// already written up, and a second copy of this rule would drift apart without
+// failing anything.
+func MeetingSlug(name string) string {
+	var b strings.Builder
+	lastHyphen := true
+	runes := 0
+	for _, r := range strings.TrimSpace(name) {
+		if runes >= meetingSlugRunes {
+			break
+		}
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(unicode.ToLower(r))
+			lastHyphen = false
+			runes++
+			continue
+		}
+		if !lastHyphen {
+			b.WriteRune('-')
+			lastHyphen = true
+			runes++
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+// MeetingPageCoveringSlug returns the 회의록 page among pages whose filename was
+// built from slug, or "" when none was.
+//
+// The scan is deliberately NOT scoped to a project. The mail analyzer's
+// RELATED_PROJECTS and the meeting service's project resolution disagree on 12
+// of the 28 covered cases in the live corpus, so scoping would miss 43% of what
+// this exists to find. The slug carries the meeting's own date and title, and no
+// two 회의록 stems in the corpus share a prefix, so cross-project collision is not
+// the risk that scoping would trade for. The suffix must be the recording-id
+// tail (or nothing), which is what keeps a longer meeting title from being
+// covered by a shorter one's slug.
+func MeetingPageCoveringSlug(pages []string, slug string) string {
+	if slug == "" {
+		return ""
+	}
+	seg := "/" + meetingDir + "/"
+	for _, p := range pages {
+		p = filepath.ToSlash(p)
+		if !strings.Contains(p, seg) || !strings.HasSuffix(p, ".md") {
+			continue
+		}
+		stem := strings.TrimSuffix(filepath.Base(p), ".md")
+		if !strings.HasPrefix(stem, slug) {
+			continue
+		}
+		if tail := stem[len(slug):]; tail == "" || meetingIDSuffixRe.MatchString(tail) {
+			return p
+		}
+	}
+	return ""
 }
