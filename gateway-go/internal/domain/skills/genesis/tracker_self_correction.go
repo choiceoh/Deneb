@@ -203,9 +203,14 @@ func (t *Tracker) RecordSelfCorrectionReview(record SelfCorrectionCandidateRecor
 	if !found {
 		// A hard error on purpose: an unknown id means the caller is reviewing
 		// something that never existed, which is a different problem from
-		// reviewing something already settled.
-		return record, fmt.Errorf("genesis-tracker: self-correction candidate not found: %s", record.ID)
+		// reviewing something already settled. The id shape is spelled out
+		// because a truncated id was the recorded way of getting here.
+		return record, fmt.Errorf("genesis-tracker: self-correction candidate not found: %s (ids are sc-<millis>-<hash>; a unique prefix also resolves)", record.ID)
 	}
+	// A prefix resolved to a full id: write the review under the id the ledger
+	// actually keys on, or the row lands as an orphan nothing folds back in —
+	// which is the very way this funnel loses work.
+	record.ID = current.ID
 	if current.Status == record.Status {
 		return record, nil // idempotent retry: do not inflate the append-only funnel
 	}
@@ -257,8 +262,9 @@ func (t *Tracker) RecordSelfCorrectionDispatch(record SelfCorrectionCandidateRec
 		return record, fmt.Errorf("genesis-tracker: load self-correction candidates: %w", err)
 	}
 	if !found {
-		return record, fmt.Errorf("genesis-tracker: self-correction candidate not found: %s", record.ID)
+		return record, fmt.Errorf("genesis-tracker: self-correction candidate not found: %s (ids are sc-<millis>-<hash>; a unique prefix also resolves)", record.ID)
 	}
+	record.ID = current.ID // see RecordSelfCorrectionReview: never append under a prefix
 	if current.DispatchPhase == record.DispatchPhase && current.AttemptID == record.AttemptID {
 		adds, conflict := selfCorrectionDispatchProvenanceDelta(current, record)
 		if conflict != "" {
@@ -383,17 +389,65 @@ func (t *Tracker) mergedSelfCorrectionCandidatesLocked() (map[string]SelfCorrect
 	return merged, err
 }
 
+// mergedSelfCorrectionCandidateLocked folds every ledger row for one candidate
+// into its current state. The id may be a PREFIX of the stored id, resolved
+// only when exactly one candidate matches.
+//
+// Candidate ids are minted as sc-<epochMillis>-<hash8>, and callers lose the
+// hash: production hit `self-correction candidate not found: sc-1787744942869`
+// on 2026-08-26 and again on 2026-08-29, both times for an id whose full form
+// (sc-…-5a66182a, sc-…-7735ae71) was sitting in the ledger, unique on that
+// prefix. The review died on an exact-match miss, and a self-correction that
+// never lands is the funnel's known way of losing work silently. An ambiguous
+// prefix is still an error — the point is to resolve what is unambiguous, never
+// to guess between two candidates.
 func (t *Tracker) mergedSelfCorrectionCandidateLocked(id string) (SelfCorrectionCandidateRecord, bool, error) {
 	id = strings.TrimSpace(id)
+	if id == "" {
+		return SelfCorrectionCandidateRecord{}, false, nil
+	}
+
 	var current SelfCorrectionCandidateRecord
 	found := false
+	prefixIDs := map[string]struct{}{}
 	err := t.scanSelfCorrectionRecords(func(rec SelfCorrectionCandidateRecord) {
 		rec.ID = strings.TrimSpace(rec.ID)
-		if rec.ID == id {
+		switch {
+		case rec.ID == id:
 			current, found = foldSelfCorrectionRecord(current, found, rec)
+		case strings.HasPrefix(rec.ID, id):
+			prefixIDs[rec.ID] = struct{}{}
 		}
 	})
-	return current, found, err
+	if err != nil || found {
+		return current, found, err
+	}
+	switch len(prefixIDs) {
+	case 0:
+		return current, false, nil
+	case 1:
+		var full string
+		for candidateID := range prefixIDs {
+			full = candidateID
+		}
+		return t.mergedSelfCorrectionCandidateLocked(full)
+	default:
+		return current, false, fmt.Errorf(
+			"genesis-tracker: self-correction id %q matches %d candidates (%s) — pass the full sc-<millis>-<hash> id",
+			id, len(prefixIDs), strings.Join(sortedKeys(prefixIDs), ", "),
+		)
+	}
+}
+
+// sortedKeys returns a set's keys in a stable order so an ambiguity error reads
+// the same way twice.
+func sortedKeys(set map[string]struct{}) []string {
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (t *Tracker) scanSelfCorrectionRecords(visit func(SelfCorrectionCandidateRecord)) error {
