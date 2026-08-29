@@ -153,3 +153,42 @@ func approvalLogText(s string) string {
 	}, s)
 	return strings.TrimSpace(strings.Join(strings.Fields(s), " "))
 }
+
+// approvalProjectStateContext renders the matched project's own state for the
+// approval prompt: summary plus the curated 현재 상태 bullets from its
+// 대표페이지.
+//
+// resolveApprovalProject already identified the project, and the prompt then
+// carried only its NAME. The other context an approval gets — 단가 이력 and
+// 전례 — answers whether the AMOUNT is right; neither says anything about
+// where the project stands, which is the half that decides whether the
+// document should go out at all.
+//
+// Bounded and best-effort: an unreadable page yields "" and the prompt keeps
+// the plain name, exactly as before.
+func approvalProjectStateContext(store *wiki.Store, ref wiki.ProjectRef) string {
+	if store == nil || strings.TrimSpace(ref.Path) == "" {
+		return ""
+	}
+	page, err := store.ReadPage(ref.Path)
+	if err != nil || page == nil {
+		return ""
+	}
+	var parts []string
+	if summary := strings.TrimSpace(page.Meta.Summary); summary != "" {
+		parts = append(parts, "- summary: "+summary)
+	}
+	if status := strings.TrimSpace(page.Section("현재 상태")); status != "" {
+		parts = append(parts, "- 현재 상태: "+status)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return truncateRunes("### 「"+ref.Name+"」 현재 상태 (위키)\n"+
+		strings.Join(parts, "\n"), approvalProjectStateMaxRune)
+}
+
+// approvalProjectStateMaxRune bounds the project-state block. Smaller than the
+// document body budget: this is orienting context, not the subject of the
+// analysis.
+const approvalProjectStateMaxRune = 1200
