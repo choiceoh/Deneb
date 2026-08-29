@@ -35,6 +35,31 @@ import "./cygnus.css";
 // (cygnus.css re-values the workstation token names under .cygnus-root).
 const CYGNUS_MAIN = "client:cygnus:main";
 const THEME_KEY = "cygnus.theme";
+const RAIL_KEY = "cygnus.rail";
+
+// Width at which the thread rail DOCKS beside the conversation instead of
+// covering it. Must match the @media breakpoint in cygnus.css — the CSS owns
+// the layout, this constant only tells the behaviour half (auto-close) which
+// mode is on screen. Below it the rail is an overlay with a scrim, so leaving
+// it open after a pick would hide the thread the user just chose.
+const CYGNUS_DOCK_PX = 560;
+
+/** True while the window is wide enough for the docked rail. */
+function useDockedRail(): boolean {
+  const query = `(min-width: ${CYGNUS_DOCK_PX}px)`;
+  const [docked, setDocked] = useState(
+    () => typeof window.matchMedia === "function" && window.matchMedia(query).matches,
+  );
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia(query);
+    const sync = () => setDocked(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, [query]);
+  return docked;
+}
 
 // Empty-state starters: what this surface is FOR, in the user's own words. They
 // fill the composer (never send on their own) so the phrasing stays editable.
@@ -132,11 +157,30 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
   useEvents(cfg, connected);
   const [input, setInput] = useState("");
   const [attaching, setAttaching] = useState(false);
-  // Dev-only `?rail`: lets the headless screenshot loop capture the drawer open
-  // (a one-shot screenshot cannot click). Stripped from production builds.
-  const [railOpen, setRailOpen] = useState(
-    () => import.meta.env.DEV && new URLSearchParams(window.location.search).has("rail"),
-  );
+  // The thread rail is a standing part of the surface, not a popup: docked, it
+  // defaults open and remembers the user's choice across summons and restarts.
+  // It only auto-opens when it can DOCK, though — in overlay mode an open rail
+  // sits on a scrim over the conversation, so opening it unasked would mean
+  // every summon greets the user with a covered thread. There the toggle is an
+  // explicit, per-visit action. (Dev-only `?rail` still forces it open so the
+  // headless screenshot loop can capture it — a one-shot screenshot can't click.)
+  const docked = useDockedRail();
+  const [railOpen, setRailOpen] = useState(() => {
+    if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("rail")) return true;
+    const wideEnough =
+      typeof window.matchMedia === "function" && window.matchMedia(`(min-width: ${CYGNUS_DOCK_PX}px)`).matches;
+    return wideEnough && getString(RAIL_KEY) !== "closed";
+  });
+  function setRail(open: boolean) {
+    setRailOpen(open);
+    setString(RAIL_KEY, open ? "open" : "closed");
+  }
+  // Picking a thread closes the rail ONLY in overlay mode, where it sits on top
+  // of the conversation it just opened. Docked, it stays — that is the point of
+  // a permanent list.
+  function closeRailIfOverlay() {
+    if (!docked) setRail(false);
+  }
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -246,7 +290,7 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
         <span className="cy-sp" data-tauri-drag-region />
         <button
           className="cy-tbtn"
-          onClick={() => setRailOpen((v) => !v)}
+          onClick={() => setRail(!railOpen)}
           aria-pressed={railOpen}
           title="스레드 목록"
           aria-label="스레드 목록"
@@ -275,7 +319,7 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
       <div className="cy-body">
         {railOpen && (
           <>
-            <button className="cy-scrim" aria-label="스레드 목록 닫기" onClick={() => setRailOpen(false)} />
+            {!docked && <button className="cy-scrim" aria-label="스레드 목록 닫기" onClick={() => setRail(false)} />}
             <aside className="cy-rail">
               <SessionDrawer
                 sessions={sessions}
@@ -284,12 +328,12 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
                 error={sessionErr}
                 onSelect={(key) => {
                   selectSession(key);
-                  setRailOpen(false);
+                  closeRailIfOverlay();
                 }}
                 onDelete={removeSession}
                 onNew={() => {
                   newChat();
-                  setRailOpen(false);
+                  closeRailIfOverlay();
                 }}
                 onRename={(key, label) => void renameSession(key, label)}
                 onPin={(key, pinned) => void pinConversation(key, pinned)}

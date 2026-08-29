@@ -189,12 +189,17 @@ body.cygnus-window {
   animation: cy-rail-in 0.18s var(--ease);
 }
 
-/* Docked mode: wide enough for the list to live beside the thread. */
-@media (min-width: 720px) {
+/* Docked mode: wide enough for the list to live beside the thread. The
+ * breakpoint is mirrored by CYGNUS_DOCK_PX in CygnusApp.tsx (which needs to
+ * know the mode to decide whether picking a thread closes the rail) — change
+ * both together. 560px is the narrowest width where a 200px rail still leaves
+ * the conversation a readable column; the window ships wider than this so the
+ * rail is docked by default. */
+@media (min-width: 560px) {
   .cy-rail {
     position: relative;
     inset: auto;
-    width: 250px;
+    width: 200px;
     flex: none;
     box-shadow: none;
     background: transparent;
