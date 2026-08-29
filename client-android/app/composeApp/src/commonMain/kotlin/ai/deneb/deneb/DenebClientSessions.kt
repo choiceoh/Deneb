@@ -8,14 +8,15 @@ import ai.deneb.ui.chat.History
 import ai.deneb.ui.chat.stableTranscriptId
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.time.TimeSource
-import kotlin.uuid.Uuid
 
 /**
  * Sessions-drawer surface of [DenebGatewayClient] (`miniapp.sessions.recent`):
@@ -268,42 +269,122 @@ internal suspend fun DenebGatewayClient.loadTranscriptGuarded(
 // chip) and poll through the same recovery loop the stream-failure path uses —
 // on completion it installs the finished transcript itself (epoch-fenced).
 
-private const val FOREIGN_TURN_ROW_PREFIX = "foreign-turn-watch-"
-
-/** Stop the watch and drop its status row. Own sends and session switches call
- * this so the row and the poll can never outlive the state they narrate. */
+/** Stop the watch and drop its status rows. Own sends and session switches call
+ * this so the rows and the poll can never outlive the state they narrate. */
 internal fun DenebGatewayClient.cancelForeignTurnWatch() {
     foreignTurnWatch?.cancel()
     foreignTurnWatch = null
-    _chatHistory.update { list -> list.filterNot { it.id.startsWith(FOREIGN_TURN_ROW_PREFIX) } }
+    // Clear through the watch's own TurnProgress rather than by id prefix: the
+    // rows are minted by TurnProgress now (one per tool, plus the phase row),
+    // so a prefix filter silently stops matching anything. It has to happen
+    // here and synchronously — cancel() only schedules the job's finally, and
+    // the caller renders its own state before that dispatch runs.
+    foreignTurnProgress?.clear()
+    foreignTurnProgress = null
 }
 
 private fun DenebGatewayClient.armForeignTurnWatch(watchScope: CoroutineScope, key: String, sentText: String) {
     cancelForeignTurnWatch()
-    // Per-watch row id: cancel() does not join, so a previous job's finally can
-    // run AFTER this arm — with a shared id it would strip the row this watch
-    // just added. Each job only ever removes its own row.
-    val rowId = FOREIGN_TURN_ROW_PREFIX + Uuid.random()
-    _chatHistory.update { list ->
-        list + History(
-            id = rowId,
-            role = History.Role.TOOL_EXECUTING,
-            content = "foreign-turn",
-            toolName = ToolStatusLabels.WORKING,
-            isStatusMessage = true,
-        )
-    }
+    // Live spectate through the SAME state machine the owning turn uses: a
+    // TurnProgress fed by the gateway event plane renders the foreign run's
+    // tools and phases as the native transient rows (the waiting chip shows
+    // TOOL_EXECUTING rows without isLoading since the foreign-turn relaxation
+    // in chatShowWaitingRow). Until the first frame arrives it narrates with
+    // the generic working row; the 3s transcript poll below stays as the
+    // answer-delivery fallback for gateways without the event plane.
+    val progress = TurnProgress(_chatHistory, watchScope)
+    foreignTurnProgress = progress
+    progress.onProgress(ProgressEvent(phase = "foreign", label = ToolStatusLabels.WORKING))
     // The stale Job handle after completion is harmless (cancel is a no-op),
     // so the job never nulls the field itself — that write raced a newer arm.
     foreignTurnWatch = watchScope.launch {
+        val spectate = launch {
+            var subscribedConn = ""
+            launch {
+                eventsHello.collect { connId ->
+                    // First emission subscribes; a reconnect's fresh id
+                    // re-subscribes (the old socket's registrations died).
+                    subscribedConn = connId
+                    runCatching {
+                        this@armForeignTurnWatch.callRpc<JsonObject>(
+                            "miniapp.sessions.events.subscribe",
+                            buildJsonObject {
+                                put("connId", connId)
+                                put("sessionKey", key)
+                            },
+                        )
+                    }
+                }
+            }
+            try {
+                agentEvents.collect { frame ->
+                    if (frame.sessionKey != key) return@collect
+                    when (frame.kind) {
+                        "tool.start" -> progress.onTool(
+                            ToolEvent(state = "started", tool = frame.tool, toolUseId = frame.toolUseId, detail = frame.detail),
+                        )
+
+                        "tool.end" -> progress.onTool(
+                            ToolEvent(
+                                state = "completed",
+                                tool = frame.tool,
+                                toolUseId = frame.toolUseId,
+                                isError = frame.isError,
+                                resultSummary = frame.summary,
+                            ),
+                        )
+
+                        "phase.changed" -> if (frame.label.isNotBlank()) {
+                            progress.onProgress(ProgressEvent(phase = frame.phase, label = frame.label))
+                        }
+                        // run.end needs no handling here: the transcript poll
+                        // below sees the answer within one poll interval.
+                    }
+                }
+            } finally {
+                // NonCancellable: this finally almost always runs BECAUSE the
+                // watch was cancelled, and a suspend call in an already-
+                // cancelled coroutine throws before it reaches the wire — the
+                // unsubscribe would silently never happen, leaving the server
+                // fanning session frames at a connection that stopped caring.
+                if (subscribedConn.isNotEmpty()) {
+                    withContext(NonCancellable) {
+                        runCatching {
+                            this@armForeignTurnWatch.callRpc<JsonObject>(
+                                "miniapp.sessions.events.unsubscribe",
+                                buildJsonObject {
+                                    put("connId", subscribedConn)
+                                    put("sessionKey", key)
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
         try {
             // Recovered → installRecoveredTranscript already swapped the view
             // (answer + chips + footprint) under the session/epoch guards.
             // NotArrived/GiveUp → the turn died or the anchor is unusable; the
-            // row is dropped below and the transcript stays as loaded.
+            // rows are dropped below and the transcript stays as loaded.
             recoverTurnFromTranscript(key, sentText)
         } finally {
-            _chatHistory.update { list -> list.filter { it.id != rowId } }
+            // Clear twice, on purpose. The first is synchronous so the stale
+            // chips are gone the moment the watch is cancelled — the caller
+            // is usually the user sending their own turn, and the rows must
+            // not survive into it waiting on a dispatch. But cancel() does
+            // not wait, so a frame handler still mid-onTool can add its row
+            // after that snapshot — a zombie "실행 중" chip that never goes
+            // away (the non-joining-cancel class #4898 hit with the row id).
+            // So join the collector, then clear again; clear() is idempotent
+            // and its id set is append-only, so the second pass catches
+            // anything the race added. NonCancellable because this finally
+            // usually runs BECAUSE the watch was cancelled, and a suspend
+            // call in a cancelled coroutine would throw before joining.
+            spectate.cancel()
+            progress.clear()
+            withContext(NonCancellable) { spectate.join() }
+            progress.clear()
         }
     }
 }

@@ -148,3 +148,30 @@ func TestGatewayEventSubscriber_DropsWhenBacklogged(t *testing.T) {
 		t.Fatalf("buffered = %d, want the first frame only", len(sub.ch))
 	}
 }
+
+// Which client kinds join the gateway event plane. The phone was excluded
+// originally on the belief its daemon only understood `push` frames; it in
+// fact ignores unknown event names, and the exclusion left mobile with no
+// live spectate narration (3s transcript polling only).
+func TestJoinsGatewayPlane(t *testing.T) {
+	if !joinsGatewayPlane(nativepush.KindDesktop) {
+		t.Error("desktop (andromeda) must join the plane")
+	}
+	if !joinsGatewayPlane(nativepush.KindMobile) {
+		t.Error("mobile must join the plane — it drives the phone's live spectate chips")
+	}
+	// An unidentified client made no claim about understanding the plane.
+	if joinsGatewayPlane(nativepush.KindUnknown) {
+		t.Error("unknown kind must not be sent frames it never asked for")
+	}
+}
+
+// The header a surface sends is what decides the attach, so the mapping and
+// the gate have to agree — a rename on either side silently un-wires spectate.
+func TestClientKindHeaderReachesTheGatewayPlane(t *testing.T) {
+	for _, header := range []string{"mobile", "desktop"} {
+		if !joinsGatewayPlane(nativepush.ClientKindFromHeader(header)) {
+			t.Errorf("X-Deneb-Client-Kind: %s must reach the gateway plane", header)
+		}
+	}
+}

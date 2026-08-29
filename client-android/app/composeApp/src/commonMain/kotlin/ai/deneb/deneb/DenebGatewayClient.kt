@@ -139,6 +139,18 @@ class DenebGatewayClient private constructor(
     // surface) when the open conversation's transcript loaded — owned by
     // DenebClientSessions' foreign-turn watch. One at a time.
     internal var foreignTurnWatch: kotlinx.coroutines.Job? = null
+
+    // The live watch's progress rows (tools + gateway phase narration), held so
+    // cancelForeignTurnWatch can drop them synchronously — the job's own finally
+    // only runs on a later dispatch, after the caller has redrawn.
+    internal var foreignTurnProgress: TurnProgress? = null
+
+    // Gateway event plane (the events stream's hello/gateway frames).
+    // eventsHello replays the live connection's broadcaster connId so a watch
+    // armed after connect still subscribes; a reconnect emits a fresh id and
+    // collectors re-subscribe (server-side subscriptions die with the socket).
+    internal val eventsHello = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 4)
+    internal val agentEvents = MutableSharedFlow<AgentEventFrame>(extraBufferCapacity = 64)
     override val chatHistory: StateFlow<List<History>> = _chatHistory
 
     // Guards _chatHistory against a background transcript load clobbering an

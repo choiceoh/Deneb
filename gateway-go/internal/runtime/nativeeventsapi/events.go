@@ -56,11 +56,11 @@ type Config struct {
 	PushHub         PushHub
 	ShutdownContext context.Context
 	Logger          *slog.Logger
-	// Broadcaster is optional. When set, DESKTOP-kind connections are also
-	// registered on the gateway event broadcaster: the stream opens with an
-	// `event: hello` frame carrying the connection's connId, and targeted
-	// gateway events (agent.event) arrive as `event: gateway` frames. Phone
-	// connections are left untouched — their daemon only understands `push`.
+	// Broadcaster is optional. When set, connections whose kind
+	// [joinsGatewayPlane] accepts (desktop and mobile) are also registered on
+	// the gateway event broadcaster: the stream opens with an `event: hello`
+	// frame carrying the connection's connId, and targeted gateway events
+	// (agent.event) arrive as `event: gateway` frames.
 	Broadcaster GatewayBroadcaster
 }
 
@@ -126,7 +126,7 @@ func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 	// with no transport serving its subscribers — every emit returned to zero
 	// recipients. This attach is the missing half.
 	var gwCh chan []byte
-	if h.broadcaster != nil && kind == nativepush.KindDesktop {
+	if h.broadcaster != nil && joinsGatewayPlane(kind) {
 		connID := "evt-" + randomConnID()
 		gwCh = make(chan []byte, gatewayFrameBuffer)
 		sub := &gatewayEventSubscriber{id: connID, ch: gwCh, logger: h.logger}
@@ -145,6 +145,22 @@ func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 
 	// Stop when the client disconnects (request ctx) or the server shuts down.
 	streamPushEvents(r.Context(), h.shutdownContext, w, flusher, pushEvents, gwCh)
+}
+
+// joinsGatewayPlane reports whether a client kind is attached to the gateway
+// event broadcaster (hello + agent.event frames) on top of its push stream.
+//
+// Both real product surfaces qualify: andromeda (desktop) and the phone
+// (mobile), which spectates a foreign turn through the same frames. Mobile was
+// held back originally on the belief that its daemon only understood `push`,
+// but the reader switches on the event name and ignores the ones it does not
+// know — so the frames are backward-safe for builds predating the spectate
+// surface, and the exclusion was only costing the phone live narration.
+//
+// KindUnknown stays out: an unidentified client made no claim about
+// understanding the plane, and the frames cost bandwidth it may never read.
+func joinsGatewayPlane(kind nativepush.ClientKind) bool {
+	return kind == nativepush.KindDesktop || kind == nativepush.KindMobile
 }
 
 // randomConnID returns 16 random bytes as hex — unique enough for a

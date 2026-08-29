@@ -18,7 +18,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlin.coroutines.coroutineContext
 import kotlin.time.TimeMark
@@ -130,7 +134,19 @@ suspend fun DenebGatewayClient.subscribeEvents(onPush: (title: String, body: Str
                         }
 
                         line.isEmpty() -> {
-                            if (event == "push") {
+                            if (event == "hello") {
+                                // The gateway event plane's handshake: this
+                                // connection's broadcaster id. Session-scoped
+                                // agent events are subscribed against it (the
+                                // spectate surface, DenebClientSessions).
+                                runCatching {
+                                    jsonCodec.decodeFromString(EventsHello.serializer(), data.toString())
+                                }.getOrNull()?.connId?.takeIf { it.isNotBlank() }?.let { id ->
+                                    eventsHello.tryEmit(id)
+                                }
+                            } else if (event == "gateway") {
+                                parseAgentEventFrame(jsonCodec, data.toString())?.let { agentEvents.tryEmit(it) }
+                            } else if (event == "push") {
                                 runCatching {
                                     jsonCodec.decodeFromString(PushEvent.serializer(), data.toString())
                                 }.getOrNull()?.let { p ->
@@ -219,6 +235,49 @@ suspend fun DenebGatewayClient.subscribeEvents(onPush: (title: String, body: Str
         }
     }
 }
+
+/** The gateway event plane's `event: hello` payload. */
+@kotlinx.serialization.Serializable
+internal data class EventsHello(val connId: String = "")
+
+/**
+ * One session-scoped agent event from the gateway event plane (`event:
+ * gateway` frames on the events stream): the run/tool/phase lifecycle of a
+ * turn, addressed by sessionKey. Fields are pre-flattened from the wire's
+ * nested {event, payload:{kind, sessionKey, payload:{…}}} shape.
+ */
+internal data class AgentEventFrame(
+    val kind: String,
+    val sessionKey: String,
+    val tool: String = "",
+    val toolUseId: String = "",
+    val detail: String = "",
+    val summary: String = "",
+    val isError: Boolean = false,
+    val phase: String = "",
+    val label: String = "",
+)
+
+/** Decode a `gateway` SSE frame into an [AgentEventFrame]; null for frames
+ * that are not agent.event or fail to parse (never throws — stream safety). */
+internal fun parseAgentEventFrame(codec: kotlinx.serialization.json.Json, raw: String): AgentEventFrame? = runCatching {
+    val root = codec.parseToJsonElement(raw).jsonObject
+    if (root["event"]?.jsonPrimitive?.content != "agent.event") return null
+    val payload = root["payload"]?.jsonObject ?: return null
+    val inner = payload["payload"]?.jsonObject
+    fun str(o: kotlinx.serialization.json.JsonObject?, k: String) = o?.get(k)?.jsonPrimitive?.contentOrNull.orEmpty()
+    AgentEventFrame(
+        kind = str(payload, "kind"),
+        sessionKey = str(payload, "sessionKey"),
+        tool = str(inner, "tool"),
+        toolUseId = str(inner, "toolUseId"),
+        detail = str(inner, "detail"),
+        summary = str(inner, "summary"),
+        isError = inner?.get("isError")?.jsonPrimitive?.booleanOrNull == true,
+        phase = str(inner, "phase"),
+        label = str(inner, "label"),
+    ).takeIf { it.kind.isNotBlank() && it.sessionKey.isNotBlank() }
+}.getOrNull()
 
 /**
  * Minimum gap between event-stream connections.
