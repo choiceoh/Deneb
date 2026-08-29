@@ -31,6 +31,11 @@ func WithSessionKey(ctx context.Context, key string) context.Context {
 	return toolport.WithSessionKey(ctx, key)
 }
 
+// WithWorkspaceDir pins the directory this run's tools work in.
+func WithWorkspaceDir(ctx context.Context, dir string) context.Context {
+	return toolport.WithWorkspaceDir(ctx, dir)
+}
+
 // WithMediaSendFunc attaches a MediaSendFunc to ctx.
 func WithMediaSendFunc(ctx context.Context, fn MediaSendFunc) context.Context {
 	return toolport.WithMediaSendFunc(ctx, fn)

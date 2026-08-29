@@ -369,6 +369,13 @@ func withRunContextValues(ctx context.Context, params RunParams, deps runDeps) c
 			ctx = WithMaxUploadBytes(ctx, limit)
 		}
 	}
+	// Pin the run's workspace for the TOOLS, not just the prompt. Only when the
+	// request named one: tools were registered with a default resolved through a
+	// different helper than the prompt path uses, so defaulting here could move
+	// where commands run without anyone asking.
+	if dir := strings.TrimSpace(params.WorkspaceDir); dir != "" {
+		ctx = WithWorkspaceDir(ctx, dir)
+	}
 	return WithSessionKey(ctx, params.SessionKey)
 }
 

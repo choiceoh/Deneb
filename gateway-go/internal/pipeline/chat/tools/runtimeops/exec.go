@@ -96,6 +96,11 @@ func ToolExec(procMgr *process.Manager, defaultDir string) toolport.ToolFunc {
 
 		workDir := p.Workdir
 		if workDir == "" {
+			// The run may pin its own workspace; tools are registered once at
+			// startup, so without this the default is server-wide forever.
+			workDir = toolport.WorkspaceDirFromContext(ctx)
+		}
+		if workDir == "" {
 			workDir = defaultDir
 		}
 
