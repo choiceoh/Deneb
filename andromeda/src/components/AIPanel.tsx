@@ -64,6 +64,7 @@ export function AIPanel({
     selectVariant,
     clear,
     setTurns,
+    patchTurns,
   } = useChat(cfg);
   // 마지막 사용자 메시지만 편집-재전송 가능 (마지막 교환 대체 시맨틱).
   const [editingMsg, setEditingMsg] = useState<string | null>(null);
@@ -105,7 +106,7 @@ export function AIPanel({
     loadMoreSessions,
     newChat,
     loadOlderTurns,
-  } = useSessions(cfg, connected, busy || attaching, { clear, setTurns });
+  } = useSessions(cfg, connected, busy || attaching, { clear, setTurns, patchTurns });
   const { clearDraft } = useSessionDraft(sessionKey, input, setInput);
   const sessionModel = sessions.find((s) => s.key === sessionKey)?.model ?? "";
   const { models, model, setModel } = useModels(cfg, connected, sessionKey, sessionModel);

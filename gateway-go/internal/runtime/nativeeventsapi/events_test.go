@@ -55,7 +55,7 @@ func TestStreamPushEvents_PublishReachesSSE(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		streamPushEvents(clientCtx, context.Background(), out, out, events)
+		streamPushEvents(clientCtx, context.Background(), out, out, events, nil)
 	}()
 
 	hub.Publish(nativepush.Event{Title: "Deneb", Body: "morning letter"})
@@ -93,7 +93,7 @@ func TestStreamPushEvents_ShutdownStops(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		streamPushEvents(context.Background(), shutdownCtx, rec, rec, events)
+		streamPushEvents(context.Background(), shutdownCtx, rec, rec, events, nil)
 	}()
 
 	shutdown()
@@ -101,5 +101,50 @@ func TestStreamPushEvents_ShutdownStops(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("streamPushEvents did not return after shutdown")
+	}
+}
+
+func TestStreamPushEvents_GatewayFramesInterleave(t *testing.T) {
+	events := make(chan nativepush.Event)
+	frames := make(chan []byte, 1)
+	out := &syncBuffer{}
+	clientCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		streamPushEvents(clientCtx, context.Background(), out, out, events, frames)
+	}()
+
+	frames <- []byte(`{"type":"event","event":"agent.event","payload":{"kind":"tool.start"}}`)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && !strings.Contains(out.String(), "event: gateway") {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := out.String(); !strings.Contains(got, "event: gateway") || !strings.Contains(got, `"kind":"tool.start"`) {
+		t.Fatalf("gateway frame missing from stream: %q", got)
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("streamPushEvents did not return after client cancel")
+	}
+}
+
+// The broadcaster attach must never block fan-out: a full frame buffer drops.
+func TestGatewayEventSubscriber_DropsWhenBacklogged(t *testing.T) {
+	sub := &gatewayEventSubscriber{id: "c1", ch: make(chan []byte, 1)}
+	if err := sub.SendEvent([]byte("a")); err != nil {
+		t.Fatalf("first send: %v", err)
+	}
+	if err := sub.SendEvent([]byte("b")); err != nil {
+		t.Fatalf("backlogged send must drop, not error: %v", err)
+	}
+	if got := sub.dropped.Load(); got != 1 {
+		t.Fatalf("dropped = %d, want 1", got)
+	}
+	if len(sub.ch) != 1 {
+		t.Fatalf("buffered = %d, want the first frame only", len(sub.ch))
 	}
 }

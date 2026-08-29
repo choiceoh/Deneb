@@ -89,6 +89,7 @@ function chatState(overrides: Partial<ChatState> = {}): ChatState {
     selectVariant: vi.fn(),
     clear: vi.fn(),
     setTurns: vi.fn(),
+    patchTurns: vi.fn(),
     ...overrides,
   };
 }

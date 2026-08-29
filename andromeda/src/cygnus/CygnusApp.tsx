@@ -4,7 +4,7 @@ import { DataProviderScope } from "@/crud";
 import { denebDataProvider } from "@/dataProvider";
 import { useDesktopChrome } from "@/desktopChrome";
 import { type GatewayConfig, loadConfig, saveConfig } from "@/gateway";
-import { useChat } from "@/hooks";
+import { useEvents, useChat } from "@/hooks";
 import { parseUiSubmission } from "@/markdown/denebUiParse";
 import { getString, setString } from "@/storage";
 import { isTauri, readDesktopToken } from "@/tauri";
@@ -122,7 +122,14 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
     selectVariant,
     clear,
     setTurns,
+    patchTurns,
   } = useChat(cfg);
+
+  // Hold the gateway events stream open in this window too. The workstation
+  // gets it via ProactivePanel; without one here the spectate surface (live
+  // chips for a turn started elsewhere) never receives its hello/agent frames.
+  // The proactive list itself is unused — Cygnus stays a chat surface.
+  useEvents(cfg, connected);
   const [input, setInput] = useState("");
   const [attaching, setAttaching] = useState(false);
   // Dev-only `?rail`: lets the headless screenshot loop capture the drawer open
@@ -156,7 +163,7 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
     cfg,
     connected,
     busy || attaching,
-    { clear, setTurns },
+    { clear, setTurns, patchTurns },
     {
       mainKey: CYGNUS_MAIN,
       channel: "client",

@@ -29,6 +29,57 @@ export interface EventHandlers {
   onError?: (err: string) => void;
 }
 
+// ---- Gateway event plane (spectate) ----------------------------------------
+// Desktop connections additionally join the gateway event broadcaster: the
+// stream opens with `event: hello` {connId}, and session-scoped agent events
+// (subscribed per session via the sessions.messages.subscribe RPC against that
+// connId) arrive as `event: gateway` frames. This module fans them out so any
+// surface (the foreign-turn spectate in useSessions) can listen without
+// threading callbacks through the component tree.
+
+export interface GatewayEventFrame {
+  event: string; // e.g. "agent.event"
+  payload: Record<string, unknown>;
+}
+
+type GatewayListener = (frame: GatewayEventFrame) => void;
+type HelloListener = (connId: string) => void;
+
+let currentConnId: string | null = null;
+const gatewayListeners = new Set<GatewayListener>();
+const helloListeners = new Set<HelloListener>();
+
+/** connId of the live events stream, or null while (re)connecting. */
+export function eventsConnId(): string | null {
+  return currentConnId;
+}
+
+/** Listen for gateway event frames. Returns an unlisten function. */
+export function onGatewayEvent(fn: GatewayListener): () => void {
+  gatewayListeners.add(fn);
+  return () => gatewayListeners.delete(fn);
+}
+
+/** Fires on every (re)connect with the fresh connId — resubscribe here. */
+export function onEventsHello(fn: HelloListener): () => void {
+  helloListeners.add(fn);
+  if (currentConnId) fn(currentConnId);
+  return () => helloListeners.delete(fn);
+}
+
+function dispatchGatewayFrame(obj: Record<string, unknown>) {
+  const event = asStr(obj.event);
+  if (!event) return;
+  const payload = (obj.payload && typeof obj.payload === "object" ? obj.payload : {}) as Record<string, unknown>;
+  for (const fn of [...gatewayListeners]) {
+    try {
+      fn({ event, payload });
+    } catch (e) {
+      evLog.warn("gateway listener failed", String(e));
+    }
+  }
+}
+
 // Map a raw SSE frame (event name + parsed data object) to a ProactiveEvent,
 // tolerating whatever field names the gateway uses.
 function toEvent(eventName: string, data: Record<string, unknown>): ProactiveEvent {
@@ -56,13 +107,32 @@ export async function subscribeEvents(
   evLog.info("stream open");
   handlers.onOpen?.();
 
-  await readJsonSSE(
-    body,
-    (event, obj) => {
-      const ev = toEvent(event, obj);
-      evLog.debug(`event ${ev.kind ?? "?"}`, ev.title ?? "");
-      handlers.onEvent?.(ev);
-    },
-    signal,
-  );
+  try {
+    await readJsonSSE(
+      body,
+      (event, obj) => {
+        if (event === "hello") {
+          currentConnId = asStr(obj.connId) ?? null;
+          // Debug affordance: headless CDP probes read this to verify the
+          // event plane attached without console capture.
+          (window as unknown as Record<string, unknown>).__DENEB_EVENTS_CONN = currentConnId;
+          evLog.info(`gateway plane attached (${currentConnId ?? "?"})`);
+          if (currentConnId) for (const fn of [...helloListeners]) fn(currentConnId);
+          return;
+        }
+        if (event === "gateway") {
+          dispatchGatewayFrame(obj);
+          return;
+        }
+        const ev = toEvent(event, obj);
+        evLog.debug(`event ${ev.kind ?? "?"}`, ev.title ?? "");
+        handlers.onEvent?.(ev);
+      },
+      signal,
+    );
+  } finally {
+    // Stream gone — the connId (and every server-side subscription keyed on
+    // it) died with it. Listeners resubscribe on the next hello.
+    currentConnId = null;
+  }
 }

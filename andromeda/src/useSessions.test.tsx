@@ -15,6 +15,23 @@ import type { ChatTurn } from "@/hooks";
 import { CHAT_RECOVERY_POLL_MS } from "@/gateway";
 import { useSessions } from "./useSessions";
 
+type GwFrame = { event: string; payload: Record<string, unknown> };
+const gatewayListeners = new Set<(f: GwFrame) => void>();
+const emitGatewayFrame = (f: GwFrame) => {
+  for (const fn of [...gatewayListeners]) fn(f);
+};
+vi.mock("@/events", () => ({
+  // The events stream is "already connected": hello fires immediately.
+  onEventsHello: (fn: (connId: string) => void) => {
+    fn("conn-test");
+    return () => {};
+  },
+  onGatewayEvent: (fn: (f: GwFrame) => void) => {
+    gatewayListeners.add(fn);
+    return () => gatewayListeners.delete(fn);
+  },
+}));
+
 vi.mock("@/gateway", async (importOriginal) => {
   // recoverTurnAnswer (and its constants) stay REAL so the foreign-turn
   // watcher tests exercise the actual poll loop against the mocked
@@ -24,6 +41,7 @@ vi.mock("@/gateway", async (importOriginal) => {
     TRANSCRIPT_MAX: 200,
     CHAT_RECOVERY_POLL_MS: real.CHAT_RECOVERY_POLL_MS,
     recoverTurnAnswer: real.recoverTurnAnswer,
+    callRpc: vi.fn().mockResolvedValue({}),
     deleteSession: vi.fn(),
     focusSession: vi.fn(),
     pinSession: vi.fn(),
@@ -51,7 +69,22 @@ const pin = vi.mocked(pinSession);
 const persist = vi.mocked(setModel);
 
 function chatDouble() {
-  return { clear: vi.fn(), setTurns: vi.fn() };
+  // Stateful double: setTurns stays a spy (existing call-shape assertions) but
+  // also holds the list so patchTurns/turns() can express the spectate flow.
+  let held: ChatTurn[] = [];
+  const setTurns = vi.fn((turns: ChatTurn[]) => {
+    held = turns;
+  });
+  return {
+    clear: vi.fn(() => {
+      held = [];
+    }),
+    setTurns,
+    patchTurns: (fn: (turns: ChatTurn[]) => ChatTurn[]) => {
+      held = fn(held);
+    },
+    turns: () => held,
+  };
 }
 
 beforeEach(() => {
@@ -219,6 +252,95 @@ describe("useSessions", () => {
       const finalTurns = chat.setTurns.mock.calls.at(-1)?.[0] as ChatTurn[];
       expect(finalTurns.at(-1)).toMatchObject({ status: "done", text: "정리했습니다." });
       expect(finalTurns.some((t) => t.status === "streaming")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("spectates a running foreign turn: live chips land on the placeholder", async () => {
+    vi.useFakeTimers();
+    try {
+      transcript.mockResolvedValue({
+        messages: [{ id: "u1", role: "user", content: "정리해줘", timestampMs: 1_000 }],
+        total: 1,
+        turnRunning: true,
+      });
+      const chat = chatDouble();
+      const { result } = renderHook(() => useSessions(cfg, true, false, chat));
+      await act(async () => result.current.selectSession("client:main:run"));
+
+      // The gateway relays the owning run's tool lifecycle as agent events.
+      act(() => {
+        emitGatewayFrame({
+          event: "agent.event",
+          payload: {
+            kind: "tool.start",
+            sessionKey: "client:main:run",
+            payload: { tool: "exec", toolUseId: "t1", detail: "ls -la" },
+          },
+        });
+      });
+      let placeholder = (chat.turns() as ChatTurn[]).at(-1)!;
+      expect(placeholder.parts).toMatchObject([{ kind: "tool", tool: "exec", state: "started", detail: "ls -la" }]);
+
+      act(() => {
+        emitGatewayFrame({
+          event: "agent.event",
+          payload: {
+            kind: "tool.end",
+            sessionKey: "client:main:run",
+            payload: { tool: "exec", toolUseId: "t1", summary: "total 60 · 2줄" },
+          },
+        });
+      });
+      placeholder = (chat.turns() as ChatTurn[]).at(-1)!;
+      expect(placeholder.parts).toMatchObject([
+        { kind: "tool", state: "completed", detail: "ls -la", resultSummary: "total 60 · 2줄" },
+      ]);
+
+      // A frame for ANOTHER session must not touch this placeholder.
+      act(() => {
+        emitGatewayFrame({
+          event: "agent.event",
+          payload: { kind: "tool.start", sessionKey: "client:other", payload: { tool: "wiki", toolUseId: "x" } },
+        });
+      });
+      expect(((chat.turns() as ChatTurn[]).at(-1)!.parts ?? []).length).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("run.end triggers the fast reload that replaces the placeholder", async () => {
+    vi.useFakeTimers();
+    try {
+      const done = {
+        messages: [
+          { id: "u1", role: "user", content: "정리해줘", timestampMs: 1_000 },
+          { id: "a1", role: "assistant", content: "끝났습니다." },
+        ],
+        total: 2,
+        turnRunning: false,
+      };
+      transcript
+        .mockResolvedValueOnce({
+          messages: [{ id: "u1", role: "user", content: "정리해줘", timestampMs: 1_000 }],
+          total: 1,
+          turnRunning: true,
+        })
+        .mockResolvedValue(done);
+      const chat = chatDouble();
+      const { result } = renderHook(() => useSessions(cfg, true, false, chat));
+      await act(async () => result.current.selectSession("client:main:run"));
+
+      await act(async () => {
+        emitGatewayFrame({ event: "agent.event", payload: { kind: "run.end", sessionKey: "client:main:run" } });
+        await Promise.resolve();
+      });
+
+      const turns = chat.turns() as ChatTurn[];
+      expect(turns.at(-1)).toMatchObject({ status: "done", text: "끝났습니다." });
+      expect(turns.some((t) => t.status === "streaming")).toBe(false);
     } finally {
       vi.useRealTimers();
     }
