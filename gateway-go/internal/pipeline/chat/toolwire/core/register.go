@@ -183,17 +183,10 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		})
 	}
 
-	// Org chart (read-only): the operator-curated group→company→team tree with
-	// 직급/직책. Deferred; loads {stateDir}/org.json on demand — empty file just
-	// reports unset, so no dep/nil-guard needed.
-	registry.RegisterTool(toolport.ToolDef{
-		Name: "org",
-		Description: "큐레이션 조직도(읽기 전용, org.json) — '1팀 팀장 누구'·'회사 조직 어떻게 되지'·직급/직책. " +
-			"query로 사람/팀/회사 검색, 생략 시 전체 트리. 라이브 휴대폰·부서·생년월일은 groupware(area=people); 번호↔이름은 contacts.",
-		InputSchema: schema.OrgToolSchema(),
-		Fn:          surface.ToolOrg(),
-		Deferred:    true,
-	})
+	// The org chart is no longer its own tool: it is one of the three sources
+	// behind `people` (registered from toolwire/domain), so "1팀 팀장 누구" and
+	// "이 번호 누구" reach the same entry point instead of asking the model to
+	// pick a store first. orgops.ToolOrg still backs it there.
 
 	// NOTE: fetch_tools and code_action are registered by
 	// RegisterRegistryBridgeTools (called from chat.RegisterCoreTools) because

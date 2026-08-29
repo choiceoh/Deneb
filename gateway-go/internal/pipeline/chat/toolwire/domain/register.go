@@ -2,10 +2,14 @@ package domain
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/groupwareops"
 	mailtool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/mailarchive"
 	notebooktool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/notebook"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/orgops"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/peopleops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/personaops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/skilltool"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/wikitool"
@@ -17,29 +21,37 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	RegisterMailArchiveTool(registry, deps)
 }
 
-// RegisterContactsTool registers the address-book lookup tool (phone lookup +
-// name/company search) over the contacts store mirrored from the native client's
-// contacts sync. Skipped when the store isn't wired so the agent doesn't see a
-// dead surface; a nil/empty store would otherwise reply "주소록이 비어 있습니다".
-func RegisterContactsTool(registry toolport.ToolRegistrar, contactsDeps *tooldeps.ContactsDeps) {
+// RegisterPeopleTool registers the unified person-lookup tool. It replaces the
+// separate `contacts` and `org` tools (2026-08-29 audit): three stores answered
+// person questions — the synced address book, the curated org.json tree, and
+// Amaranth's live HR area — and the model had to guess which one held the
+// answer before it could ask. `people` fans out instead, so one call covers all
+// three and the caller never routes.
+//
+// Skipped when the address book isn't wired: the other two sources alone do not
+// justify a tool, and a nil store would otherwise answer "주소록이 비어 있습니다".
+//
+// Deferred: the person wiki already carries 연락처 for the people the operator
+// keeps pages for, so this is the occasional "이 번호 누구야" / "그 사람 어느
+// 팀이야" turn that can fetch on demand. ASR hotword injection and wiki person
+// enrichment read the store server-side and are unaffected.
+func RegisterPeopleTool(registry toolport.ToolRegistrar, contactsDeps *tooldeps.ContactsDeps, wikiStore *wiki.Store) {
 	if contactsDeps.Store == nil {
 		return
 	}
-	// Deferred (2026-07-09): the person wiki now carries 연락처 for the people the
-	// user keeps pages for, so contacts' meeting-prep/context role is covered there
-	// (wiki/knowledge/org). Its surviving unique value is full address-book coverage
-	// + reverse phone lookup (번호→사람, normalized) — an occasional "이 번호 누구야"
-	// turn that fetches on demand. code_action's bridge still exposes it zero-hop.
-	// ASR hotword injection and wiki person enrichment read the store server-side,
-	// unaffected. Description leads with the trigger so the 80-rune summary is useful.
 	registry.RegisterTool(toolport.ToolDef{
-		Name: "contacts",
-		Description: "'이 번호 누구?'·'010-xxxx 누구야'·'OOO 연락처/번호'처럼 주소록을 물으면 짐작 말고 호출 — " +
-			"전화번호로 인물 찾기(lookup) 또는 이름·회사로 검색(search). " +
-			"네이티브 클라이언트가 동기화한 연락처 전체를 조회한다.",
-		InputSchema: schema.ContactsToolSchema(),
-		Fn:          wikitool.ToolContacts(contactsDeps),
-		Deferred:    true,
+		Name: "people",
+		Description: "사람 조회 한 입구 — '이 번호 누구?'·'OOO 연락처'·'1팀 팀장 누구'·'김○○ 부서/휴대폰'은 짐작 말고 호출. " +
+			"find(기본)는 주소록·조직도·그룹웨어를 한 번에 훑어 세 출처를 함께 돌려준다 " +
+			"(각각 번호·회사 / 조직 위치·직급 / 라이브 부서·휴대폰). " +
+			"phone=번호→사람, company=회사 소속 전원, tree=조직도.",
+		InputSchema: schema.PeopleToolSchema(),
+		Fn: peopleops.ToolPeople(peopleops.Sources{
+			Contacts:  wikitool.ToolContacts(contactsDeps),
+			Org:       orgops.ToolOrg(),
+			Groupware: groupwareops.ToolGroupware(wikiStore),
+		}),
+		Deferred: true,
 	})
 }
 

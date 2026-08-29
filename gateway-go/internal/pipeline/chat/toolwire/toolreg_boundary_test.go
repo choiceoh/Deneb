@@ -55,7 +55,7 @@ func allSchemaCases() []schemaCase {
 		{name: "wiki_forget", build: schema.WikiForgetToolSchema},
 		{name: "preference", build: schema.PreferenceToolSchema},
 		{name: "notebook", build: schema.NotebookToolSchema},
-		{name: "contacts", build: schema.ContactsToolSchema},
+		{name: "people", build: schema.PeopleToolSchema},
 		{name: "calendar", build: schema.CalendarToolSchema},
 		{name: "polaris", build: schema.PolarisToolSchema},
 		{name: "knowledge", build: schema.KnowledgeToolSchema},
@@ -75,7 +75,6 @@ func allSchemaCases() []schemaCase {
 		{name: "transcribe", build: schema.TranscribeToolSchema},
 		{name: "ocr", build: schema.OcrToolSchema},
 		{name: "market", build: schema.MarketToolSchema},
-		{name: "org", build: schema.OrgToolSchema},
 		{name: "goal", build: schema.GoalToolSchema},
 		{name: "blackboard", build: schema.BlackboardToolSchema},
 		{name: "mail_archive", build: schema.MailArchiveToolSchema},
@@ -356,7 +355,7 @@ func TestEditSchemaRequiresOneEditMode(t *testing.T) {
 func TestActionEnumsAreNonEmptyUniqueAndDocumented(t *testing.T) {
 	actionSchemas := []string{
 		"process", "cron", "message", "gateway", "sessions",
-		"files", "skills", "wiki", "notebook", "contacts", "calendar", "polaris",
+		"files", "skills", "wiki", "notebook", "people", "calendar", "polaris",
 		"observe", "fleet", "browser", "groupware", "workfeed", "goal", "blackboard", "mail_archive",
 	}
 	byName := make(map[string]schemaCase)
@@ -426,7 +425,7 @@ func TestToolMaxOutputsContractAndFreshMap(t *testing.T) {
 	want := map[string]int{
 		"browser":     32000,
 		"calendar":    8000,
-		"contacts":    8000,
+		"people":      8000,
 		"deal_ledger": 8000,
 		"exec":        32000,
 		"groupware":   32000,
@@ -480,7 +479,7 @@ func TestRegisterCoreToolsWithMinimalDependenciesHasValidUniqueContracts(t *test
 	}
 	for _, eager := range []string{
 		"read", "write", "grep", "exec", "web", "sessions_spawn", "heartbeat_update",
-		"goal", "blackboard", "mail_archive", "transcribe", "ocr", "org", "message",
+		"goal", "blackboard", "mail_archive", "transcribe", "ocr", "message",
 	} {
 		if !seen[eager] {
 			t.Errorf("minimal core missing %q", eager)
@@ -499,7 +498,7 @@ func TestRegisterCoreToolsDeferredPolicyContractMatchesOperationalIntent(t *test
 	deferred := map[string]bool{
 		"read": false, "write": false, "grep": false, "exec": false, "web": false,
 		"sessions_spawn": false, "heartbeat_update": false, "goal": true, "blackboard": false,
-		"mail_archive": false, "transcribe": true, "ocr": true, "org": true,
+		"mail_archive": false, "transcribe": true, "ocr": true,
 		"office": true, // deferred 2026-08-29: largest eager schema, zero recorded calls
 		"edit":   true, "gateway": true, "observe": true, "fleet": true, "browser": true, "groupware": false,
 		"graphify": true, "process": true, "sessions": true,
@@ -592,7 +591,7 @@ func TestOptionalRegistrationsSkipUnavailableDependencies(t *testing.T) {
 	}{
 		{name: "polaris nil", run: func(r *mockRegistrar) { recall.RegisterPolarisTools(r, nil, nil) }},
 		{name: "knowledge nil", run: func(r *mockRegistrar) { recall.RegisterKnowledgeTool(r, nil) }},
-		{name: "contacts empty", run: func(r *mockRegistrar) { RegisterContactsTool(r, &tooldeps.ContactsDeps{}) }},
+		{name: "people empty", run: func(r *mockRegistrar) { RegisterPeopleTool(r, &tooldeps.ContactsDeps{}, nil) }},
 		{name: "calendar empty", run: func(r *mockRegistrar) { RegisterCalendarTool(r, &tooldeps.CalendarDeps{}) }},
 		{name: "wiki empty", run: func(r *mockRegistrar) { RegisterWikiTools(r, &tooldeps.WikiDeps{}, t.TempDir(), nil) }},
 		{name: "notebook nil", run: func(r *mockRegistrar) { RegisterNotebookTool(r, nil) }},

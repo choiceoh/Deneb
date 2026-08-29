@@ -1284,21 +1284,22 @@ func NotebookToolSchema() map[string]any {
 	}
 }
 
-func ContactsToolSchema() map[string]any {
+func PeopleToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "lookup: 전화번호로 인물 찾기 (정규화·+82↔0·뒷자리 폴백). search: 이름·회사·이메일·번호 부분일치 검색 (최대 20건, 초과 시 표시). by_company: 회사명으로 소속 인물 전체 열거 (이름순, 최대 50명).",
-				"enum":        []string{"lookup", "search", "by_company"},
+				"description": "find (기본): 이름·회사로 주소록·조직도·그룹웨어를 한 번에 조회해 세 출처를 함께 반환. phone: 전화번호 → 사람 (주소록만 가능). company: 회사명 → 그 회사 소속으로 등록된 사람 전체. tree: 조직도 트리 (query 생략 시 전체, 주면 그 팀·회사 부분).",
+				"default":     "find",
+				"enum":        []string{"find", "phone", "company", "tree"},
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "조회할 전화번호 (lookup) 또는 검색어 — 이름/회사/이메일/번호 일부 (search).",
+				"description": "사람 이름(find) · 전화번호(phone) · 회사명(company) · 팀·회사명(tree, 생략 가능)",
 			},
 		},
-		"required": []string{"action", "query"},
+		"required": []string{"action"},
 	}
 }
 
@@ -2098,18 +2099,6 @@ func MarketToolSchema() map[string]any {
 	}
 }
 
-func OrgToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"query": map[string]any{
-				"type":        "string",
-				"description": "이름 검색어 (사람/팀/회사, 부분 일치). 생략하면 전체 조직도",
-			},
-		},
-	}
-}
-
 func GoalToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -2335,12 +2324,12 @@ func ToolMaxOutputs() map[string]int {
 	return map[string]int{
 		"browser":     32000,
 		"calendar":    8000,
-		"contacts":    8000,
 		"deal_ledger": 8000,
 		"exec":        32000,
 		"groupware":   32000,
 		"notebook":    24000,
 		"office":      32000,
+		"people":      8000,
 		"solarflow":   32000,
 		"wiki":        20000,
 	}

@@ -17,10 +17,14 @@
   `fetch_tools`, `phoneops/`는 `phone_read`/`phone_write`, `gatewayops/`는
   `gateway`/`heartbeat_update`, `hostops/`는 `browser`/`fleet`/`solarflow`/
   `workstation`을 소유한다. `browseops/`는 `browse`, `officeops/`는 `office`,
-  `orgops/`는 `org`, `personaops/`는 `preference`, `workflowops/`는
+  `orgops/`는 조직도 조회(이제 `people`의 한 소스), `personaops/`는 `preference`, `workflowops/`는
   `goal`/`blackboard`, `recallops/`는 `knowledge`/`polaris`/`research_panel`,
   `graphifyops/`는 `graphify`, `translateops/`는 DeepL 세그먼트 번역,
   `messageops/`는 `message`를 소유한다.
+- `peopleops/`는 `people` — 주소록(`wikitool.ToolContacts`)·조직도
+  (`orgops.ToolOrg`)·그룹웨어 인사(`groupwareops.ToolGroupware`)를 팬아웃하는
+  파사드다. 세 소스를 `Sources` 구조체로 주입받으므로 이 패키지는 세 구현 중
+  무엇도 import하지 않는다. 구 `contacts`/`org` 툴을 대체한다(2026-08-29).
 - `artifact/`는 chart/diagram/file/media 결과물, `document/`는 문서 추출,
   `schedule/`은 calendar/todo, `mailarchive/`는 archive 조회 구현이다.
 - `groupwareops/`는 Amaranth10 전자결재·게시판·ERP 원장 조회와
