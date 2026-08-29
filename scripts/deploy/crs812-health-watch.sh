@@ -76,6 +76,11 @@ cpu_temp="$(value_of cpu-temperature)"
 switch_temp="$(value_of switch-temperature)"
 [[ -n "$switch_temp" && "$switch_temp" -ge "$SWITCH_TEMP_MAX" ]] && faults+=("스위치칩 ${switch_temp}°C (임계 ${SWITCH_TEMP_MAX})")
 
+# Always leave a one-line trend sample in the journal (fault or not): the
+# 08-29 "yesterday it was quiet" episode had no way to answer "what changed
+# and when" — 30-minute temp/RPM samples make the next step-change datable.
+echo "crs812-health-watch: sample switch=${switch_temp:-?}C cpu=${cpu_temp:-?}C fan=$(value_of fan1-speed)/$(value_of fan2-speed)/$(value_of fan3-speed)/$(value_of fan4-speed)rpm psu=$(value_of psu1-power)W" >&2
+
 if ((${#faults[@]} == 0)); then
     exit 0
 fi
