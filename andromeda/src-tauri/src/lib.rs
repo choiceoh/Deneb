@@ -95,7 +95,11 @@ fn toggle_cygnus_window(app: &tauri::AppHandle) {
     let built = WebviewWindowBuilder::new(app, "cygnus", WebviewUrl::App("index.html?window=cygnus".into()))
         .initialization_script("window.__CYGNUS__ = true;")
         .title("Cygnus")
-        .inner_size(480.0, 700.0)
+        // Wide enough that the thread rail docks beside the conversation
+        // (the 560px breakpoint in cygnus.css) instead of covering it — the
+        // list is meant to stay up. Narrower is still supported: below the
+        // breakpoint the rail falls back to an overlay drawer.
+        .inner_size(720.0, 700.0)
         .min_inner_size(380.0, 520.0)
         .decorations(false)
         .transparent(true)
