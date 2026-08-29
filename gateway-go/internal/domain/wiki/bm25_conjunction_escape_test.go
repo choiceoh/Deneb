@@ -3,6 +3,7 @@ package wiki
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -73,5 +74,51 @@ func TestBM25RarityFloor_ConjunctionEscape(t *testing.T) {
 	}
 	if res := searchPaths(t, store, "자료 본문", 5); len(res) != 0 {
 		t.Fatalf("LEAK: everywhere-common conjunction admitted %d pages", len(res))
+	}
+}
+
+// The cluster-coherence escape: when even the conjunction is corpus-common
+// because the subject's OWN subtree carries the pair on every page, hits that
+// concentrate in that one subtree are the answer cluster, not the leak. The
+// scattered case stays gated (each flat file is its own cluster — covered by
+// the everywhere-common assertions above).
+func TestBM25RarityFloor_ClusterCoherenceEscape(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	for i := 0; i < 40; i++ {
+		if err := store.WritePage(fmt.Sprintf("업무/f%03d.md", i), &Page{
+			Meta: Frontmatter{ID: fmt.Sprintf("f%03d", i), Title: "채움", Summary: "요약"},
+			Body: "일반 업무 문서 채우기 본문",
+		}); err != nil {
+			t.Fatalf("WritePage: %v", err)
+		}
+	}
+	// One project subtree where the name pair appears on EVERY page — big
+	// enough that both tokens and their conjunction read corpus-common.
+	for i := 0; i < 12; i++ {
+		if err := store.WritePage(fmt.Sprintf("프로젝트/해남단지/p%02d.md", i), &Page{
+			Meta: Frontmatter{ID: fmt.Sprintf("hn%02d", i), Title: "해남 단지 문서", Summary: "요약"},
+			Body: fmt.Sprintf("해남 단지 공정 기록 %d", i),
+		}); err != nil {
+			t.Fatalf("WritePage: %v", err)
+		}
+	}
+
+	rConj := store.fts.queryConjunctionRarity("해남 단지")
+	if rConj >= bm25RarityFloor {
+		t.Fatalf("fixture broke: the subtree pair must read corpus-common, got %.3f", rConj)
+	}
+	res := searchPaths(t, store, "해남 단지", 5)
+	if len(res) == 0 {
+		t.Fatalf("coherent-cluster common query must surface its subtree pages")
+	}
+	for _, r := range res {
+		if !strings.HasPrefix(r.Path, "프로젝트/해남단지/") {
+			t.Fatalf("escape admitted an off-cluster page: %s", r.Path)
+		}
 	}
 }

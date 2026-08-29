@@ -561,7 +561,22 @@ func (s *Store) SearchWithOptions(ctx context.Context, query string, limit int, 
 	// that never co-occur return 0 — the common-word leak stays gated.
 	commonOnlyQuery := len(bm25) > 0 && s.fts.docCount() >= bm25GateMinCorpus &&
 		s.fts.queryMaxRarity(query) < rarityFloor &&
-		s.fts.queryConjunctionRarity(query) < rarityFloor
+		s.fts.queryConjunctionRarity(query) < rarityFloor &&
+		!bm25ClusterCoherent(bm25)
+	// Third escape, bounded: a common-only query whose TOP hit scores high is
+	// trusted for its head. Multi-term accumulation on the right page separates
+	// cleanly from the leak shape (probe answers 0.836–0.931 normalized vs the
+	// common-noun leak's 0.59), and the admitted rows still face the semantic
+	// blend and cross-encoder downstream — this widens admission by at most
+	// three rows, it does not skip re-ranking. Recovers gold-at-rank-1 queries
+	// ("해남 신재생단지" — gate off, the project page IS the top hit) that
+	// neither the conjunction nor the cluster escape reaches.
+	if commonOnlyQuery && bm25[0].Score >= bm25StrongCommonScore {
+		commonOnlyQuery = false
+		if len(bm25) > 3 {
+			bm25 = bm25[:3]
+		}
+	}
 
 	var sem []SearchResult
 	if mode != SearchModeBM25 {
@@ -572,6 +587,41 @@ func (s *Store) SearchWithOptions(ctx context.Context, query string, limit int, 
 		return intentResults
 	}
 	return s.composeSearchReport(ctx, query, limit, fetchLimit, bm25, sem, commonOnlyQuery, options, loadIntent), nil
+}
+
+// bm25ClusterCoherent reports whether the lexical hits CONCENTRATE in one
+// documentation cluster — the second escape from the common-only gate. Even
+// when a query's tokens AND their conjunction are corpus-common (a project's
+// own subpages all carry its name pair: "해남 신재생단지" across every
+// 프로젝트/pl1-hnm-* page), hits that mostly land in one subtree are that
+// subject's cluster, not the scattered off-topic matches the gate exists to
+// drop. Cluster key = first two path segments, so a project subtree
+// (프로젝트/<name>/...) folds to one cluster while flat files (업무/fNNN.md)
+// each stand alone — the scattered-common-noun leak fixture stays gated.
+func bm25ClusterCoherent(bm25 []SearchResult) bool {
+	top := bm25
+	if len(top) > 8 {
+		top = top[:8]
+	}
+	if len(top) < 2 {
+		return false
+	}
+	counts := map[string]int{}
+	for _, h := range top {
+		parts := strings.SplitN(h.Path, "/", 3)
+		key := h.Path
+		if len(parts) >= 2 {
+			key = parts[0] + "/" + parts[1]
+		}
+		counts[key]++
+	}
+	best := 0
+	for _, c := range counts {
+		if c > best {
+			best = c
+		}
+	}
+	return float64(best) >= 0.6*float64(len(top))
 }
 
 // graphBoostPaths returns the graph-proximity ranking for query (the third RRF
@@ -1322,6 +1372,10 @@ const (
 	// test corpus. 30 is comfortably below the production wiki (~260 pages) and
 	// above the band where the rarity ratio is too coarse to trust.
 	bm25GateMinCorpus = 30
+	// bm25StrongCommonScore is the normalized-score bar for the strong-head
+	// escape from the common-only gate (see the gate site). Measured gap:
+	// real-answer heads 0.836+, common-noun leak heads ~0.59.
+	bm25StrongCommonScore = 0.8
 )
 
 // bm25RarityFloorValue returns the lexical-query rarity floor, honoring the
