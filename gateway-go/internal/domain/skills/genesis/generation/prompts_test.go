@@ -28,3 +28,26 @@ func TestGenesisPromptUsesOutcomeDrivenSkillContract(t *testing.T) {
 		}
 	}
 }
+
+// TestDispatchContractOpensWithTheImpactCheck pins the L4 coding lane's first
+// step. The dispatched Codex session has no MCP tools, so the contract must
+// name the CLI; and it must tell the agent to DECLARE a missing index rather
+// than narrate a blast radius it never checked (the "없는 걸 약속" class).
+func TestDispatchContractOpensWithTheImpactCheck(t *testing.T) {
+	for _, want := range []string{
+		"codegraph impact",
+		"codegraph node",
+		"codegraph sync .",
+		"확인한 척하지 마라",
+	} {
+		if !strings.Contains(dispatchContractPrompt, want) {
+			t.Errorf("dispatch contract missing %q", want)
+		}
+	}
+	// First step means first line: the contract is read top-down by a session
+	// that may stop reading once it starts working.
+	first := strings.SplitN(dispatchContractPrompt, "\n", 3)[1]
+	if !strings.Contains(first, "파급 범위") {
+		t.Errorf("impact check is not the contract's first bullet, got %q", first)
+	}
+}

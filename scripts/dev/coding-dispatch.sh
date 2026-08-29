@@ -118,6 +118,45 @@ log() {
     printf '%s  %s\n' "$(date -Iseconds)" "$*" >> "$LOG_FILE"
 }
 
+# Seed the CodeGraph symbol index into a fresh dispatch worktree.
+#
+# The contract's first step is `codegraph impact <symbol>` — a dependency check
+# before any edit. That step is only real if the worktree HAS an index: a fresh
+# `git worktree add` carries none (.codegraph is gitignored), and a full `init`
+# would cost minutes of every session's budget. Copying the production index
+# and syncing the (near-empty) delta from origin/main takes seconds.
+#
+# Only codegraph.db* is copied — the semantic-code.* vectors are 296MB of
+# `make codesearch` state that impact/node/callers never read, so seeding them
+# would nearly triple the per-worktree disk cost for nothing.
+#
+# Fully soft: a missing binary, missing donor index, or failed sync leaves the
+# worktree index-less. The contract tells the agent to say so rather than to
+# claim a blast radius it never checked.
+seed_codegraph_index() {
+    local wt="$1"
+    command -v codegraph >/dev/null 2>&1 || { log "codegraph absent — $wt gets no index"; return 0; }
+    local donor="$PROD_DIR/.codegraph"
+    [[ -d "$donor" && -f "$donor/codegraph.db" ]] || { log "no donor index at $donor — $wt gets no index"; return 0; }
+    mkdir -p "$wt/.codegraph" || return 0
+    # db + its WAL/SHM sidecars must travel together: the donor daemon writes
+    # through a WAL, so the .db alone can be a torn read.
+    cp -f "$donor"/codegraph.db "$donor"/codegraph.db-wal "$donor"/codegraph.db-shm \
+        "$wt/.codegraph/" 2>/dev/null || true
+    [[ -f "$donor/.gitignore" ]] && cp -f "$donor/.gitignore" "$wt/.codegraph/" 2>/dev/null
+    if [[ ! -f "$wt/.codegraph/codegraph.db" ]]; then
+        log "codegraph index copy failed for $wt"
+        rm -rf "$wt/.codegraph"
+        return 0
+    fi
+    if codegraph sync "$wt" >>"$LOG_FILE" 2>&1; then
+        log "codegraph index seeded for $wt"
+    else
+        log "codegraph sync failed for $wt — serving the copied index as-is"
+    fi
+    return 0
+}
+
 record_runtime_status() {
     local result="$1" detail="${2:-}" candidate="${3:-}"
     if [[ -f "$DISPATCH_STATUS_WRITER" ]]; then
@@ -568,6 +607,10 @@ main() {
         record_runtime_status setup_failed "setup exhausted after skips ${skip_ids:-none}"
         exit 0
     fi
+
+    # Dependency-graph supply, before the session opens: the contract's first
+    # step needs an index in THIS worktree.
+    seed_codegraph_index "$wt"
 
     # Prompt composition + dispatch marker live in dispatch_prompt.py: the
     # contract half of the prompt is the externalized meta artifact

@@ -9,6 +9,7 @@ globs: [".github/**", "scripts/committer"]
 
 - `/landpr` lives in the global Codex prompts (`~/.codex/prompts/landpr.md`); when landing or merging any PR, always follow that `/landpr` process.
 - **Land PRs with `scripts/dev/pr.sh land <pr>`** (or `watch <pr>` to just gate on checks): it watches checks to green, squash-merges, verifies the squash commit actually reached `origin/main` (MERGED ≠ LANDED — see below), and deletes the remote branch. One command instead of five, and the landing invariants can't be skipped.
+- **The blast-radius brief is attached automatically.** `watch`/`land` (and `attach <pr>` on its own) run `scripts/dev/impact_brief.py` and splice a CodeGraph section into the PR body — the symbols this diff edits, which production symbols outside the diff they reach, and which have no test coverage. Deterministic graph queries, no LLM. It replaces its own previous block rather than stacking, and skips silently when the checkout isn't at the PR head or the index is missing. Don't hand-maintain that section; edit the code or the script.
 - Create commits with `scripts/committer "<msg>" <file...>`; avoid manual `git add`/`git commit` so staging stays scoped.
 - **ZCode/Codex helpers** (when pre-commit hooks or multi-agent push collisions slow you down):
   - `scripts/dev/zcode-commit.sh "<msg>" <files...>` — runs local shellcheck/golangci-lint first, then tries `committer`; on Docker/OrbStack pre-commit failure, falls back to `--no-verify` (safe — local validation already passed).

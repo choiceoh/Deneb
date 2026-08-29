@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 SCHEMA_VERSION = 1
-RUBRIC_VERSION = "1.2.0"
+RUBRIC_VERSION = "1.3.0"
 # Soft-confirm from evolve watches may score rates, but never above this ceiling —
 # lifecycle confirm/rollback remains the hard oracle (PACE).
 SOFT_RESOLVE_SCORE_CAP = 55.0

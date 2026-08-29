@@ -1,4 +1,4 @@
-"""Process domain — acceptor honesty and loop dynamics (paper-mapped, rubric 1.2)."""
+"""Process domain — acceptor honesty and loop dynamics (paper-mapped, rubric 1.3)."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from .model import (
     grade_rate_low_good,
     stable_id,
 )
+from .impact_first import ImpactFirstWindow, load_impact_first_window
 from .ledgers import (
     GenesisWindow,
     JudgeWindow,
@@ -48,7 +49,14 @@ BOOTSTRAP = {
     "timescale-turn": 18.0,
     "ability-transfer": 22.0,
     "anti-collapse": 40.0,
+    "impact-first": 25.0,
 }
+
+# A thin sample cannot claim full discipline credit: four runs at 100% is a
+# coincidence, not a habit. Below this many source-editing runs the rate is
+# scored but ceilinged, mirroring the proxy-cap convention used elsewhere.
+IMPACT_FIRST_THIN_SAMPLE = 8
+IMPACT_FIRST_THIN_CAP = 70.0
 
 
 def _merge_health(genesis: GenesisWindow, health: dict[str, Any]) -> GenesisWindow:
@@ -368,6 +376,82 @@ def _score_probe_coverage(judge: JudgeWindow) -> tuple[float, Evidence, list[Fin
     )
 
 
+def _score_impact_first(window: ImpactFirstWindow) -> tuple[float, Evidence, list[Finding]]:
+    """Did coding runs check the dependency graph BEFORE their first source edit?
+
+    Scored, not advisory, and deliberately so. The failure this guards is a
+    discipline that decays silently: an agent that reads whole files instead of
+    the reached symbols still produces plausible diffs, so nothing in the loop
+    notices until a change lands on a caller nobody looked at. Prompt text
+    cannot hold a habit the scoreboard does not price.
+
+    The rate is over runs that ACTUALLY edited source — a research turn that
+    never touched code is not a missed impact check.
+    """
+    n = window.edit_runs
+    if n < MIN_RESOLVED_FOR_HARD:
+        return (
+            BOOTSTRAP["impact-first"],
+            Evidence(
+                "process-impact-first",
+                "bootstrap",
+                f"editRuns={n} (<{MIN_RESOLVED_FOR_HARD}) lanes={sorted(window.lanes_seen) or 'none'}",
+                required=False,
+            ),
+            [],
+        )
+    rate = window.rate or 0.0
+    score = clamp(100.0 * rate)
+    thin = n < IMPACT_FIRST_THIN_SAMPLE
+    if thin:
+        score = min(score, IMPACT_FIRST_THIN_CAP)
+    detail = (
+        f"impactFirst={window.impact_first}/{n} rate={rate:.2f} "
+        f"late={window.impact_late} runtime={window.runtime_edit_runs} "
+        f"dispatch={window.dispatch_edit_runs}" + (" thin-sample-cap" if thin else "")
+    )
+    findings: list[Finding] = []
+    if rate < 0.5:
+        findings.append(
+            Finding(
+                id=stable_id("impact-first", "below-half"),
+                domain="process",
+                pillar="impact-first",
+                severity="medium" if rate > 0.2 else "high",
+                path="scripts/dev/impact_brief.py",
+                evidence=detail,
+                why=(
+                    "Source edits are landing without a blast-radius check; the "
+                    "editing agent is working from whole-file reads, not from the "
+                    "symbols the change reaches"
+                ),
+                remediation=(
+                    "Verify the supply half before the discipline half: codegraph "
+                    "tools in the implementer allow-list, a seeded .codegraph in the "
+                    "dispatch worktree, then the contract's impact-first step"
+                ),
+                verify="python3 -c 'from rsi_bench.impact_first import load_impact_first_window as f; print(f().to_dict())'",
+                priority=70.0,
+            )
+        )
+    if window.runtime_edit_runs == 0 and window.dispatch_edit_runs > 0:
+        findings.append(
+            Finding(
+                id=stable_id("impact-first", "runtime-lane-silent"),
+                domain="process",
+                pillar="impact-first",
+                severity="low",
+                path="gateway-go/internal/pipeline/toolpreset/preset.go",
+                evidence=f"runtime editRuns=0, dispatch editRuns={window.dispatch_edit_runs}",
+                why="Only the L4 dispatch lane is observable; runtime source edits leave no measured sample",
+                remediation="Confirm implementer sub-agents are actually dispatched for code work",
+                verify="grep -c 'turn.tool' ~/.deneb/agent-logs/*.jsonl",
+                priority=35.0,
+            )
+        )
+    return score, Evidence("process-impact-first", "measured", detail), findings
+
+
 def _score_timescale(
     genesis: GenesisWindow, meta: MetaWindow, health: dict[str, Any]
 ) -> tuple[float, Evidence, list[Finding]]:
@@ -541,6 +625,7 @@ def evaluate_process(
     meta = load_meta_window(data_path)
     watch = load_watch_window(data_path)
     transfer = load_transfer_window(data_path)
+    impact = load_impact_first_window(data=data_path)
 
     scores = [
         ("acceptor-trust", "Acceptor trust", 16, *_score_acceptor(genesis, health, watch),
@@ -551,18 +636,23 @@ def evaluate_process(
          "CoEvoSkills/BabelJudge accuracy + misses + falseRejects"),
         ("preference-collapse", "Preference collapse", 8, *_score_preference_collapse(judge),
          "BabelJudge byCategory accuracy spread"),
-        ("swap-consistency", "Swap consistency", 10, *_score_swap_consistency(judge),
+        ("swap-consistency", "Swap consistency", 7, *_score_swap_consistency(judge),
          "BabelJudge run-to-run byClass stability (order/swap proxy)"),
-        ("probe-coverage", "Probe coverage", 6, *_score_probe_coverage(judge),
+        ("probe-coverage", "Probe coverage", 4, *_score_probe_coverage(judge),
          "BabelJudge byClass coverage breadth"),
         ("timescale-turn", "Timescale turn", 12, *_score_timescale(genesis, meta, health),
          "MetaSkill-Evolve L1+L2 activity"),
-        ("ability-transfer", "Ability transfer", 12, *_score_ability_transfer(transfer, genesis, health),
+        ("ability-transfer", "Ability transfer", 9, *_score_ability_transfer(transfer, genesis, health),
          "EvoAgentBench validation∩evolve coverage + diversity"),
         ("anti-collapse", "Anti-collapse", 14, *_score_anti_collapse(genesis, meta, health),
          "Thrash off + parametric streak penalty"),
+        ("impact-first", "Impact first", 8, *_score_impact_first(impact),
+         "Dependency-graph check before the first source edit (both coding lanes)"),
     ]
-    # weights: 16+10+12+8+10+6+12+12+14 = 100
+    # weights: 16+10+12+8+7+4+12+9+14+8 = 100. The 8 points for impact-first come
+    # off the three proxy-ceilinged metrics (swap-consistency, probe-coverage,
+    # ability-transfer): each is a stand-in until its dedicated corpus lands and
+    # is capped below 60 anyway, while impact-first reads real per-run artifacts.
     metrics: list[Metric] = []
     evidence: list[Evidence] = []
     for mid, title, weight, score, ev, findings, intent in scores:

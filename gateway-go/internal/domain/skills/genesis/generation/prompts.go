@@ -227,6 +227,7 @@ const skillJudgeSystemPrompt = `당신은 AI 에이전트 스킬 개선의 품�
 // revision stays operator-side until a dispatch-outcome bench exists (the
 // deterministic gate a rotation entry requires).
 const dispatchContractPrompt = `## 계약 (오퍼레이터 승인 2026-07-12)
+- **첫 단계: 파급 범위 확인.** 소스 심볼을 편집하기 전에 ` + "`codegraph impact <심볼>`" + ` 를 최소 1회 돌려 무엇이 깨지는지 먼저 본다 (워크트리에 인덱스가 시드돼 있다; 없으면 ` + "`codegraph sync .`" + `). 심볼 본문은 파일 전체 읽기 대신 ` + "`codegraph node <심볼>`" + `, 호출 관계는 ` + "`codegraph callers/callees`" + `, 이름을 모르는 영역은 ` + "`codegraph explore`" + ` 다중 토큰. 파일을 통째로 읽어 창을 채우면 앞 맥락이 밀려나 잘못된 심볼을 고치게 된다 — 순서가 곧 정확도다. 인덱스가 없어 확인하지 못했다면 PR 본문에 그 사실을 쓰고, 확인한 척하지 마라.
 - 이 워크트리에서만 편집. CLAUDE.md의 게이트 전부 준수: make check(또는 스코프 게이트) + 게이트웨이 동작 변경 시 live-test smoke까지.
 - 게이트 그린이면 scripts/committer로 커밋 → push → PR(본문 3섹션+푸터) → 체크 그린 대기 → scripts/dev/pr.sh land로 직접 랜딩.
 - 구현이 부적절하다고 판단되면(근거 부족·리스크 과다·원인이 우리 소스 밖) 아무것도 랜딩하지 말고, 그 판단 사유 1~3문장을 **워크트리 루트의 ` + "`.dispatch-decline.md`" + ` 파일**로 남겨라(커밋 금지) — 호출 스크립트가 사유를 결과 원장에 승격한다. 마지막 메시지에도 같은 요지를 남겨라.

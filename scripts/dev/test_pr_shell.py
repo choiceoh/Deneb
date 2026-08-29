@@ -51,6 +51,12 @@ class PRShellTests(unittest.TestCase):
             #!/usr/bin/env bash
             printf 'git %s\n' "$*" >> "$FAKE_LOG"
             case "$*" in
+              "rev-parse --quiet --verify HEAD")
+                printf '%s\n' "${GIT_HEAD_OID:-}"
+                ;;
+              "rev-parse --show-toplevel")
+                printf '%s\n' "${GIT_TOPLEVEL:-}"
+                ;;
               "rev-parse --quiet --verify refs/heads/"*)
                 [[ -n "${GIT_LOCAL_OID:-head111}" ]] || exit 1
                 printf '%s\n' "${GIT_LOCAL_OID:-head111}"
@@ -79,6 +85,7 @@ class PRShellTests(unittest.TestCase):
             "GH_URL": "https://example.test/pr/42",
             "GIT_LOCAL_OID": "head111",
             "GIT_ANCESTOR_RC": "0",
+            "PR_ATTACH_RETRY_DELAY": "0",
         }
         defaults.update(values)
         return isolated_env(self.home, self.bin, **defaults)
@@ -97,8 +104,30 @@ class PRShellTests(unittest.TestCase):
                 self.log.unlink(missing_ok=True)
                 proc = self.invoke(*args)
                 self.assertEqual(proc.returncode, 2)
-                self.assertIn("{watch|land} <pr-number>", proc.stderr)
+                self.assertIn("{watch|land|attach} <pr-number>", proc.stderr)
         self.assertEqual(self.calls(), [])
+
+    def test_attach_skips_when_the_checkout_is_not_at_the_pr_head(self) -> None:
+        """A brief computed from the wrong tree would describe the wrong code."""
+        proc = self.invoke("attach", "42", env=self.env(GIT_HEAD_OID="other222"))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("impact brief skipped", proc.stderr)
+        self.assertNotIn("gh pr edit", "\n".join(self.calls()))
+        # One retry against the API lag, then it gives up rather than guessing.
+        self.assertEqual(
+            len([c for c in self.calls() if "--json headRefOid" in c]), 2, self.calls()
+        )
+
+    def test_land_is_not_blocked_when_the_brief_cannot_be_built(self) -> None:
+        """Review evidence is best-effort; a green PR still lands without it."""
+        proc = self.invoke("land", "42", env=self.env(GIT_HEAD_OID="head111", GIT_TOPLEVEL=""))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("PR #42 landed", proc.stdout)
+
+    def test_watch_stays_a_pure_poll(self) -> None:
+        """watch is called repeatedly; the impact brief belongs on land, not here."""
+        self.invoke("watch", "42")
+        self.assertEqual(self.calls(), ["gh pr checks 42 --watch --interval 30"])
 
     def test_watch_green_reports_success_without_extra_api_calls(self) -> None:
         proc = self.invoke("watch", "42")
