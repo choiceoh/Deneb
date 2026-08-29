@@ -13,6 +13,7 @@ import ai.deneb.ui.chat.composables.HeartbeatBanner
 import ai.deneb.ui.chat.composables.PendingSmsBanners
 import ai.deneb.ui.chat.composables.QuestionInput
 import ai.deneb.ui.chat.composables.ServiceSelector
+import ai.deneb.ui.chat.composables.WaitingResponseRow
 import ai.deneb.ui.chat.composables.WorkReportBanner
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
@@ -28,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.ic_service_anthropic
 import kotlinx.collections.immutable.persistentListOf
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 /**
  * Fixtures for the chat's TRANSIENT-STATE components — error banner, heartbeat /
@@ -246,6 +249,47 @@ internal fun chatInputBody(scheme: ColorScheme) {
                     textState = TextFieldValue(""),
                     onTextStateChange = {},
                     isLoading = true,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The waiting row's status + elapsed suffix.
+ *
+ * Reported from the device 2026-08-30: "뭐뭐하는중 N초" does not sit level. The
+ * status text centers inside the indicator Row (the star is taller than one line
+ * of text) while the " · N초" suffix top-aligns against the outer Row, so the two
+ * 14sp runs land on different baselines. Both one-line and two-line statuses are
+ * rendered because the current code switches alignment between them.
+ */
+@Composable
+internal fun waitingRowBody(scheme: ColorScheme) {
+    val longAgo = TimeSource.Monotonic.markNow() - 92.seconds
+    MaterialTheme(colorScheme = scheme) {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.width(412.dp)) {
+                DenebSectionLabel("상태 한 줄 + 경과", Modifier.padding(start = 24.dp, top = 16.dp))
+                WaitingResponseRow(
+                    executingTools = persistentListOf(),
+                    isStatusOnly = true,
+                    statusText = "메일 확인 중",
+                    turnStart = longAgo,
+                )
+
+                DenebSectionLabel("상태 두 줄 + 경과", Modifier.padding(start = 24.dp, top = 16.dp))
+                WaitingResponseRow(
+                    executingTools = persistentListOf(),
+                    isStatusOnly = true,
+                    statusText = "거래 내역과 계좌 변경 여부를 대조하면서 최근 견적서도 같이 확인하는 중",
+                    turnStart = longAgo,
+                )
+
+                DenebSectionLabel("도구 실행 중 + 경과", Modifier.padding(start = 24.dp, top = 16.dp))
+                WaitingResponseRow(
+                    executingTools = persistentListOf("wiki" to "금호타이어"),
+                    turnStart = longAgo,
                 )
             }
         }

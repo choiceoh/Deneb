@@ -223,6 +223,7 @@ fun main() {
     renderScreen("chat_states_light.png", "chat_states", LightColorScheme, 824, 2300)
     renderScreen("chat_input_dark.png", "chat_input", DarkColorScheme, 824, 900)
     renderScreen("chat_input_light.png", "chat_input", LightColorScheme, 824, 900)
+    renderScreen("waiting_row_dark.png", "waiting_row", DarkColorScheme, 824, 700)
     renderScreen("session_drawer_dark.png", "session_drawer", DarkColorScheme, 720, 1440)
     renderScreen("session_drawer_search_dark.png", "session_drawer_search", DarkColorScheme, 720, 1440)
     renderScreen("session_drawer_actions_dark.png", "session_drawer_actions", DarkColorScheme, 720, 1440)

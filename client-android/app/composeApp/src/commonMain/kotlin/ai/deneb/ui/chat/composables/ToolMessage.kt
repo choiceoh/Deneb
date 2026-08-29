@@ -127,6 +127,11 @@ internal fun WaitingResponseRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PulsingStatusIndicator(
+            // Yield the suffix its intrinsic width instead of taking the whole
+            // row: a wrapping status used to push " · 1분 32초" past the edge,
+            // where clipToBounds simply erased it — the elapsed readout vanished
+            // exactly on the long-running turns that need it most.
+            modifier = Modifier.weight(1f, fill = false).alignByBaseline(),
             toolSummary = summary,
             isStatusOnly = effectiveStatusOnly,
             dotColor = MaterialTheme.colorScheme.primary, // sky-blue cool accent — a touch of life
@@ -139,18 +144,17 @@ internal fun WaitingResponseRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = DenebType.rowSubtitle,
                 maxLines = 1,
-                // Same rule as the star in PulsingStatusIndicator: top-align ONLY when
-                // the status can wrap to two lines, so the suffix stays on the first
-                // line. Top-aligning it unconditionally lifted it ABOVE the status
-                // baseline on the common one-line row — the star makes the indicator
-                // row taller than its own text, so that text centers inside it while a
-                // top-aligned sibling does not. Inheriting the Row's CenterVertically
-                // puts both 14sp rowSubtitle runs on the same line.
-                modifier = if (effectiveStatusOnly && summary != null) {
-                    Modifier.align(Alignment.Top)
-                } else {
-                    Modifier
-                },
+                modifier = Modifier.alignByBaseline(),
+                // No per-case alignment: inherit the Row's CenterVertically like the
+                // indicator beside it. The old top-align branch was meant to keep the
+                // suffix on line one of a wrapping status, but measured on the dark
+                // render (2026-08-30) it did neither job — it sat the suffix 2px above
+                // the status baseline on the common one-line row (reported from the
+                // device as "수평이 안 맞다"), while the two-line case it existed for
+                // never showed the suffix at all, because the status consumed the row
+                // and clipToBounds cut it off. The weight above fixes the wrapping
+                // case; centering fixes the alignment. The tool-progress branch, which
+                // already inherited CenterVertically, measures 0px off.
             )
         }
     }
