@@ -7,8 +7,7 @@ chat 구현을 임포트하지 않고 대화 턴을 부르도록, 요청/응답�
 ## 진입점과 책임
 
 - `chatport.go` — 동기 턴 계약: `SyncRequest`, `SyncResult`, `DeliveryContext`,
-  `ProviderConfig`, `RoutingConfig`, `ToolStreamEvent`, `TypingSignaler`,
-  `ReplyDirectives`.
+  `ToolStreamEvent`, `TypingSignaler`, `ReplyDirectives`.
 - `transcript_contracts.go` — transcript 계약: `ChatMessage`,
   `NewTextChatMessage`, `ChatAttachment`, `SearchResult`, `MatchedMsg`,
   `MarshalJSONString`.
@@ -19,6 +18,8 @@ chat 구현을 임포트하지 않고 대화 턴을 부르도록, 요청/응답�
 - `activation_notice.go` — deferred tool 활성화 공지 포맷/파서:
   `FormatFetchActivationNotice`, `ParseActivationNotices`,
   `ExtractActivationNotices`.
+- 모델 provider 설정과 live model picker 제어 계약은 형제 leaf 패키지
+  `internal/pipeline/modelport`가 소유한다.
 
 ## 의존 방향과 불변조건
 

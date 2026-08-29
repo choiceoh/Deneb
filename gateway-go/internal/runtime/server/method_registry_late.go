@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/modelport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
@@ -202,7 +202,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				return s.roleHealth.Verdicts()
 			},
 			RefreshCodingModelConsumers: s.refreshCodingModelConsumers,
-			ProviderConfigs: func() map[string]chatport.ProviderConfig {
+			ProviderConfigs: func() map[string]modelport.ProviderConfig {
 				return configresolve.LoadProviderConfigs(s.logger)
 			},
 			// 24h per-model usage for the picker rows (nil-safe on the writer).

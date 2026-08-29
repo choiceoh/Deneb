@@ -14,7 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/modelport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -125,11 +125,11 @@ var miniappProbeClient = &http.Client{Timeout: miniappModelHealthTimeout}
 // Controller owns model-picker discovery, health, selection, and persistence.
 type Controller struct {
 	modelRegistry               *modelrole.Registry
-	chatHandler                 chatport.ModelController
+	chatHandler                 modelport.ModelController
 	logger                      *slog.Logger
 	roleHealthVerdicts          func() map[string]string
 	refreshCodingModelConsumers func()
-	providerConfigs             func() map[string]chatport.ProviderConfig
+	providerConfigs             func() map[string]modelport.ProviderConfig
 	usageStats                  func(sinceMs int64) []agentlog.ModelStat
 	sessions                    sessionBinder
 
@@ -149,11 +149,11 @@ const usageCacheTTL = time.Minute
 // ControllerConfig contains the live model-system boundaries used by Controller.
 type ControllerConfig struct {
 	Registry                    *modelrole.Registry
-	ChatHandler                 chatport.ModelController
+	ChatHandler                 modelport.ModelController
 	Logger                      *slog.Logger
 	RoleHealthVerdicts          func() map[string]string
 	RefreshCodingModelConsumers func()
-	ProviderConfigs             func() map[string]chatport.ProviderConfig
+	ProviderConfigs             func() map[string]modelport.ProviderConfig
 	// UsageStats aggregates per-model run/token counters since a cutoff
 	// (agentlog.Writer.AggregateByModel). nil = no usage enrichment.
 	UsageStats func(sinceMs int64) []agentlog.ModelStat
