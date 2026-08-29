@@ -100,6 +100,11 @@ func (s *Server) forgetSessionExtras(key string) {
 	dropStoredSessionListPin(key)
 	dropStoredSessionLabel(key)
 	dropStoredSessionPin(key)
+	// Release the conversation's worktree BEFORE dropping its repo binding —
+	// the release needs the binding to know which repository the tree belongs
+	// to. Cygnus-only and dirty-tree guards live in releaseSessionWorktree.
+	s.releaseSessionWorktree(key)
+	s.dropStoredSessionRepo(key)
 	if path, err := sessionFocusStorePath(); err == nil && loadSessionFocus(path) == key {
 		_ = saveSessionFocus(path, "")
 	}

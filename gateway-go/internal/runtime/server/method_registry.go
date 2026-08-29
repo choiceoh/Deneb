@@ -1021,27 +1021,45 @@ func (s *Server) earlyProviderMethods() []map[string]rpcutil.HandlerFunc {
 
 // protectedRepoRoots lists repository roots the agent must never be pointed at.
 //
-// The gateway's own checkout is production: an auto-deploy timer pulls, builds,
-// and hot-swaps there, and CLAUDE.md forbids agent branches, worktrees, and
-// manual builds in it. Resolved from the running process's working directory
-// (the same way /update finds its repo root) so this holds wherever the gateway
-// is deployed, rather than hard-coding one operator's path.
+// The gateway's own repository is production: an auto-deploy timer pulls,
+// builds, and hot-swaps there, and CLAUDE.md forbids agent branches, worktrees,
+// and manual builds in it. Resolved from the running process rather than
+// hard-coded, so it holds wherever the gateway is deployed.
+//
+// ★Both the current tree AND the MAIN checkout are protected. A gateway started
+// from a worktree (a dev instance, a test harness) has `--show-toplevel` =
+// that worktree, which would leave the production checkout wide open — observed
+// live: `/home/choiceoh/deneb` registered successfully from a worktree-run
+// gateway. `--git-common-dir` points at the main repository's .git regardless of
+// which worktree is running, and its parent is the checkout that must not be
+// touched.
 func protectedRepoRoots() []string {
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil
 	}
-	// Bounded: this runs during startup wiring, and a wedged git must not hold
-	// the gateway's registration phase open.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "git", "-C", wd, "rev-parse", "--show-toplevel").Output()
-	if err != nil {
-		return nil
+
+	// Explicit argument lists rather than a variadic helper: every argument
+	// here is a literal, and spreading a slice into exec reads as tainted input
+	// to static analysis.
+	var roots []string
+	if out, err := exec.CommandContext(ctx, "git", "-C", wd, "rev-parse", "--show-toplevel").Output(); err == nil {
+		if top := strings.TrimSpace(string(out)); top != "" {
+			roots = append(roots, top)
+		}
 	}
-	root := strings.TrimSpace(string(out))
-	if root == "" {
-		return nil
+	// The main checkout: parent of the shared .git directory. For a plain
+	// (non-worktree) checkout this is the same path as above, which the store
+	// de-duplicates by comparing resolved paths.
+	if out, err := exec.CommandContext(ctx, "git", "-C", wd,
+		"rev-parse", "--path-format=absolute", "--git-common-dir").Output(); err == nil {
+		if common := strings.TrimSpace(string(out)); common != "" {
+			if main := filepath.Dir(common); main != "" && main != "." {
+				roots = append(roots, main)
+			}
+		}
 	}
-	return []string{root}
+	return roots
 }

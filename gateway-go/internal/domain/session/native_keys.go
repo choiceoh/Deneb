@@ -165,6 +165,15 @@ func IsSystemSession(sessionKey string) bool {
 	return strings.HasPrefix(sessionKey, "system:")
 }
 
+// IsCompanionWorkSession reports whether a conversation belongs to the Cygnus
+// companion surface. Cygnus threads are the disposable coding surface, so
+// automatic cleanup (per-conversation worktrees) applies to them and not to
+// 업무 conversations, whose working trees are not something a delete sweep
+// should decide about.
+func IsCompanionWorkSession(sessionKey string) bool {
+	return strings.HasPrefix(sessionKey, CompanionWorkSessionPrefix)
+}
+
 // IsCronSession reports whether a run is a scheduled job.
 func IsCronSession(sessionKey string) bool {
 	return strings.HasPrefix(sessionKey, "cron:")

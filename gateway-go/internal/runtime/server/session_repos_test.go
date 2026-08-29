@@ -1,6 +1,8 @@
 package server
 
 import (
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -139,5 +141,41 @@ func TestBindSessionRepoRejectsUnregisteredRepo(t *testing.T) {
 	}
 	if err := s.BindSessionRepo("", "whatever"); err == nil {
 		t.Error("an empty session key must fail")
+	}
+}
+
+// Only Cygnus conversations are cleaned up automatically (operator decision):
+// a 업무 conversation's tree is not something a delete sweep should decide about.
+func TestReleaseSessionWorktreeOnlyTouchesCygnusSessions(t *testing.T) {
+	store, repo := registeredRepo(t)
+	s := &Server{ServerRuntime: &ServerRuntime{
+		codeRepos:    store,
+		sessionRepos: map[string]string{"client:main:work": repo.ID},
+	}}
+	s.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	// A non-Cygnus session must be left entirely alone — no lookup, no removal.
+	s.releaseSessionWorktree("client:main:work")
+	if got := s.BoundSessionRepo("client:main:work"); got != repo.ID {
+		t.Errorf("binding = %q, want it untouched", got)
+	}
+}
+
+// Forgetting a conversation must clear the binding in BOTH places: the sidecar
+// and the in-memory map the run path reads. Clearing only the file would leave
+// a deleted conversation resolving to a workspace until the next restart.
+func TestDropStoredSessionRepoClearsMemoryToo(t *testing.T) {
+	store, repo := registeredRepo(t)
+	s := &Server{ServerRuntime: &ServerRuntime{
+		codeRepos:    store,
+		sessionRepos: map[string]string{"client:cygnus:a": repo.ID},
+	}}
+
+	s.dropStoredSessionRepo("client:cygnus:a")
+	if got := s.BoundSessionRepo("client:cygnus:a"); got != "" {
+		t.Errorf("binding = %q, want cleared in memory", got)
+	}
+	if got := s.SessionWorkspaceDir("client:cygnus:a"); got != "" {
+		t.Errorf("workspace = %q, want the default after forgetting", got)
 	}
 }
