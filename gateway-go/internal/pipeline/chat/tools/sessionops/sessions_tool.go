@@ -217,6 +217,16 @@ func resolveHistoryKey(transcript toolport.TranscriptStore, raw string) (key str
 	return key, anchor, candidates
 }
 
+// dateNote renders a header date suffix for a unix-milli timestamp, or "" when
+// the timestamp is unknown. One formatter for both the history window and the
+// search results so the two headers cannot drift apart.
+func dateNote(ts int64) string {
+	if ts <= 0 {
+		return ""
+	}
+	return " (" + time.UnixMilli(ts).Format("2006-01-02") + ")"
+}
+
 // firstTimestamp returns the first nonzero message timestamp in the slice.
 func firstTimestamp(msgs []toolport.ChatMessage) int64 {
 	for _, m := range msgs {
@@ -303,12 +313,9 @@ func toolSessionsHistory(transcript toolport.TranscriptStore) toolport.ToolFunc 
 			// the reader confirms WHAT happened and erases WHEN (measured on
 			// temporal-reasoning: opens fired on 26/64 questions yet the
 			// category lagged its ceiling until the date was restored here).
-			dateNote := ""
-			if ts := firstTimestamp(all[start:end]); ts > 0 {
-				dateNote = " (" + time.UnixMilli(ts).Format("2006-01-02") + ")"
-			}
+			header := dateNote(firstTimestamp(all[start:end]))
 			fmt.Fprintf(&sb, "Session %q%s — messages %d..%d of %d (window around #%d):\n\n",
-				sessionKey, dateNote, start+1, end, total, anchor)
+				sessionKey, header, start+1, end, total, anchor)
 			budget := 24000
 			for i, msg := range all[start:end] {
 				content := msg.SearchableText()
@@ -468,8 +475,8 @@ func toolSessionsSearch(transcript toolport.TranscriptStore) toolport.ToolFunc {
 // taken from the first match's message timestamp ("" when unknown).
 func sessionMatchDate(r toolport.SearchResult) string {
 	for _, m := range r.Matches {
-		if m.Message.Timestamp > 0 {
-			return " (" + time.UnixMilli(m.Message.Timestamp).Format("2006-01-02") + ")"
+		if note := dateNote(m.Message.Timestamp); note != "" {
+			return note
 		}
 	}
 	return ""
