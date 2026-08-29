@@ -762,3 +762,34 @@ body.cygnus-window {
     animation: none !important;
   }
 }
+
+/* Repository picker in the titlebar — which tree this conversation works in.
+ * Sized down to sit in a title row rather than a settings form, and allowed to
+ * shrink first: the thread name and window controls matter more when the window
+ * is narrow. */
+.cygnus-root .repo-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.cygnus-root .repo-picker > .field {
+  height: 24px;
+  padding: 0 6px;
+  font-size: 11px;
+  max-width: 160px;
+  min-width: 0;
+}
+.cygnus-root .repo-picker-path {
+  width: 220px;
+}
+/* The gateway's refusal names its reason (not a repository, protected
+   production checkout) — show it, do not reduce it to a red border. */
+.cygnus-root .repo-picker-error {
+  font-size: 11px;
+  color: var(--due);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
