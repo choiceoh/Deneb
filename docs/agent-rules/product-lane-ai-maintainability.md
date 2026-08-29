@@ -55,3 +55,23 @@ point, the boundary invariant, and the focused verification command before editi
   read git history, checked-in source, fixtures, and local logs, but it must not
   write baselines, snapshots, JSONL ledgers, or dispatch state unless the command
   is explicitly a documented write path with operator approval.
+
+## Python Eval Harnesses
+
+- Source anchors: `scripts/eval/reader_tool_eval.py`, `scripts/eval/depth_probe.py`.
+- Entrypoints: `parse_directive`, `resolve_ref`, `render_window`, `search_sessions`,
+  `serve_directive`, `parse_verdict`, `summarize`.
+- Tests: `scripts/eval/test_reader_tool_eval.py`.
+- Verify: `make python-test`, `make python-lint`. An end-to-end run needs the
+  wormhole and a retrieval snapshot; see the module docstring.
+- Boundary invariant: an eval harness IS the measurement instrument, so the half
+  that decides a score must be pure and pinned by tests — protocol parsing, ref
+  resolution, window and search rendering, verdict parsing, aggregation. Only
+  model I/O may be non-deterministic. Two rules follow, both learned by losing
+  runs: a harness must never score an ungraded question as WRONG
+  (`parse_verdict` returns a separate `UNSCORED`, surfaced in the summary —
+  folding it into INCORRECT silently deflates every number the run reports),
+  and it must refuse a model the wormhole is not serving rather than let a dead
+  pin route somewhere else. Harnesses live in the repo, never only in `/tmp`:
+  the previous reader harness produced the whole 44.5 to 77.0 ladder and was
+  lost with a tmp sweep.
