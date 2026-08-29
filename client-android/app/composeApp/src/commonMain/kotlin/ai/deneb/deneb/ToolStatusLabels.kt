@@ -21,6 +21,10 @@ internal object ToolStatusLabels {
      */
     const val REVIEWING = "결과 검토 중…"
 
+    /** A turn started elsewhere (phone/desktop) is still running in the opened
+     * conversation — the foreign-turn watch row (DenebClientSessions). */
+    const val WORKING = "작업 진행 중…"
+
     /**
      * Waiting-chip label while the client's SSE connection dropped mid-turn and
      * it is polling the transcript for the answer the (detached) server run is

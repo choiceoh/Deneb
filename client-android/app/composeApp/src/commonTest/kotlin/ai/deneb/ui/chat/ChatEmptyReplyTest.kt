@@ -57,4 +57,17 @@ class ChatEmptyReplyTest {
             ).hasUnansweredUserTurn(),
         )
     }
+
+    @Test
+    fun executingStatusRowSuppressesTheUnansweredAffordance() {
+        // A foreign-turn watch row narrates a LIVE run — "응답이 비었습니다 /
+        // 다시 생성" beside it contradicts the row and would double-send.
+        val watching = listOf(
+            msg(History.Role.USER, "보고서 정리해줘"),
+            msg(History.Role.TOOL_EXECUTING, "foreign-turn"),
+        )
+        assertFalse(watching.silentlyUnanswered())
+        // Same shape without the narration row IS the silent-death case.
+        assertTrue(listOf(msg(History.Role.USER, "보고서 정리해줘")).silentlyUnanswered())
+    }
 }

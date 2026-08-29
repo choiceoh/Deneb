@@ -236,11 +236,16 @@ fun List<History>.hasUnansweredUserTurn(): Boolean {
     return lastAnswer < lastUser
 }
 
+/** [hasUnansweredUserTurn] minus live narration: an executing/status row (the
+ * foreign-turn watch, a recovery poll) means the turn is NOT silently dead —
+ * offering 다시 생성 beside it would double-send into the running turn. */
+fun List<History>.silentlyUnanswered(): Boolean = none { it.role == History.Role.TOOL_EXECUTING } && hasUnansweredUserTurn()
+
 /**
  * Silent-death recovery: the turn finished, nothing rendered, no error banner —
  * and the user did not stop it themselves.
  */
-fun ChatUiState.needsEmptyReplyRecovery(): Boolean = !isLoading && !isRestoring && error == null && !stoppedBeforeAnswer && history.hasUnansweredUserTurn()
+fun ChatUiState.needsEmptyReplyRecovery(): Boolean = !isLoading && !isRestoring && error == null && !stoppedBeforeAnswer && history.silentlyUnanswered()
 
 @Immutable
 data class ToolCallInfo(

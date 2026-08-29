@@ -134,6 +134,11 @@ class DenebGatewayClient private constructor(
     )
 
     internal val _chatHistory = MutableStateFlow<List<History>>(emptyList())
+
+    // Poll job for a turn that was already running (started from another
+    // surface) when the open conversation's transcript loaded — owned by
+    // DenebClientSessions' foreign-turn watch. One at a time.
+    internal var foreignTurnWatch: kotlinx.coroutines.Job? = null
     override val chatHistory: StateFlow<List<History>> = _chatHistory
 
     // Guards _chatHistory against a background transcript load clobbering an
