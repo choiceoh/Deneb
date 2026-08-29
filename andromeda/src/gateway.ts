@@ -511,6 +511,9 @@ export interface ChatToolEvent {
   state: string; // "started" | "completed"
   tool: string;
   toolUseId: string;
+  // Gateway-owned Korean name for the tool (toolport.ChatToolLabel). Absent for
+  // an uncurated tool or an older gateway — the chip falls back to the id.
+  label?: string;
   detail?: string;
   isError?: boolean;
   // Gateway-owned one-line digest of the result; `completed` frames only.
@@ -619,6 +622,7 @@ export async function chatStream(
             state: asStr(obj.state) ?? "",
             tool,
             toolUseId: asStr(obj.toolUseId) ?? "",
+            label: asStr(obj.label),
             detail: asStr(obj.detail),
             isError: asBool(obj.isError),
             resultSummary: asStr(obj.resultSummary),

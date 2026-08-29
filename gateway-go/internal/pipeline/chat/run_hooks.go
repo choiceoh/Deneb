@@ -138,14 +138,18 @@ func wireStreamHooks(
 			deps.callbacks.emitAgentFn("tool.start", params.SessionKey, params.ClientRunID, map[string]any{
 				"tool":      name,
 				"toolUseId": toolUseID,
-				"detail":    toolport.ToolStreamDetail(name, input),
-				"ts":        time.Now().UnixMilli(),
+				// Same Korean name the owning stream sends, so a spectating
+				// window narrates a turn identically to the one running it.
+				"label":  toolport.ChatToolLabel(name),
+				"detail": toolport.ToolStreamDetail(name, input),
+				"ts":     time.Now().UnixMilli(),
 			})
 		})
 		hc.OnToolResult(func(name, toolUseID, result string, isErr bool) {
 			deps.callbacks.emitAgentFn("tool.end", params.SessionKey, params.ClientRunID, map[string]any{
 				"tool":      name,
 				"toolUseId": toolUseID,
+				"label":     toolport.ChatToolLabel(name),
 				"isError":   isErr,
 				"summary":   toolport.SummarizeToolResult(result),
 				"ts":        time.Now().UnixMilli(),
