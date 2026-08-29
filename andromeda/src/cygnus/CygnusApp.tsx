@@ -3,7 +3,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { DataProviderScope } from "@/crud";
 import { denebDataProvider } from "@/dataProvider";
 import { useDesktopChrome } from "@/desktopChrome";
-import { type GatewayConfig, loadConfig, saveConfig } from "@/gateway";
+import {
+  type CodeRepo,
+  type GatewayConfig,
+  getSessionRepo,
+  listRepos,
+  loadConfig,
+  registerRepo,
+  saveConfig,
+  setSessionRepo,
+} from "@/gateway";
 import { useEvents, useChat } from "@/hooks";
 import { parseUiSubmission } from "@/markdown/denebUiParse";
 import { getString, setString } from "@/storage";
@@ -19,6 +28,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Icon } from "@/components/Icon";
 import { LiveDot } from "@/components/LiveDot";
 import { ModelPicker } from "@/components/ModelPicker";
+import { RepoPicker } from "@/components/RepoPicker";
 import { SessionDrawer } from "@/components/SessionDrawer";
 import { UiSubmissionBubble } from "@/components/UiSubmission";
 import { WindowControls } from "@/components/WindowControls";
@@ -283,6 +293,54 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
 
   const lastId = turns.at(-1)?.id;
   const lastAssistantId = [...turns].reverse().find((t) => t.role === "assistant")?.id;
+  // Which repository this conversation works in. Loaded per conversation: the
+  // binding is server-side state, so switching threads must re-read it rather
+  // than carry the previous thread's answer.
+  const [repos, setRepos] = useState<CodeRepo[]>([]);
+  const [repoId, setRepoId] = useState("");
+  useEffect(() => {
+    if (!connected) return;
+    let cancelled = false;
+    void listRepos(cfg)
+      .then((rows) => {
+        if (!cancelled) setRepos(rows);
+      })
+      .catch(() => {}); // an older gateway has no allowlist — stay empty
+    return () => {
+      cancelled = true;
+    };
+  }, [cfg, connected]);
+  useEffect(() => {
+    if (!connected || !sessionKey) return;
+    let cancelled = false;
+    void getSessionRepo(cfg, sessionKey)
+      .then((r) => {
+        if (!cancelled) setRepoId(r.repoId ?? "");
+      })
+      .catch(() => {
+        if (!cancelled) setRepoId("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cfg, connected, sessionKey]);
+
+  async function bindRepo(id: string) {
+    const previous = repoId;
+    setRepoId(id); // optimistic — the picker should not lag the click
+    try {
+      await setSessionRepo(cfg, sessionKey, id);
+    } catch {
+      setRepoId(previous); // the gateway refused; do not show a binding that is not real
+    }
+  }
+
+  async function addRepo(path: string) {
+    const { repo } = await registerRepo(cfg, path);
+    setRepos(await listRepos(cfg));
+    await bindRepo(repo.id); // registering to work somewhere means working there
+  }
+
   const sessionLabel = sessions.find((s) => s.key === sessionKey)?.label || "새 스레드";
 
   return (
@@ -291,6 +349,15 @@ function CygnusSurface({ cfg, connected }: { cfg: GatewayConfig; connected: bool
         <DenebStar size={16} />
         <span className="cy-title">Cygnus</span>
         <span className="cy-title-session">{sessionLabel}</span>
+        {connected ? (
+          <RepoPicker
+            repos={repos}
+            value={repoId}
+            busy={busy}
+            onSelect={(id) => void bindRepo(id)}
+            onRegister={addRepo}
+          />
+        ) : null}
         <span className="cy-sp" data-tauri-drag-region />
         <button
           className="cy-tbtn"

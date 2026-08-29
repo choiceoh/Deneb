@@ -189,6 +189,41 @@ export const updatePrompt = (cfg: GatewayConfig, id: string, text: string) =>
 export const resetPrompt = (cfg: GatewayConfig, id: string) =>
   callRpc<PromptDetailOut>(cfg, "miniapp.prompts.reset", { id });
 
+// --- Code repositories (miniapp.repos.*) — where the agent may work ---
+
+// One registered repository. Mirrors handlerminiapp/coderepos.codeRepoOut.
+export interface CodeRepo {
+  id: string;
+  name: string;
+  path: string;
+  addedAtMs?: number;
+}
+
+export const listRepos = (cfg: GatewayConfig): Promise<CodeRepo[]> =>
+  callRpc<{ repos?: CodeRepo[] }>(cfg, "miniapp.repos.list").then((r) => r.repos ?? []);
+
+// Registering is the human step: only what is registered here can be bound to a
+// conversation, and the gateway refuses paths it must never work in (its own
+// production checkout).
+export const registerRepo = (cfg: GatewayConfig, path: string, name?: string) =>
+  callRpc<{ repo: CodeRepo }>(cfg, "miniapp.repos.register", name ? { path, name } : { path });
+
+export const unregisterRepo = (cfg: GatewayConfig, id: string) =>
+  callRpc<{ unregistered: boolean }>(cfg, "miniapp.repos.unregister", { id });
+
+// Point a conversation at a repository. An empty repoId CLEARS the binding —
+// the documented way back to the default workspace, not a missing argument.
+export const setSessionRepo = (cfg: GatewayConfig, sessionKey: string, repoId: string) =>
+  callRpc<{ bound: boolean; repoId: string; path?: string; name?: string }>(cfg, "miniapp.sessions.repo.set", {
+    sessionKey,
+    repoId,
+  });
+
+export const getSessionRepo = (cfg: GatewayConfig, sessionKey: string) =>
+  callRpc<{ bound: boolean; repoId: string; path?: string; name?: string }>(cfg, "miniapp.sessions.repo.get", {
+    sessionKey,
+  });
+
 // --- Sessions (miniapp.sessions.*) — conversation history drawer ---
 
 // One recent conversation row. Mirrors handlerminiapp.sessionRowOut (sessions.go).
