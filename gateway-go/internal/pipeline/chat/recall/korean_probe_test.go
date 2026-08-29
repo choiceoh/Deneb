@@ -111,7 +111,14 @@ func TestKoreanRecallProbe(t *testing.T) {
 		exportFile = f
 	}
 
-	hit := 0
+	// gold-in-block asks whether SOME page under the gold path was rendered.
+	// That over-counts: gold_paths are path substrings and a third of them name
+	// a project FOLDER, so a sibling page (로그.md) satisfies it while the page
+	// holding the answer (대표.md) is absent — measured, 3 of 13 excerpt
+	// failures were this. answer-in-block is the honest companion: are the
+	// must_contain tokens actually IN the block. Both are reported; optimizing
+	// against the path metric alone optimizes against a false pass.
+	hit, answerHit, answerable := 0, 0, 0
 	durations := make([]time.Duration, 0, len(cases))
 	for _, c := range cases {
 		start := time.Now()
@@ -129,11 +136,18 @@ func TestKoreanRecallProbe(t *testing.T) {
 				break
 			}
 		}
+		if len(c.MustContain) > 0 {
+			answerable++
+			if blockCarriesTokens(block, c.MustContain) {
+				answerHit++
+			}
+		}
 		if exportFile != nil {
 			line, _ := json.Marshal(map[string]any{
 				"id": c.ID, "category": c.Category, "question": c.Question,
 				"gold_paths": c.GoldPaths, "must_contain": c.MustContain,
 				"must_not": c.MustNot, "block": block, "gold_in_block": found,
+				"answer_in_block": len(c.MustContain) > 0 && blockCarriesTokens(block, c.MustContain),
 			})
 			_, _ = exportFile.Write(append(line, '\n'))
 		}
@@ -152,10 +166,46 @@ func TestKoreanRecallProbe(t *testing.T) {
 		}
 	}
 	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
-	t.Logf("KOREAN_PROBE n=%d gold-in-block=%.1f%% median=%v p90=%v max=%v (deadline %v)",
-		len(cases), 100*float64(hit)/float64(len(cases)),
+	answerPct := 0.0
+	if answerable > 0 {
+		answerPct = 100 * float64(answerHit) / float64(answerable)
+	}
+	t.Logf("KOREAN_PROBE n=%d gold-in-block=%.1f%% answer-in-block=%.1f%% (n=%d) median=%v p90=%v max=%v (deadline %v)",
+		len(cases), 100*float64(hit)/float64(len(cases)), answerPct, answerable,
 		durations[len(durations)/2], durations[(len(durations)*9)/10],
 		durations[len(durations)-1], recallPreflightTimeout)
+}
+
+// blockCarriesTokens reports whether every must_contain requirement is present
+// in the block. "a|b" means either alternative satisfies; comparison folds the
+// spacing and separators a token author never meant to be significant (the
+// token "1500" has to match "1,500V").
+func blockCarriesTokens(block string, mustContain []string) bool {
+	norm := func(s string) string {
+		var b strings.Builder
+		for _, r := range strings.ToLower(s) {
+			switch r {
+			case ' ', '\t', '\n', ',', '(', ')', '·':
+			default:
+				b.WriteRune(r)
+			}
+		}
+		return b.String()
+	}
+	haystack := norm(block)
+	for _, group := range mustContain {
+		ok := false
+		for _, alt := range strings.Split(group, "|") {
+			if a := norm(alt); a != "" && strings.Contains(haystack, a) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func loadKoreanGold(path string) ([]koreanGoldCase, error) {
