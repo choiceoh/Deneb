@@ -35,6 +35,13 @@ func makeMailAnalysisWikiSink(hub *rpcutil.GatewayHub) func(handlermail.WikiAnal
 		if err := mailanalysis.AnalysisUsable(in.Analysis); err != nil {
 			return fmt.Errorf("분석 본문을 위키에 저장할 수 없음: %w", err)
 		}
+		// Same AutoFlow suppression as the autonomous sink: a meeting the MCP
+		// path already wrote a 회의록 page for does not get a second page from the
+		// mail describing it. nil (not an error) — the analysis itself is fine
+		// and the caller must not surface a failure.
+		if covered := autoFlowMeetingCovered(store, in.From, in.Subject); covered != "" {
+			return nil
+		}
 		return store.WritePage(mailAnalysisWikiPath(in.MsgID, in.RelatedProjects), buildMailAnalysisPage(in))
 	}
 }
