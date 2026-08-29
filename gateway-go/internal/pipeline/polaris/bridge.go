@@ -1,17 +1,22 @@
 package polaris
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Compile-time interface compliance.
 var (
 	_ chatport.TranscriptStore                = (*Bridge)(nil)
+	_ chatport.SemanticSessionSearcher        = (*Bridge)(nil)
 	_ chatport.ToolResultReceiptStoreProvider = (*Bridge)(nil)
 )
 
@@ -192,4 +197,45 @@ func (b *Bridge) ensureMigrated(sessionKey string) error {
 		b.logger.Warn("polaris: lazy migration failed", "session", sessionKey, "error", err)
 	}
 	return nil
+}
+
+// SearchSessionsSemantic implements chatport.SemanticSessionSearcher: a
+// meaning-level search over resident sessions' summary embeddings, the same
+// index the recall preflight's summary arm uses (SearchSummariesSemantic).
+// Exposing it through the sessions tool lets the model enumerate PAST
+// CONVERSATIONS BY CONCEPT when keyword search cannot — "병원 몇 번 갔지"
+// whose instances say 피부과/이비인후과 and share no keyword. nil (degrade to
+// keyword-only) when the semantic index is disabled.
+func (b *Bridge) SearchSessionsSemantic(ctx context.Context, excludeKey, query string, limit int) []chatport.SemanticSessionHit {
+	if b == nil || b.store == nil || strings.TrimSpace(query) == "" {
+		return nil
+	}
+	if limit <= 0 {
+		limit = 5
+	}
+	batch := b.store.SearchSummariesSemantic(ctx, excludeKey, []string{query}, limit)
+	if len(batch) == 0 || len(batch[0]) == 0 {
+		return nil
+	}
+	hits := batch[0]
+	out := make([]chatport.SemanticSessionHit, 0, len(hits))
+	seen := make(map[string]struct{}, len(hits))
+	for _, h := range hits {
+		// One line per session: several summary nodes of the same conversation
+		// would otherwise crowd the list the model reads.
+		if _, dup := seen[h.SessionKey]; dup {
+			continue
+		}
+		seen[h.SessionKey] = struct{}{}
+		out = append(out, chatport.SemanticSessionHit{
+			SessionKey: h.SessionKey,
+			Snippet:    textutil.TruncateRunes(h.Content, 200, "..."),
+			At:         h.CreatedAt,
+			Score:      h.Score,
+		})
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
 }

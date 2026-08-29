@@ -1,6 +1,7 @@
 package chatport
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"unicode/utf8"
@@ -208,6 +209,24 @@ type MatchedMsg struct {
 	Index   int           `json:"index"`
 	Message ChatMessage   `json:"message"`
 	Context []ChatMessage `json:"context"`
+}
+
+// SemanticSessionHit is one meaning-level match against a past session's
+// summaries — the session it lives in, a summary snippet, when it was
+// created, and the cosine-backed score.
+type SemanticSessionHit struct {
+	SessionKey string
+	Snippet    string
+	At         int64 // unix milli
+	Score      float64
+}
+
+// SemanticSessionSearcher is the OPTIONAL meaning-search capability a
+// transcript store may offer on top of TranscriptStore: consumers type-assert
+// for it and degrade to keyword search when absent. Kept separate from
+// TranscriptStore so existing implementations and fakes stay valid.
+type SemanticSessionSearcher interface {
+	SearchSessionsSemantic(ctx context.Context, excludeKey, query string, limit int) []SemanticSessionHit
 }
 
 // TranscriptStore is the stable persistence and search boundary shared by

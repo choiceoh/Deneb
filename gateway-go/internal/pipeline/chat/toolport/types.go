@@ -122,4 +122,8 @@ type (
 	SearchResult    = chatport.SearchResult
 	MatchedMsg      = chatport.MatchedMsg
 	TranscriptStore = chatport.TranscriptStore
+	// SemanticSessionSearcher/Hit re-export the optional meaning-search
+	// capability so tools keep importing only toolport.
+	SemanticSessionSearcher = chatport.SemanticSessionSearcher
+	SemanticSessionHit      = chatport.SemanticSessionHit
 )

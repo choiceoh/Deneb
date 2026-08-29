@@ -217,6 +217,16 @@ func resolveHistoryKey(transcript toolport.TranscriptStore, raw string) (key str
 	return key, anchor, candidates
 }
 
+// dateNote renders a header date suffix for a unix-milli timestamp, or "" when
+// the timestamp is unknown. One formatter for both the history window and the
+// search results so the two headers cannot drift apart.
+func dateNote(ts int64) string {
+	if ts <= 0 {
+		return ""
+	}
+	return " (" + time.UnixMilli(ts).Format("2006-01-02") + ")"
+}
+
 // firstTimestamp returns the first nonzero message timestamp in the slice.
 func firstTimestamp(msgs []toolport.ChatMessage) int64 {
 	for _, m := range msgs {
@@ -303,12 +313,9 @@ func toolSessionsHistory(transcript toolport.TranscriptStore) toolport.ToolFunc 
 			// the reader confirms WHAT happened and erases WHEN (measured on
 			// temporal-reasoning: opens fired on 26/64 questions yet the
 			// category lagged its ceiling until the date was restored here).
-			dateNote := ""
-			if ts := firstTimestamp(all[start:end]); ts > 0 {
-				dateNote = " (" + time.UnixMilli(ts).Format("2006-01-02") + ")"
-			}
+			header := dateNote(firstTimestamp(all[start:end]))
 			fmt.Fprintf(&sb, "Session %q%s — messages %d..%d of %d (window around #%d):\n\n",
-				sessionKey, dateNote, start+1, end, total, anchor)
+				sessionKey, header, start+1, end, total, anchor)
 			budget := 24000
 			for i, msg := range all[start:end] {
 				content := msg.SearchableText()
@@ -362,7 +369,7 @@ func toolSessionsHistory(transcript toolport.TranscriptStore) toolport.ToolFunc 
 
 // toolSessionsSearch returns a tool function that searches across session transcripts.
 func toolSessionsSearch(transcript toolport.TranscriptStore) toolport.ToolFunc {
-	return func(_ context.Context, input json.RawMessage) (string, error) {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Query      string           `json:"query"`
 			MaxResults artifact.FlexInt `json:"maxResults"`
@@ -402,7 +409,8 @@ func toolSessionsSearch(transcript toolport.TranscriptStore) toolport.ToolFunc {
 			}
 			expanded = len(results) > 0
 		}
-		if len(results) == 0 {
+		semantic := semanticSessionMatches(ctx, transcript, query, results)
+		if len(results) == 0 && len(semantic) == 0 {
 			return fmt.Sprintf("No matches found for %q across session transcripts.", query), nil
 		}
 
@@ -419,7 +427,10 @@ func toolSessionsSearch(transcript toolport.TranscriptStore) toolport.ToolFunc {
 		}
 
 		for _, r := range results {
-			fmt.Fprintf(&sb, "### Session: %s\n", r.SessionKey)
+			// The conversation's date on the header: enumeration-style questions
+			// ("how many X since May") need to FILTER the listed conversations
+			// by time, and match snippets rarely carry it.
+			fmt.Fprintf(&sb, "### Session: %s%s\n", r.SessionKey, sessionMatchDate(r))
 			for _, m := range r.Matches {
 				// Context layout: [before, after] when both exist,
 				// [after] when index==0, [before] when last message.
@@ -446,8 +457,58 @@ func toolSessionsSearch(transcript toolport.TranscriptStore) toolport.ToolFunc {
 				sb.WriteString("\n")
 			}
 		}
+		if len(semantic) > 0 {
+			sb.WriteString("### 의미 일치 대화 (요약 기반 — 키워드가 달라도 같은 주제):\n")
+			for _, h := range semantic {
+				date := ""
+				if h.At > 0 {
+					date = time.UnixMilli(h.At).Format("2006-01-02") + " · "
+				}
+				fmt.Fprintf(&sb, "- %s (%s점수 %.2f): %s\n", h.SessionKey, date, h.Score, h.Snippet)
+			}
+		}
 		return sb.String(), nil
 	}
+}
+
+// sessionMatchDate renders the conversation date for a search-result header,
+// taken from the first match's message timestamp ("" when unknown).
+func sessionMatchDate(r toolport.SearchResult) string {
+	for _, m := range r.Matches {
+		if note := dateNote(m.Message.Timestamp); note != "" {
+			return note
+		}
+	}
+	return ""
+}
+
+// semanticSessionMatches asks the transcript store's OPTIONAL meaning-search
+// capability for summary-level matches, excluding the current session and any
+// session the keyword results already cover. Degrades to nil when the store
+// does not offer the capability or the semantic index is disabled.
+func semanticSessionMatches(ctx context.Context, transcript toolport.TranscriptStore, query string, keyword []toolport.SearchResult) []toolport.SemanticSessionHit {
+	searcher, ok := transcript.(toolport.SemanticSessionSearcher)
+	if !ok {
+		return nil
+	}
+	hits := searcher.SearchSessionsSemantic(ctx, toolport.SessionKeyFromContext(ctx), query, 5)
+	if len(hits) == 0 {
+		return nil
+	}
+	covered := make(map[string]struct{}, len(keyword))
+	for _, r := range keyword {
+		covered[r.SessionKey] = struct{}{}
+	}
+	// Fresh slice, not hits[:0]: an implementation may hand back a cached
+	// slice and filtering in place would corrupt it for the next caller.
+	out := make([]toolport.SemanticSessionHit, 0, len(hits))
+	for _, h := range hits {
+		if _, dup := covered[h.SessionKey]; dup {
+			continue
+		}
+		out = append(out, h)
+	}
+	return out
 }
 
 var sessionSearchStopWords = map[string]struct{}{
