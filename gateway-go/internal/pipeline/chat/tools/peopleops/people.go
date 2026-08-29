@@ -104,6 +104,9 @@ func ToolPeople(s Sources) toolport.ToolFunc {
 		switch action {
 		case "phone":
 			// Only the address book maps a number back to a name.
+			if s.Contacts == nil {
+				return "주소록이 연결되지 않아 번호로 사람을 찾을 수 없습니다 (네이티브 클라이언트에서 연락처를 동기화하세요).", nil
+			}
 			if query == "" {
 				return "phone에는 query에 전화번호가 필요합니다.", nil
 			}
@@ -114,6 +117,9 @@ func ToolPeople(s Sources) toolport.ToolFunc {
 			return out, nil
 
 		case "company":
+			if s.Contacts == nil {
+				return "주소록이 연결되지 않아 회사 로스터를 만들 수 없습니다 (네이티브 클라이언트에서 연락처를 동기화하세요).", nil
+			}
 			if query == "" {
 				return "company에는 query에 회사명이 필요합니다.", nil
 			}

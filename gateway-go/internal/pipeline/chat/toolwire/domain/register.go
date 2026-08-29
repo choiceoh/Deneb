@@ -28,16 +28,27 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 // answer before it could ask. `people` fans out instead, so one call covers all
 // three and the caller never routes.
 //
-// Skipped when the address book isn't wired: the other two sources alone do not
-// justify a tool, and a nil store would otherwise answer "주소록이 비어 있습니다".
+// Always registered, unlike the address-book tool it absorbed. That tool was
+// gated on a wired contacts store, but the org chart never was — so gating the
+// merged tool the same way would leave a gateway without a synced address book
+// (a fresh install, or the dev instance) with no person surface at all. The
+// facade degrades per source instead: a nil contacts leg drops its section and
+// answers the two address-book-only actions with a clear reason.
 //
-// Deferred: the person wiki already carries 연락처 for the people the operator
-// keeps pages for, so this is the occasional "이 번호 누구야" / "그 사람 어느
-// 팀이야" turn that can fetch on demand. ASR hotword injection and wiki person
-// enrichment read the store server-side and are unaffected.
+// Eager, unlike the two deferred tools it replaces. Live check on the first
+// deferred build: asked "김성훈 씨 연락처랑 어느 팀인지", the model never
+// fetched people at all — it reached for eager `groupware` (which owns HR as
+// one of nine areas), then code_action, and burned five turns. A person tool
+// that has to be fetched loses every race against an eager tool that can half
+// answer, so the facade only pays off on the wire. It is cheap enough to sit
+// there: ~460 schema bytes, among the smallest eager tools.
+//
+// ASR hotword injection and wiki person enrichment read the store server-side
+// and are unaffected either way.
 func RegisterPeopleTool(registry toolport.ToolRegistrar, contactsDeps *tooldeps.ContactsDeps, wikiStore *wiki.Store) {
-	if contactsDeps.Store == nil {
-		return
+	var contacts toolport.ToolFunc
+	if contactsDeps.Store != nil {
+		contacts = wikitool.ToolContacts(contactsDeps)
 	}
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "people",
@@ -47,11 +58,10 @@ func RegisterPeopleTool(registry toolport.ToolRegistrar, contactsDeps *tooldeps.
 			"phone=번호→사람, company=회사 소속 전원, tree=조직도.",
 		InputSchema: schema.PeopleToolSchema(),
 		Fn: peopleops.ToolPeople(peopleops.Sources{
-			Contacts:  wikitool.ToolContacts(contactsDeps),
+			Contacts:  contacts,
 			Org:       orgops.ToolOrg(),
 			Groupware: groupwareops.ToolGroupware(wikiStore),
 		}),
-		Deferred: true,
 	})
 }
 

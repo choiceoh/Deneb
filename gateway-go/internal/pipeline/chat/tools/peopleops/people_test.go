@@ -137,6 +137,23 @@ func TestPeopleRequiresAQueryWhereItCannotGuess(t *testing.T) {
 	}
 }
 
+// TestPeopleWithoutAnAddressBookStillAnswers covers the ungated registration:
+// a gateway with no synced contacts store must still reach the org chart, and
+// the two address-book-only actions must say why they cannot answer instead of
+// returning an empty result.
+func TestPeopleWithoutAnAddressBookStillAnswers(t *testing.T) {
+	fn := ToolPeople(Sources{Org: stub("남도에코 > 1팀 > 김성훈 (팀장)", nil, nil)})
+
+	if out := run(t, fn, `{"action":"find","query":"김성훈"}`); !strings.Contains(out, "## 조직도") {
+		t.Fatalf("find should still return the org section, got: %s", out)
+	}
+	for _, input := range []string{`{"action":"phone","query":"010-1111-2222"}`, `{"action":"company","query":"탑솔라"}`} {
+		if out := run(t, fn, input); !strings.Contains(out, "주소록이 연결되지 않아") {
+			t.Errorf("%s should explain the missing address book, got: %s", input, out)
+		}
+	}
+}
+
 // TestPeopleDefaultsToFind: action is optional, and omitting it must not fall
 // through to the usage line.
 func TestPeopleDefaultsToFind(t *testing.T) {

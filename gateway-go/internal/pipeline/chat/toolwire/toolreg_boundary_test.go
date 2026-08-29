@@ -591,7 +591,7 @@ func TestOptionalRegistrationsSkipUnavailableDependencies(t *testing.T) {
 	}{
 		{name: "polaris nil", run: func(r *mockRegistrar) { recall.RegisterPolarisTools(r, nil, nil) }},
 		{name: "knowledge nil", run: func(r *mockRegistrar) { recall.RegisterKnowledgeTool(r, nil) }},
-		{name: "people empty", run: func(r *mockRegistrar) { RegisterPeopleTool(r, &tooldeps.ContactsDeps{}, nil) }},
+
 		{name: "calendar empty", run: func(r *mockRegistrar) { RegisterCalendarTool(r, &tooldeps.CalendarDeps{}) }},
 		{name: "wiki empty", run: func(r *mockRegistrar) { RegisterWikiTools(r, &tooldeps.WikiDeps{}, t.TempDir(), nil) }},
 		{name: "notebook nil", run: func(r *mockRegistrar) { RegisterNotebookTool(r, nil) }},
