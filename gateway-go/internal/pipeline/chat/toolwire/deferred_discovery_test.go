@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/fetchops"
@@ -55,6 +56,14 @@ func TestDeferredToolsStayReachableByKoreanQuery(t *testing.T) {
 	})
 
 	RegisterPersonaTools(registry, t.TempDir())
+	// notebook needs a live store to register; deal_ledger rides the wiki deps.
+	// Both hold the same auto-pinned deal evidence, so their reachability is
+	// part of this contract (2026-08-30).
+	store, err := notebook.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	RegisterNotebookTool(registry, &tooldeps.NotebookDeps{Store: store})
 
 	fetch := fetchops.ToolFetchTools(registry)
 	ctx := toolport.WithDeferredActivation(context.Background(), toolport.NewDeferredActivation())
@@ -83,6 +92,10 @@ func TestDeferredToolsStayReachableByKoreanQuery(t *testing.T) {
 		{"게이트웨이 상태 관찰", "observe"},
 		{"앞으로 이렇게 해줘", "preference"},
 		{"이 녹음 정리해줘", "transcribe"},
+		// The deal-evidence pair: the notebooks are filled by mail analysis with
+		// 견적/계약 extractions, but neither tool said "deal" in a way a Korean
+		// turn would type, and both sat at zero calls (2026-08-30 audit).
+		{"이 거래처 견적 이력", "notebook"},
 	} {
 		t.Run(tc.query, func(t *testing.T) {
 			input, err := json.Marshal(map[string]any{"query": tc.query})
