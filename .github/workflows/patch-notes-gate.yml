@@ -4,7 +4,12 @@ name: Patch notes gate
 # in-app "패치노트" changelog stops drifting (see .github/scripts/patch-notes-gate.sh).
 
 on:
+  # `labeled`/`unlabeled` matter: this gate's own escape hatch is a label, and
+  # the default trigger set does not include it — so adding "skip-patch-notes"
+  # left the failed run standing, and the only way out was an unrelated push.
+  # The hatch is documented in patch-notes-gate.sh; this makes it work.
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 permissions:
   contents: read
