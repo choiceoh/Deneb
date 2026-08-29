@@ -71,8 +71,9 @@ func (t *Tracker) recordSelfCorrectionImpact(record SelfCorrectionCandidateRecor
 		return record, fmt.Errorf("genesis-tracker: load self-correction candidates: %w", err)
 	}
 	if !found {
-		return record, fmt.Errorf("genesis-tracker: self-correction candidate not found: %s", record.ID)
+		return record, fmt.Errorf("genesis-tracker: self-correction candidate not found: %s (ids are sc-<millis>-<hash>; a unique prefix also resolves)", record.ID)
 	}
+	record.ID = current.ID // see RecordSelfCorrectionReview: never append under a prefix
 	if current.DispatchPhase != selfCorrectionDispatchWatchPassed {
 		return record, fmt.Errorf("genesis-tracker: impact requires watch_passed delivery, got %s", current.DispatchPhase)
 	}
