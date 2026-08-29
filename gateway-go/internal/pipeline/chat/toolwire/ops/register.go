@@ -3,6 +3,7 @@ package ops
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
@@ -62,9 +63,18 @@ func RuntimeOpsToolSetFromDeps(deps RuntimeOpsDeps) RuntimeOpsToolSet {
 		Gateway:   gatewayops.ToolGatewayWithDeps(deps.WorkspaceDir, gatewayops.GatewayDeps{Version: deps.GatewayVersion}),
 		Observe:   observeFn,
 		Fleet:     hostops.ToolFleet(&deps.Fleet),
-		Browser:   hostops.ToolBrowser(&deps.Browser),
 		Groupware: groupwareops.ToolGroupware(deps.WikiStore),
 		Solarflow: hostops.ToolSolarflow(),
+	}
+	// Browser only exists when the Page Agent bridge is configured. Without
+	// DENEB_BROWSER_URL every call answers "브라우저 연동이 꺼져 있습니다", so an
+	// unconfigured deployment was advertising ~310 prompt bytes for a surface
+	// that can only refuse — and it has never been called once in the recorded
+	// history. Same rule the address book already followed: do not show the
+	// agent a dead surface. The env is read per call and cannot change without
+	// a restart, so deciding here is equivalent to deciding at call time.
+	if deps.Browser.BaseURL != nil && strings.TrimSpace(deps.Browser.BaseURL()) != "" {
+		set.Browser = hostops.ToolBrowser(&deps.Browser)
 	}
 	if deps.SpilloverStore != nil {
 		set.SpilloverRead = media.SpilloverReadTool(deps.SpilloverStore, deps.SpilloverAsk)
@@ -109,16 +119,19 @@ func RegisterRuntimeOpsTools(registry toolport.ToolRegistrar, set RuntimeOpsTool
 	// Browser: operate the user's real Chrome via a workstation Page Agent
 	// bridge (login sessions + SPA clicks). Deferred like fleet — niche but
 	// powerful; fetch_tools when a turn needs interactive web control.
-	registry.RegisterTool(toolport.ToolDef{
-		Name: "browser",
-		Description: "사용자 PC의 실제 크롬(Chrome) 브라우저를 자연어로 조작한다 (Page Agent 브리지) — \"크롬으로 열어봐\"·\"로그인해서 봐줘\"·\"브라우저로 클릭해\". " +
-			"로그인된 SaaS·SPA처럼 `web`(HTTP fetch)으로 못 읽는 화면을 클릭·입력·스크롤한다. " +
-			"action=status (허브 연결/작업 중 여부) · execute (task=자연어 지시, 블로킹) · stop (진행 중 작업 중단). " +
-			"\"이 사이트에서 …해줘\" · \"로그인한 페이지에서 폼 채워\" 류에 사용. DENEB_BROWSER_URL 미설정 시 연동 꺼짐.",
-		InputSchema: schema.BrowserToolSchema(),
-		Fn:          set.Browser,
-		Deferred:    true,
-	})
+	// Registered only when the bridge is configured — see RuntimeOpsToolSetFromDeps.
+	if set.Browser != nil {
+		registry.RegisterTool(toolport.ToolDef{
+			Name: "browser",
+			Description: "사용자 PC의 실제 크롬(Chrome) 브라우저를 자연어로 조작한다 (Page Agent 브리지) — \"크롬으로 열어봐\"·\"로그인해서 봐줘\"·\"브라우저로 클릭해\". " +
+				"로그인된 SaaS·SPA처럼 `web`(HTTP fetch)으로 못 읽는 화면을 클릭·입력·스크롤한다. " +
+				"action=status (허브 연결/작업 중 여부) · execute (task=자연어 지시, 블로킹) · stop (진행 중 작업 중단). " +
+				"\"이 사이트에서 …해줘\" · \"로그인한 페이지에서 폼 채워\" 류에 사용.",
+			InputSchema: schema.BrowserToolSchema(),
+			Fn:          set.Browser,
+			Deferred:    true,
+		})
+	}
 
 	// Groupware: srv4 headless Amaranth — 전자결재·게시판·매출·재고·발주·입고·출고·단가·사원.
 	// Eager: ops asks about 재고/출고/매출/사원 often; fetch_tools round-trip was pure latency.
