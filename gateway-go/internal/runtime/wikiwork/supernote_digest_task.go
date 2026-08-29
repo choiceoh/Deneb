@@ -13,7 +13,7 @@
 // first-party content (meeting notes, to-dos, sketches of a plan), not hostile
 // third-party text — so this uses the internal-research preset (wiki + memory
 // stores, no web) and does not arm the untrusted-tool gate: matching a note to
-// its project benefits from mail_archive/contacts/graphify, exactly like the
+// its project benefits from mail_archive/people/graphify, exactly like the
 // dreamer consolidating a diary.
 //
 // Not configured = safe no-op: an absent Drive credential or unset folder ID

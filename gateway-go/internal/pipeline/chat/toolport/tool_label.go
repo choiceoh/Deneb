@@ -17,7 +17,7 @@ package toolport
 var chatToolLabels = map[string]string{
 	"calendar":         "일정 확인",
 	"clarify":          "질문 정리",
-	"contacts":         "연락처 확인",
+	"people":           "사람 조회",
 	"cron":             "예약 작업 처리",
 	"edit":             "파일 수정",
 	"exec":             "명령 실행",
@@ -54,3 +54,14 @@ var chatToolLabels = map[string]string{
 // label from the raw name (say, title-casing it) would look curated while being
 // nothing of the sort, and would hide that the tool needs an entry here.
 func ChatToolLabel(tool string) string { return chatToolLabels[tool] }
+
+// LabelledToolNames returns every tool name the label map covers. Exported for
+// the toolwire contract test that catches a label left behind by a removed tool
+// (or a live tool with no label) — the map is otherwise unreachable from there.
+func LabelledToolNames() []string {
+	out := make([]string, 0, len(chatToolLabels))
+	for name := range chatToolLabels {
+		out = append(out, name)
+	}
+	return out
+}

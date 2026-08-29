@@ -103,12 +103,12 @@ func PreloadedDeferredTools(preset Preset) []string {
 // completion relay, not by messaging the user directly.
 
 // researcherTools: read-focused context gathering — files, web, mail,
-// wiki/knowledge/graph, contacts, session recall. wiki·knowledge keep their
+// wiki/knowledge/graph, people, session recall. wiki·knowledge keep their
 // write sub-actions ("분석 → 위키 갱신" doctrine). Received mail always flows
 // through mail_archive; direct Gmail OAuth access is intentionally absent.
 var researcherTools = toSet(
 	"mail_archive",                   // eager (received-mail hand)
-	"contacts",                       // deferred — loaded via fetch_tools
+	"people",                         // 주소록·조직도·그룹웨어 인사 팬아웃 (구 contacts)
 	"graphify",                       // deferred — loaded via fetch_tools
 	"read", "grep", "read_spillover", // file inspection
 	"web",                          // web search + page fetch
@@ -130,7 +130,7 @@ var wikiResearchTools = without(researcherTools, "web")
 // (wiki_scout_task.go). Deliberately NARROW, not the researcher surface: the
 // scout's context carries fetched untrusted web pages, and the background
 // SendSync path has no untrusted-origin tool gate — so the personal-memory
-// surfaces (mail_archive/contacts/polaris/graphify) and file reads must not
+// surfaces (mail_archive/people/polaris/graphify) and file reads must not
 // be reachable from the same turn, or a prompt-injected page could steer
 // internal reads and leak them through a later web query. web is the job;
 // wiki stays for the three permitted writes (자료 ingest / 로그 op / 미해결
@@ -182,7 +182,7 @@ var implementerTools = union(researcherTools, codegraphTools, toSet(
 // codingTools back 코드모드 (code: sessions, ConfigureCoding): file inspection +
 // mutation + shell + web docs lookup, and nothing personal. Deliberately NOT
 // derived from implementerTools: that preset carries the Deneb 업무 memory
-// surfaces (mail_archive/contacts/wiki/knowledge/polaris/graphify), which are
+// surfaces (mail_archive/people/wiki/knowledge/polaris/graphify), which are
 // noise — and a privacy leak — inside an external GitHub repo worktree. The
 // coding profile withholds the 업무 context from the prompt (run_prepare), so
 // the tool surface must match or the swap is half-done. No sessions_spawn: a
@@ -205,7 +205,7 @@ var codingTools = toSet(
 // write/edit are intentionally present: benchmark tasks may create artifacts,
 // but the briefcase runtime binds their workspace to a disposable RunRoot.
 var briefcaseTools = toSet(
-	"mail_archive", "contacts", "files", "calendar", "todo",
+	"mail_archive", "people", "files", "calendar", "todo",
 	"phone_read", "phone_write",
 	"wiki", "knowledge", "polaris", "notebook",
 	"read", "grep", "write", "edit",
