@@ -51,9 +51,18 @@ attach_impact_brief() {
     # disk), so it only describes THIS PR when the checkout sits at its head.
     # Landing someone else's PR from an unrelated tree must not attach a brief
     # about the wrong code.
+    #
+    # One retry: GitHub's API lags a push by a few seconds, and attaching right
+    # after `git push` is the normal flow — observed 2026-08-29, the first read
+    # still returned the previous head. A genuinely different checkout still
+    # mismatches after the retry and is skipped.
     local head_oid local_head root
-    head_oid="$(gh pr view "$pr" --json headRefOid -q .headRefOid 2>/dev/null || true)"
     local_head="$(git rev-parse --quiet --verify HEAD 2>/dev/null || true)"
+    head_oid="$(gh pr view "$pr" --json headRefOid -q .headRefOid 2>/dev/null || true)"
+    if [ -n "$local_head" ] && [ "$head_oid" != "$local_head" ]; then
+        sleep "${PR_ATTACH_RETRY_DELAY:-5}"
+        head_oid="$(gh pr view "$pr" --json headRefOid -q .headRefOid 2>/dev/null || true)"
+    fi
     if [ -z "$head_oid" ] || [ "$head_oid" != "$local_head" ]; then
         echo "PR #$pr: impact brief skipped (checkout is not at the PR head)" >&2
         return 0

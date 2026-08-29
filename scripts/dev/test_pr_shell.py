@@ -85,6 +85,7 @@ class PRShellTests(unittest.TestCase):
             "GH_URL": "https://example.test/pr/42",
             "GIT_LOCAL_OID": "head111",
             "GIT_ANCESTOR_RC": "0",
+            "PR_ATTACH_RETRY_DELAY": "0",
         }
         defaults.update(values)
         return isolated_env(self.home, self.bin, **defaults)
@@ -112,6 +113,10 @@ class PRShellTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("impact brief skipped", proc.stderr)
         self.assertNotIn("gh pr edit", "\n".join(self.calls()))
+        # One retry against the API lag, then it gives up rather than guessing.
+        self.assertEqual(
+            len([c for c in self.calls() if "--json headRefOid" in c]), 2, self.calls()
+        )
 
     def test_land_is_not_blocked_when_the_brief_cannot_be_built(self) -> None:
         """Review evidence is best-effort; a green PR still lands without it."""
