@@ -196,12 +196,19 @@ func skillReadMissHint(path string, skillRoots []string) string {
 // readParams are the read tool's decoded arguments.
 type readParams struct {
 	FilePath string `json:"file_path"`
-	Offset   int    `json:"offset"`
-	Limit    int    `json:"limit"`
-	Function string `json:"function"`
-	Force    bool   `json:"force"`
-	Hashes   bool   `json:"hashes"`
+	// FilePaths reads several files in ONE call. See readBatchCap and ToolRead.
+	FilePaths []string `json:"file_paths"`
+	Offset    int      `json:"offset"`
+	Limit     int      `json:"limit"`
+	Function  string   `json:"function"`
+	Force     bool     `json:"force"`
+	Hashes    bool     `json:"hashes"`
 }
+
+// readBatchCap bounds one batched read. Eight matches the wiki batch that this
+// mirrors; past that a single call's output stops being reviewable and the
+// spillover path is the better answer anyway.
+const readBatchCap = 8
 
 // parseReadParams decodes and validates the read tool's arguments.
 func parseReadParams(ctx context.Context, input json.RawMessage) (readParams, error) {
@@ -212,8 +219,8 @@ func parseReadParams(ctx context.Context, input json.RawMessage) (readParams, er
 	if err := jsonutil.UnmarshalInto("read params", input, &p); err != nil {
 		return p, err
 	}
-	if p.FilePath == "" {
-		return p, fmt.Errorf("file_path is required")
+	if p.FilePath == "" && len(p.FilePaths) == 0 {
+		return p, fmt.Errorf("file_path (or file_paths for a batch) is required")
 	}
 	return p, nil
 }
@@ -363,60 +370,128 @@ func storeReadCache(fc *agent.FileCache, path, output string, data []byte) {
 // ToolRead returns the file-read tool. extraReadRoots are directories outside
 // the workspace that reads may reach (read-only; currently the skills catalog —
 // the system prompt directs the model to read SKILL.md at those locations).
+//
+// file_paths reads several files in one call. The prompt already asks for
+// independent reads to be batched into one turn, and read is parallel-safe, yet
+// 56% of read calls sat in a run of consecutive single-read turns (measured
+// 2026-08-29 over the transcript history). The tools that carry a batch
+// parameter do not behave that way — wiki read, which took `paths`, folds at
+// 3.5% — so the gap was the missing parameter, not the guidance.
 func ToolRead(defaultDir string, extraReadRoots ...string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		p, err := parseReadParams(ctx, input)
 		if err != nil {
 			return "", err
 		}
-
-		dir := defaultDir
-		path := artifact.ResolvePathWithRoots(p.FilePath, dir, extraReadRoots)
-		if err := artifact.CheckProtectedPath(path, "read"); err != nil {
-			return "", err
+		if len(p.FilePaths) > 0 {
+			return readBatch(ctx, p, defaultDir, extraReadRoots)
 		}
-
-		// File-read dedup: for default full-file reads (no offset/limit/function),
-		// check cache before hitting disk.  Skip if force=true.
-		fc := toolport.FileCacheFromContext(ctx)
-		useCache := useReadCache(fc, p)
-		if useCache {
-			if cached, ok := cachedReadResult(fc, path, p.FilePath); ok {
-				return cached, nil
-			}
-		}
-
-		path, data, dirListing, err := readFileWithFallbacks(path, p.FilePath, extraReadRoots)
-		if err != nil {
-			return "", err
-		}
-		if dirListing != "" {
-			return dirListing, nil
-		}
-
-		// Staleness baseline for EVERY successful file read, including the
-		// modes the dedup cache skips (offset/limit/function/hashes/force,
-		// oversize). Without it, an edit after a partial read of a
-		// concurrently modified file bypassed the modified-since-read guard.
-		// Default full reads upgrade the entry with the rendered output via
-		// storeReadCache below.
-		if fc != nil {
-			fc.RecordReadEvidence(path, data)
-		}
-
-		// Function extraction mode — needs the full content as string.
-		if p.Function != "" {
-			return readFunction(path, p.FilePath, string(data), p.Function)
-		}
-
-		output := renderReadRange(p.FilePath, data, p)
-
-		if useCache {
-			storeReadCache(fc, path, output, data)
-		}
-
-		return output, nil
+		return readOne(ctx, p, defaultDir, extraReadRoots)
 	}
+}
+
+// readOne performs one file read — the whole tool before file_paths existed,
+// lifted out so a batch element goes through the identical path: same root
+// resolution, same protected-path guard, same dedup cache, and the same
+// RecordReadEvidence staleness baseline that edit's modified-since-read guard
+// depends on.
+func readOne(ctx context.Context, p readParams, defaultDir string, extraReadRoots []string) (string, error) {
+	dir := defaultDir
+	path := artifact.ResolvePathWithRoots(p.FilePath, dir, extraReadRoots)
+	if err := artifact.CheckProtectedPath(path, "read"); err != nil {
+		return "", err
+	}
+
+	// File-read dedup: for default full-file reads (no offset/limit/function),
+	// check cache before hitting disk.  Skip if force=true.
+	fc := toolport.FileCacheFromContext(ctx)
+	useCache := useReadCache(fc, p)
+	if useCache {
+		if cached, ok := cachedReadResult(fc, path, p.FilePath); ok {
+			return cached, nil
+		}
+	}
+
+	path, data, dirListing, err := readFileWithFallbacks(path, p.FilePath, extraReadRoots)
+	if err != nil {
+		return "", err
+	}
+	if dirListing != "" {
+		return dirListing, nil
+	}
+
+	// Staleness baseline for EVERY successful file read, including the
+	// modes the dedup cache skips (offset/limit/function/hashes/force,
+	// oversize). Without it, an edit after a partial read of a
+	// concurrently modified file bypassed the modified-since-read guard.
+	// Default full reads upgrade the entry with the rendered output via
+	// storeReadCache below.
+	if fc != nil {
+		fc.RecordReadEvidence(path, data)
+	}
+
+	// Function extraction mode — needs the full content as string.
+	if p.Function != "" {
+		return readFunction(path, p.FilePath, string(data), p.Function)
+	}
+
+	output := renderReadRange(p.FilePath, data, p)
+
+	if useCache {
+		storeReadCache(fc, path, output, data)
+	}
+
+	return output, nil
+}
+
+// readBatch reads every requested file in one call, each under its own numbered
+// header. A file that cannot be read fills its slot with the reason instead of
+// failing the batch — a batch that dies on its third path teaches the model to
+// go back to one-at-a-time, which is the behaviour this exists to remove.
+//
+// Batch mode is whole-file only: offset/limit/function/hashes describe ONE
+// file's interior and mean nothing spread across several, so they are refused
+// rather than silently ignored.
+func readBatch(ctx context.Context, p readParams, defaultDir string, extraReadRoots []string) (string, error) {
+	if p.Offset > 0 || p.Limit > 0 || p.Function != "" || p.Hashes {
+		return "file_paths(배치)는 파일 전체 읽기 전용입니다 — offset/limit/function/hashes는 file_path 단건 읽기에 쓰세요.", nil
+	}
+
+	paths := make([]string, 0, readBatchCap)
+	for _, raw := range p.FilePaths {
+		if trimmed := strings.TrimSpace(raw); trimmed != "" {
+			paths = append(paths, trimmed)
+		}
+	}
+	if len(paths) == 0 {
+		return "file_paths에 읽을 경로가 없습니다.", nil
+	}
+	note := ""
+	if len(paths) > readBatchCap {
+		note = fmt.Sprintf("\n[%d개 중 %d개만 읽었습니다 — 나머지는 다음 호출로]", len(paths), readBatchCap)
+		paths = paths[:readBatchCap]
+	}
+
+	var b strings.Builder
+	for i, display := range paths {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		if i > 0 {
+			b.WriteString("\n\n")
+		}
+		fmt.Fprintf(&b, "[%d/%d] %s\n", i+1, len(paths), display)
+		one := p
+		one.FilePath = display
+		one.FilePaths = nil
+		out, err := readOne(ctx, one, defaultDir, extraReadRoots)
+		if err != nil {
+			fmt.Fprintf(&b, "읽기 실패: %v", err)
+			continue
+		}
+		b.WriteString(out)
+	}
+	return b.String() + note, nil
 }
 
 // readFunction extracts a specific function/type from a file.

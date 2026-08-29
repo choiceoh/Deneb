@@ -12,6 +12,13 @@ func ReadToolSchema() map[string]any {
 				"type":        "string",
 				"description": "The absolute path to the file to read",
 			},
+			"file_paths": map[string]any{
+				"type":        "array",
+				"description": "Read several files in ONE call — pass every path you need instead of one read per turn (up to 8; each arrives under its own [i/N] header, and a path that fails fills its slot without killing the batch). Whole-file only: use file_path with offset/limit/function/hashes for one file's interior.",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
 			"force": map[string]any{
 				"type":        "boolean",
 				"description": "Force re-read even if cached (default: false)",

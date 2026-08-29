@@ -6,6 +6,13 @@
     "type": "string",
     "description": "The absolute path to the file to read"
    },
+   "file_paths": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "Read several files in ONE call — pass every path you need instead of one read per turn (up to 8; each arrives under its own [i/N] header, and a path that fails fills its slot without killing the batch). Whole-file only: use file_path with offset/limit/function/hashes for one file's interior."
+   },
    "offset": {
     "type": "number",
     "description": "The line number to start reading from (1-based)",
