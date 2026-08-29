@@ -233,6 +233,7 @@ func recallWikiEvidenceResult(ctx context.Context, store *wiki.Store, queries []
 		return evidence, err
 	}
 	queryLabel := queries[0]
+	kept := 0
 	for _, r := range report.Results {
 		if r.FactID != "" {
 			// Chat preflight renders canonical facts in its trusted, live
@@ -266,9 +267,10 @@ func recallWikiEvidenceResult(ctx context.Context, store *wiki.Store, queries []
 		seen[r.Path] = struct{}{}
 		evidence = append(evidence, recallEvidence{
 			Kind: "wiki", Source: r.Path, Query: queryLabel,
-			Note: formatRecallWikiNote(store, r), Score: 0.80 + r.Score,
+			Note: formatRecallWikiNote(store, r, kept), Score: 0.80 + r.Score,
 			SubjectID: subjectID,
 		})
+		kept++
 	}
 	return evidence, nil
 }
@@ -309,7 +311,52 @@ func formatRecallCounterpartyAnchorNote(store *wiki.Store, ref wiki.Counterparty
 	return truncateRecallText(strings.Join(parts, " | "), 420)
 }
 
-func formatRecallWikiNote(store *wiki.Store, result wiki.SearchResult) string {
+// wikiNoteCapFor is the character budget one wiki row's note may spend, by its
+// rank among the kept wiki hits.
+//
+// The asymmetry is MEASURED AND REJECTED; it stays as a knob so the idea is not
+// re-proposed from the same reasoning that motivated it. That reasoning was
+// sound as far as it went — over the gold set, how much of the answer-bearing
+// page each block actually carried:
+//
+//	answer present in the block: 20.0% of the page's lines (median)
+//	answer cut from the block:    7.1%  (median)
+//
+// so failures are rows that got a thin slice, not answers hiding somewhere
+// unusual (77% of cut answers sit in the page's first fifth). But giving the
+// head rows more room does not add answers, it moves them. Swept against the
+// deterministic answer-in-block metric (198 gold cases, 117 with answer tokens,
+// serial runs whose spread is one case):
+//
+//	head cap   420(off)   600    900    1300   1800
+//	answer     88.0%      88.0%  88.9%  88.0%  88.0%
+//
+// The one case at 900 is the run-to-run spread. The mechanism is visible in the
+// block itself: at 900 the median wiki row count falls 6 → 5 while the block
+// grows 6734 → 7317 max. The recall block is at its character budget, so a
+// bigger head slice EVICTS A TAIL ROW and the two cancel — the same zero-sum
+// the session plane hit (cap 900 there: blocks +24%, tail rows evicted,
+// strict@4 −1.2). Room is not the constraint; the budget is.
+//
+// DENEB_RECALL_WIKI_HEAD_CAP sets the head cap for a sweep. Default off.
+func wikiNoteCapFor(rank int) int {
+	if rank >= wikiHeadCapRows {
+		return wikiNoteCapTail
+	}
+	if raw := strings.TrimSpace(os.Getenv("DENEB_RECALL_WIKI_HEAD_CAP")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+			return v
+		}
+	}
+	return wikiNoteCapTail
+}
+
+const (
+	wikiNoteCapTail = 420
+	wikiHeadCapRows = 2
+)
+
+func formatRecallWikiNote(store *wiki.Store, result wiki.SearchResult, rank int) string {
 	var parts []string
 	if page, err := store.ReadPage(result.Path); err == nil && page != nil {
 		// Staleness marker first: search already demotes superseded/archived
@@ -349,7 +396,20 @@ func formatRecallWikiNote(store *wiki.Store, result wiki.SearchResult) string {
 	if len(parts) == 0 {
 		return result.Path
 	}
-	return truncateRecallText(strings.Join(parts, " | "), 420)
+	// A "this excerpt is only N% of the page" marker was tried here and
+	// REJECTED — it does not identify the rows that lost the answer. On the
+	// gold set, the gold row's excerpt share was median 100% (no marker) for
+	// BOTH outcomes, and rows whose answer was cut were marked thin slightly
+	// LESS often than rows whose answer survived (7% vs 11%). The aggregate
+	// that motivated it (blocks carrying the answer held ~20% of the page's
+	// lines, blocks cutting it ~7%) was a max over every page under the gold
+	// path, so it conflated "this page got a thin slice" with "a different page
+	// of the folder was rendered"; the row-level quantity does not reproduce
+	// it. What remains true is that in 10 of 13 answer-missing cases the
+	// answering PAGE is rendered and the answering SENTENCE is not — a passage
+	// SELECTION problem, which neither more room (see wikiNoteCapFor) nor a
+	// thinness marker addresses.
+	return truncateRecallText(strings.Join(parts, " | "), wikiNoteCapFor(rank))
 }
 
 // recallWikiStalenessMarker returns a loud inline marker when a recalled wiki

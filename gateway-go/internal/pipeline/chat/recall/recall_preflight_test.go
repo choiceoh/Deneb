@@ -274,7 +274,7 @@ func TestFormatRecallWikiNoteIncludesStalenessMarker(t *testing.T) {
 		t.Fatalf("WritePage: %v", err)
 	}
 
-	note := formatRecallWikiNote(store, wiki.SearchResult{Path: "거래/hyundai-ulsan.md"})
+	note := formatRecallWikiNote(store, wiki.SearchResult{Path: "거래/hyundai-ulsan.md"}, 0)
 	if !strings.Contains(note, "⚠ 대체됨") || !strings.Contains(note, "거래/hyundai-ulsan-v2.md") {
 		t.Fatalf("expected staleness marker naming the replacement, got %q", note)
 	}
@@ -308,7 +308,7 @@ func TestFormatRecallWikiNoteNamesOwningProjectInKorean(t *testing.T) {
 		t.Fatalf("WritePage mail: %v", err)
 	}
 
-	note := formatRecallWikiNote(store, wiki.SearchResult{Path: "프로젝트/pl2-kia-epc-001/메일분석/m1.md"})
+	note := formatRecallWikiNote(store, wiki.SearchResult{Path: "프로젝트/pl2-kia-epc-001/메일분석/m1.md"}, 0)
 	if !strings.Contains(note, "프로젝트: 기아 오토랜드 화성 태양광") {
 		t.Fatalf("note must name the owning project in Korean, got %q", note)
 	}
@@ -323,7 +323,7 @@ func TestFormatRecallWikiNoteNamesOwningProjectInKorean(t *testing.T) {
 	if err := store.WritePage("업무/BEP.md", plain); err != nil {
 		t.Fatalf("WritePage plain: %v", err)
 	}
-	if n := formatRecallWikiNote(store, wiki.SearchResult{Path: "업무/BEP.md"}); strings.Contains(n, "프로젝트:") {
+	if n := formatRecallWikiNote(store, wiki.SearchResult{Path: "업무/BEP.md"}, 0); strings.Contains(n, "프로젝트:") {
 		t.Fatalf("non-project note must not carry a project label, got %q", n)
 	}
 }
