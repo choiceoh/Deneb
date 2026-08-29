@@ -314,6 +314,34 @@ class MiniappWireValueContractTest {
             invalidValue = JsonObject(emptyMap()),
         ),
         wireContract(
+            name = "CodeRepoOut",
+            serializer = CodeRepoOut.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "id",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "name",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "path",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "addedAtMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "id",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
             name = "ContactRow",
             serializer = ContactRow.serializer(),
             fields = listOf(

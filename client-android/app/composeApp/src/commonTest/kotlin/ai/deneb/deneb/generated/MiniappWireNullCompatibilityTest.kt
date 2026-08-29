@@ -268,6 +268,30 @@ class MiniappWireNullCompatibilityTest {
             field = "sourceFrom",
         ),
         nullContract(
+            name = "CodeRepoOut.id",
+            serializer = CodeRepoOut.serializer(),
+            empty = CodeRepoOut(),
+            field = "id",
+        ),
+        nullContract(
+            name = "CodeRepoOut.name",
+            serializer = CodeRepoOut.serializer(),
+            empty = CodeRepoOut(),
+            field = "name",
+        ),
+        nullContract(
+            name = "CodeRepoOut.path",
+            serializer = CodeRepoOut.serializer(),
+            empty = CodeRepoOut(),
+            field = "path",
+        ),
+        nullContract(
+            name = "CodeRepoOut.addedAtMs",
+            serializer = CodeRepoOut.serializer(),
+            empty = CodeRepoOut(),
+            field = "addedAtMs",
+        ),
+        nullContract(
             name = "ContactRow.name",
             serializer = ContactRow.serializer(),
             empty = ContactRow(),
