@@ -2,12 +2,16 @@ package ai.deneb.deneb
 
 import ai.deneb.ui.chat.History
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlin.uuid.Uuid
 
@@ -83,6 +87,21 @@ internal class TurnProgress(
     // toolUseId (or tool name when the gateway omits the id) → row id/start.
     private val rowIds = mutableMapOf<String, String>()
     private val startMarks = mutableMapOf<String, TimeSource.Monotonic.ValueTimeMark>()
+
+    // Per-tool elapsed tickers. A tool row said "…중" and then froze for as long
+    // as the tool took: the gateway sends started → completed with nothing in
+    // between, so a 49-second skill_lifecycle call (measured p95, 2026-08-30)
+    // left a motionless chip and no way to tell work from a hang. The start mark
+    // above was already here — only the readout was missing.
+    private val elapsedJobs = mutableMapOf<String, Job>()
+
+    private companion object {
+        /** A tool has to look stuck before its row starts counting. */
+        val ELAPSED_VISIBLE_AFTER = 8.seconds
+
+        /** Stop counting past the turn budget — see startElapsedTicker. */
+        val ELAPSED_CEILING = 5.minutes
+    }
     private val allRowIds = mutableSetOf<String>()
 
     // Row currently repurposed as the between-steps continuity status
@@ -182,6 +201,7 @@ internal class TurnProgress(
                 rowIds[key] = rowId
                 startMarks[key] = TimeSource.Monotonic.markNow()
                 allRowIds += rowId
+                startElapsedTicker(key, rowId, label)
                 // "메일 확인 중: 아르고에너지" — the server-extracted hint
                 // names the target, not just the tool.
                 chatHistory.update { list ->
@@ -214,8 +234,10 @@ internal class TurnProgress(
                         removeRow(rowId)
                     }
                     startMarks.remove(key)
+                    stopElapsedTicker(key)
                     return
                 }
+                stopElapsedTicker(key)
                 val elapsed = startMarks.remove(key)?.elapsedNow() ?: 0.milliseconds
                 // A row that carries the result summary has more to read than a
                 // bare label — hold it to the raised floor.
@@ -291,7 +313,45 @@ internal class TurnProgress(
     fun footprint(): String? = ToolStatusLabels.buildToolFootprint(trail)
 
     /** Remove every row this turn added (idempotent; runs in ask()'s finally). */
+
+    /**
+     * Appends a live second count to a tool row once it has run long enough to
+     * look stuck.
+     *
+     * Silent below [ELAPSED_VISIBLE_AFTER]: the median tool call finishes in
+     * milliseconds, and a number on those would be noise. Past it the row reads
+     * "스킬 정리 중… 12초" and keeps moving, which is the difference between
+     * "working" and "hung" — the only signal the user had was none.
+     */
+    private fun startElapsedTicker(key: String, rowId: String, label: String) {
+        elapsedJobs[key]?.cancel()
+        elapsedJobs[key] = scope.launch {
+            delay(ELAPSED_VISIBLE_AFTER)
+            var seconds = ELAPSED_VISIBLE_AFTER.inWholeSeconds
+            // Bounded on purpose. An unbounded loop outlives the thing it
+            // describes: a dropped SSE stream or a gateway restart means the
+            // completion frame never arrives, and the row would count forever —
+            // and in tests it never completes, which is how this was caught.
+            // Past the turn budget the number has stopped being informative
+            // anyway, so the last count simply stands.
+            while (isActive && seconds <= ELAPSED_CEILING.inWholeSeconds) {
+                val withElapsed = "$label… ${seconds}초"
+                chatHistory.update { list ->
+                    list.map { if (it.id == rowId) it.copy(toolName = withElapsed) else it }
+                }
+                delay(1.seconds)
+                seconds += 1
+            }
+        }
+    }
+
+    private fun stopElapsedTicker(key: String) {
+        elapsedJobs.remove(key)?.cancel()
+    }
+
     fun clear() {
+        elapsedJobs.values.forEach { it.cancel() }
+        elapsedJobs.clear()
         if (allRowIds.isEmpty()) return
         thinkingVisible = false
         phaseVisible = false
