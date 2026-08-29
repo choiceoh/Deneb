@@ -11,13 +11,19 @@
 # POST /api/hooks/fleet), which shares the proactive cooldown gate — so a stuck
 # fault notifies once rather than every cycle. Read-only against the switch.
 #
-# Thresholds sit against measured normals (2026-08-29, post 200G + fan re-tune):
-# cpu 46-49C, switch-chip 63C, board 38-43C, fans 7.4-7.8K RPM, psu1 41W. The
-# chip's overtemp shutdown is 115C, so 85C is a wide early warning.
+# Thresholds sit against measured normals (2026-08-29 evening, post 200G and
+# post min-speed floor): cpu 45-49C, switch-chip 58C, board 35C, fans ~5.2K RPM,
+# psu1 38.7W. The chip's overtemp shutdown is 115C, so 85C is a wide early
+# warning.
 #
-# The older 3.9-4.8K RPM baseline (2026-08-09) is no longer reachable: the 08-09
-# 200G cutover (two ports at 200G-baseCR4) raised psu draw 37.7W -> 41W+, and
-# holding the chip at 63C now costs ~7.5K RPM. Do not treat 4.8K as the target.
+# An earlier revision of this comment claimed the 3.9-4.8K RPM baseline was "no
+# longer reachable" and that holding 63C cost ~7.5K RPM. Both were wrong: those
+# figures were sampled mid-oscillation, not at rest. With a floor the fans sit at
+# ~5.2K and the chip parks at 58C — below the old quiet baseline's 62C.
+#
+# psu watts here track fan RPM, not port load (37W at idle spin, 38.7W tuned,
+# 49.6W mid-slam), so reading "200G raised draw to 41-50W" as switch load was
+# measuring the fans. Base draw with all four links up is still ~38W.
 #
 # ALWAYS exits 0 (release-and-deploy.md): a red unit invites an operator to
 # disable the timer, which would silently end the monitoring this script exists
@@ -29,23 +35,39 @@ SWITCH_HOST="${CRS812_HOST:-admin@192.168.88.1}"
 SWITCH_VIA="${CRS812_VIA:-srv2}"   # the switch mgmt net is reachable from srv2 only
 CPU_TEMP_MAX="${CRS812_CPU_TEMP_MAX:-85}"
 SWITCH_TEMP_MAX="${CRS812_SWITCH_TEMP_MAX:-85}"
-FAN_RPM_MIN="${CRS812_FAN_RPM_MIN:-1000}"
-# Sustained high RPM = the fan-control oscillation (2026-08-29). Root cause is a
-# ZERO proportional band: fan-target-temp == fan-full-speed-temp (both 65C) makes
-# the controller bang-bang — idle below the threshold, 100% the instant it is
-# touched. That stayed hidden while the chip sat at 62C and never reached 65C;
-# after the 200G cutover it does, and the loop hunts between 5K and 13.8K.
+# A floor breach now also means the min-speed setting was reverted: with
+# fan-min-speed-percent at 40% the fans never idle below ~5K, so anything under
+# 3000 says someone put the floor back to 0% (see below) or a fan is failing.
+FAN_RPM_MIN="${CRS812_FAN_RPM_MIN:-3000}"
+# Sustained high RPM = the fan-control oscillation (2026-08-29). It has TWO
+# halves, and fixing only the first leaves the slams in place:
+#
+#   1. A near-zero proportional band. fan-target-temp == fan-full-speed-temp
+#      (both 65C) makes the controller bang-bang. Dropping target to 64C buys a
+#      1C band, which is still effectively zero — measured that evening, the
+#      chip crossed 64C and then 65C with the fans still parked at their floor.
+#   2. No floor. fan-min-speed-percent=0% let the fans idle at ~1.8K, so the
+#      chip walked 62C -> 66C in 70s and overshot before the controller reacted.
+#      Full cycle: 70s climb, 20s slam to 14,040 RPM, 100s overcooling to 55C,
+#      repeating every ~3.5 minutes. That is the swell an operator hears.
+#
+# The fix is BOTH: target 64C (band) AND fan-min-speed-percent 40% (floor). With
+# the floor the chip parks at 58C and never reaches the threshold, so the
+# controller never engages and the fans hold a steady ~5.2K.
 #
 # Do NOT "fix" loud fans by raising fan-target-temp to 65C — that CREATES the
 # oscillation (an 08-29 morning attempt did exactly that and made it worse).
-# The fix is a proportional band: keep full-speed at 65C and set target BELOW it
-# (64C in production -> steady 7.4-7.8K at 63C). Widening upward is impossible;
-# both knobs cap at 65C (`out of range (-273..65)`).
+# Widening the band upward is impossible; both knobs cap at 65C (`out of range
+# (-273..65)`). The floor is the knob with room left.
+#
+# Measured floor mapping (2026-08-29, idle fabric): 0% -> ~1.8K RPM (chip runs
+# away), 35% -> ~4.5K (chip 60C), 40% -> ~5.3K (chip 58C). Step the floor up if
+# slams return under summer daytime load.
 #
 # Signature to distinguish: in the 30-minute samples below, oscillation shows RPM
 # INVERSELY correlated with temperature (a high-RPM sample is the moment just
 # after a full-speed slam dropped the temp). Real high load reads the other way.
-# Tuned-normal is 7.4-7.8K; the 9K bound catches a return to hunting.
+# Tuned-normal is ~5.2K; the 9K bound catches a return to hunting.
 FAN_RPM_MAX="${CRS812_FAN_RPM_MAX:-9000}"
 
 alert() { # level, title, message
@@ -85,7 +107,7 @@ psu1_state="$(value_of psu1-state)"
 for fan in fan1 fan2 fan3 fan4; do
     rpm="$(value_of "${fan}-speed")"
     [[ -n "$rpm" && "$rpm" -lt "$FAN_RPM_MIN" ]] && faults+=("${fan} ${rpm}RPM (하한 ${FAN_RPM_MIN})")
-    [[ -n "$rpm" && "$rpm" -gt "$FAN_RPM_MAX" ]] && faults+=("${fan} ${rpm}RPM 과속 — 팬 제어 발진 의심 (상한 ${FAN_RPM_MAX}). target=full-speed=65C면 비례 구간 0 → target을 64C로. 65C로 올리지 말 것")
+    [[ -n "$rpm" && "$rpm" -gt "$FAN_RPM_MAX" ]] && faults+=("${fan} ${rpm}RPM 과속 — 팬 제어 발진 의심 (상한 ${FAN_RPM_MAX}). 처방은 둘 다: target=64C(밴드) + fan-min-speed-percent=40%(바닥). 바닥이 0%면 칩이 임계까지 방치돼 슬램이 난다. 65C로 올리지 말 것")
 done
 
 cpu_temp="$(value_of cpu-temperature)"
