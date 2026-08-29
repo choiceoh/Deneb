@@ -1,5 +1,26 @@
 # Changelog
 
+## [5.11.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.10.0...deneb-v5.11.0) (2026-08-29)
+
+
+### ✨ Features
+
+* **andromeda:** Cygnus에서 작업할 저장소를 고른다 ([#4932](https://github.com/choiceoh/Deneb/issues/4932)) ([c55b30d](https://github.com/choiceoh/Deneb/commit/c55b30d91d615cbf8f78a65ef32b7114f9ddafb2))
+* **chat:** 대화마다 자기 워크트리 — 격리된 브랜치에서 작업한다 ([#4931](https://github.com/choiceoh/Deneb/issues/4931)) ([426d2f5](https://github.com/choiceoh/Deneb/commit/426d2f5a104581b0a078d69958f113797259ff65))
+* **chat:** 대화별 레포 바인딩 — 등록된 저장소에 대화를 묶는다 ([#4929](https://github.com/choiceoh/Deneb/issues/4929)) ([d37ef5f](https://github.com/choiceoh/Deneb/commit/d37ef5fea345cbfcf9e1cd6c7fd20d2f8f174b58))
+* **chat:** 대화의 PR·CI 상태를 배지로 ([#4934](https://github.com/choiceoh/Deneb/issues/4934)) ([2c93636](https://github.com/choiceoh/Deneb/commit/2c93636261b5892b582df0bcc2d53939b80ce14d))
+* **chat:** 런이 지정한 워크스페이스가 툴까지 도달한다 ([#4925](https://github.com/choiceoh/Deneb/issues/4925)) ([4393fc9](https://github.com/choiceoh/Deneb/commit/4393fc9572f7e2d4f018ada3a891000d09205710))
+* **chat:** 툴 이름을 게이트웨이가 짓는다 — 데스크톱이 영문 식별자를 노출하던 것 ([#4924](https://github.com/choiceoh/Deneb/issues/4924)) ([0eb31bf](https://github.com/choiceoh/Deneb/commit/0eb31bfc00933bcf864ad0c791e425e3bd055111))
+* **eval:** 위키 회상 리더 벤치 + 오라클 천장 모드 ([#4928](https://github.com/choiceoh/Deneb/issues/4928)) ([538b3ae](https://github.com/choiceoh/Deneb/commit/538b3ae1b8984b4f250edab655eae385155e51c3))
+* **gateway:** 코드 레포 등록 목록 — 에이전트가 일할 수 있는 곳을 운영자가 정한다 ([#4927](https://github.com/choiceoh/Deneb/issues/4927)) ([c347440](https://github.com/choiceoh/Deneb/commit/c3474401b4e4a353c558683af7d15b457d31eaee))
+* **recall:** answer-in-block 지표 + 발췌 레버 2건 측정 기각 ([#4935](https://github.com/choiceoh/Deneb/issues/4935)) ([1c650a9](https://github.com/choiceoh/Deneb/commit/1c650a9b4e681aa889842698f3e490e5e2bfc210))
+
+
+### 🐛 Bug Fixes
+
+* **deploy:** CRS812 팬소음 원인 정정 — 되돌림이 아니라 제어 발진 ([#4930](https://github.com/choiceoh/Deneb/issues/4930)) ([c57e86a](https://github.com/choiceoh/Deneb/commit/c57e86ab9c5adadb51b922421abf7327d0dc0aaf))
+* **eval:** 위키 채점 3종 + 오라클 판정 독립 — 수치를 믿을 수 있게 ([#4933](https://github.com/choiceoh/Deneb/issues/4933)) ([f051181](https://github.com/choiceoh/Deneb/commit/f0511810e2aae51133ce8e86068cf86678baf226))
+
 ## [5.10.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.9.0...deneb-v5.10.0) (2026-08-29)
 
 
