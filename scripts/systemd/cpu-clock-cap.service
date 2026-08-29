@@ -1,0 +1,20 @@
+# Cap GB10 P-cores to the E-core ceiling (2.808 GHz) at every boot.
+#
+# Why: 10x Cortex-X925 sit at 3.9 GHz under the performance governor even
+# at idle. That boost is the only CPU-side thermal lever that is not
+# GPU-dominated. Deeper caps (2.2 GHz) were measured as ~zero extra
+# package-heat reduction when the GPU is the hot die.
+# scaling_max_freq resets on reboot; this unit writes it back.
+#
+# Retry: cpufreq sysfs can appear after multi-user has already started.
+[Unit]
+Description=Cap CPU max frequency to 2808 MHz (GB10 P-core boost off)
+After=sysinit.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash -c 'for i in $(seq 1 30); do ok=1; for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_max_freq; do echo 2808000 > "$f" || ok=0; done; [ "$ok" = 1 ] && exit 0; sleep 2; done; echo "cpu-clock-cap: sysfs never ready" >&2; exit 1'
+
+[Install]
+WantedBy=multi-user.target
