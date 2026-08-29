@@ -1,5 +1,26 @@
 # Changelog
 
+## [5.10.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.9.0...deneb-v5.10.0) (2026-08-29)
+
+
+### ✨ Features
+
+* **andromeda:** Cygnus를 작업창으로 재포지셔닝 ([#4915](https://github.com/choiceoh/Deneb/issues/4915)) ([ade7d98](https://github.com/choiceoh/Deneb/commit/ade7d989e7591e8bfe7b6b533b5cca78fbe7bdc9))
+* **andromeda:** 툴콜 소요시간 표시 — 단계마다 얼마 걸렸는지 ([#4921](https://github.com/choiceoh/Deneb/issues/4921)) ([90b83cd](https://github.com/choiceoh/Deneb/commit/90b83cd8b7462ca1ae7081e15f2cc566bfb95c47))
+* **andromeda:** 폭 스윕 검증 도구 + Cygnus 작업창 마감 ([#4919](https://github.com/choiceoh/Deneb/issues/4919)) ([12e9699](https://github.com/choiceoh/Deneb/commit/12e9699c62f8ba581f83d0aaa359d2825cee1fba))
+* **chat:** 대화 목록에 작업 중 표시 ([#4922](https://github.com/choiceoh/Deneb/issues/4922)) ([36e5fec](https://github.com/choiceoh/Deneb/commit/36e5fec735c76818095be6487259bc038b331574))
+* **deploy:** persist Spark GPU 1600MHz and CPU 2.8GHz clock caps ([#4912](https://github.com/choiceoh/Deneb/issues/4912)) ([73968ee](https://github.com/choiceoh/Deneb/commit/73968eead72b67f0958b571758320df66c3b87fc))
+* **recall:** 세션 시맨틱 검색 노출 — 어휘가 달라도 같은 주제를 센다 (R9) ([#4909](https://github.com/choiceoh/Deneb/issues/4909)) ([ea660ba](https://github.com/choiceoh/Deneb/commit/ea660baec7d178559aa7b9d5ab76ff9f62dd4c88))
+* 폰 실시간 관전 + Cygnus 상시 스레드 사이드바 ([#4911](https://github.com/choiceoh/Deneb/issues/4911)) ([e04bbcf](https://github.com/choiceoh/Deneb/commit/e04bbcff7b9577618a11d85f58f639ab9d7d6716))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** Cygnus 대화·입력에 가독 폭 캡 — 최대화 시 줄이 화면 끝까지 흐르던 회귀 ([#4917](https://github.com/choiceoh/Deneb/issues/4917)) ([36202cd](https://github.com/choiceoh/Deneb/commit/36202cd69c3d46638239515824601f818a9de51f))
+* **andromeda:** Cygnus 최소 너비를 도킹 문턱 위로 — 저장된 좁은 창이 상시 목록을 가리던 문제 ([#4913](https://github.com/choiceoh/Deneb/issues/4913)) ([39a38e3](https://github.com/choiceoh/Deneb/commit/39a38e307a88d5c5bda335054774bc9943f5acee))
+* **eval:** 모델 검증을 실호출로 — 목록에 있다 ≠ 서빙한다 ([#4920](https://github.com/choiceoh/Deneb/issues/4920)) ([b6f0669](https://github.com/choiceoh/Deneb/commit/b6f066909838624a7e13ca53c4028565821f5a3d))
+* **recall:** 세션 시맨틱 색인이 기동 시 빈 채로 '워밍 완료'를 찍던 버그 ([#4914](https://github.com/choiceoh/Deneb/issues/4914)) ([dc4840d](https://github.com/choiceoh/Deneb/commit/dc4840d5e9871fb396d49a8e982dbd33b272cdea))
+
 ## [5.9.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.8.0...deneb-v5.9.0) (2026-08-29)
 
 
