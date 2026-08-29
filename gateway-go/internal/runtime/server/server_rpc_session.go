@@ -373,6 +373,13 @@ func (s *Server) configureSessionChatCallbacks(chatCfg *chat.HandlerConfig) {
 			s.autonomousSvc.IncrementDreamTurn(ctx)
 		}
 	}
+	// Per-conversation repository binding (code-repo allowlist). initCodeRepos
+	// is idempotent here — the early RPC registration may already have built
+	// the shared store, and both paths must see the same instance.
+	if s.codeRepos == nil {
+		s.initCodeRepos()
+	}
+	chatCfg.SessionWorkspaceFn = s.SessionWorkspaceDir
 	chatCfg.PreferenceSignalFn = func() {
 		if s.wikiDreamer != nil {
 			s.wikiDreamer.NotePreferenceSignal()

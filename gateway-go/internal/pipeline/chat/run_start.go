@@ -82,6 +82,14 @@ func (h *Handler) startAsyncRunWithAdmission(reqID string, params RunParams, isS
 		sess = h.sessions.Create(params.SessionKey, session.KindDirect)
 	}
 
+	// Inherit the conversation's bound repository when the request named no
+	// workspace. Placed here so ONE resolution feeds everything downstream —
+	// the prompt's context files and the tools' working directory alike. An
+	// explicit request workspace still wins: the caller was specific.
+	if params.WorkspaceDir == "" && h.sessionWorkspaceFn != nil {
+		params.WorkspaceDir = h.sessionWorkspaceFn(params.SessionKey)
+	}
+
 	// Inherit model from session state when RunParams doesn't specify one.
 	// Skip for sub-agents — their default model is resolved separately in
 	// executeAgentRun (subagentDefaultModel takes priority over session.Model).

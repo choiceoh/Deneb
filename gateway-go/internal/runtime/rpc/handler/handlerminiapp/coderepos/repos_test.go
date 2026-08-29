@@ -94,3 +94,79 @@ func TestUnregisterRequiresAnID(t *testing.T) {
 	m := Methods(CodeReposDeps{Store: coderepo.New(t.TempDir(), nil)})
 	rpctest.MustErr(t, rpctest.Call(m, "miniapp.repos.unregister", map[string]any{}))
 }
+
+// Binding methods appear only when the server wired a binder — a gateway
+// without one must not advertise a call that cannot work.
+func TestBindingMethodsAppearOnlyWithABinder(t *testing.T) {
+	store := coderepo.New(t.TempDir(), nil)
+	if _, ok := Methods(CodeReposDeps{Store: store})["miniapp.sessions.repo.set"]; ok {
+		t.Error("bind method advertised without a binder")
+	}
+	m := Methods(CodeReposDeps{Store: store, Bind: func(string, string) error { return nil }})
+	if _, ok := m["miniapp.sessions.repo.set"]; !ok {
+		t.Error("bind method missing when a binder is wired")
+	}
+}
+
+func TestBindRoundTripsThroughTheServerBinder(t *testing.T) {
+	repo := gitRepo(t)
+	store := coderepo.New(t.TempDir(), nil)
+	added, err := store.Register(repo, "")
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	bound := map[string]string{}
+	m := Methods(CodeReposDeps{
+		Store:     store,
+		Bind:      func(k, id string) error { bound[k] = id; return nil },
+		BoundRepo: func(k string) string { return bound[k] },
+	})
+
+	got := rpctest.Result[struct {
+		Bound  bool   `json:"bound"`
+		RepoID string `json:"repoId"`
+		Path   string `json:"path"`
+	}](t, rpctest.Call(m, "miniapp.sessions.repo.set",
+		map[string]any{"sessionKey": "client:cygnus:a", "repoId": added.ID}))
+	if !got.Bound || got.RepoID != added.ID || got.Path != repo {
+		t.Fatalf("set = %+v, want bound to %s at %s", got, added.ID, repo)
+	}
+
+	read := rpctest.Result[struct {
+		Bound  bool   `json:"bound"`
+		RepoID string `json:"repoId"`
+	}](t, rpctest.Call(m, "miniapp.sessions.repo.get", map[string]any{"sessionKey": "client:cygnus:a"}))
+	if !read.Bound || read.RepoID != added.ID {
+		t.Errorf("get = %+v, want the binding just made", read)
+	}
+}
+
+// An empty repoId CLEARS the binding — it is the documented way back to the
+// default workspace, not a missing parameter.
+func TestEmptyRepoIDClearsRatherThanErrors(t *testing.T) {
+	store := coderepo.New(t.TempDir(), nil)
+	bound := map[string]string{"client:cygnus:a": "api-1"}
+	m := Methods(CodeReposDeps{
+		Store:     store,
+		Bind:      func(k, id string) error { bound[k] = id; return nil },
+		BoundRepo: func(k string) string { return bound[k] },
+	})
+
+	got := rpctest.Result[struct {
+		Bound bool `json:"bound"`
+	}](t, rpctest.Call(m, "miniapp.sessions.repo.set", map[string]any{"sessionKey": "client:cygnus:a"}))
+	if got.Bound {
+		t.Error("clearing a binding must report bound=false")
+	}
+	if bound["client:cygnus:a"] != "" {
+		t.Errorf("binding = %q, want cleared", bound["client:cygnus:a"])
+	}
+}
+
+func TestBindRequiresASessionKey(t *testing.T) {
+	m := Methods(CodeReposDeps{
+		Store: coderepo.New(t.TempDir(), nil),
+		Bind:  func(string, string) error { return nil },
+	})
+	rpctest.MustErr(t, rpctest.Call(m, "miniapp.sessions.repo.set", map[string]any{"repoId": "api-1"}))
+}
