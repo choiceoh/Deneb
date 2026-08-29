@@ -34,6 +34,14 @@ export interface ToolPart {
   resultSummary?: string;
   // The readable head of the result, shown when the chip is expanded.
   resultPreview?: string;
+  // When this client first saw the `started` frame, and how long until its
+  // `completed` arrived. Measured here rather than on the wire: the chat
+  // stream's tool frame carries no timestamp (nativeapi toolStreamFrame), and
+  // what a progress chip should report is the wait the user actually sat
+  // through, which is the client-observed span. Absent on restored transcripts
+  // — that turn's waiting was never witnessed, so no duration is claimed.
+  startedAtMs?: number;
+  elapsedMs?: number;
 }
 export type CaptureKind = "image" | "audio" | "document";
 export interface AttachmentPart {

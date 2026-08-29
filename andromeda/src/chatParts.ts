@@ -22,7 +22,8 @@ export function appendTextPart(turn: ChatTurn, t: string): ChatTurn {
 }
 
 // Insert a tool chip on `started`; flip it to its result on `completed` (same id).
-export function upsertToolPart(turn: ChatTurn, ev: ChatToolEvent): ChatTurn {
+// `now` is injected so the reducer stays pure and the timing is testable.
+export function upsertToolPart(turn: ChatTurn, ev: ChatToolEvent, now: number = Date.now()): ChatTurn {
   const parts: AssistantPart[] = [...(turn.parts ?? [])];
   const idx = ev.toolUseId ? parts.findIndex((p) => p.kind === "tool" && p.id === ev.toolUseId) : -1;
   // The gateway puts the human hint (command, query, path) on the `started`
@@ -31,6 +32,13 @@ export function upsertToolPart(turn: ChatTurn, ev: ChatToolEvent): ChatTurn {
   // tool name — keep the hint we were already shown.
   const prev = idx >= 0 ? (parts[idx] as ToolPart) : undefined;
   const prevDetail = prev?.detail;
+  const completed = (ev.state || "started") === "completed";
+  // Stamp the start once and close it out on completion. A repeated `started`
+  // (SSE replay/reconnect) keeps the ORIGINAL stamp — restamping would reset a
+  // call that has been running for a while back to zero. A `completed` with no
+  // start seen (chip adopted mid-stream) simply reports no duration.
+  const startedAtMs = prev?.startedAtMs ?? (completed ? undefined : now);
+  const elapsedMs = completed && startedAtMs !== undefined ? Math.max(0, now - startedAtMs) : prev?.elapsedMs;
   const next: ToolPart = {
     kind: "tool",
     id: ev.toolUseId || `${ev.tool}-${parts.length}`,
@@ -40,6 +48,8 @@ export function upsertToolPart(turn: ChatTurn, ev: ChatToolEvent): ChatTurn {
     isError: ev.isError,
     resultSummary: ev.resultSummary || prev?.resultSummary,
     resultPreview: ev.resultPreview || prev?.resultPreview,
+    startedAtMs,
+    elapsedMs,
   };
   if (idx >= 0) parts[idx] = { ...(parts[idx] as ToolPart), ...next };
   else parts.push(next);

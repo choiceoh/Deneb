@@ -53,3 +53,29 @@ describe("upsertToolPart", () => {
     });
   });
 });
+
+describe("upsertToolPart timing", () => {
+  const start = { state: "started", tool: "exec", toolUseId: "t9" } as const;
+
+  it("closes the span on completion", () => {
+    const started = upsertToolPart(base, start, 1_000);
+    expect(started.parts?.[0]).toMatchObject({ startedAtMs: 1_000, elapsedMs: undefined });
+    const done = upsertToolPart(started, { ...start, state: "completed" }, 1_420);
+    expect(done.parts?.[0]).toMatchObject({ elapsedMs: 420 });
+  });
+
+  it("keeps the original stamp when a started frame repeats", () => {
+    // An SSE reconnect replays `started`; restamping would reset a call that has
+    // already been running back to zero and under-report the wait.
+    const first = upsertToolPart(base, start, 1_000);
+    const replay = upsertToolPart(first, start, 3_000);
+    const done = upsertToolPart(replay, { ...start, state: "completed" }, 4_000);
+    expect(done.parts?.[0]).toMatchObject({ elapsedMs: 3_000 });
+  });
+
+  it("claims no duration for a completion it never saw start", () => {
+    // Chip adopted mid-stream — reporting `now - undefined` would be a fiction.
+    const done = upsertToolPart(base, { ...start, state: "completed" }, 5_000);
+    expect(done.parts?.[0]).toMatchObject({ elapsedMs: undefined, startedAtMs: undefined });
+  });
+});

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { ToolChip, previewLineClass } from "./ToolChip";
+import { ToolChip, formatElapsed, previewLineClass } from "./ToolChip";
 
 describe("ToolChip", () => {
   it("humanizes the tool id and displays its detail", () => {
@@ -59,5 +59,52 @@ describe("ToolChip", () => {
     expect(previewLineClass("+++ b/file.ts")).toBe("");
     expect(previewLineClass("--- a/file.ts")).toBe("");
     expect(previewLineClass("plain")).toBe("");
+  });
+});
+
+describe("formatElapsed", () => {
+  it("keeps millisecond resolution below a second", () => {
+    // A 40ms cache hit and a 900ms one are different facts on a coding surface;
+    // rounding both to "0.0초" would erase the distinction.
+    expect(formatElapsed(40)).toBe("40ms");
+    expect(formatElapsed(912)).toBe("912ms");
+  });
+
+  it("switches to seconds, losing the decimal once it stops mattering", () => {
+    expect(formatElapsed(1_000)).toBe("1.0초");
+    expect(formatElapsed(3_240)).toBe("3.2초");
+    expect(formatElapsed(24_400)).toBe("24초");
+  });
+
+  it("reads minutes for long steps", () => {
+    expect(formatElapsed(60_000)).toBe("1분");
+    expect(formatElapsed(80_000)).toBe("1분 20초");
+  });
+
+  it("renders nothing for a nonsense span", () => {
+    expect(formatElapsed(-1)).toBe("");
+    expect(formatElapsed(Number.NaN)).toBe("");
+  });
+});
+
+describe("ToolChip duration", () => {
+  const base = { kind: "tool", id: "t1", tool: "exec", state: "completed" } as const;
+
+  it("shows what a finished call cost", () => {
+    render(<ToolChip part={{ ...base, elapsedMs: 1_500 }} />);
+    expect(screen.getByText("1.5초")).toBeInTheDocument();
+  });
+
+  it("claims no duration on a restored chip that was never timed", () => {
+    // Restored transcripts carry no timing — inventing one would be a fiction
+    // presented as measurement.
+    const { container } = render(<ToolChip part={base} />);
+    expect(container.querySelector(".tool-chip-elapsed")).toBeNull();
+  });
+
+  it("waits for completion before reporting a span", () => {
+    // A running chip has a start but no end; a number mid-flight reads as final.
+    const { container } = render(<ToolChip part={{ ...base, state: "started", startedAtMs: 1 }} />);
+    expect(container.querySelector(".tool-chip-elapsed")).toBeNull();
   });
 });
