@@ -14,6 +14,7 @@ package recall
 import (
 	"log/slog"
 	"path"
+	"regexp"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -40,6 +41,40 @@ func StoreInjectedPaths(sessionKey string, paths []string) {
 		return
 	}
 	recallInjectedStore.store[sessionKey] = append([]string(nil), paths...)
+}
+
+// snapshotWikiRefPattern extracts the wiki/org page refs from a RENDERED
+// recall block — the inverse of formatRecallEvidenceAt's row shape, kept in
+// this package so renderer and parser move together (round-trip pinned by
+// TestArmSnapshotCitationsRoundTrip).
+var snapshotWikiRefPattern = regexp.MustCompile(`(?m)^- source=(wiki|org) ref="([^"]+)"`)
+
+// ArmSnapshotCitations re-arms the end-of-turn citation pass for a turn served
+// from the frozen snapshot cache. A cache hit skips Build entirely, so without
+// this the SECOND and later turns of a pinned-topic conversation — exactly the
+// turns most likely to keep using the pinned evidence — could never earn cite
+// events (the candidates are consume-once). Inject events are NOT re-recorded:
+// exposure was already counted when the snapshot was built; only the use half
+// needs re-arming. Org rows count only when they point at a real page, the
+// same rule isLedgerPage applies on the evidence structs.
+func ArmSnapshotCitations(sessionKey, snapshot string) {
+	if sessionKey == "" || snapshot == "" {
+		return
+	}
+	matches := snapshotWikiRefPattern.FindAllStringSubmatch(snapshot, -1)
+	if len(matches) == 0 {
+		return
+	}
+	paths := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if m[1] == "org" && !strings.HasSuffix(m[2], ".md") {
+			continue
+		}
+		paths = append(paths, m[2])
+	}
+	if len(paths) > 0 {
+		StoreInjectedPaths(sessionKey, paths)
+	}
 }
 
 // TakeInjectedPaths returns and clears the session's pending candidates —

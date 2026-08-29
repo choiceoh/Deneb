@@ -1,86 +1,35 @@
 package recall
 
 import (
-	"reflect"
 	"testing"
+	"time"
 )
 
-func TestInjectedPaths_ConsumeOnceAndClearOnEmpty(t *testing.T) {
-	const session = "client:test-injected"
-	StoreInjectedPaths(session, []string{"프로젝트/a.md", "프로젝트/b.md"})
+// Renderer↔parser round-trip: ArmSnapshotCitations must recover from a
+// RENDERED snapshot exactly the paths the ledger scores (isLedgerPage's
+// rule) — wiki rows and org rows that point at real pages, never session
+// rows or org placeholders. Pins the row shape the parser depends on.
+func TestArmSnapshotCitationsRoundTrip(t *testing.T) {
+	evidence := []recallEvidence{
+		{Kind: "wiki", Source: "프로젝트/pl1-hnm-epc-001/대표.md", Note: "위키 근거", Score: 1.2, At: 1},
+		{Kind: "org", Source: "인물/임형철.md", Note: "조직 인물", Score: 1.1, At: 1},
+		{Kind: "org", Source: "조직도: 미등재멤버", Note: "페이지 없음", Score: 1.0, At: 1},
+		{Kind: "session", Source: "cl:x:s3#1/user", Note: "세션 행", Score: 0.9, At: 1},
+	}
+	block, _ := formatRecallEvidenceAt(evidence, time.Now(), true, true)
 
-	got := TakeInjectedPaths(session)
-	if !reflect.DeepEqual(got, []string{"프로젝트/a.md", "프로젝트/b.md"}) {
-		t.Fatalf("first take = %v", got)
+	ArmSnapshotCitations("client:roundtrip", block)
+	got := TakeInjectedPaths("client:roundtrip")
+	want := map[string]bool{"프로젝트/pl1-hnm-epc-001/대표.md": true, "인물/임형철.md": true}
+	if len(got) != len(want) {
+		t.Fatalf("want exactly the ledger pages, got %v", got)
 	}
-	if again := TakeInjectedPaths(session); again != nil {
-		t.Errorf("second take = %v, want nil (consume-once)", again)
+	for _, p := range got {
+		if !want[p] {
+			t.Fatalf("unexpected path %q in %v", p, got)
+		}
 	}
-
-	// A later turn that injects nothing must clear a pending slot so its
-	// answer cannot be attributed to the earlier turn's paths.
-	StoreInjectedPaths(session, []string{"프로젝트/a.md"})
-	StoreInjectedPaths(session, nil)
-	if got := TakeInjectedPaths(session); got != nil {
-		t.Errorf("cleared slot take = %v, want nil", got)
-	}
-
-	// Empty session keys are ignored on both sides.
-	StoreInjectedPaths("", []string{"프로젝트/a.md"})
-	if got := TakeInjectedPaths(""); got != nil {
-		t.Errorf("empty session take = %v, want nil", got)
-	}
-}
-
-func TestMatchCitedPaths(t *testing.T) {
-	paths := []string{
-		"프로젝트/PRJ-021/한울읍성.md",
-		"거래처/knk-energy.md",
-		"프로젝트/PRJ-007/대표.md", // generic title — full path required
-		"인물/김.md",            // 1-rune title — full path required
-	}
-
-	tests := []struct {
-		name   string
-		answer string
-		want   []string
-	}{
-		{
-			name:   "full path cited",
-			answer: "상세는 프로젝트/PRJ-021/한울읍성.md 참조.",
-			want:   []string{"프로젝트/PRJ-021/한울읍성.md"},
-		},
-		{
-			name:   "path without md suffix cited",
-			answer: "거래처/knk-energy 페이지에 정리돼 있습니다.",
-			want:   []string{"거래처/knk-energy.md"},
-		},
-		{
-			name:   "bare specific title cited",
-			answer: "한울읍성 현장은 다음 주 계약 예정입니다.",
-			want:   []string{"프로젝트/PRJ-021/한울읍성.md"},
-		},
-		{
-			name:   "generic title alone is not a citation",
-			answer: "대표 담당자가 확인했고, 김 부장이 회신했습니다.",
-			want:   nil,
-		},
-		{
-			name:   "unrelated answer cites nothing",
-			answer: "오늘 일정은 오후 회의 하나입니다.",
-			want:   nil,
-		},
-		{
-			name:   "empty answer",
-			answer: "",
-			want:   nil,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := matchCitedPaths(tt.answer, paths, nil); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("matchCitedPaths(%q, nil) = %v, want %v", tt.answer, got, tt.want)
-			}
-		})
+	if again := TakeInjectedPaths("client:roundtrip"); len(again) != 0 {
+		t.Fatalf("candidates must stay consume-once, got %v", again)
 	}
 }

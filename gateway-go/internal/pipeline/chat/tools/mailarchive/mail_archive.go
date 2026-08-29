@@ -14,6 +14,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
@@ -335,6 +336,9 @@ func relatedArchiveWiki(ctx context.Context, adapter knowledge.Adapter, msg mail
 	if query == "" {
 		return nil
 	}
+	// These hits render into the tool result the model reads — that is
+	// exposure, and it previously went uncounted in the recall-utility ledger.
+	ctx = knowledge.WithInjectAttribution(ctx, toolport.SessionKeyFromContext(ctx), "mail-archive-enrich")
 	hits, err := adapter.Recall(ctx, query, 3)
 	if err != nil || len(hits) == 0 {
 		return nil

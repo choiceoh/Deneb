@@ -174,6 +174,10 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, se
 			cached, ok, generation := chatrecall.CachedSnapshotWithGeneration(params.SessionKey, fingerprint)
 			recallCacheGeneration = generation
 			if ok {
+				// A snapshot-served turn still shows the model the pinned wiki
+				// evidence: re-arm the citation pass so later turns of a frozen
+				// conversation can earn cite events (recall_injected.go).
+				chatrecall.ArmSnapshotCitations(params.SessionKey, cached)
 				return cached
 			}
 		}

@@ -237,6 +237,10 @@ func knowledgeRead(ctx context.Context, router *knowledge.Router, refStr string)
 	if refStr == "" {
 		return "", fmt.Errorf("ref is required for knowledge(op=\"read\")")
 	}
+	// This tool is the model-driven read surface: attribute the read to the
+	// chat session so the wiki utility ledger can join it against the inject
+	// exposure that surfaced the page (unattributed reads are not recorded).
+	ctx = knowledge.WithReadAttribution(ctx, toolport.SessionKeyFromContext(ctx))
 	// Guidance strings instead of raw Go errors: a bad ref or a missing doc is
 	// an expected state the model should recover from (search first), not a
 	// hard failure to surface to the user.
