@@ -95,12 +95,19 @@ fn toggle_cygnus_window(app: &tauri::AppHandle) {
     let built = WebviewWindowBuilder::new(app, "cygnus", WebviewUrl::App("index.html?window=cygnus".into()))
         .initialization_script("window.__CYGNUS__ = true;")
         .title("Cygnus")
-        // Wide enough that the thread rail docks beside the conversation
-        // (the 560px breakpoint in cygnus.css) instead of covering it — the
-        // list is meant to stay up. Narrower is still supported: below the
-        // breakpoint the rail falls back to an overlay drawer.
+        // Wide enough that the thread rail docks beside the conversation (the
+        // 560px breakpoint in cygnus.css) instead of covering it — the list is
+        // a standing part of this surface, not a popup.
+        //
+        // The MINIMUM carries that intent, not just the default: window-state
+        // restores the last geometry with an unconditional set_size, so anyone
+        // who used Cygnus before the docked rail would come back at 480px —
+        // under the breakpoint, silently back to an overlay, with the feature
+        // invisible. A minimum above the breakpoint is what the window manager
+        // clamps that restore against. 600 (not 560) leaves slack so rounding
+        // or a scrollbar can't land the webview a pixel under the query.
         .inner_size(720.0, 700.0)
-        .min_inner_size(380.0, 520.0)
+        .min_inner_size(600.0, 520.0)
         .decorations(false)
         .transparent(true)
         // Match the main window: let the webview own drag-drop (HTML5 file drop).
