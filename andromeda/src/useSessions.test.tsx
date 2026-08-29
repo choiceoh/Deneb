@@ -298,6 +298,19 @@ describe("useSessions", () => {
         { kind: "tool", state: "completed", detail: "ls -la", resultSummary: "total 60 · 2줄" },
       ]);
 
+      // The gateway-authored phase line lands as the placeholder's status hint.
+      act(() => {
+        emitGatewayFrame({
+          event: "agent.event",
+          payload: {
+            kind: "phase.changed",
+            sessionKey: "client:main:run",
+            payload: { phase: "working", label: "도구로 필요한 내용을 확인하고 있습니다" },
+          },
+        });
+      });
+      expect((chat.turns() as ChatTurn[]).at(-1)!.statusHint).toBe("도구로 필요한 내용을 확인하고 있습니다");
+
       // A frame for ANOTHER session must not touch this placeholder.
       act(() => {
         emitGatewayFrame({

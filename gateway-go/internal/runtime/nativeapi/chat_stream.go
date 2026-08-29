@@ -40,6 +40,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeauth"
@@ -124,28 +126,9 @@ type progressStreamFrame struct {
 }
 
 func chatProgressLabel(phase string) string {
-	switch phase {
-	case "accepted":
-		return "요청을 받았습니다"
-	case "preparing":
-		return "대화 맥락을 준비하고 있습니다"
-	case "recalling":
-		return "관련 기억을 확인하고 있습니다"
-	case "thinking":
-		return "해결 방법을 검토하고 있습니다"
-	case "working":
-		return "도구로 필요한 내용을 확인하고 있습니다"
-	case "reviewing":
-		return "확인한 결과를 검토하고 있습니다"
-	case "writing":
-		return "답변을 작성하고 있습니다"
-	case "wrapping_up":
-		return "마무리 답변을 작성하고 있습니다"
-	case "finalizing":
-		return "답변을 정리하고 있습니다"
-	default:
-		return "응답을 준비하고 있습니다"
-	}
+	// Single wording source shared with the spectate plane's phase.changed
+	// payloads — see toolport.ChatProgressLabel.
+	return toolport.ChatProgressLabel(phase)
 }
 
 // chatStreamRunner runs a streaming chat turn, invoking the sink callbacks as
