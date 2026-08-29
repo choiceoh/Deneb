@@ -31,6 +31,17 @@ func ResolvePathWithRoots(path, defaultDir string, extraRoots []string) string {
 	return resolved
 }
 
+// ResolvePathWithRootsContained is ResolvePathWithRoots plus the clamp flag
+// ResolvePathContained reports — the read-side tools need it for the same
+// reason write does. Without it a path outside the jail comes back as the
+// workspace ROOT, and a tool that then describes that directory is making a
+// claim about a path it never touched: read answered `"…/CLAUDE.md" is a
+// directory with 0 entries` for a regular file, and the model concluded the
+// tool was broken and shelled out instead (2026-08-29, live).
+func ResolvePathWithRootsContained(path, defaultDir string, extraRoots []string) (string, bool) {
+	return resolvePathWithRoots(path, defaultDir, extraRoots)
+}
+
 func resolvePathWithRoots(path, defaultDir string, extraRoots []string) (string, bool) {
 	if path == "~" || strings.HasPrefix(path, "~/") {
 		if home, err := os.UserHomeDir(); err == nil && home != "" {

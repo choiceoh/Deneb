@@ -397,7 +397,15 @@ func ToolRead(defaultDir string, extraReadRoots ...string) toolport.ToolFunc {
 // depends on.
 func readOne(ctx context.Context, p readParams, defaultDir string, extraReadRoots []string) (string, error) {
 	dir := defaultDir
-	path := artifact.ResolvePathWithRoots(p.FilePath, dir, extraReadRoots)
+	path, clamped := artifact.ResolvePathWithRootsContained(p.FilePath, dir, extraReadRoots)
+	// Outside the jail the resolver hands back the workspace ROOT, and the
+	// directory-listing fallback below would then describe THAT directory
+	// against the requested path — "…/CLAUDE.md is a directory with 0 entries"
+	// for a regular file. Say what actually happened instead; write has
+	// answered this way since 2026-08-02.
+	if clamped {
+		return "", fmt.Errorf("%q is outside this tool's reach (workspace %s plus the curated read roots) — read cannot open it", p.FilePath, dir)
+	}
 	if err := artifact.CheckProtectedPath(path, "read"); err != nil {
 		return "", err
 	}

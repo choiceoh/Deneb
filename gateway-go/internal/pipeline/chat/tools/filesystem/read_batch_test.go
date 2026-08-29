@@ -134,3 +134,53 @@ func TestToolRead_SingleReadStillWorks(t *testing.T) {
 		t.Fatalf("single read must stay header-free:\n%s", out)
 	}
 }
+
+// TestToolRead_OutOfJailPathSaysSo pins the live finding behind the clamp fix:
+// a path outside the workspace used to come back as the workspace ROOT, so the
+// directory-listing fallback described THAT directory against the requested
+// path — read answered `"…/CLAUDE.md" is a directory with 0 entries` for a
+// regular file, and the model concluded the tool was broken and shelled out.
+// write has refused this way since 2026-08-02; read and grep had not.
+func TestToolRead_OutOfJailPathSaysSo(t *testing.T) {
+	jail := t.TempDir()
+	outside := t.TempDir()
+	writeReadFixture(t, outside, "secret.md", "# not yours\n")
+	target := filepath.Join(outside, "secret.md")
+
+	for _, args := range []map[string]any{
+		{"file_path": target},
+		{"file_paths": []string{target}},
+	} {
+		out, err := callTool(t, ToolRead(jail), args)
+		if err == nil && !strings.Contains(out, "읽기 실패") {
+			t.Fatalf("%v should not succeed, got: %s", args, out)
+		}
+		msg := out
+		if err != nil {
+			msg = err.Error()
+		}
+		if strings.Contains(msg, "is a directory") {
+			t.Errorf("%v must not claim the file is a directory: %s", args, msg)
+		}
+		if !strings.Contains(msg, "outside this tool's reach") {
+			t.Errorf("%v should name the boundary: %s", args, msg)
+		}
+	}
+}
+
+// TestToolGrep_OutOfJailPathSaysSo: grep clamped the same way, which was worse
+// than a wrong message — it silently searched the whole workspace and reported
+// the hits as if they came from the requested path.
+func TestToolGrep_OutOfJailPathSaysSo(t *testing.T) {
+	jail := t.TempDir()
+	writeReadFixture(t, jail, "inside.txt", "needle here\n")
+	outside := t.TempDir()
+
+	_, err := callTool(t, ToolGrep(jail), map[string]any{"pattern": "needle", "path": outside})
+	if err == nil {
+		t.Fatal("grep outside the jail should refuse, not silently search the workspace")
+	}
+	if !strings.Contains(err.Error(), "outside this tool's reach") {
+		t.Fatalf("want the boundary named, got: %v", err)
+	}
+}
