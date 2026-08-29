@@ -149,6 +149,32 @@ func extractSenderContext(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 	return extractWikiGraphContext(ctx, msg)
 }
 
+// maxTopicFactsChars bounds recalled topic material so the analyze prompt stays
+// small. Larger than the sender budget: the sender resolves to one identity
+// line, a subject can span several project pages.
+const maxTopicFactsChars = 3000
+
+// extractTopicContext recalls what the wiki holds about this mail's SUBJECT.
+//
+// This is the half of MemoryContext that was never wired. Arrival analysis
+// resolved the sender (identity graph) and the thread (previous mails) but
+// never the topic, so a message on a running deal arrived without the prior
+// quotes, decisions and terms the wiki already had. Best-effort on every path:
+// the pipeline must not block or fail on memory.
+func extractTopicContext(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail) string {
+	if deps.TopicFactsFn == nil || msg == nil {
+		return ""
+	}
+	facts := strings.TrimSpace(deps.TopicFactsFn(ctx, msg.Subject, msg.Body))
+	if facts == "" {
+		return ""
+	}
+	if len(facts) > maxTopicFactsChars {
+		facts = textutil.TruncateBytes(facts, maxTopicFactsChars) + "\n...(생략)"
+	}
+	return facts
+}
+
 // extractWikiGraphContext queries the wiki knowledge graph (built by the wiki
 // dreamer at ~/.deneb/wiki-graph/graphify-out/graph.json) for the sender's
 // identity and related context. The result populates MemoryContext.SenderFacts

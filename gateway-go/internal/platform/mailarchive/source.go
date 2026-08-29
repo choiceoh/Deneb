@@ -14,11 +14,18 @@ import (
 // Default tuning. These mirror the Gmail-path caps in mailanalysis so the LLM thread
 // extractor sees a comparable amount of context regardless of source.
 const (
-	defaultMaxThread     = 10
-	defaultMaxSender     = 5
-	defaultMaxFetch      = 18 // hard cap on bodies fetched per incoming message
+	defaultMaxThread = 10
+	// Sender history: 10 messages over 90 days (operator decision, 2026-08-29).
+	// A 30-day window is shorter than the deals it has to explain — an EPC
+	// thread runs for months, so the exchange that frames a new message often
+	// sits outside a month.
+	defaultMaxSender = 10
+	// Must cover maxThread + maxSender or prioritizedArchiveUIDGroups silently
+	// trims the SENDER group to fit (thread wins the tie): at 18 a 10+10 config
+	// would deliver 8 sender messages while reporting 10.
+	defaultMaxFetch      = 20 // hard cap on bodies fetched per incoming message
 	defaultMaxReferences = 20 // bound per-message HEADER searches on long threads
-	defaultSenderWindow  = 30 * 24 * time.Hour
+	defaultSenderWindow  = 90 * 24 * time.Hour
 	defaultTimeout       = 15 * time.Second
 )
 

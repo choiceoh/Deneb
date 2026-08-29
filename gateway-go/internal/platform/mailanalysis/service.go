@@ -94,6 +94,11 @@ type Config struct {
 	// Forwarded to PipelineDeps; nil = fall back to the graphify subprocess.
 	SenderFactsFn func(ctx context.Context, displayName string) string
 
+	// TopicFactsFn recalls what the wiki holds about the mail's SUBJECT.
+	// Forwarded to PipelineDeps; nil = no topic recall (the slot stays empty,
+	// which is how it shipped before this was wired).
+	TopicFactsFn func(ctx context.Context, subject, body string) string
+
 	// CounterpartyProjectsFn returns linked project names for an active
 	// counterparty domain (party-anchor enrichment). Forwarded to
 	// PipelineDeps; nil = plain side labels.
@@ -559,6 +564,7 @@ func (s *Service) pipelineDeps(gmailClient *gmail.Client) PipelineDeps {
 		Logger:                 s.log,
 		ProjectsFn:             s.cfg.ProjectsFn,
 		SenderFactsFn:          s.cfg.SenderFactsFn,
+		TopicFactsFn:           s.cfg.TopicFactsFn,
 		CounterpartyProjectsFn: s.cfg.CounterpartyProjectsFn,
 		AttachmentExtractFn:    s.cfg.AttachmentExtractFn,
 		ThinkingKwarg:          s.cfg.ThinkingKwarg,

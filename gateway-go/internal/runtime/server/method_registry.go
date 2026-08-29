@@ -124,6 +124,56 @@ func (s *Server) wikiSenderFacts(ctx context.Context, from string) string {
 	return facts
 }
 
+// wikiTopicFacts recalls what the wiki already holds about an arriving mail's
+// subject, for mailanalysis.PipelineDeps.TopicFactsFn.
+//
+// The query is the SUBJECT plus a short body head, not the whole mail: the
+// body carries signatures, quoted history and disclaimers that dominate a
+// search query and pull unrelated pages. Results render as path + title +
+// summary — enough for synthesis to say what the project already knows, while
+// the analysis prompt's own wiki tool remains available for the full page.
+func (s *Server) wikiTopicFacts(ctx context.Context, subject, body string) string {
+	if s.wikiStore == nil {
+		return ""
+	}
+	query := strings.TrimSpace(subject)
+	if head := strings.TrimSpace(body); head != "" {
+		if len(head) > wikiTopicBodyHeadChars {
+			head = head[:wikiTopicBodyHeadChars]
+		}
+		query = strings.TrimSpace(query + " " + head)
+	}
+	if query == "" {
+		return ""
+	}
+	results, err := s.wikiStore.Search(ctx, query, wikiTopicFactsLimit)
+	if err != nil || len(results) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range results {
+		if b.Len() > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString("- " + r.Path)
+		if page, readErr := s.wikiStore.ReadPage(r.Path); readErr == nil && page != nil {
+			if t := strings.TrimSpace(page.Meta.Title); t != "" {
+				b.WriteString(" | " + t)
+			}
+			if sum := strings.TrimSpace(page.Meta.Summary); sum != "" {
+				b.WriteString(" | " + sum)
+			}
+		}
+	}
+	return b.String()
+}
+
+const (
+	// Subject plus this much body head forms the topic query.
+	wikiTopicBodyHeadChars = 400
+	wikiTopicFactsLimit    = 5
+)
+
 // senderEmailFromHeader pulls the address out of a "Name <addr@host>" From header
 // (or returns a bare address as-is). "" when the header carries no address.
 func senderEmailFromHeader(from string) string {

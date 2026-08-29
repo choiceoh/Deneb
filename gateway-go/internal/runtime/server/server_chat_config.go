@@ -72,6 +72,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		LocalClient:   stage1,
 		LocalModel:    stage1Model,
 		SenderFactsFn: s.wikiSenderFacts,
+		TopicFactsFn:  s.wikiTopicFacts,
 		CounterpartyProjectsFn: func(domain string) []string {
 			return s.cpProjects.Lookup(s.wikiStore, domain)
 		},
@@ -282,6 +283,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		LocalClient:   stage1,
 		LocalModel:    stage1Model,
 		SenderFactsFn: s.wikiSenderFacts,
+		TopicFactsFn:  s.wikiTopicFacts,
 		CounterpartyProjectsFn: func(domain string) []string {
 			return s.cpProjects.Lookup(s.wikiStore, domain)
 		},
