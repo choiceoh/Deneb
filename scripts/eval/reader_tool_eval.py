@@ -48,6 +48,7 @@ paired run (same snapshot, same judge) beats comparing two runs taken apart.
 """
 
 import argparse
+import concurrent.futures
 import json
 import os
 import pathlib
@@ -481,6 +482,12 @@ def looks_abstained(answer: str) -> bool:
     return any(m in low for m in ABSTAIN_MARKERS)
 
 
+def _progress(done: int, total: int, rec: dict) -> None:
+    mark = {"CORRECT": "o", "INCORRECT": "x"}.get(rec.get("verdict_label"), "?")
+    print(f"[{done}/{total}] {mark} {rec['qid']} "
+          f"(open {rec['opens']} search {rec['searches']})", file=sys.stderr)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--export", required=True,
@@ -493,6 +500,8 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--open-budget", type=int, default=DEFAULT_OPEN_BUDGET)
     ap.add_argument("--search-budget", type=int, default=DEFAULT_SEARCH_BUDGET)
+    ap.add_argument("--workers", type=int, default=1,
+                    help="concurrent questions (default 1; see the note in main)")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -516,8 +525,7 @@ def main() -> int:
         print(f"warning: {len(missing)} qids absent from --data "
               f"(OPEN/SEARCH unavailable for them)", file=sys.stderr)
 
-    results = []
-    for i, rec in enumerate(records, 1):
+    def score_one(rec: dict) -> dict:
         out = run_question(rec, haystacks.get(rec["qid"]), args.model,
                            args.open_budget, args.search_budget, args.verbose)
         label, reason = judge(out, args.judge_model)
@@ -525,10 +533,30 @@ def main() -> int:
         out["correct"] = label == "CORRECT"
         out["verdict"] = reason
         out["abstained"] = looks_abstained(out["answer"])
-        results.append(out)
-        mark = {"CORRECT": "o", "INCORRECT": "x"}.get(label, "?")
-        print(f"[{i}/{len(records)}] {mark} {out['qid']} "
-              f"(open {out['opens']} search {out['searches']})", file=sys.stderr)
+        return out
+
+    # Questions are independent and every one of them is latency-bound on the
+    # wormhole, so workers buy wall clock almost linearly. Serial stays the
+    # DEFAULT because concurrency is not free of measurement risk in general —
+    # the Go bench measures a different configuration under load, when its
+    # rerank sidecar times out and silently falls back. Here that class of
+    # error cannot hide: a call that fails under load becomes UNSCORED and is
+    # reported, not folded into the accuracy as a wrong answer.
+    results = [None] * len(records)
+    done = 0
+    if args.workers > 1:
+        with concurrent.futures.ThreadPoolExecutor(args.workers) as pool:
+            futures = {pool.submit(score_one, rec): i
+                       for i, rec in enumerate(records)}
+            for fut in concurrent.futures.as_completed(futures):
+                i = futures[fut]
+                results[i] = fut.result()
+                done += 1
+                _progress(done, len(records), results[i])
+    else:
+        for i, rec in enumerate(records):
+            results[i] = score_one(rec)
+            _progress(i + 1, len(records), results[i])
 
     summary = summarize(results)
     text = format_summary(f"{args.model} over {pathlib.Path(args.export).name}",
