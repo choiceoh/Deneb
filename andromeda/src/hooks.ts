@@ -62,6 +62,10 @@ export interface ChatTurn {
   canRegenerate?: boolean;
   reasoning?: string; // assistant chain-of-thought → expandable reasoning block
   startedAt?: number; // live-turn wall clock anchor for the visible elapsed timer
+  // Gateway-authored phase line for a SPECTATED turn ("도구로 필요한 내용을
+  // 확인하고 있습니다") — the live turn's narration arrives via `thinking`
+  // instead, so the render uses thinking first, then this.
+  statusHint?: string;
 }
 
 export interface SendOpts {

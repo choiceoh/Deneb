@@ -70,6 +70,9 @@ export function onEventsHello(fn: HelloListener): () => void {
 function dispatchGatewayFrame(obj: Record<string, unknown>) {
   const event = asStr(obj.event);
   if (!event) return;
+  // Debug ring (headless CDP probes): last 40 gateway frames.
+  const w = window as unknown as { __DENEB_GW_RING?: unknown[] };
+  w.__DENEB_GW_RING = [...(w.__DENEB_GW_RING ?? []).slice(-39), obj];
   const payload = (obj.payload && typeof obj.payload === "object" ? obj.payload : {}) as Record<string, unknown>;
   for (const fn of [...gatewayListeners]) {
     try {

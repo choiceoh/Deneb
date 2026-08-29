@@ -877,6 +877,9 @@ func emitPhase(deps runDeps, params RunParams, phase string, at time.Time) {
 	}
 	deps.callbacks.emitAgentFn("phase.changed", params.SessionKey, params.ClientRunID, map[string]any{
 		"phase": phase,
+		// The spectate surface renders this verbatim — same wording the owning
+		// stream's progress frames carry.
+		"label": toolport.ChatProgressLabel(phase),
 		"ts":    at.UnixMilli(),
 	})
 }

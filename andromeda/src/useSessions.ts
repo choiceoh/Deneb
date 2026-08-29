@@ -389,6 +389,12 @@ export function useSessions(
         chat.patchTurns?.((turns) => turns.map((t) => (t.id === placeholderId ? upsertToolPart(t, ev) : t)));
         return;
       }
+      if (kind === "phase.changed") {
+        const label = typeof inner.label === "string" ? inner.label : "";
+        if (!label) return;
+        chat.patchTurns?.((turns) => turns.map((t) => (t.id === placeholderId ? { ...t, statusHint: label } : t)));
+        return;
+      }
       if (kind === "run.end") {
         // Faster than the next 3s poll — and loadTranscript stops this spectate.
         void loadTranscript(key).catch(() => {});

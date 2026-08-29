@@ -100,7 +100,7 @@ export function AssistantBody({
       return (
         <div className="ai-turn-body">
           {reasoning}
-          <DenebStatus summary={thinking?.trim() ? thinking : undefined} startedAt={turn.startedAt} />
+          <DenebStatus summary={thinking?.trim() ? thinking : turn.statusHint} startedAt={turn.startedAt} />
         </div>
       );
     }
@@ -124,7 +124,7 @@ export function AssistantBody({
         ),
       )}
       {turn.status === "streaming" ? (
-        <DenebStatus summary={thinking?.trim() ? thinking : undefined} startedAt={turn.startedAt} />
+        <DenebStatus summary={thinking?.trim() ? thinking : turn.statusHint} startedAt={turn.startedAt} />
       ) : null}
     </div>
   );
