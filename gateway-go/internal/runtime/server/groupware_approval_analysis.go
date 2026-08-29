@@ -62,6 +62,14 @@ func (s *Server) completeApprovalAnalysis(ctx context.Context, docID, title, dat
 		}
 		if ref, ok := resolveApprovalProject(s.wikiStore, title, enriched); ok {
 			user += "\n\n## 프로젝트 후보\n「" + ref.Name + "」에 매칭됨. 이 프로젝트 로그/현재 상태에 남길지 PROJECT_FILE로 답할 것."
+			// The match IDENTIFIED the project and then said nothing about it.
+			// Price history answers "is this amount right"; the project's own
+			// state answers the other half — "should this go out now" — and a
+			// 결재 decision needs both. Summary + 현재 상태 from the 대표페이지,
+			// the same surfaces recall renders for a project anchor.
+			if state := approvalProjectStateContext(s.wikiStore, ref); state != "" {
+				user += "\n" + state
+			}
 		}
 	}
 	// Precedent recall: past analyses of similar documents (title-token overlap,
