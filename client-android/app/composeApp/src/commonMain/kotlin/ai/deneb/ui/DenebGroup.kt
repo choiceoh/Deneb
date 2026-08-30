@@ -1,6 +1,7 @@
 package ai.deneb.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -73,10 +75,17 @@ fun DenebGroup(
 }
 
 /**
- * A row inside a [DenebGroup]: a leading mono icon, a title (+ optional subtitle), and a
+ * A row inside a [DenebGroup]: a leading icon, a title (+ optional subtitle), and a
  * trailing chevron (or custom [trailing]). A [selected] row tints its icon + title with
  * the interactive accent (`primary`). Each row draws an inset bottom hairline unless
  * [divider] is false (use on the last row of a group).
+ *
+ * [statusText] reports that the row is NOT in its normal state; a healthy row passes
+ * nothing and stays quiet. [statusColor] is optional and reserved for FAILURE — pass
+ * `colorScheme.error` / the warning ink when the operator has to act, and leave it null
+ * for a state that is merely in progress. ADR 0008's test is why: the word already
+ * distinguishes the rows, so colour on a non-failure is decoration, while colour on a
+ * failure is the thing this repo keeps re-learning it must never make silent.
  */
 @Composable
 fun DenebListRow(
@@ -88,6 +97,8 @@ fun DenebListRow(
     selected: Boolean = false,
     divider: Boolean = true,
     chevron: Boolean = true,
+    statusColor: Color? = null,
+    statusText: String? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val hairline = denebHairline()
@@ -123,9 +134,26 @@ fun DenebListRow(
                 style = DenebType.rowTitleStrong,
                 color = if (selected) accent else MaterialTheme.colorScheme.onBackground,
             )
-            if (subtitle != null) {
-                Text(text = subtitle, style = DenebType.rowSubtitle, color = denebHint())
+            when {
+                !statusText.isNullOrEmpty() -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = statusText,
+                        style = DenebType.rowSubtitle,
+                        color = statusColor ?: denebHint(),
+                    )
+                    if (subtitle != null) {
+                        Text(text = "  ·  $subtitle", style = DenebType.rowSubtitle, color = denebHint())
+                    }
+                }
+
+                subtitle != null -> Text(text = subtitle, style = DenebType.rowSubtitle, color = denebHint())
             }
+        }
+        if (statusColor != null) {
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.size(7.dp).clip(CircleShape).background(statusColor))
         }
         when {
             trailing != null -> {
