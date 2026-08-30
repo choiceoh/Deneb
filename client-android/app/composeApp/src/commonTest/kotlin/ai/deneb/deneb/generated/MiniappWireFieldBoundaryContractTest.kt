@@ -5485,6 +5485,14 @@ class MiniappWireFieldBoundaryContractTest {
             expectation = Expectation.Exact,
         ),
         fieldContract(
+            name = "WormholeModelOut.circuitState",
+            serializer = WormholeModelOut.serializer(),
+            field = "circuitState",
+            valid = boundaryText,
+            invalid = JsonObject(emptyMap()),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
             name = "WormholeStatusOut.reachable",
             serializer = WormholeStatusOut.serializer(),
             field = "reachable",

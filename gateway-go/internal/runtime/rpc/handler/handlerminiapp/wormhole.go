@@ -47,14 +47,24 @@ type WormholeStatusOut struct {
 // "rate_limited" | "unreachable" | "http_N" | "unchecked"; empty for local/keyless
 // models or when the live view is unavailable). Lets the picker flag a dead key.
 //
+// CircuitState carries wormhole's breaker for this model ("closed" | "degraded" |
+// "open" | "half_open"; empty when the live view is unavailable). "open" is the one
+// a client should surface: wormhole tries an open model only AFTER its ready
+// fallbacks, so an open circuit means requests are being answered by a DIFFERENT
+// model than the one configured. That swap is silent by design and has run for
+// half a day unnoticed before (2026-08-29: a refused srv2 sent the dsv4 lane to a
+// cloud provider for 12h). Empty is UNKNOWN, not healthy — the config-file
+// fallback path below has no breaker view and leaves it blank.
+//
 //deneb:wire
 type WormholeModelOut struct {
-	Name      string `json:"name"`
-	Protocol  string `json:"protocol"`
-	Local     bool   `json:"local"`
-	Thinking  bool   `json:"thinking"`
-	Source    string `json:"source"`
-	KeyHealth string `json:"keyHealth,omitempty"`
+	Name         string `json:"name"`
+	Protocol     string `json:"protocol"`
+	Local        bool   `json:"local"`
+	Thinking     bool   `json:"thinking"`
+	Source       string `json:"source"`
+	KeyHealth    string `json:"keyHealth,omitempty"`
+	CircuitState string `json:"circuitState,omitempty"`
 }
 
 // WormholeDeps is the wiring for the wormhole status/toggle handlers. Empty
@@ -141,12 +151,13 @@ func statusFromLive(live *whLiveStatus) WormholeStatusOut {
 			src = "config"
 		}
 		out.Models = append(out.Models, WormholeModelOut{
-			Name:      m.Name,
-			Protocol:  proto,
-			Local:     m.Local,
-			Thinking:  m.Thinking,
-			Source:    src,
-			KeyHealth: m.KeyHealth,
+			Name:         m.Name,
+			Protocol:     proto,
+			Local:        m.Local,
+			Thinking:     m.Thinking,
+			Source:       src,
+			KeyHealth:    m.KeyHealth,
+			CircuitState: m.CircuitState,
 		})
 	}
 	return out
@@ -194,12 +205,13 @@ type whLiveStatus struct {
 	EffortRouting bool     `json:"effortRouting"`
 	Auto          []string `json:"auto"`
 	Models        []struct {
-		Name      string `json:"name"`
-		Protocol  string `json:"protocol"`
-		Local     bool   `json:"local"`
-		Thinking  bool   `json:"thinking"`
-		Source    string `json:"source"`
-		KeyHealth string `json:"keyHealth"`
+		Name         string `json:"name"`
+		Protocol     string `json:"protocol"`
+		Local        bool   `json:"local"`
+		Thinking     bool   `json:"thinking"`
+		Source       string `json:"source"`
+		KeyHealth    string `json:"keyHealth"`
+		CircuitState string `json:"circuitState"`
 	} `json:"models"`
 }
 

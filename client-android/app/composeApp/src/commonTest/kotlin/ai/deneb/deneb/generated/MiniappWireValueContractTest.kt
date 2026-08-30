@@ -4293,6 +4293,11 @@ class MiniappWireValueContractTest {
                     value = boundaryText,
                     expectation = Expectation.Exact,
                 ),
+                fieldValue(
+                    name = "circuitState",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
             ),
             invalidField = "name",
             invalidValue = JsonObject(emptyMap()),

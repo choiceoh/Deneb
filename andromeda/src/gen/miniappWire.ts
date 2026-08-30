@@ -991,6 +991,7 @@ export interface WormholeModelOut {
   thinking?: boolean
   source?: string
   keyHealth?: string
+  circuitState?: string
 }
 
 export interface WormholeStatusOut {
