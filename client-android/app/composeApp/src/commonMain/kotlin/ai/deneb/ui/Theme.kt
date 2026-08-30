@@ -126,6 +126,14 @@ fun ColorScheme.withBlackBackground(): ColorScheme = copy(
     surfaceContainerLowest = Color.Black,
 )
 
+/**
+ * The app's only color scheme (ADR 0007). Deneb ships a single theme — OLED black —
+ * so this is what every screen is drawn in and what the preview goldens capture.
+ * Kept as a derivation of [DarkColorScheme] rather than a hand-written scheme so the
+ * two never drift: only the three ground colors differ.
+ */
+val OledColorScheme: ColorScheme = DarkColorScheme.withBlackBackground()
+
 val ColorScheme.isOledFlavor: Boolean get() = background == Color.Black
 
 @Composable

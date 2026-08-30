@@ -48,7 +48,12 @@ DIFF_OUT = Path("/tmp/deneb-render-diff")
 # relative timestamp ("3분 전") from a real clock inside the component itself, so
 # freezing the fixture clock does not reach it — and reaching into production code
 # to make a preview deterministic would be the tail wagging the dog.
-SKIP = {"workfeed_dark.png", "workfeed_light.png"}
+#
+# This list is matched by exact filename, so RENAMING A FIXTURE SILENTLY UN-SKIPS IT.
+# That happened on the OLED single-theme cut: workfeed_dark.png became workfeed.png,
+# the entry stopped matching, and the non-deterministic PNG was admitted as a golden —
+# green on the run that wrote it, red on every run after.
+SKIP = {"workfeed.png"}
 
 
 def render() -> None:

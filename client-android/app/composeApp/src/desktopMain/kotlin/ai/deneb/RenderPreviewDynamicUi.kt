@@ -499,7 +499,7 @@ internal fun renderCardCorpus() {
         // Height scales with source size so long briefings aren't clipped;
         // the PNG is white below the content, which is fine for an audit.
         val height = (600 + f.length().toInt() * 2 / 5).coerceIn(800, 6000)
-        renderLetterCard("corpus_${f.nameWithoutExtension}.png", ai.deneb.ui.DarkColorScheme, node, height)
+        renderLetterCard("corpus_${f.nameWithoutExtension}.png", ai.deneb.ui.OledColorScheme, node, height)
         rendered++
     }
     println("card corpus rendered: $rendered/${files.size} -> /tmp/deneb-render/corpus_*.png")
@@ -518,7 +518,7 @@ internal fun renderMessageCorpus() {
         val text = f.readText().trim()
         if (text.isEmpty()) continue
         val height = (400 + f.length().toInt() / 2).coerceIn(800, 6000)
-        renderMessageDoc("msg_${f.nameWithoutExtension}.png", ai.deneb.ui.DarkColorScheme, text, height)
+        renderMessageDoc("msg_${f.nameWithoutExtension}.png", ai.deneb.ui.OledColorScheme, text, height)
         rendered++
     }
     println("message corpus rendered: $rendered/${files.size} -> /tmp/deneb-render/msg_*.png")
