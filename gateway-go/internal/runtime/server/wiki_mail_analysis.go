@@ -207,7 +207,7 @@ func (s *Server) projectCandidatesFn() func() []mailanalysis.ProjectCandidate {
 // manual tap.
 func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, mailanalysis.AnalysisResult) error {
 	cacheStore := handlermail.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis"))
-	workStore := mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json"))
+	workStore := s.mailWorkStatePathStore()
 	return func(msg *gmail.MessageDetail, res mailanalysis.AnalysisResult) error {
 		if msg == nil {
 			return nil
@@ -317,7 +317,7 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, mailanalysis.
 }
 
 func (s *Server) makeMailFeedDeliverySink() func([]string) {
-	workStore := mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json"))
+	workStore := s.mailWorkStatePathStore()
 	return func(ids []string) {
 		for _, id := range ids {
 			id = strings.TrimSpace(id)
@@ -332,7 +332,7 @@ func (s *Server) makeMailFeedDeliverySink() func([]string) {
 }
 
 func (s *Server) makeMailAnalysisFailureSink() func(*gmail.MessageDetail, error) {
-	workStore := mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json"))
+	workStore := s.mailWorkStatePathStore()
 	return func(msg *gmail.MessageDetail, err error) {
 		if msg == nil || strings.TrimSpace(msg.ID) == "" {
 			return
@@ -352,7 +352,7 @@ func (s *Server) makeMailAnalysisFailureSink() func(*gmail.MessageDetail, error)
 }
 
 func (s *Server) makeMailSenderReviewSink() func(*gmail.MessageDetail, mailanalysis.SenderTrustDecision) error {
-	workStore := mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json"))
+	workStore := s.mailWorkStatePathStore()
 	return func(msg *gmail.MessageDetail, decision mailanalysis.SenderTrustDecision) error {
 		if msg == nil || strings.TrimSpace(msg.ID) == "" {
 			return nil

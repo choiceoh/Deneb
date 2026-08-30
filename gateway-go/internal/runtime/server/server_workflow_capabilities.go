@@ -388,6 +388,7 @@ func (s *Server) registerPlaudWorkflow(homeDir string) {
 		return client.ListUpcoming(ctx, from, to, 40)
 	})
 	s.plaudRecordings.SetPriorMeetingLoader(s.plaudPriorMeeting)
+	s.plaudRecordings.SetCoveredMailFolder(s.foldCoveredMailAnalysis)
 	s.plaudRecordings.Start(s.ShutdownCtx())
 }
 

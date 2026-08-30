@@ -166,6 +166,7 @@ type plaudRecordingsService struct {
 	listCalendar    func(ctx context.Context, from, to time.Time) ([]calendar.Event, error)
 	priorMeeting    func(projectPath string) (title, body string)
 	writePage       func(relPath string, page *wiki.Page) error
+	foldCoveredMail func(meetingName string) (string, bool)
 	// appendStatus prepends a dated bullet on a linked project rep page
 	// (wiki.Store.AppendProjectStatusLine; idempotent by ref).
 	appendStatus func(projectPath, line, ref string, now time.Time) error
@@ -260,6 +261,21 @@ func NewPlaudService(
 func (s *plaudRecordingsService) SetCalendarLister(fn func(ctx context.Context, from, to time.Time) ([]calendar.Event, error)) {
 	if s != nil {
 		s.listCalendar = fn
+	}
+}
+
+// SetCoveredMailFolder wires the other half of the AutoFlow duplicate rule.
+//
+// The write-time gate in the mail path (server.autoFlowMeetingCovered) can only
+// see a 회의록 page that already exists, and Plaud polls every 15 minutes — so an
+// AutoFlow notice arriving inside that window writes its 메일분석 page before this
+// service writes the meeting page. Measured on the live corpus that was 1 case
+// in 28, and it is the only residue the gate cannot reach. Folding here closes
+// it from the other side: the deep path, having just written the authoritative
+// record, removes the shallow one it superseded.
+func (s *plaudRecordingsService) SetCoveredMailFolder(fn func(meetingName string) (string, bool)) {
+	if s != nil {
+		s.foldCoveredMail = fn
 	}
 }
 
@@ -432,6 +448,16 @@ func (s *plaudRecordingsService) processRecording(ctx context.Context, f plaudFi
 	}
 	if err := s.writePage(pagePath, page); err != nil {
 		return fmt.Errorf("wiki write: %w", err)
+	}
+
+	// The meeting record now exists, so an AutoFlow 메일분석 page describing the
+	// same meeting is a duplicate the mail-side gate raced past. Best-effort:
+	// a failure here costs a duplicate page, never the meeting record.
+	if s.foldCoveredMail != nil {
+		if folded, ok := s.foldCoveredMail(f.Name); ok {
+			s.logger.Info("plaud recordings: 중복 메일분석 접기",
+				"meeting", pagePath, "folded", folded)
+		}
 	}
 
 	// Dated bullet on each linked project (idempotent by recording id).

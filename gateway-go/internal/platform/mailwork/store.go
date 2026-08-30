@@ -12,6 +12,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -209,6 +210,65 @@ func (s *Store) MarkAnalysisDone(in AnalysisInput) (MessageState, error) {
 		ms.UpdatedAtMs = now
 		return ms
 	})
+}
+
+// PendingAnalysis returns messages that were registered but never analyzed, or
+// whose analysis failed, oldest registration first and bounded by limit.
+//
+// This query is why MarkAnalysisFailed means anything. Until 2026-08-30 the
+// analysis sink wrote "failed" with a comment saying a later pass would
+// re-analyze the message, and no such pass existed — the only reader of the
+// status was a display filter in the Gmail row listing. The 60-day-old cohort
+// in the live store was 41.7% never-analyzed (96 of 230), 87 of them
+// human-sent, and nothing in the system was looking.
+//
+// Messages younger than minAge are excluded so a backfill never races the live
+// poller for a mail that is simply still in flight.
+func (s *Store) PendingAnalysis(limit int, minAge time.Duration) []MessageState {
+	if limit <= 0 {
+		return nil
+	}
+	unlock := s.lock()
+	defer unlock()
+	st, err := s.loadLocked()
+	if err != nil {
+		return nil
+	}
+	cutoff := time.Now().Add(-minAge).UnixMilli()
+	out := make([]MessageState, 0, limit)
+	for _, ms := range st.Messages {
+		switch ms.AnalysisStatus {
+		case "", AnalysisFailed:
+		default:
+			continue
+		}
+		if ms.CreatedAtMs == 0 || ms.CreatedAtMs > cutoff {
+			continue
+		}
+		out = append(out, ms)
+	}
+	// Least-recently-ATTEMPTED first, not oldest-registered first. A message
+	// that can never produce a usable analysis would otherwise sit at the head
+	// of an oldest-first queue and consume the bounded batch on every cycle,
+	// starving everything behind it — the failure keeps its slot precisely
+	// because it keeps failing. Ordering by the last attempt sends it to the
+	// back each time, so the queue always makes progress.
+	sort.Slice(out, func(a, b int) bool {
+		return lastAttemptAt(out[a]) < lastAttemptAt(out[b])
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+// lastAttemptAt reports when analysis last ran for a message; never-attempted
+// messages report their registration time, which is always older.
+func lastAttemptAt(ms MessageState) int64 {
+	if ms.AnalysisUpdatedAtMs > 0 {
+		return ms.AnalysisUpdatedAtMs
+	}
+	return ms.CreatedAtMs
 }
 
 // MarkAnalysisFailed records a bounded diagnostic for a failed analysis.

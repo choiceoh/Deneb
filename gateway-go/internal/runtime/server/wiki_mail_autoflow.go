@@ -29,6 +29,9 @@ const (
 	// anything.
 	autoFlowSender        = "no-reply@plaud.ai"
 	autoFlowSubjectPrefix = "[Plaud-AutoFlow]"
+
+	// mailAnalysisDirName is the per-project 메일분석 folder segment.
+	mailAnalysisDirName = "메일분석"
 )
 
 // meetingPageLister is the sliver of the wiki store this file needs. Narrow on
@@ -83,4 +86,49 @@ func autoFlowMeetingCovered(store meetingPageLister, from, subject string) strin
 		return ""
 	}
 	return wiki.MeetingPageCoveringSlug(pages, slug)
+}
+
+// foldCoveredMailAnalysis removes the 메일분석 page written from the AutoFlow
+// notice for meetingName, and reports which page it removed.
+//
+// This is the losing side of the same rule autoFlowMeetingCovered enforces at
+// write time, and it exists because that gate cannot see into the future: the
+// Plaud poll runs every 15 minutes, so a notice arriving inside that window
+// writes its page before the meeting record exists. Deleting is safe here in a
+// way it is not in general — identity is exact (the AutoFlow subject IS the
+// recording name, matched through the shared slug rule), the caller has just
+// written the authoritative record of the same meeting, and the mail itself
+// stays in the archive. On the live corpus the same match scored 28/28 with no
+// false positives.
+func (s *Server) foldCoveredMailAnalysis(meetingName string) (string, bool) {
+	if s.wikiStore == nil || strings.TrimSpace(meetingName) == "" {
+		return "", false
+	}
+	want := wiki.MeetingSlug(meetingName)
+	if want == "" {
+		return "", false
+	}
+	pages, err := s.wikiStore.ListPages(wikiProjectCategory)
+	if err != nil {
+		return "", false
+	}
+	for _, rp := range pages {
+		if !strings.Contains(rp, "/"+mailAnalysisDirName+"/") {
+			continue
+		}
+		page, err := s.wikiStore.ReadPage(rp)
+		if err != nil || page == nil {
+			continue
+		}
+		name, ok := strings.CutPrefix(strings.TrimSpace(page.Meta.Title), autoFlowSubjectPrefix)
+		if !ok || wiki.MeetingSlug(strings.TrimSpace(name)) != want {
+			continue
+		}
+		if err := s.wikiStore.DeletePage(rp); err != nil {
+			s.logger.Warn("중복 메일분석 삭제 실패", "path", rp, "error", err)
+			return "", false
+		}
+		return rp, true
+	}
+	return "", false
 }

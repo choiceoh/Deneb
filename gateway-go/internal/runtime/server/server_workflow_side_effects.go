@@ -39,6 +39,16 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		// instances (DENEB_STATE_DIR=/tmp/...) must not ship archives.
 		s.registerMemoryBackupTask(homeDir)
 
+		// Mail backfill: drain mail the poll window never saw. The poll query
+		// is `is:unread newer_than:1h` and skips outside business hours, so mail
+		// that arrived at night was lost — measured at 41.7% of the 60-day-old
+		// cohort. Also the "later pass" MarkAnalysisFailed has been promising.
+		s.registerMailBackfillTask(homeDir)
+
+		// Pipeline-gap census: counts what the mail→wiki path is still missing
+		// so a silent regression has something that notices. Cheap, read-only.
+		s.registerMailGapCensusTask(homeDir)
+
 		// Wiki scout: every 12h, take stale project open questions plus the
 		// operator's WIKI.md brief topics and run one bounded agent turn WITH
 		// web access to chase externally-answerable answers. Findings persist
