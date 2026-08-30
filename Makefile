@@ -15,7 +15,7 @@
        health-v3 health-v3-check health-v3-deep health-v3-test health-v3-baseline \
        rsi-bench rsi-bench-check rsi-bench-deep rsi-bench-test rsi-bench-baseline \
        bench-check bench-refresh \
-       runtime-health runtime-health-test python-test python-lint shell-lint shell-behavior-test doc-ref-lint state-register \
+       runtime-health runtime-health-test python-test python-lint shell-lint shell-behavior-test doc-ref-lint design-lint state-register \
        preview render-golden-check render-golden-update native-smoke \
        info
 
@@ -257,6 +257,13 @@ health-v2:
 # Multi-axis ratchet (operator/nightly). PR CI runs this advisory-only; `make
 # check` no longer fails closed on it. New *critical* findings and score drops
 # still fail when this target is invoked explicitly.
+# ADR 0007 design principles that survive contact with a regex. NOT in the Kotlin
+# gate yet: the settings tree still has known violations, and wiring it before those
+# are fixed would fail every unrelated PR. It joins KOTLIN_GATES in the commit that
+# takes the count to zero.
+design-lint:
+	@python3 scripts/dev/design-lint.py
+
 health-v2-check:
 	@python3 scripts/audit/codebase-health-v2.py --check
 
