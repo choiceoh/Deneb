@@ -182,7 +182,13 @@ internal fun SkillsViewSwitcher(showLifecycle: Boolean, onSelect: (Boolean) -> U
 // Stateless skill list — previewable without a gateway client. Rows tap
 // through to the skill detail screen.
 @Composable
-internal fun SkillListContent(skills: List<SkillRow>, onOpenSkill: (String) -> Unit = {}) {
+internal fun SkillListContent(
+    skills: List<SkillRow>,
+    onOpenSkill: (String) -> Unit = {},
+    // Frozen by the preview renderer so the relative timestamps stay put; a live
+    // clock here rots the goldens at the next unit boundary. See lifecycleTime.
+    nowMs: Long = Clock.System.now().toEpochMilliseconds(),
+) {
     val haptics = rememberHaptics()
     // Working skills first: the alphabetical order buried the daily drivers
     // (email-analysis, 16 uses) between never-used rows. Single flat list —
@@ -231,7 +237,7 @@ internal fun SkillListContent(skills: List<SkillRow>, onOpenSkill: (String) -> U
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                val meta = skillMetaLine(skill)
+                val meta = skillMetaLine(skill, nowMs)
                 if (meta.isNotBlank()) {
                     Spacer(Modifier.height(2.dp))
                     Text(
@@ -253,22 +259,25 @@ internal fun SkillLifecycleContent(
     events: List<SkillLifecycleEvent>,
     onOpenSkill: (String) -> Unit = {},
     summary: PropusLifecycleSummary = propusTimelineSummary(events),
+    // Frozen by the preview renderer so the relative timestamps stay put; a live
+    // clock here rots the goldens at the next unit boundary. See lifecycleTime.
+    nowMs: Long = Clock.System.now().toEpochMilliseconds(),
 ) {
     val todayLine = remember(events) { propusTodayLine(events) }
     LazyColumn(Modifier.fillMaxSize()) {
         item {
-            PropusTimelineHeader(summary, todayLine)
+            PropusTimelineHeader(summary, todayLine, nowMs)
             HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
         }
         itemsIndexed(events) { _, event ->
-            SkillLifecycleRow(event, onOpenSkill = onOpenSkill)
+            SkillLifecycleRow(event, onOpenSkill = onOpenSkill, nowMs = nowMs)
             HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
         }
     }
 }
 
 @Composable
-private fun PropusTimelineHeader(summary: PropusLifecycleSummary, todayLine: String = "") {
+private fun PropusTimelineHeader(summary: PropusLifecycleSummary, todayLine: String = "", nowMs: Long) {
     // The doctrine/coverage/cue block is operator-debug depth — fold it so the
     // header reads as a one-glance digest (오늘 활동 + 상태) by default.
     var detailsExpanded by rememberSaveable { mutableStateOf(false) }
@@ -277,7 +286,7 @@ private fun PropusTimelineHeader(summary: PropusLifecycleSummary, todayLine: Str
         "생성 ${summary.genesis}",
         "진화 ${summary.evolved}",
         "리뷰 ${summary.review}",
-        summary.latestAt.takeIf { it > 0L }?.let { "마지막 ${lifecycleTime(it)}" },
+        summary.latestAt.takeIf { it > 0L }?.let { "마지막 ${lifecycleTime(it, nowMs)}" },
     ).joinToString(" · ")
     val state = if (summary.attention > 0) {
         "주의 ${summary.attention}건 · 기각/롤백 포함"
@@ -285,9 +294,11 @@ private fun PropusTimelineHeader(summary: PropusLifecycleSummary, todayLine: Str
         propusSummaryStateLabel(summary.state)
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+        // rowTitleStrong, not cardTitle: the block's subject is the system's state,
+        // not its name, so the name heads the block without outweighing it (원리 1).
         Text(
             summary.system.ifBlank { "Propus" },
-            style = DenebType.cardTitle,
+            style = DenebType.rowTitleStrong,
             color = MaterialTheme.colorScheme.primary,
         )
         if (todayLine.isNotBlank()) {
@@ -469,6 +480,9 @@ internal fun SkillLifecycleRow(
     horizontalPadding: Dp = 16.dp,
     initiallyExpanded: Boolean = false,
     onOpenSkill: ((String) -> Unit)? = null,
+    // Frozen by the preview renderer so the relative timestamps stay put; a live
+    // clock here rots the goldens at the next unit boundary. See lifecycleTime.
+    nowMs: Long = Clock.System.now().toEpochMilliseconds(),
 ) {
     val haptics = rememberHaptics()
     var expanded by rememberSaveable { mutableStateOf(initiallyExpanded) }
@@ -498,7 +512,7 @@ internal fun SkillLifecycleRow(
                 Spacer(Modifier.weight(1f))
             }
             Text(
-                lifecycleTime(event.at),
+                lifecycleTime(event.at, nowMs),
                 style = DenebType.meta,
                 color = denebHint(),
             )
@@ -649,11 +663,11 @@ internal fun skillSourceLabel(source: String): String = when (source) {
 // skillMetaLine is the list row's activity line — usage and evolution only,
 // in plain Korean. Category/source/version/dependency jargon lives in the
 // detail screen's fact lines, not here (the list answers "일하고 있나").
-private fun skillMetaLine(skill: SkillRow): String {
+private fun skillMetaLine(skill: SkillRow, nowMs: Long): String {
     if (skill.totalUses <= 0) return "아직 사용 안 함"
     return listOfNotNull(
         "사용 ${skill.totalUses}회",
-        skill.lastUsedAt.takeIf { it > 0 }?.let { "마지막 ${lifecycleTime(it)}" },
+        skill.lastUsedAt.takeIf { it > 0 }?.let { "마지막 ${lifecycleTime(it, nowMs)}" },
         skill.evolveCount.takeIf { it > 0 }?.let { "진화 ${it}회" },
     ).joinToString(" · ")
 }

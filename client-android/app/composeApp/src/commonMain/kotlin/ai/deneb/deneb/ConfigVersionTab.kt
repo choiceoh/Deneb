@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.openUrl
+import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.settings.SettingsCard
@@ -50,13 +51,8 @@ internal fun VersionTab(denebClient: DenebGatewayClient?) {
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        DenebSectionLabel("버전")
         SettingsCard {
-            Text(
-                "버전",
-                style = DenebType.cardTitle,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Spacer(Modifier.height(8.dp))
             Text(
                 "현재 빌드 $DENEB_VERSION_CODE",
                 style = DenebType.rowTitle,

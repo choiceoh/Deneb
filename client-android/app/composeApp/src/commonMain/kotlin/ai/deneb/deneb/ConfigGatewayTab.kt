@@ -11,6 +11,7 @@ import ai.deneb.sensing.parseLocationToGeofence
 import ai.deneb.sensing.readCurrentLocation
 import ai.deneb.tools.ContactsPermissionController
 import ai.deneb.tools.LocationPermissionController
+import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.settings.SettingsCard
 import androidx.compose.foundation.layout.Arrangement
@@ -69,13 +70,8 @@ internal fun GatewayTab(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        DenebSectionLabel("게이트웨이 연결")
         SettingsCard {
-            Text(
-                "게이트웨이 연결",
-                style = DenebType.cardTitle,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = url,
                 onValueChange = { url = it },
@@ -179,13 +175,8 @@ private fun GatewayStatusCard(
     enabled: Boolean,
     onRefresh: () -> Unit,
 ) {
+    DenebSectionLabel("게이트웨이 상태")
     SettingsCard {
-        Text(
-            "게이트웨이 상태",
-            style = DenebType.cardTitle,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Spacer(Modifier.height(8.dp))
         if (status == null) {
             Text(
                 "아직 확인되지 않았습니다.",
@@ -246,13 +237,8 @@ private fun ContactsSyncCard(
     val scope = rememberCoroutineScope()
     var syncing by remember { mutableStateOf(false) }
     var syncMsg by remember { mutableStateOf<String?>(null) }
+    DenebSectionLabel("주소록 동기화")
     SettingsCard {
-        Text(
-            "주소록 동기화",
-            style = DenebType.cardTitle,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Spacer(Modifier.height(8.dp))
         Text(
             "이 기기 연락처 중 위키에 이미 등록된 인물의 전화·이메일·회사를 보강합니다. " +
                 "회의 전사 고유명사 교정과 인물 조회에 쓰입니다. 전체 주소록을 새로 저장하지는 않습니다.",
@@ -339,13 +325,8 @@ private fun LocationSensingCard(permission: LocationPermissionController, appSet
         }
     }
 
+    DenebSectionLabel("위치")
     SettingsCard {
-        Text(
-            "위치",
-            style = DenebType.cardTitle,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Spacer(Modifier.height(8.dp))
         Text(
             "위치 권한을 허용하면 비서가 \"지금 어디?\"에 답할 수 있고(동기화 시 보고), " +
                 "집·직장을 찍어두면 도착·출발 시 알려줍니다. 백그라운드 추적은 하지 않습니다.",

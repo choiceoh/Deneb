@@ -538,7 +538,7 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column {
                     SkillsViewSwitcher(showLifecycle = false, onSelect = {})
-                    SkillListContent(sampleSkillRows)
+                    SkillListContent(sampleSkillRows, nowMs = PREVIEW_NOW_MS)
                 }
             }
         }
@@ -597,9 +597,9 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
                     SkillsViewSwitcher(showLifecycle = true, onSelect = {})
                     val now = PREVIEW_NOW_MS
                     val events = sampleLifecycleEvents(now)
-                    SkillLifecycleRow(events[1], initiallyExpanded = true, onOpenSkill = {})
+                    SkillLifecycleRow(events[1], initiallyExpanded = true, onOpenSkill = {}, nowMs = PREVIEW_NOW_MS)
                     HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
-                    SkillLifecycleContent(events.filterIndexed { i, _ -> i != 1 })
+                    SkillLifecycleContent(events.filterIndexed { i, _ -> i != 1 }, nowMs = PREVIEW_NOW_MS)
                 }
             }
         }
