@@ -99,7 +99,7 @@ codegraph explore  "영역..."  # 지형 one-shot (다중 토큰; --max-files �
 | self-improvement.md | genesis 자가개선 루프 (스킬 생성·진화·큐레이션·자기교정 캡처·게이트) |
 | model-roles.md · sidecar-models.md | LLM 역할 배치 · 로컬 모델/wormhole 운영 |
 | wiki-layout.md | 위키 도메인 (project_layout.go 규약) |
-| native-design-system.md · native-live-app.md | client-android UI · 실앱 라이브 검증 |
+| native-design-system.md · native-live-app.md | client-android UI · 실앱 라이브 검증 (원리는 [ADR 0007](docs/adr/0007-design-north-star.md) — 북극성 "메뉴가 아니라 결과") |
 | product-lane-ai-maintainability.md | client-android · andromeda · scripts Python 변경 시 AI용 진입점·테스트·검증 앵커 |
 | denebui.md | deneb-ui 카드 (라벨 HTML) — 3구현 동기·계약 위치·검증 사슬 |
 | generated-code.md | 생성 파일 재생성 방법 |
