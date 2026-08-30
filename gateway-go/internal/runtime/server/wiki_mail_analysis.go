@@ -245,6 +245,23 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, mailanalysis.
 		// inbox card and the notifier; only the wiki page is withheld.
 		if err := mailanalysis.AnalysisNonBusiness(res.Text); err != nil {
 			s.logger.Info("mail analysis 위키 저장 생략 — 업무 메일 아님", "id", msg.ID, "reason", err)
+			// Analysis succeeded; only the wiki page is withheld. Mark done so
+			// backfill and PendingAnalysis do not retry forever.
+			if _, markErr := workStore.MarkAnalysisDone(mailwork.AnalysisInput{
+				MessageInput: mailwork.MessageInput{
+					ID:              msg.ID,
+					ThreadID:        msg.ThreadID,
+					From:            msg.From,
+					Subject:         msg.Subject,
+					Date:            msg.Date,
+					HasAttachment:   len(msg.Attachments) > 0,
+					AttachmentCount: len(msg.Attachments),
+				},
+				Quality: res.Importance,
+			}); markErr != nil {
+				s.logger.Warn("mail workflow state 저장 실패", "id", msg.ID, "error", markErr)
+				errs = append(errs, markErr)
+			}
 			return errors.Join(errs...)
 		}
 		// Plaud's AutoFlow notice describes a meeting the MCP path may have

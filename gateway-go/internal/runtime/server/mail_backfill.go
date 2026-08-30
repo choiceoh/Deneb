@@ -95,20 +95,9 @@ func (s *Server) runMailBackfill(ctx context.Context) error {
 		s.logger.Warn("mail backfill: 분석 실패", "count", len(msgs), "error", err)
 		return err
 	}
-	analyzed := make(map[string]struct{}, len(done))
-	for _, id := range done {
-		analyzed[id] = struct{}{}
-	}
-	for _, ms := range pending {
-		if _, ok := analyzed[ms.ID]; !ok {
-			continue
-		}
-		if _, err := workStore.MarkAnalysisDone(mailwork.AnalysisInput{
-			MessageInput: messageInputOf(ms),
-		}); err != nil {
-			s.logger.Warn("mail backfill: done 표시 실패", "id", ms.ID, "error", err)
-		}
-	}
+	// Work state (done/failed) is owned by OnAnalyzed inside AnalyzeArchived.
+	// A second MarkAnalysisDone here used to overwrite AnalysisUsable failures
+	// with done, permanently dropping mail the sink had queued for re-analysis.
 	s.logger.Info("mail backfill: 과거 메일 분석",
 		"analyzed", len(done), "attempted", len(msgs), "남은 대기", remaining-len(done))
 	return nil
