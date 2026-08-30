@@ -7,7 +7,7 @@ globs: ["client-android/app/composeApp/src/**/*.kt"]
 
 > **디자인 원리는 여기 없다 — [ADR 0007](../adr/0007-design-north-star.md)이 소유한다** (북극성 "메뉴가 아니라 결과" + 제1원리 6개). 이 문서는 그 원리의 **구현 규칙**이다: 어느 컴포넌트를 쓰고 어떻게 검증하는가. **원리와 규칙이 충돌하면 원리가 이긴다.** 규칙을 다 지켜도 원리를 어길 수 있다는 것이 ADR 0007을 쓴 이유다 (설정 트리에서 실제로 11곳).
 
-> **원리 1은 기계 검사한다** — `make design-lint` (`scripts/dev/design-lint.py`). 설정 트리에서 `DenebType.cardTitle`(18sp/600, 가장 무거운 활자)을 쓰면 실패한다: 설정 화면의 콘텐츠는 컨트롤이므로 그걸 붙인 제목은 자기가 이름 붙인 대상보다 커진다. 섹션 헤더는 `DenebSectionLabel`, 행 제목은 `rowTitle(Strong)`. **아직 Kotlin 게이트에는 없다** — 남은 위반을 탭 단위로 정리한 뒤 마지막 커밋이 `KOTLIN_GATES`에 넣는다.
+> **원리 1은 기계 검사한다** — `make design-lint` (`scripts/dev/design-lint.py`). 설정 트리에서 `DenebType.cardTitle`(18sp/600, 가장 무거운 활자)을 쓰면 실패한다: 설정 화면의 콘텐츠는 컨트롤이므로 그걸 붙인 제목은 자기가 이름 붙인 대상보다 커진다. 섹션 헤더는 `DenebSectionLabel`, 행 제목은 `rowTitle(Strong)`. 설정 트리가 0건이 된 뒤 `KOTLIN_GATES`에 편입됐다.
 
 > **컨트롤은 머티리얼, 외형은 Deneb.** 두 시스템은 경쟁이 아니라 레이어가 다르다. Material을 뜯어내지 말고, 그 위에 Deneb 타이포 스킨을 입힌다.
 
