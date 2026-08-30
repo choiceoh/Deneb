@@ -82,6 +82,38 @@ class ConfigSectionStatusTest {
     }
 
     @Test
+    fun anOpenBreakerReportsFailoverAndOutranksKeyHealth() {
+        // The lane is being served by a different model than configured. Nothing
+        // else in the app looks wrong when this happens, which is the whole reason
+        // it belongs on the list.
+        val status = wormholeSectionStatus(
+            WormholeStatusOut(
+                reachable = true,
+                models = listOf(
+                    WormholeModelOut(name = "a", keyHealth = "auth_failed"),
+                    WormholeModelOut(name = "b", circuitState = "open"),
+                ),
+            ),
+        )
+        assertEquals("페일오버 1건", status?.text)
+        assertTrue(status?.failure == false, "the router still answers — degraded, not down")
+    }
+
+    @Test
+    fun onlyAnOpenBreakerCountsAsFailover() {
+        // "degraded"/"half_open" still prefer the primary, and "" means the live
+        // view was unavailable — neither is a swap.
+        for (state in listOf("closed", "degraded", "half_open", "")) {
+            assertNull(
+                wormholeSectionStatus(
+                    WormholeStatusOut(reachable = true, models = listOf(WormholeModelOut(name = "a", circuitState = state))),
+                ),
+                "circuitState=$state must not report failover",
+            )
+        }
+    }
+
+    @Test
     fun anUnknownRouterIsNotReported() {
         assertNull(wormholeSectionStatus(null))
     }

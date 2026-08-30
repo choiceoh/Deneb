@@ -4108,6 +4108,12 @@ class MiniappWireNullCompatibilityTest {
             field = "keyHealth",
         ),
         nullContract(
+            name = "WormholeModelOut.circuitState",
+            serializer = WormholeModelOut.serializer(),
+            empty = WormholeModelOut(),
+            field = "circuitState",
+        ),
+        nullContract(
             name = "WormholeStatusOut.reachable",
             serializer = WormholeStatusOut.serializer(),
             empty = WormholeStatusOut(),

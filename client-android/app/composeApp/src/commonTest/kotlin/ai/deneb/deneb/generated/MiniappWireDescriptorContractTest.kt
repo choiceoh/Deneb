@@ -670,7 +670,7 @@ class MiniappWireDescriptorContractTest {
             name = "WormholeModelOut",
             serializer = WormholeModelOut.serializer(),
             empty = WormholeModelOut(),
-            fields = listOf("name", "protocol", "local", "thinking", "source", "keyHealth"),
+            fields = listOf("name", "protocol", "local", "thinking", "source", "keyHealth", "circuitState"),
         ),
         contract(
             name = "WormholeStatusOut",

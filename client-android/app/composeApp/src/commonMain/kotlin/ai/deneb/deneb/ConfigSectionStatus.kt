@@ -30,17 +30,24 @@ internal fun fleetSectionStatus(state: FleetState?): SectionStatus? {
 }
 
 /**
- * Wormhole: an unreachable router is a fault; a reachable router with unhealthy keys
- * is degraded, not down, so it takes the warning ink.
+ * Wormhole, worst-first: an unreachable router is a fault; active failover and
+ * unhealthy keys are degradations that take the warning ink because the router is
+ * still answering.
  *
- * Deliberately NOT reported: "failover is active". Failover is the condition most
- * worth surfacing — it silently swaps the serving model — but `WormholeStatusOut`
- * carries no flag for it, and deriving one from `source` would be a guess dressed as
- * a fact. It lands when the wire says so.
+ * Failover outranks key health. An open breaker means wormhole is serving that lane
+ * from a DIFFERENT model than the one configured — answers keep arriving, so nothing
+ * else in the app looks wrong, and the swap ran for 12 hours unnoticed once. A dead
+ * key, by contrast, announces itself the moment something calls it.
+ *
+ * `circuitState` is empty when the live view is unavailable (the gateway's
+ * config-file fallback has no breaker). Empty is unknown, so only an explicit "open"
+ * counts — "degraded"/"half_open" are wormhole still preferring the primary.
  */
 internal fun wormholeSectionStatus(status: WormholeStatusOut?): SectionStatus? {
     if (status == null) return null
     if (!status.reachable) return SectionStatus("라우터 응답 없음", failure = true)
+    val failingOver = status.models.count { it.circuitState == "open" }
+    if (failingOver > 0) return SectionStatus("페일오버 ${failingOver}건", failure = false)
     val problems = status.models.count { keyHealthIsProblem(it.keyHealth) }
     if (problems == 0) return null
     return SectionStatus("키 문제 ${problems}건", failure = false)
