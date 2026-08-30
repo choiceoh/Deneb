@@ -173,15 +173,16 @@ class CICheckShellTests(unittest.TestCase):
         self.assertIn("fix: make fmt", proc.stdout)
         self.assertNotIn("Go files need formatting:", proc.stdout)
 
-    def test_kotlin_lane_runs_exact_four_targets_when_sdk_exists(self) -> None:
+    def test_kotlin_lane_runs_exact_five_targets_when_sdk_exists(self) -> None:
         proc = self.invoke("--kotlin")
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("4 passed, 0 failed", proc.stdout)
+        self.assertIn("5 passed, 0 failed", proc.stdout)
         self.assertEqual(self.calls(), [
             "make kotlin-spotless",
             "make kotlin-detekt",
             "make kotlin-desktop-smoke-test",
             "make kotlin-android-compile",
+            "make render-golden-check",
         ])
 
     def test_fast_mode_with_irrelevant_changes_exits_without_make(self) -> None:
@@ -232,7 +233,7 @@ class CICheckShellTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("can't resolve 'origin/main' merge-base", proc.stderr)
         self.assertIn("Go:run  Kotlin:run  Audit:run", proc.stdout)
-        self.assertIn("13 passed, 0 failed", proc.stdout)
+        self.assertIn("14 passed, 0 failed", proc.stdout)
         make_calls = [call for call in self.calls() if call.startswith("make ")]
         self.assertIn("make go-test-cached", make_calls)
         self.assertIn("make kotlin-android-compile", make_calls)
