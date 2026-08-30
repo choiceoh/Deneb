@@ -54,11 +54,16 @@ BASE_REF="${CI_CHECK_BASE:-origin/main}"
 
 # --- Gate definitions (gate name == make target) -----------------------------
 GO_GATES=(generate-check go-fmt go-vet go-lint go-test)
+# design-lint is the mechanical half of ADR 0007: the design principles that survive
+# contact with a regex. It joined the gate only once the settings tree hit zero
+# violations — wiring it earlier would have failed every unrelated PR, and silencing
+# it with a baseline file would have been the same as not having it at all.
+#
 # render-golden-check diffs the preview PNGs against committed goldens. It is a
 # Kotlin gate and not an audit one because a two-pixel type shift is a defect the
 # same way a compile error is — and the three native defects found on 2026-08-30
 # were all invisible to every other gate here.
-KOTLIN_GATES=(kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile render-golden-check)
+KOTLIN_GATES=(kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile render-golden-check design-lint)
 # health-v2-check is OUT of the gate (operator decision 2026-07-18): the
 # git-window pillar ratchet false-reds unrelated PRs (five-pillar drops on a
 # one-file systemd diff, while CI stayed green) and a gate that cries wolf

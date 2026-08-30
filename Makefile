@@ -257,10 +257,8 @@ health-v2:
 # Multi-axis ratchet (operator/nightly). PR CI runs this advisory-only; `make
 # check` no longer fails closed on it. New *critical* findings and score drops
 # still fail when this target is invoked explicitly.
-# ADR 0007 design principles that survive contact with a regex. NOT in the Kotlin
-# gate yet: the settings tree still has known violations, and wiring it before those
-# are fixed would fail every unrelated PR. It joins KOTLIN_GATES in the commit that
-# takes the count to zero.
+# ADR 0007 design principles that survive contact with a regex. In the Kotlin gate
+# since the settings tree reached zero violations.
 design-lint:
 	@python3 scripts/dev/design-lint.py
 

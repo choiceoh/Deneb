@@ -192,18 +192,31 @@ fun denebOnWarningContainer(): Color = if (MaterialTheme.colorScheme.isDarkFlavo
 //   • Interactive = the existing Material `primary` (cool, Prussian-derived blue,
 //     #7FA8D0 on dark / #003153 light). Used on active tabs, selected rows, links,
 //     primary CTAs — it was suppressed to ink before this refresh.
-//   • Insight = a warm apricot companion ([denebInsight]) — the cool↔warm complement
-//     of the primary — marking AI-analysis / insight surfaces (Deneb's 분석↔비서
-//     split, in color). Both stay restrained: small marks and soft fills, never a
-//     whole screen.
+//   • ★Single accent since ADR 0007. The second accent (warm apricot for AI insight)
+//     is retired: its justification was the 분석↔비서 persona split, which ADR 0001
+//     forbids. [denebInsight] is now a neutral emphasis, not a hue. Color stays
+//     restrained: small marks on interactive things, never a whole screen.
 
-/** Warm apricot — the AI-insight / analysis accent; the complement to the cool primary. */
+/**
+ * Emphasis foreground for analysis callouts. **Monochrome since ADR 0007.**
+ *
+ * This used to be a warm apricot, justified as the cool↔warm complement of the primary
+ * standing for Deneb's 분석↔비서 halves. That justification contradicted ADR 0001, which
+ * forbids splitting the persona — the palette was encoding a distinction the product
+ * denies, which is why the color never found a place on screen. Under the single-accent
+ * principle only what the user can touch gets color; analysis is set apart by weight and
+ * position instead (원리 7), so this is now the brightest neutral rather than a hue.
+ *
+ * Kept as a token rather than deleted so the ~15 call sites stay one line from being
+ * re-tuned — or re-colored, if the decision is ever revisited.
+ */
 @Composable
-fun denebInsight(): Color = if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFFE8B58C) else Color(0xFF9C5A2E)
+fun denebInsight(): Color = MaterialTheme.colorScheme.onBackground
 
-/** Soft apricot tint for insight callouts/cards (text/icon on it use [denebInsight]). */
+/** Neutral wash for analysis callouts — heavier than [denebGroupSurface]'s so a callout
+ *  still reads as set apart, without spending a color on it. */
 @Composable
-fun denebInsightContainer(): Color = if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFF2C2118) else Color(0xFFF6E7D8)
+fun denebInsightContainer(): Color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.10f)
 
 @Composable
 fun outlineTextFieldColors() = OutlinedTextFieldDefaults.colors()
