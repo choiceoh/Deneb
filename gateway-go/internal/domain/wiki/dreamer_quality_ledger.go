@@ -42,11 +42,19 @@ const (
 // pages the dreamer wrote in earlier cycles; UtilitySet distinguishes "the axis
 // had no evidence this cycle" (false) from "the axis read 0.0 because every
 // page was cold" (true) — 0.0 is a real reading, not a missing one.
+//
+// Precision and Confidence carry no omitempty for that same reason, and they
+// used to. A cycle that proposed one update and applied none scores precision
+// 0.0, which omitempty erased — so the line read as "this axis was not
+// measured" when it in fact recorded a total miss. Three of the four lowest
+// scores in the live ledger looked like unmeasured cycles until the scoring
+// code was read (analysis, 2026-08-30); an axis worth logging is worth
+// distinguishing from silence.
 type dreamQualityEntry struct {
 	Ts            int64   `json:"ts"` // unix millis
 	Score         float64 `json:"score"`
-	Precision     float64 `json:"precision,omitempty"`
-	Confidence    float64 `json:"confidence,omitempty"`
+	Precision     float64 `json:"precision"`
+	Confidence    float64 `json:"confidence"`
 	Utility       float64 `json:"utility,omitempty"`
 	UtilitySet    bool    `json:"utilitySet,omitempty"`
 	RecalledPages int     `json:"recalledPages,omitempty"`

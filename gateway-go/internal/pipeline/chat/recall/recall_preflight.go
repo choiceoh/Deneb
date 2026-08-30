@@ -335,7 +335,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 			// memory — the demand signal the research lane consumes (wiki/
 			// recall_misses.go). Cue-only: silent auto-recall legitimately finds
 			// nothing on smalltalk, and recording that would bury real demand.
-			recordRecallMiss(deps.Wiki, params.SessionKey, message, logger)
+			recordRecallMissIfHuman(deps.Wiki, params.EphemeralUser, params.SessionKey, message, logger)
 			// The no-evidence notice also carries the routing hint: "찾은 게
 			// 없다"에서 끝내지 말고 맞는 도구로 가라는 다음 행선지.
 			return combineCurrentFactContext(currentFacts, appendRoutingHint(formatRecallNoEvidence(), message, params.SessionKey, logger)), truncated

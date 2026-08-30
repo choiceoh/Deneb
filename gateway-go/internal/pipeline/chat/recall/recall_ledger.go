@@ -145,6 +145,27 @@ func recordRecallMiss(store *wiki.Store, sessionKey, message string, logger *slo
 	}
 }
 
+// recordRecallMissIfHuman records demand only for turns a PERSON drove.
+//
+// The ledger answers "what did the user ask that memory could not", and the
+// research lane spends its budget on the answer. EphemeralUser marks a
+// machine-originated turn — phone-event ingest, heartbeat, boot, mail QA —
+// whose "question" is an injected template. Counting those lets the system read
+// its own scaffolding back as user demand: on 2026-08-30 the live ledger held
+// exactly one line, a phone-event prompt, and that week's memory digest duly
+// reported 실시간·스마트폰·이벤트·알림·출처 — the words of the template header —
+// as 자주 물은 주제.
+//
+// Recall itself still runs for these turns and still injects what it finds;
+// only the demand count is withheld. The same text typed by a person is real
+// demand and is recorded.
+func recordRecallMissIfHuman(store *wiki.Store, ephemeralUser bool, sessionKey, message string, logger *slog.Logger) {
+	if ephemeralUser {
+		return
+	}
+	recordRecallMiss(store, sessionKey, message, logger)
+}
+
 // recordRecallUtility tees the injected wiki-page evidence into the store's
 // recall-utility ledger (효용 접지) as inject events, each carrying the
 // retrieval context (query label, injection rank, preflight score — so
