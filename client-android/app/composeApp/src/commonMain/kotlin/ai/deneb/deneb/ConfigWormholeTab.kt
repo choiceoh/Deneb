@@ -341,7 +341,7 @@ private fun WormholeRotateDialog(
     )
 }
 
-private fun keyHealthIsProblem(kh: String): Boolean = kh == "auth_failed" || kh == "rate_limited" || kh == "unreachable" || kh.startsWith("http_")
+internal fun keyHealthIsProblem(kh: String): Boolean = kh == "auth_failed" || kh == "rate_limited" || kh == "unreachable" || kh.startsWith("http_")
 
 private fun keyHealthKo(kh: String): String = when (kh) {
     "" -> ""
