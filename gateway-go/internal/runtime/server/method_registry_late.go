@@ -15,7 +15,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/cronrunner"
 	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
@@ -264,7 +263,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				})
 			},
 			Cache:      handlermail.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
-			WorkState:  mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json")),
+			WorkState:  s.mailWorkStatePathStore(),
 			SaveToWiki: makeMailAnalysisWikiSink(hub),
 			WikiStore: func() (miniknowledge.MemorySearcher, error) {
 				store := hub.Opt.WikiStore
