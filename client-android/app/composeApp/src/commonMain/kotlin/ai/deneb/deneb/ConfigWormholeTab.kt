@@ -8,7 +8,6 @@ import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
-import ai.deneb.ui.denebInsight
 import ai.deneb.ui.icons.outlined.Bolt
 import ai.deneb.ui.icons.outlined.CloudOff
 import ai.deneb.ui.settings.SettingsCard
@@ -57,7 +56,7 @@ import kotlinx.coroutines.launch
 //
 // Design refresh (2026-06): the settings grouped-card idiom — toggles in a
 // [DenebGroup]/[DenebListRow] block, the model list in a [SettingsCard], the cool
-// accent (`primary`) on live-state marks and the warm accent ([denebInsight]) on
+// accent (`primary`) on live-state marks and the semantic `error` color on
 // key-health problems (the two-accent doctrine).
 @Composable
 internal fun WormholeTab(client: DenebGatewayClient) {
@@ -228,8 +227,13 @@ private fun WormholeModelRow(
     val hairline = denebHairline()
     val problem = keyHealthIsProblem(keyHealth)
     val dot = when {
-        problem -> denebInsight()
+        // Semantic, not accent: a bad key is a failure, and failures have to show
+        // (ADR 0008 job 2). It was the warm insight accent until that retired, which
+        // left the problem state rendering in plain text white.
+        problem -> MaterialTheme.colorScheme.error
+
         local -> MaterialTheme.colorScheme.primary
+
         else -> denebHint()
     }
     val insetPx = with(LocalDensity.current) { 48.dp.toPx() }
@@ -256,7 +260,7 @@ private fun WormholeModelRow(
         val kh = keyHealthKo(keyHealth)
         if (kh.isNotEmpty()) {
             Spacer(Modifier.width(8.dp))
-            Text(kh, style = DenebType.meta, color = if (problem) denebInsight() else denebHint())
+            Text(kh, style = DenebType.meta, color = if (problem) MaterialTheme.colorScheme.error else denebHint())
         }
         if (onClick != null) {
             Spacer(Modifier.width(10.dp))
@@ -299,7 +303,9 @@ private fun WormholeRotateDialog(
                     Text(
                         it,
                         style = DenebType.meta,
-                        color = if (resultProblem) denebInsight() else MaterialTheme.colorScheme.primary,
+                        // error on failure, muted on success — the colored state has to be
+                        // the one that needs attention, not the one that is fine.
+                        color = if (resultProblem) MaterialTheme.colorScheme.error else denebHint(),
                     )
                 }
             }

@@ -7,7 +7,6 @@ import ai.deneb.ui.OnLiveTabActivation
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
-import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebPressable
 import ai.deneb.ui.denebSharedBounds
 import ai.deneb.ui.rememberToday
@@ -820,15 +819,26 @@ private fun dayHeadLabel(date: LocalDate, today: LocalDate, count: Int): String 
 }
 
 /** Category colors for event bars and dots — index order matches categoryColorIndex:
- *  [0] 본인 (cool primary), [1] 타인 (teal tertiary), [2] 기한 (warm apricot insight).
- *  Two cool hues plus one warm makes 기한 stand out without inventing a new color —
- *  the warm tone is the theme's second accent (denebInsight). Deliberately excludes
- *  error red (reserved for Sunday / warnings) and the Saturday-blue header tint, so a
- *  bar never reads as a weekday/date color. */
+ *  [0] 본인 (cool primary), [1] 타인 (teal tertiary), [2] 기한 (warm).
+ *
+ *  These are **category colors, not accents** (ADR 0008 job 3): here the hue *is* the
+ *  information, so all three must stay mutually distinguishable in a dense month grid
+ *  where a bar is a few pixels tall and carries no label.
+ *
+ *  [CATEGORY_WARM] is deliberately not [ai.deneb.ui.denebInsight]. That token was the
+ *  brand accent for "AI insight" and stays retired (ADR 0007 원리 5) — this is the same
+ *  hue doing a different job, with no brand meaning attached. The scheme's own
+ *  secondary was tried first and rejected: it is another blue, so 본인 and 기한 bars
+ *  became hard to tell apart at bar size.
+ *
+ *  Deliberately excludes error red (reserved for Sunday / warnings) and the
+ *  Saturday-blue header tint, so a bar never reads as a weekday/date color. */
+private val CATEGORY_WARM = Color(0xFFE8B58C)
+
 @Composable
 internal fun barPalette(): List<Color> {
     val s = MaterialTheme.colorScheme
-    return listOf(s.primary, s.tertiary, denebInsight())
+    return listOf(s.primary, s.tertiary, CATEGORY_WARM)
 }
 
 /** Rounds only a ribbon segment's outer corners: the start day's left, the end
