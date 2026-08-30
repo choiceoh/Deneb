@@ -110,13 +110,10 @@ internal fun SelfImprovementCodingContent(
     }
     LazyColumn(Modifier.fillMaxSize()) {
         item {
+            // No inline page title: DenebConfigScreen's scaffold already shows this
+            // section's name in the top bar, and repeating it here in the heaviest
+            // token made the label outweigh the status it labels (ADR 0007 원리 1).
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Text(
-                    "자가개선 코딩",
-                    style = DenebType.cardTitle,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.height(2.dp))
                 Text(
                     if (pendingCount > 0) {
                         "대기 ${pendingCount}건 — 다음 하트비트가 자동 검토합니다 · 전체 ${totalCount}건"

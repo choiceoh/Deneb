@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
@@ -426,13 +427,8 @@ internal fun ModelTab(client: DenebGatewayClient) {
         // Add an OpenAI-compatible endpoint (vLLM / LM Studio / etc.) by base URL
         // + model name in its own card, matching the gateway-connection card so
         // the form doesn't float on the bare background below the model list.
+        DenebSectionLabel("OpenAI 호환 모델 직접 추가")
         SettingsCard {
-            Text(
-                "OpenAI 호환 모델 직접 추가",
-                style = DenebType.cardTitle,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Spacer(Modifier.height(4.dp))
             Text(
                 "Base URL과 모델 이름으로 vLLM·LM Studio 같은 OpenAI 호환 엔드포인트를 추가합니다. 인증 키가 필요 없는 엔드포인트용입니다.",
                 style = DenebType.hint,
