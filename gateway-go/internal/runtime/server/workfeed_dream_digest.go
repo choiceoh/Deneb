@@ -100,7 +100,12 @@ func writeDreamDigestState(atMs int64) {
 
 // dreamDigestStats aggregates one digest window of the rollup.
 type dreamDigestStats struct {
-	Cycles           int     `json:"cycles"`
+	Cycles int `json:"cycles"`
+	// QualityScored counts the cycles that produced a score. It is NOT Cycles:
+	// a cycle that changed nothing reports no quality, and on the live ledger
+	// that was 17 of 38. Labelling the average with the cycle count would
+	// attribute it to 17 cycles that never entered it.
+	QualityScored    int     `json:"qualityScored,omitempty"`
 	FactsLearned     int     `json:"factsLearned"`
 	FactsMerged      int     `json:"factsMerged"`
 	FactsExpired     int     `json:"factsExpired"`
@@ -160,6 +165,7 @@ func aggregateDreamReports(entries []dreamReportEntry, sinceMs, untilMs int64) d
 	}
 	if qualityCount > 0 {
 		stats.QualityAvg = qualitySum / float64(qualityCount)
+		stats.QualityScored = qualityCount
 	}
 	// Sort demand terms by count (stable on first-seen order), keep top 5.
 	for i := 1; i < len(demandOrder); i++ {
@@ -174,17 +180,18 @@ func aggregateDreamReports(entries []dreamReportEntry, sinceMs, untilMs int64) d
 	return stats
 }
 
-// postDreamDigestCard surfaces one weekly digest. The feedback action's
-// prompt lands in the home conversation (client:main) — the agent then fixes
-// the wrong memory with its normal wiki tools and the next dream verify pass
-// re-checks the corrected fact.
-func (s *Server) postDreamDigestCard(stats dreamDigestStats) error {
-	nf := s.nativeWorkFeedStore()
-	if nf == nil {
-		return fmt.Errorf("native work feed unavailable")
-	}
-	days := int(time.Duration(stats.UntilMs-stats.SinceMs).Hours() / 24)
+// dreamDigestBody renders the card text. Split out of postDreamDigestCard so
+// the numbers can be tested without a work-feed store: the 2026-08-30 card
+// carried three wrong lines at once — a window that always read 0 days, two
+// quality figures over different populations printed as if comparable, and a
+// counter labelled 면 — and nothing exercised a single character of it.
+func dreamDigestBody(stats dreamDigestStats) string {
 	var b strings.Builder
+	// SinceMs/UntilMs are unix MILLIS; time.Duration counts NANOS. Without the
+	// unit the weekly window (604,800,000 ms) became 0.6 seconds and every
+	// digest ever posted opened with "지난 0일간" — it would take 2,738 years of
+	// window for the old arithmetic to reach a single day.
+	days := int(time.Duration(stats.UntilMs-stats.SinceMs) * time.Millisecond / (24 * time.Hour))
 	fmt.Fprintf(&b, "지난 %d일간 백그라운드 기억 통합(드림)이 위키 장기기억을 정리했습니다.\n\n", days)
 	fmt.Fprintf(&b, "- 드림 사이클: %d회\n", stats.Cycles)
 	fmt.Fprintf(&b, "- 사실: 학습 %d · 병합 %d · 만료 %d", stats.FactsLearned, stats.FactsMerged, stats.FactsExpired)
@@ -194,20 +201,39 @@ func (s *Server) postDreamDigestCard(stats dreamDigestStats) error {
 	b.WriteString("\n")
 	fmt.Fprintf(&b, "- 위키: 생성 %d · 갱신 %d (사용자 모델 %d)\n", stats.WikiPagesCreated, stats.WikiPagesUpdated, stats.UserModelUpdated)
 	if stats.RecallHitPages > 0 {
-		fmt.Fprintf(&b, "- 회상 활용: %d면\n", stats.RecallHitPages)
+		fmt.Fprintf(&b, "- 회상 활용: %d회\n", stats.RecallHitPages)
 	}
 	if stats.QualityAvg > 0 {
-		fmt.Fprintf(&b, "- 평균 품질: %.0f/100\n", stats.QualityAvg)
+		fmt.Fprintf(&b, "- 평균 품질(채점 %d사이클): %.0f/100\n", stats.QualityScored, stats.QualityAvg)
 	}
 	if len(stats.QualityTrend) >= 2 {
+		// The average is over EVERY scored cycle in the window; the trend keeps
+		// only the last dreamQualityTrendMax. Printed side by side without
+		// saying so, "평균 72" beside "86→88" reads as a contradiction when it is
+		// actually the good news — the recent cycles recovered.
 		first := stats.QualityTrend[0]
 		last := stats.QualityTrend[len(stats.QualityTrend)-1]
-		fmt.Fprintf(&b, "- 품질 추이: %s (%.0f→%.0f)\n", sparklineBars(stats.QualityTrend), first, last)
+		fmt.Fprintf(&b, "- 품질 추이(최근 %d사이클): %s (%.0f→%.0f)\n",
+			len(stats.QualityTrend), sparklineBars(stats.QualityTrend), first, last)
 	}
 	if len(stats.RecallDemandTerms) > 0 {
 		fmt.Fprintf(&b, "- 기억 공백(자주 물은 주제): %s\n", strings.Join(stats.RecallDemandTerms, ", "))
 	}
 	b.WriteString("\n학습된 기억 중 사실과 다른 것이 있으면 '틀린 기억 알리기'로 알려주세요 — 정정은 다음 검증 주기에 반영됩니다.")
+	return b.String()
+}
+
+// postDreamDigestCard surfaces one weekly digest. The feedback action's
+// prompt lands in the home conversation (client:main) — the agent then fixes
+// the wrong memory with its normal wiki tools and the next dream verify pass
+// re-checks the corrected fact.
+func (s *Server) postDreamDigestCard(stats dreamDigestStats) error {
+	nf := s.nativeWorkFeedStore()
+	if nf == nil {
+		return fmt.Errorf("native work feed unavailable")
+	}
+	b := strings.Builder{}
+	b.WriteString(dreamDigestBody(stats))
 	item := workfeed.Item{
 		Source:     dreamDigestSource,
 		Title:      fmt.Sprintf("주간 기억 다이제스트: 학습 %d · 병합 %d · 만료 %d", stats.FactsLearned, stats.FactsMerged, stats.FactsExpired),
