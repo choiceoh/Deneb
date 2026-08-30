@@ -5,9 +5,9 @@ import ai.deneb.data.AppSettings
 import ai.deneb.openUrl
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebBrowserAccent
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
-import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebPopEnter
 import ai.deneb.ui.denebPopExit
 import ai.deneb.ui.denebPressable
@@ -650,28 +650,28 @@ fun DenebBrowserChrome(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(denebInsight().copy(alpha = 0.08f))
+                        .background(denebBrowserAccent().copy(alpha = 0.08f))
                         .padding(horizontal = 12.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         browserTranslationStatusText(translation),
                         style = DenebType.meta,
-                        color = denebInsight(),
+                        color = denebBrowserAccent(),
                         modifier = Modifier.weight(1f),
                     )
                     if (translation.total > 0) {
                         LinearProgressIndicator(
                             progress = { translation.applied.toFloat() / translation.total.toFloat() },
                             modifier = Modifier.width(88.dp).height(3.dp),
-                            color = denebInsight(),
-                            trackColor = denebInsight().copy(alpha = 0.18f),
+                            color = denebBrowserAccent(),
+                            trackColor = denebBrowserAccent().copy(alpha = 0.18f),
                         )
                     } else {
                         LinearProgressIndicator(
                             modifier = Modifier.width(88.dp).height(3.dp),
-                            color = denebInsight(),
-                            trackColor = denebInsight().copy(alpha = 0.18f),
+                            color = denebBrowserAccent(),
+                            trackColor = denebBrowserAccent().copy(alpha = 0.18f),
                         )
                     }
                 }
@@ -702,7 +702,7 @@ fun DenebBrowserChrome(
                                     Icons.Outlined.History
                                 },
                                 contentDescription = null,
-                                tint = if (suggestion.source == BrowserOmniboxSuggestion.Source.BOOKMARK) denebInsight() else denebHint(),
+                                tint = if (suggestion.source == BrowserOmniboxSuggestion.Source.BOOKMARK) denebBrowserAccent() else denebHint(),
                                 modifier = Modifier.size(18.dp),
                             )
                             Column(Modifier.weight(1f).padding(start = 10.dp)) {
@@ -842,7 +842,7 @@ fun DenebBrowserChrome(
                     Icon(
                         Icons.Outlined.Translate,
                         contentDescription = if (state.translateEnabled) "원문 보기" else "DeepL로 한국어 번역",
-                        tint = if (state.translateEnabled) denebInsight() else denebHint(),
+                        tint = if (state.translateEnabled) denebBrowserAccent() else denebHint(),
                     )
                 }
                 if (!state.popupActive) {
@@ -861,7 +861,7 @@ fun DenebBrowserChrome(
                         Icon(
                             if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                             contentDescription = "북마크 목록",
-                            tint = if (isBookmarked) denebInsight() else denebHint(),
+                            tint = if (isBookmarked) denebBrowserAccent() else denebHint(),
                         )
                     }
                     IconButton(
@@ -907,7 +907,7 @@ fun DenebBrowserChrome(
                                     Text("기본 엔진", style = DenebType.meta, color = denebHint())
                                 }
                             },
-                            leadingIcon = { Icon(Icons.Outlined.Translate, contentDescription = null, tint = denebInsight()) },
+                            leadingIcon = { Icon(Icons.Outlined.Translate, contentDescription = null, tint = denebBrowserAccent()) },
                             onClick = {},
                         )
                         DropdownMenuItem(
@@ -929,7 +929,7 @@ fun DenebBrowserChrome(
                                 Icon(
                                     Icons.Outlined.Block,
                                     contentDescription = null,
-                                    tint = if (state.adBlockEnabled) denebInsight() else denebHint(),
+                                    tint = if (state.adBlockEnabled) denebBrowserAccent() else denebHint(),
                                 )
                             },
                             onClick = {
@@ -960,7 +960,7 @@ fun DenebBrowserChrome(
                                     Icon(
                                         if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                                         contentDescription = null,
-                                        tint = if (isBookmarked) denebInsight() else denebHint(),
+                                        tint = if (isBookmarked) denebBrowserAccent() else denebHint(),
                                     )
                                 },
                                 onClick = {
@@ -1018,7 +1018,7 @@ fun DenebBrowserChrome(
                             DropdownMenuItem(
                                 enabled = canBookmark,
                                 text = { Text("현재 페이지를 홈으로") },
-                                leadingIcon = { Icon(Icons.Outlined.Home, contentDescription = null, tint = denebInsight()) },
+                                leadingIcon = { Icon(Icons.Outlined.Home, contentDescription = null, tint = denebBrowserAccent()) },
                                 onClick = {
                                     haptics.tap()
                                     menuOpen = false
@@ -1159,7 +1159,7 @@ internal fun BrowserBookmarksList(
                 Icon(
                     Icons.Filled.Bookmark,
                     contentDescription = null,
-                    tint = denebInsight(),
+                    tint = denebBrowserAccent(),
                     modifier = Modifier.size(22.dp),
                 )
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {

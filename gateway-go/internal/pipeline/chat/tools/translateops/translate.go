@@ -14,11 +14,20 @@ const (
 	translateMaxCharsPerBatch = 1200
 	// translateMaxSegmentsPerBatch caps a batch when segments are short (nav/labels) so a
 	// run of tiny strings doesn't pack hundreds into one call. The char bound dominates.
-	translateMaxSegmentsPerBatch   = 20
-	translateMaxConcurrentBatches  = 3
-	defaultTranslateTargetLang     = "Korean"
-	translateSegmentEnvelopePrefix = "deneb_translate_segment:v1:"
-	translatePartsEnvelopePrefix   = "deneb_translate_parts:v1:"
+	translateMaxSegmentsPerBatch  = 20
+	translateMaxConcurrentBatches = 3
+	defaultTranslateTargetLang    = "Korean"
+	// The U+E000 sentinel is written as an ESCAPE on purpose. It is a private-use
+	// rune, so a literal one renders as nothing in terminals, grep, sed and git
+	// diffs — a 2026-08-30 investigation read its absence from `sed` output and
+	// from a diff whose minus side was escaped, concluded the protocol had been
+	// broken for seven weeks, and nearly "fixed" it by prepending a second
+	// sentinel (which would have broken it for real). Keep the escape so the
+	// rune is visible in every tool. The client spells it the same way
+	// (deneb-translate.js SEGMENT_PAYLOAD_PREFIX / PARTS_RESULT_PREFIX); the
+	// cross-language contract test pins the two to the same bytes.
+	translateSegmentEnvelopePrefix = "\ue000deneb_translate_segment:v1:"
+	translatePartsEnvelopePrefix   = "\ue000deneb_translate_parts:v1:"
 )
 
 type translateInput struct {

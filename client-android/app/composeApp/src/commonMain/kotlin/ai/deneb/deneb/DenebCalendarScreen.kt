@@ -819,26 +819,36 @@ private fun dayHeadLabel(date: LocalDate, today: LocalDate, count: Int): String 
 }
 
 /** Category colors for event bars and dots — index order matches categoryColorIndex:
- *  [0] 본인 (cool primary), [1] 타인 (teal tertiary), [2] 기한 (warm).
+ *  [0] 본인 (warm), [1] 타인 (teal tertiary), [2] 기한 (cool primary).
+ *
+ *  본인 and 기한 were swapped on operator preference (2026-08-30): the operator's own
+ *  events are the bulk of the grid, and they read better warm. Nothing else moved —
+ *  the three hues are the same proven-distinguishable set, permuted, so no new color
+ *  had to clear the "still readable in a few pixels" bar.
  *
  *  These are **category colors, not accents** (ADR 0008 job 3): here the hue *is* the
  *  information, so all three must stay mutually distinguishable in a dense month grid
  *  where a bar is a few pixels tall and carries no label.
  *
  *  [CATEGORY_WARM] is deliberately not [ai.deneb.ui.denebInsight]. That token was the
- *  brand accent for "AI insight" and stays retired (ADR 0007 원리 5) — this is the same
+ *  brand accent for "AI insight" and stays retired (ADR 0007 원리 5) — this is a warm
  *  hue doing a different job, with no brand meaning attached. The scheme's own
- *  secondary was tried first and rejected: it is another blue, so 본인 and 기한 bars
+ *  secondary was tried first and rejected: it is another blue, so two categories
  *  became hard to tell apart at bar size.
+ *
+ *  Vermilion and tangerine were measured and rejected for this slot: their hues sit
+ *  1.8 and 6.5 degrees from the Sunday/error red, so a dot would have read as a
+ *  weekend or a warning. This orange keeps 21.6 degrees of separation — the same
+ *  margin the previous apricot had — while carrying far more saturation.
  *
  *  Deliberately excludes error red (reserved for Sunday / warnings) and the
  *  Saturday-blue header tint, so a bar never reads as a weekday/date color. */
-private val CATEGORY_WARM = Color(0xFFE8B58C)
+private val CATEGORY_WARM = Color(0xFFF97316)
 
 @Composable
 internal fun barPalette(): List<Color> {
     val s = MaterialTheme.colorScheme
-    return listOf(s.primary, s.tertiary, CATEGORY_WARM)
+    return listOf(CATEGORY_WARM, s.tertiary, s.primary)
 }
 
 /** Rounds only a ribbon segment's outer corners: the start day's left, the end
