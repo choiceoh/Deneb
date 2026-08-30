@@ -213,6 +213,27 @@ fun denebOnWarningContainer(): Color = if (MaterialTheme.colorScheme.isDarkFlavo
 @Composable
 fun denebInsight(): Color = MaterialTheme.colorScheme.onBackground
 
+/**
+ * Warm accent for the IN-APP BROWSER's own chrome — the translate/bookmark/ad-block
+ * toggles when they are on, and the translation status strip.
+ *
+ * This is a deliberate exception to the single-accent rule (ADR 0007 principle 5,
+ * ADR 0008 job 1), recorded in ADR 0009. The rule holds everywhere the app draws its
+ * own surfaces: one cool accent marks what you can touch. Browser chrome is the one
+ * place that is NOT the app's own surface — it floats over third-party pages whose
+ * links, buttons and highlights are overwhelmingly blue, so the cool accent stops
+ * reading as "this control is on" and starts reading as more page.
+ *
+ * The hue is a true orange (hue 25 deg, not the 2026-06 apricot's washed 27 deg at
+ * two thirds the saturation) chosen for punch at icon size. Its old justification is
+ * NOT revived: the cool<->warm = analysis<->assistant persona mapping stays rejected
+ * (it contradicts ADR 0001). The reason here is contrast against foreign content, and
+ * it applies to nothing outside the browser. Do not widen this token's call sites;
+ * app surfaces keep [denebInsight].
+ */
+@Composable
+fun denebBrowserAccent(): Color = if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFFF97316) else Color(0xFFB3510A)
+
 /** Neutral wash for analysis callouts — heavier than [denebGroupSurface]'s so a callout
  *  still reads as set apart, without spending a color on it. */
 @Composable
