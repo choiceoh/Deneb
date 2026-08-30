@@ -233,6 +233,29 @@ actual fun DenebWebView(
                     state.canGoForward = view.canGoForward()
                 }
 
+                // First paint of the main frame. Translation used to start only in
+                // onPageFinished, which waits for every ad, tracker and lazy image —
+                // so the reader stared at the source text for however long the
+                // slowest subresource took, on exactly the ad-heavy pages where that
+                // is longest. Starting here works against the DOM already on screen,
+                // and the viewport-first dispatch inside the script means the text
+                // being read is translated first.
+                //
+                // Running twice is free and deliberate: the script self-guards
+                // (`__installed`), its asset is read once into an AtomicReference,
+                // and resumeForDocument only sets a flag. The onPageFinished pass
+                // below stays as the backstop for pages that never commit a visible
+                // frame (immediate redirects, some error paths).
+                override fun onPageCommitVisible(view: WebView, url: String) {
+                    if (state.loadError != null) return
+                    injectTranslateScript(view)
+                    holder.translateBridge?.resumeForDocument()
+                    view.evaluateJavascript(
+                        "window.DenebTranslate&&window.DenebTranslate.setEnabled(${state.translateEnabled});",
+                        null,
+                    )
+                }
+
                 override fun onPageFinished(view: WebView, url: String) {
                     if (canBookmarkUrl(url)) {
                         state.markRendererRecoveryStarted(url)
