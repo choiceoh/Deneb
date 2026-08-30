@@ -624,12 +624,12 @@ private fun lifecycleTypeLabel(type: String): String = when (type) {
 
 @Composable
 private fun LifecycleTypeBadge(type: String) {
-    // Two-accent + semantic mapping (2026-06 doctrine): genesis (AI authored a new
-    // skill) = warm apricot insight; evolved (an applied/committed change) = cool
-    // interactive primary; rejected/rolled back = semantic warning/error;
-    // review/no-op = neutral mono.
+    // Five categories, so the color IS the information (ADR 0008 job 3) and every
+    // branch has to stay distinguishable from the others. genesis was the warm apricot
+    // until that accent retired; the neutral wash it briefly became was the same grey
+    // as the `else` branch, collapsing "AI authored a new skill" into "review/no-op".
     val (bg, fg) = when (type) {
-        "genesis" -> denebInsightContainer() to denebInsight()
+        "genesis" -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
         "evolved" -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
         "evolve_rejected" -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
         "evolve_rolled_back" -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
