@@ -157,3 +157,31 @@ sudo apt-get install -y xvfb x11vnc novnc websockify matchbox-window-manager \
 - **시스템 제스처**(엣지 스와이프 등)는 재현 불가 — 실기기 필요. 관련: [[reference_native_client_build_verify]], [[reference_native_nested_drawer_gesture]].
 - 빌드가 매번 `client-android/app/iosApp/Configuration/Config.xcconfig`(APP_VERSION) 재생성 → **커밋 전 `git checkout --`로 원복**.
 - 단일 사용자·단일 머신 전용(**srv4** — 2026-07-06 개발/배포 통일로 srv1 에서 이전; 실행 체크아웃은 `~/deneb-dev`). 디스플레이 `:99`, noVNC 포트 6080은 Tailnet 한정.
+
+## 모션 검수 (녹화 → 필름스트립)
+
+정지 화면은 움직임을 못 보여주고, **움직임이 "폴리시드"의 절반**이다(ADR 0007이 모션
+원리를 미룬 이유가 "아직 아무도 이 앱이 움직이는 걸 본 적이 없다"였다).
+
+```bash
+scripts/dev/native-app.sh rec-start nav 60   # 디스플레이 녹화 시작 (60fps)
+scripts/dev/native-app.sh tap 200 145        # 평소처럼 조작
+scripts/dev/native-app.sh rec-stop 14        # 종료 → mp4 + 14프레임 필름스트립 PNG
+```
+
+`rec-stop`은 **mp4와 스트립 PNG를 둘 다** 낸다 — 사람은 영상을 보고, 에이전트는
+스트립을 읽는다(에이전트는 영상을 볼 수 없다).
+
+- ★**균등 간격 스트립으로 전환을 판정하지 말 것.** 14프레임/2초 = 0.16s 간격인데
+  Compose 전환은 130~300ms라 **한 칸에 통째로 숨는다.** 전환 구간을 찾은 뒤
+  `ffmpeg -ss <t> -frames:v 1`로 **33ms 간격 재추출**해야 곡선이 보인다.
+- 픽셀 해상도가 홀수면(phone 프로파일 915) H.264가 안 열린다 — `rec-start`가 pad
+  필터로 짝수화한다. 이 가드를 지우면 0바이트 mp4가 조용히 나온다.
+- ★**전달되는 것과 안 되는 것**: 애니메이션 **시간·곡선·순서**는 공용 Compose 코드라
+  그대로 옮겨간다. **프레임 페이싱·잔더링**은 아니다 — Xvfb + SOFTWARE 렌더러다.
+  체감 부드러움은 여전히 실기기로 판정한다.
+
+**2026-08-30 첫 측정** (이 경로로 처음 관찰): 하단 탭 전환 = **약 130ms 크로스페이드,
+측면 이동 없음**(독트린은 "측면 이동(빠른 페이드)"라고 적었는데 페이드만 구현돼 있다).
+피드 행 확장 = **컨테이너는 즉시 튀고 내용만 ~200ms 스태거 페이드인** — 레이아웃이
+먼저 점프한 뒤 글자가 채워진다.

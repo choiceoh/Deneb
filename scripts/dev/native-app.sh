@@ -24,6 +24,8 @@
 #   scripts/dev/native-app.sh tap 200 120    # click at physical px (200,120)
 #   scripts/dev/native-app.sh type "안녕"     # type text (tap a field first)
 #   scripts/dev/native-app.sh key Return      # press a key
+#   scripts/dev/native-app.sh rec-start nav   # start recording the display
+#   scripts/dev/native-app.sh rec-stop 12     # stop -> mp4 + a 12-frame filmstrip PNG
 #   scripts/dev/native-app.sh view            # also expose noVNC for a human to watch
 #   scripts/dev/native-app.sh stop            # tear everything down
 #
@@ -308,6 +310,94 @@ cmd_shot() {
   echo "$out"
 }
 
+# ── Motion capture. Stills cannot show movement, and movement is half of what
+# "polished" means (ADR 0007 defers the motion principles until someone has actually
+# watched this app move). ffmpeg grabs the Xvfb display while the usual tap/swipe
+# commands drive the UI; `rec-stop` then writes BOTH an mp4 (for a human) and a
+# filmstrip PNG of evenly spaced frames — an agent can read the strip, it cannot
+# watch the video. Judge duration and easing off the strip, feel off the mp4.
+REC_PID_FILE="$STATE_DIR/record.pid"
+REC_OUT_FILE="$STATE_DIR/record.out"
+
+cmd_rec_start() {
+  [[ -n "$(xvfb_pid)" ]] || die "nothing running — 'native-app.sh start' first"
+  [[ -f "$REC_PID_FILE" ]] && die "already recording (rec-stop first)"
+  command -v ffmpeg >/dev/null || die "ffmpeg not found"
+  local name="${1:-motion-$(date +%H%M%S)}"
+  local fps="${2:-60}"
+  local out="$SHOTS_DIR/${name}.mp4"
+  mkdir -p "$SHOTS_DIR"
+  # -draw_mouse 0: the synthetic pointer is an artifact of how we drive the app, not
+  # part of the design under review, and it moves between takes.
+  # The pad filter is not optional: the phone profile is 412x915 and H.264/yuv420p
+  # refuses odd dimensions, so without it libx264 fails to open and the recording is
+  # a zero-byte file. Pad (not crop/scale) so no pixel of the UI is lost or resampled.
+  DISPLAY="$DISP" ffmpeg -y -loglevel error -f x11grab -draw_mouse 0 \
+    -framerate "$fps" -i "$DISP" \
+    -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$out" \
+    >"$STATE_DIR/ffmpeg.log" 2>&1 &
+  echo $! >"$REC_PID_FILE"
+  echo "$out" >"$REC_OUT_FILE"
+  sleep 0.6   # let the first frames land before the caller starts driving
+  log "recording -> $out (${fps}fps)"
+}
+
+cmd_rec_stop() {
+  [[ -f "$REC_PID_FILE" ]] || die "not recording"
+  local pid out; pid="$(cat "$REC_PID_FILE")"; out="$(cat "$REC_OUT_FILE")"
+  kill -INT "$pid" 2>/dev/null || true
+  # NOT `wait`: rec-start ran in a different invocation of this script, so ffmpeg is
+  # not our child and wait returns immediately. Poll instead — SIGINT makes ffmpeg
+  # finalize the container, and checking the file before that lands yields an mp4
+  # with no moov atom (ffprobe: "moov atom not found") that looks written but is not.
+  local waited=0
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 0.2; waited=$((waited + 1))
+    if (( waited > 50 )); then kill -9 "$pid" 2>/dev/null || true; break; fi
+  done
+  rm -f "$REC_PID_FILE" "$REC_OUT_FILE"
+  [[ -s "$out" ]] || die "recording produced nothing (see $STATE_DIR/ffmpeg.log)"
+  ffprobe -v error -show_entries format=duration -of csv=p=0 "$out" >/dev/null \
+    || die "recording is not a readable video (see $STATE_DIR/ffmpeg.log)"
+  log "saved $out"
+  cmd_filmstrip "$out" "${1:-12}"
+}
+
+# Even-spaced frames laid out left-to-right, labelled with their timestamp, so the
+# shape of an animation is readable in one image.
+cmd_filmstrip() {
+  local video="${1:?usage: filmstrip <video.mp4> [frames]}"
+  local frames="${2:-12}"
+  local base; base="$(basename "${video%.*}")"
+  local dir="$SHOTS_DIR/${base}-frames"
+  rm -rf "$dir"; mkdir -p "$dir"
+  local dur; dur="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$video")"
+  python3 - "$video" "$dir" "$frames" "$dur" <<'''PY'''
+import subprocess, sys
+video, out_dir, n, dur = sys.argv[1], sys.argv[2], int(sys.argv[3]), float(sys.argv[4])
+stamps = [dur * i / (n - 1) for i in range(n)] if n > 1 else [0.0]
+for i, t in enumerate(stamps):
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{max(0.0, t - 0.001):.3f}",
+                    "-i", video, "-frames:v", "1", f"{out_dir}/{i:02d}.png"], check=True)
+print(" ".join(f"{t:.2f}s" for t in stamps))
+PY
+  python3 - "$dir" "$SHOTS_DIR/${base}-strip.png" <<'''PY'''
+import sys, glob
+from PIL import Image
+files = sorted(glob.glob(sys.argv[1] + "/*.png"))
+ims = [Image.open(f).convert("RGB") for f in files]
+w, h = ims[0].size
+scale = min(1.0, 220 / w)
+tw, th = int(w * scale), int(h * scale)
+gap = 6
+strip = Image.new("RGB", (tw * len(ims) + gap * (len(ims) - 1), th), (24, 24, 24))
+for i, im in enumerate(ims):
+    strip.paste(im.resize((tw, th), Image.LANCZOS), (i * (tw + gap), 0))
+strip.save(sys.argv[2])
+print(sys.argv[2], strip.size)
+PY
+}
+
 # ── Synthetic input (xdotool). Coords = physical px in the screenshot. ───────
 _wid_or_die() { local w; w="$(app_wid)"; [[ -n "$w" ]] || die "no app window (start first)"; echo "$w"; }
 
@@ -552,6 +642,9 @@ cmd="${1:-}"; shift || true
 case "$cmd" in
   start)   cmd_start "$@" ;;
   shot)    cmd_shot "$@" ;;
+  rec-start) cmd_rec_start "$@" ;;
+  rec-stop)  cmd_rec_stop "$@" ;;
+  filmstrip) cmd_filmstrip "$@" ;;
   tap)     cmd_tap "$@" ;;
   dbltap)  cmd_dbltap "$@" ;;
   type)    cmd_type "$@" ;;
