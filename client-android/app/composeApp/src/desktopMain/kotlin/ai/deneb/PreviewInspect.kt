@@ -3,10 +3,9 @@
 
 package ai.deneb
 
-import ai.deneb.ui.DarkColorScheme
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
-import ai.deneb.ui.LightColorScheme
+import ai.deneb.ui.OledColorScheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -40,7 +39,7 @@ import kotlin.system.exitProcess
  * each so a state change is visible. Wired by scripts/dev/ui-inspect.sh + the
  * previewInspect Gradle task. Siblings: the RenderPreview*.kt PNG harness and
  * native-app.sh (live, pixel/OCR). Driven by system properties: deneb.screen,
- * deneb.actions, deneb.dark.
+ * deneb.actions.
  */
 // Inspector-only demo screens layered on top of the shared previewScreens registry
 // (RenderPreviewScreens.kt): a synthetic settings group, and a tiny STATEFUL counter
@@ -72,11 +71,10 @@ private val screens: Map<String, @Composable (ColorScheme) -> Unit> = previewScr
 
 fun main() {
     val name = System.getProperty("deneb.screen", "").trim()
-    val dark = System.getProperty("deneb.dark", "false").toBoolean()
     val actions = System.getProperty("deneb.actions", "")
         .split(";").map { it.trim() }.filter { it.isNotEmpty() }
 
-    println("=== UI-INSPECT screen=$name theme=${if (dark) "dark" else "light"} ===")
+    println("=== UI-INSPECT screen=$name ===")
     val body = screens[name]
     if (body == null) {
         println("unknown screen '$name'. available: ${screens.keys.sorted().joinToString(", ")}")
@@ -84,7 +82,8 @@ fun main() {
         exitProcess(1)
     }
 
-    val scheme = if (dark) DarkColorScheme else LightColorScheme
+    // One theme (ADR 0007) — the old deneb.dark switch had nothing left to switch.
+    val scheme = OledColorScheme
     // Count action failures so this can be used as a verification gate: a missing node,
     // an ambiguous match, or a throwing handler must make ui-inspect exit non-zero — not
     // silently skip the re-dump and let an agent treat an unverified UI state as success.

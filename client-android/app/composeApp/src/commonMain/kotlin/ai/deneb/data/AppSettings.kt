@@ -9,13 +9,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 
-enum class ThemeMode {
-    System,
-    Light,
-    Dark,
-    OledBlack,
-}
-
 @Serializable
 private data class ComposerDraftEntry(
     val id: String,
@@ -334,28 +327,11 @@ class AppSettings(internal val settings: Settings) {
         settings.putBoolean(KEY_DYNAMIC_UI_ENABLED, enabled)
     }
 
-    private val _themeModeFlow = MutableStateFlow(loadInitialThemeMode())
-    val themeModeFlow: StateFlow<ThemeMode> = _themeModeFlow
-
-    fun getThemeMode(): ThemeMode = _themeModeFlow.value
-
-    fun setThemeMode(mode: ThemeMode) {
-        settings.putString(KEY_THEME_MODE, mode.name)
-        _themeModeFlow.value = mode
-    }
-
-    private fun loadInitialThemeMode(): ThemeMode {
-        val raw = settings.getString(KEY_THEME_MODE, "")
-        if (raw.isNotEmpty()) {
-            return try {
-                ThemeMode.valueOf(raw)
-            } catch (_: IllegalArgumentException) {
-                ThemeMode.System
-            }
-        }
-        // Migrate the legacy boolean OLED toggle: true → OledBlack, false → System.
-        return if (settings.getBoolean(KEY_OLED_MODE_ENABLED, false)) ThemeMode.OledBlack else ThemeMode.System
-    }
+    // Theme is no longer a setting (ADR 0007) — the app ships one palette, OLED black.
+    // The two stored keys (KEY_THEME_MODE, KEY_OLED_MODE_ENABLED) are simply ignored
+    // rather than migrated: whatever a device had, it now gets the single theme, so
+    // there is nothing to carry over. They are left in the store rather than deleted
+    // because clearing keys costs a write on every launch to no benefit.
 
     // Daemon mode
     fun isDaemonEnabled(): Boolean = settings.getBoolean(KEY_DAEMON_ENABLED, false)

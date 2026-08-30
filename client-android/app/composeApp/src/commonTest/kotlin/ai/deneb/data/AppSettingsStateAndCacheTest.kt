@@ -38,57 +38,19 @@ class AppSettingsStateAndCacheTest {
         return Fixture(raw, AppSettings(raw))
     }
 
+    // The settings flows must conflate: writing the value that is already there emits
+    // nothing, so observers do not recompose for a no-op write. (Previously covered on
+    // themeModeFlow, which is gone with the single-theme cut — the contract is not.)
     @Test
-    fun themeFlowStartsFromPersistedMode() = runTest {
-        val (_, settings) = fixture { putString(AppSettings.KEY_THEME_MODE, ThemeMode.Dark.name) }
+    fun settingTheSameValueDoesNotProduceDuplicateStateFlowEmission() = runTest {
+        val (_, settings) = fixture()
 
-        settings.themeModeFlow.test {
-            assertEquals(ThemeMode.Dark, awaitItem())
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
-    fun settingThemePersistsAndEmitsTheNewMode() = runTest {
-        val (raw, settings) = fixture()
-
-        settings.themeModeFlow.test {
-            assertEquals(ThemeMode.System, awaitItem())
-            settings.setThemeMode(ThemeMode.OledBlack)
-            assertEquals(ThemeMode.OledBlack, awaitItem())
-            assertEquals("OledBlack", raw.getString(AppSettings.KEY_THEME_MODE, ""))
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
-    fun settingSameThemeDoesNotProduceDuplicateStateFlowEmission() = runTest {
-        val (_, settings) = fixture { putString(AppSettings.KEY_THEME_MODE, ThemeMode.Light.name) }
-
-        settings.themeModeFlow.test {
-            assertEquals(ThemeMode.Light, awaitItem())
-            settings.setThemeMode(ThemeMode.Light)
+        settings.uiScaleFlow.test {
+            val initial = awaitItem()
+            settings.setUiScale(initial)
             expectNoEvents()
             cancelAndIgnoreRemainingEvents()
         }
-    }
-
-    @Test
-    fun invalidStoredThemeDoesNotRewriteRawPreference() {
-        val (raw, settings) = fixture { putString(AppSettings.KEY_THEME_MODE, "Neon") }
-
-        assertEquals(ThemeMode.System, settings.getThemeMode())
-        assertEquals("Neon", raw.getString(AppSettings.KEY_THEME_MODE, ""))
-    }
-
-    @Test
-    fun explicitThemeWinsOverLegacyOledFlag() {
-        val (_, settings) = fixture {
-            putString(AppSettings.KEY_THEME_MODE, ThemeMode.Light.name)
-            putBoolean(AppSettings.KEY_OLED_MODE_ENABLED, true)
-        }
-
-        assertEquals(ThemeMode.Light, settings.getThemeMode())
     }
 
     @Test

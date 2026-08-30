@@ -1,10 +1,7 @@
 package ai.deneb
 
-import ai.deneb.ui.DarkColorScheme
-import ai.deneb.ui.LightColorScheme
 import ai.deneb.ui.chat.composables.CaptureActions
 import ai.deneb.ui.chat.composables.LocalCaptureActions
-import androidx.compose.material3.ColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigation.NavHostController
@@ -20,8 +17,6 @@ import org.koin.dsl.koinConfiguration
 @Composable
 fun App(
     navController: NavHostController,
-    lightColorScheme: ColorScheme = LightColorScheme,
-    darkColorScheme: ColorScheme = DarkColorScheme,
     textToSpeech: TextToSpeechInstance? = null,
     isKoinStarted: Boolean = false,
     onAppOpens: ((Int) -> Unit)? = null,
@@ -44,8 +39,6 @@ fun App(
         if (isKoinStarted) {
             AppContent(
                 navController,
-                lightColorScheme,
-                darkColorScheme,
                 textToSpeech,
                 onAppOpens,
                 openWorkFeedItemId,
@@ -59,8 +52,6 @@ fun App(
             ) {
                 AppContent(
                     navController,
-                    lightColorScheme,
-                    darkColorScheme,
                     textToSpeech,
                     onAppOpens,
                     openWorkFeedItemId,

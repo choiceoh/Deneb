@@ -1,6 +1,6 @@
 package ai.deneb
 
-import ai.deneb.ui.DarkColorScheme
+import ai.deneb.ui.OledColorScheme
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -52,7 +52,7 @@ private val TABLE_MD = LONG_MD + "\n\n| 팀 | 안건 | 상태 |\n|---|---|---|\n
 private fun renderPhases(content: @Composable () -> Unit): Triple<Long, Long, Long> {
     val t0 = System.nanoTime()
     val scene = ImageComposeScene(width = 824, height = 1700, density = Density(2f)) {
-        MaterialTheme(colorScheme = DarkColorScheme) { Surface { content() } }
+        MaterialTheme(colorScheme = OledColorScheme) { Surface { content() } }
     }
     val t1 = System.nanoTime() // compose (setContent during construction)
     scene.render() // first render: measure + layout + draw
