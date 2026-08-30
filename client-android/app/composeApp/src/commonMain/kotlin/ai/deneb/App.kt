@@ -4,7 +4,6 @@ package ai.deneb
 
 import ai.deneb.data.AppSettings
 import ai.deneb.data.DataRepository
-import ai.deneb.data.ThemeMode
 import ai.deneb.deneb.DenebApprovalDetailScreen
 import ai.deneb.deneb.DenebApprovalsScreen
 import ai.deneb.deneb.DenebBrowserScreen
@@ -57,6 +56,7 @@ import ai.deneb.tools.SmsSendPermissionController
 import ai.deneb.ui.LiveTab
 import ai.deneb.ui.LiveTabPane
 import ai.deneb.ui.LocalSharedTransitionScope
+import ai.deneb.ui.OledColorScheme
 import ai.deneb.ui.Theme
 import ai.deneb.ui.chat.ChatScreen
 import ai.deneb.ui.chat.ChatViewModel
@@ -83,11 +83,9 @@ import ai.deneb.ui.denebNavExit
 import ai.deneb.ui.denebNavPopEnter
 import ai.deneb.ui.denebNavPopExit
 import ai.deneb.ui.handCursor
-import ai.deneb.ui.withBlackBackground
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -99,7 +97,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.union
-import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
@@ -148,8 +145,6 @@ import kotlin.time.Instant
 @Composable
 internal fun AppContent(
     navController: NavHostController,
-    lightColorScheme: ColorScheme,
-    darkColorScheme: ColorScheme,
     textToSpeech: TextToSpeechInstance?,
     onAppOpens: ((Int) -> Unit)?,
     openWorkFeedItemId: String?,
@@ -264,17 +259,10 @@ internal fun AppContent(
         Density(defaultDensity.density * uiScale, defaultDensity.fontScale)
     }
 
-    val themeMode by appSettings.themeModeFlow.collectAsStateWithLifecycle()
-    val systemInDark = isSystemInDarkTheme()
-    val effectiveColorScheme = when (themeMode) {
-        ThemeMode.System -> if (systemInDark) darkColorScheme else lightColorScheme
-        ThemeMode.Light -> lightColorScheme
-        ThemeMode.Dark -> darkColorScheme
-        ThemeMode.OledBlack -> darkColorScheme.withBlackBackground()
-    }
-
+    // Deneb ships one theme (ADR 0007): OLED black. There is no picker and no system
+    // following — the palette is part of the product, not a preference.
     CompositionLocalProvider(LocalDensity provides scaledDensity) {
-        Theme(colorScheme = effectiveColorScheme) {
+        Theme(colorScheme = OledColorScheme) {
             FullScreenImageHost {
                 val chatViewModel: ChatViewModel = koinViewModel()
                 // Web shows the chat/settings tab bar; mobile uses the bottom bar / drawer

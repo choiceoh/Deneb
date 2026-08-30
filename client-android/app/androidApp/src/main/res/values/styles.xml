@@ -1,17 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
+    <!-- One theme, always dark (ADR 0007) — Force.Dark rather than DayNight so the
+         window background and system chrome do not follow the device setting while
+         Compose paints pure black underneath. -->
+    <style name="AppTheme" parent="Theme.Material3.Dark.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:enforceNavigationBarContrast">false</item>
         <item name="android:enforceStatusBarContrast">false</item>
+        <item name="android:windowBackground">#FF000000</item>
     </style>
-    <!-- Launch theme: SplashScreen API — background matches the app's LIGHT
-         Compose background (Theme.kt LightColorScheme.background = pure white)
-         so splash → app has no color step; values-night overrides it to the
-         dark windowBackground. Icon exit animation lives in MainActivity. -->
+    <!-- Launch theme: SplashScreen API. Black in every configuration, matching
+         OledColorScheme.background, so splash → app has no color step. This used to be
+         pure white here and dark only in values-night; with a single black app that
+         meant a white flash into a black screen on any device set to light mode. -->
     <style name="AppTheme.Starting" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">#FFFFFFFF</item>
+        <item name="windowSplashScreenBackground">#FF000000</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
         <item name="postSplashScreenTheme">@style/AppTheme</item>
     </style>

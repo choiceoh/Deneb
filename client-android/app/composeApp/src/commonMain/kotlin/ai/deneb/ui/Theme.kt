@@ -14,7 +14,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -169,40 +168,6 @@ fun Modifier.denebAdaptiveCardSurface(shape: Shape = CardDefaults.shape): Modifi
             Modifier
         },
     )
-
-val LightColorScheme = lightColorScheme(
-    primary = darkPurple,
-    onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFD2E3F7),
-    onPrimaryContainer = Color(0xFF001D33),
-    inversePrimary = Color(0xFF7FA8D0),
-    secondary = Color(0xFF4A6072),
-    onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFD5E3F0),
-    onSecondaryContainer = Color(0xFF0A1F2E),
-    tertiary = Color(0xFF1F6F68),
-    onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = Color(0xFFB8ECE6),
-    onTertiaryContainer = Color(0xFF00201D),
-    error = Color(0xFFB3261E),
-    onError = Color(0xFFFFFFFF),
-    errorContainer = Color(0xFFF9DEDC),
-    onErrorContainer = Color(0xFF410E0B),
-    background = Color(0xFFFFFFFF),
-    onBackground = Color(0xFF000000),
-    surface = Color(0xFFF7F9FB),
-    onSurface = Color(0xFF000000),
-    surfaceVariant = Color(0xFFE1E7EE),
-    onSurfaceVariant = Color(0xFF434A52),
-    surfaceTint = darkPurple,
-    surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFF2F5F8),
-    surfaceContainer = Color(0xFFECF1F6),
-    surfaceContainerHigh = Color(0xFFE6EDF3),
-    surfaceContainerHighest = Color(0xFFE0E8F0),
-    outline = Color(0xFF74808C),
-    outlineVariant = Color(0xFFC4CDD6),
-)
 
 // Status containers (law 5, container tier) — the success/warning surface+text
 // pairs M3's scheme lacks, promoted from the values RenderAlert hand-rolled.

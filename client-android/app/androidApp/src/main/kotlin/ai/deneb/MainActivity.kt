@@ -1,9 +1,7 @@
 package ai.deneb
 
-import ai.deneb.data.AppSettings
 import ai.deneb.data.AttachmentRoute
 import ai.deneb.data.DataRepository
-import ai.deneb.data.ThemeMode
 import ai.deneb.data.attachmentExtension
 import ai.deneb.data.documentCaptureMime
 import ai.deneb.data.isWithinAttachmentSize
@@ -11,8 +9,6 @@ import ai.deneb.data.routeAttachment
 import ai.deneb.deneb.DenebAttachment
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.captureBatch
-import ai.deneb.ui.DarkColorScheme
-import ai.deneb.ui.LightColorScheme
 import ai.deneb.ui.chat.composables.CaptureActions
 import android.content.Intent
 import android.net.Uri
@@ -26,20 +22,14 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import io.github.vinceglb.filekit.FileKit
@@ -111,39 +101,16 @@ class MainActivity : ComponentActivity() {
             handleVoiceIntent(intent)
         }
 
-        val dynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-        val appSettings: AppSettings = get()
         setContent {
-            val themeMode by appSettings.themeModeFlow.collectAsStateWithLifecycle()
-            val systemInDark = isSystemInDarkTheme()
-            val isDarkTheme = when (themeMode) {
-                ThemeMode.System -> systemInDark
-                ThemeMode.Light -> false
-                ThemeMode.Dark, ThemeMode.OledBlack -> true
-            }
-            LaunchedEffect(isDarkTheme) {
+            // One theme, always dark (ADR 0007) — so the system bars are set once and
+            // never re-evaluated, and Material You is gone: dynamic color repaints the
+            // ground from the wallpaper, which is exactly what OLED black must not do.
+            LaunchedEffect(Unit) {
                 enableEdgeToEdge(
-                    statusBarStyle = if (isDarkTheme) {
-                        SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
-                    } else {
-                        SystemBarStyle.light(
-                            android.graphics.Color.TRANSPARENT,
-                            android.graphics.Color.TRANSPARENT,
-                        )
-                    },
-                    navigationBarStyle = if (isDarkTheme) {
-                        SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
-                    } else {
-                        SystemBarStyle.light(
-                            android.graphics.Color.TRANSPARENT,
-                            android.graphics.Color.TRANSPARENT,
-                        )
-                    },
+                    statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+                    navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
                 )
             }
-            val context = LocalContext.current
-            val lightScheme: ColorScheme = if (dynamicColor) dynamicLightColorScheme(context) else LightColorScheme
-            val darkScheme: ColorScheme = if (dynamicColor) dynamicDarkColorScheme(context) else DarkColorScheme
             val navController = rememberNavController()
             // Defer TTS initialization until after the first frame
             var ttsReady by remember { mutableStateOf(false) }
@@ -155,8 +122,6 @@ class MainActivity : ComponentActivity() {
             }
             App(
                 navController = navController,
-                lightColorScheme = lightScheme,
-                darkColorScheme = darkScheme,
                 textToSpeech = textToSpeech,
                 isKoinStarted = true,
                 onAppOpens = { appOpens ->

@@ -56,7 +56,7 @@ class AppSettingsLogicTest {
         s.putCachedCalendar("cal")
         s.putCachedApprovalsList("approvals")
         s.setSoulText("keep me")
-        s.setThemeMode(ThemeMode.Dark)
+        s.setUiScale(1.25f)
 
         s.clearCachedContent()
 
@@ -67,29 +67,7 @@ class AppSettingsLogicTest {
         assertNull(s.getCachedApprovalsList())
         // Non-cache preferences are untouched.
         assertEquals("keep me", s.getSoulText())
-        assertEquals(ThemeMode.Dark, s.getThemeMode())
-    }
-
-    // --- theme mode init + legacy migration ------------------------------
-
-    @Test
-    fun `theme mode initializes from a stored valid value`() {
-        val store = MapSettings().apply { putString(AppSettings.KEY_THEME_MODE, "Dark") }
-        assertEquals(ThemeMode.Dark, AppSettings(store).getThemeMode())
-    }
-
-    @Test
-    fun `an unrecognized stored theme falls back to System`() {
-        val store = MapSettings().apply { putString(AppSettings.KEY_THEME_MODE, "Neon") }
-        assertEquals(ThemeMode.System, AppSettings(store).getThemeMode())
-    }
-
-    @Test
-    fun `the legacy OLED boolean migrates to OledBlack when no theme mode is set`() {
-        val oled = MapSettings().apply { putBoolean(AppSettings.KEY_OLED_MODE_ENABLED, true) }
-        assertEquals(ThemeMode.OledBlack, AppSettings(oled).getThemeMode())
-        // No legacy flag and no theme mode → System.
-        assertEquals(ThemeMode.System, AppSettings(MapSettings()).getThemeMode())
+        assertEquals(1.25f, s.getUiScale())
     }
 
     // --- feed seen set ---------------------------------------------------
