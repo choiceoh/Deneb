@@ -146,8 +146,23 @@ gateway-prod:
 
 # Build the wormhole model router binary to dist/ (cmd/wormhole). Managed as a
 # sibling service (scripts/deploy/start-wormhole.sh, wormhole.service).
+# WORMHOLE_LDFLAGS deliberately omits the -X stamps in GO_LDFLAGS, and the build
+# turns off VCS stamping. Both exist to make this binary REPRODUCIBLE: identical
+# source must produce identical bytes.
+#
+# deploy.sh restarts the router only when dist/wormhole's sha256 changes,
+# because "a restart drops in-flight LLM requests". That guard could never fire.
+# The linker records the -ldflags string and the vcs revision/time in the
+# binary's build info, so every deploy — new commit, new DENEB_BUILD_UNIX —
+# produced different bytes from identical router code. Measured 2026-08-30: 41
+# wormhole restarts in 24h, and because sparkfleet model discovery re-runs only
+# every ~7 minutes after a restart, each one left fleet-served models answering
+# 404 "model does not exist" for up to 22 minutes. cmd/wormhole links neither
+# main.Version nor bootstrap.BuildUnix, so the stamps bought nothing.
+WORMHOLE_LDFLAGS := -ldflags '-s -w'
+
 wormhole:
-	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -trimpath -p $(GO_PAR) $(GO_LDFLAGS) -o ../dist/wormhole ./cmd/wormhole/
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -trimpath -buildvcs=false -p $(GO_PAR) $(WORMHOLE_LDFLAGS) -o ../dist/wormhole ./cmd/wormhole/
 	@echo "wormhole router ready: dist/wormhole"
 
 # Build the standalone, fail-closed Deneb-Briefcase runner.

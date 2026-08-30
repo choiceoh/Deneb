@@ -56,6 +56,7 @@ func BuildDigest(lines []observe.LogLine) Digest {
 	// error. That is output becoming its own input, and it inflates recurrence
 	// counts, which is exactly the signal this digest leans on hardest.
 	lines = dropSelfLines(lines)
+	lines = dropAdvisoryLines(lines)
 
 	d := Digest{}
 	if len(lines) == 0 {
@@ -121,6 +122,29 @@ func dropSelfLines(lines []observe.LogLine) []observe.LogLine {
 	kept := lines[:0:0]
 	for _, l := range lines {
 		if strings.HasPrefix(l.Msg, selfLogPrefix) {
+			continue
+		}
+		kept = append(kept, l)
+	}
+	return kept
+}
+
+// dropAdvisoryLines removes lines whose author marked them as observations
+// rather than faults.
+//
+// genesis's runtime-error mining has filtered these since 2026-07-25; this lane
+// never learned it, and paid for that: on the 2026-08-30 ledger 3 of the 7
+// HIGH-severity findings were built on `regression-watch: regression detected
+// (observe-only)` lines. "관측 전용 회귀 감지가 … 어떤 조치도 취해지지 않았다" reports a
+// lane behaving exactly as designed as the most serious event in the window,
+// and it crowds out the real findings beside it.
+//
+// The predicate is observe.IsAdvisory rather than a copy — one rule, so the two
+// lanes cannot drift into disagreeing about it again.
+func dropAdvisoryLines(lines []observe.LogLine) []observe.LogLine {
+	kept := lines[:0:0]
+	for _, l := range lines {
+		if observe.IsAdvisory(l) {
 			continue
 		}
 		kept = append(kept, l)
