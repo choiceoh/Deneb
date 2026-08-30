@@ -13,6 +13,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JsPromptResult
@@ -30,15 +31,26 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -70,6 +82,15 @@ actual fun DenebWebView(
     // evaluateJavascript back onto it on the main thread.
     val scope = rememberCoroutineScope()
     val holder = remember(state) { WebViewHolder(state) }
+    // Pull-to-refresh. A WebView is not a Compose nested-scroll child, so
+    // PullToRefreshBox's gesture never fires over one; and this file's scroll
+    // behaviour is hard-won (reflow budget, restore, Reddit unlock), so the
+    // gesture must not change touch handling at all. The listener below only
+    // OBSERVES — it always returns false, so every event still reaches the
+    // WebView exactly as before. Feedback while dragging is this indicator;
+    // once the reload starts, the existing determinate progress bar in the
+    // browser chrome takes over.
+    var pullFraction by remember(state) { mutableFloatStateOf(0f) }
     val context = LocalContext.current
 
     // Web forms with <input type="file"> need an activity result; without one the
@@ -111,376 +132,389 @@ actual fun DenebWebView(
         fileChooser.deliver(WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data))
     }
 
-    AndroidView(
-        modifier = modifier,
-        factory = { ctx ->
-            val root = FrameLayout(ctx)
-            val web = WebView(ctx)
-            val popupLayerView = newBrowserPopupLayerView(ctx)
-            root.addView(
-                web,
-                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
-            )
-            root.addView(
-                popupLayerView,
-                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
-            )
-            holder.web = web
-            holder.popups = BrowserPopupLayer(
-                state = state,
-                context = ctx,
-                scope = scope,
-                translate = translate,
-                fileChooser = fileChooser,
-                launchFilePicker = { filePicker.launch(it) },
-                layer = popupLayerView,
-            )
-            holder.lastCommandUrl = state.url
-            holder.translationEnabled = state.translateEnabled
-            val adBlockHits = AtomicInteger(0)
-            val mainHandler = Handler(Looper.getMainLooper())
-            applyDenebBrowserWebSettings(web)
+    Box(modifier) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                val root = FrameLayout(ctx)
+                val web = WebView(ctx)
+                val popupLayerView = newBrowserPopupLayerView(ctx)
+                root.addView(
+                    web,
+                    FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+                )
+                root.addView(
+                    popupLayerView,
+                    FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+                )
+                holder.web = web
+                holder.popups = BrowserPopupLayer(
+                    state = state,
+                    context = ctx,
+                    scope = scope,
+                    translate = translate,
+                    fileChooser = fileChooser,
+                    launchFilePicker = { filePicker.launch(it) },
+                    layer = popupLayerView,
+                )
+                holder.lastCommandUrl = state.url
+                holder.translationEnabled = state.translateEnabled
+                val adBlockHits = AtomicInteger(0)
+                val mainHandler = Handler(Looper.getMainLooper())
+                applyDenebBrowserWebSettings(web)
+                attachPullToRefresh(
+                    web = web,
+                    onPull = { pullFraction = it },
+                    onTrigger = {
+                        pullFraction = 0f
+                        state.reload()
+                    },
+                )
 
-            // Downloads: a WebView with no listener drops the navigation with no
-            // error, so tapping a PDF/xlsx link does nothing at all. Hand it to
-            // DownloadManager with the page's cookies + UA so authenticated
-            // attachments (groupware, mail) actually come down.
-            web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-                val name = browserDownloadFileName(url, contentDisposition, mimeType)
-                val started = startBrowserDownload(context, url, userAgent, mimeType, name)
-                Toast.makeText(
-                    context,
-                    if (started) "다운로드 시작: $name" else "다운로드를 시작할 수 없습니다",
-                    Toast.LENGTH_SHORT,
-                ).show()
-            }
-            val translateBridge = BrowserTranslateBridge(
-                scope = scope,
-                translateSegments = translate,
-                state = state,
-                webView = { holder.web },
-                translationEnabled = { holder.translationEnabled },
-            )
-            holder.translateBridge = translateBridge
-            web.addJavascriptInterface(translateBridge, BROWSER_TRANSLATE_BRIDGE_NAME)
-            web.webViewClient = object : WebViewClient() {
-                // App/deep-link schemes (intent://, market://, kakaotalk://, tel:,
-                // mailto:, bank cert auth) cannot be rendered by a WebView. With no
-                // override the navigation just fails and the tap does nothing —
-                // which is most Korean login/payment flows.
-                override fun shouldOverrideUrlLoading(
-                    view: WebView,
-                    request: WebResourceRequest,
-                ): Boolean {
-                    if (request.isForMainFrame && request.hasGesture()) {
-                        holder.finishDetachedRestore()
-                    }
-                    val url = request.url?.toString().orEmpty()
-                    if (!isExternalSchemeUrl(url)) return false
-                    if (openExternalUrl(context, url)) return true
-                    // No app installed: intent:// may name a web page to use instead.
-                    intentFallbackUrl(url)?.let {
-                        view.loadUrl(it)
+                // Downloads: a WebView with no listener drops the navigation with no
+                // error, so tapping a PDF/xlsx link does nothing at all. Hand it to
+                // DownloadManager with the page's cookies + UA so authenticated
+                // attachments (groupware, mail) actually come down.
+                web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+                    val name = browserDownloadFileName(url, contentDisposition, mimeType)
+                    val started = startBrowserDownload(context, url, userAgent, mimeType, name)
+                    Toast.makeText(
+                        context,
+                        if (started) "다운로드 시작: $name" else "다운로드를 시작할 수 없습니다",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+                val translateBridge = BrowserTranslateBridge(
+                    scope = scope,
+                    translateSegments = translate,
+                    state = state,
+                    webView = { holder.web },
+                    translationEnabled = { holder.translationEnabled },
+                )
+                holder.translateBridge = translateBridge
+                web.addJavascriptInterface(translateBridge, BROWSER_TRANSLATE_BRIDGE_NAME)
+                web.webViewClient = object : WebViewClient() {
+                    // App/deep-link schemes (intent://, market://, kakaotalk://, tel:,
+                    // mailto:, bank cert auth) cannot be rendered by a WebView. With no
+                    // override the navigation just fails and the tap does nothing —
+                    // which is most Korean login/payment flows.
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView,
+                        request: WebResourceRequest,
+                    ): Boolean {
+                        if (request.isForMainFrame && request.hasGesture()) {
+                            holder.finishDetachedRestore()
+                        }
+                        val url = request.url?.toString().orEmpty()
+                        if (!isExternalSchemeUrl(url)) return false
+                        if (openExternalUrl(context, url)) return true
+                        // No app installed: intent:// may name a web page to use instead.
+                        intentFallbackUrl(url)?.let {
+                            view.loadUrl(it)
+                            return true
+                        }
+                        Toast.makeText(context, "이 링크를 열 앱이 없습니다", Toast.LENGTH_SHORT).show()
                         return true
                     }
-                    Toast.makeText(context, "이 링크를 열 앱이 없습니다", Toast.LENGTH_SHORT).show()
-                    return true
-                }
 
-                override fun shouldInterceptRequest(
-                    view: WebView,
-                    request: WebResourceRequest,
-                ): WebResourceResponse? {
-                    if (!state.adBlockEnabled) return null
-                    val url = request.url?.toString().orEmpty()
-                    if (!shouldBlockBrowserAdRequest(url, isForMainFrame = request.isForMainFrame)) {
-                        return null
-                    }
-                    val n = adBlockHits.incrementAndGet()
-                    mainHandler.post { state.adBlockedCount = n }
-                    return emptyBlockedResponse(url)
-                }
-
-                @Deprecated("Deprecated in Java")
-                override fun shouldInterceptRequest(view: WebView, url: String): WebResourceResponse? {
-                    if (!state.adBlockEnabled) return null
-                    if (!shouldBlockBrowserAdRequest(url, isForMainFrame = false)) return null
-                    val n = adBlockHits.incrementAndGet()
-                    mainHandler.post { state.adBlockedCount = n }
-                    return emptyBlockedResponse(url)
-                }
-
-                override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                    holder.translateBridge?.cancelForNavigation()
-                    val previousStable = stableBrowserTabUrl(state.currentUrl, state.url, state.rendererRecoveryUrl)
-                    if (canBookmarkUrl(url)) {
-                        state.markRendererRecoveryStarted(url)
-                        if (url != previousStable) {
-                            state.pageTitle = ""
-                            state.pageFavicon = null
-                            state.pagePreview = null
-                            state.clearTranslationProgress()
+                    override fun shouldInterceptRequest(
+                        view: WebView,
+                        request: WebResourceRequest,
+                    ): WebResourceResponse? {
+                        if (!state.adBlockEnabled) return null
+                        val url = request.url?.toString().orEmpty()
+                        if (!shouldBlockBrowserAdRequest(url, isForMainFrame = request.isForMainFrame)) {
+                            return null
                         }
-                    } else if (!state.rendererRecoveryPending && canShowAsAddress(url)) {
-                        state.currentUrl = url
+                        val n = adBlockHits.incrementAndGet()
+                        mainHandler.post { state.adBlockedCount = n }
+                        return emptyBlockedResponse(url)
                     }
-                    favicon?.let(::browserFaviconImage)?.let { state.pageFavicon = it }
-                    if (!state.rendererRecoveryPending) state.loadError = null
-                    state.loading = true
-                    adBlockHits.set(0)
-                    state.adBlockedCount = 0
-                    state.canGoBack = view.canGoBack()
-                    state.canGoForward = view.canGoForward()
-                }
 
-                // First paint of the main frame. Translation used to start only in
-                // onPageFinished, which waits for every ad, tracker and lazy image —
-                // so the reader stared at the source text for however long the
-                // slowest subresource took, on exactly the ad-heavy pages where that
-                // is longest. Starting here works against the DOM already on screen,
-                // and the viewport-first dispatch inside the script means the text
-                // being read is translated first.
-                //
-                // Running twice is free and deliberate: the script self-guards
-                // (`__installed`), its asset is read once into an AtomicReference,
-                // and resumeForDocument only sets a flag. The onPageFinished pass
-                // below stays as the backstop for pages that never commit a visible
-                // frame (immediate redirects, some error paths).
-                override fun onPageCommitVisible(view: WebView, url: String) {
-                    if (state.loadError != null) return
-                    injectTranslateScript(view)
-                    holder.translateBridge?.resumeForDocument()
-                    view.evaluateJavascript(
-                        "window.DenebTranslate&&window.DenebTranslate.setEnabled(${state.translateEnabled});",
-                        null,
-                    )
-                }
-
-                override fun onPageFinished(view: WebView, url: String) {
-                    if (canBookmarkUrl(url)) {
-                        state.markRendererRecoveryStarted(url)
-                    } else if (!state.rendererRecoveryPending && canShowAsAddress(url)) {
-                        state.currentUrl = url
+                    @Deprecated("Deprecated in Java")
+                    override fun shouldInterceptRequest(view: WebView, url: String): WebResourceResponse? {
+                        if (!state.adBlockEnabled) return null
+                        if (!shouldBlockBrowserAdRequest(url, isForMainFrame = false)) return null
+                        val n = adBlockHits.incrementAndGet()
+                        mainHandler.post { state.adBlockedCount = n }
+                        return emptyBlockedResponse(url)
                     }
-                    state.canGoBack = view.canGoBack()
-                    state.canGoForward = view.canGoForward()
-                    view.post {
-                        holder.restoreScroll(view, state)
-                        captureBrowserPreview(view)?.let { state.pagePreview = it }
-                        if (holder.restoringDetachedTab) {
-                            holder.restoringDetachedTab = false
-                        } else {
-                            state.commitNavigation(url)
+
+                    override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                        holder.translateBridge?.cancelForNavigation()
+                        val previousStable = stableBrowserTabUrl(state.currentUrl, state.url, state.rendererRecoveryUrl)
+                        if (canBookmarkUrl(url)) {
+                            state.markRendererRecoveryStarted(url)
+                            if (url != previousStable) {
+                                state.pageTitle = ""
+                                state.pageFavicon = null
+                                state.pagePreview = null
+                                state.clearTranslationProgress()
+                            }
+                        } else if (!state.rendererRecoveryPending && canShowAsAddress(url)) {
+                            state.currentUrl = url
                         }
+                        favicon?.let(::browserFaviconImage)?.let { state.pageFavicon = it }
+                        if (!state.rendererRecoveryPending) state.loadError = null
+                        state.loading = true
+                        adBlockHits.set(0)
+                        state.adBlockedCount = 0
+                        state.canGoBack = view.canGoBack()
+                        state.canGoForward = view.canGoForward()
                     }
-                    if (state.loadError != null) return
-                    injectSiteQuirk(view, url)
-                    injectTranslateScript(view)
-                    holder.translateBridge?.resumeForDocument()
-                    // Re-apply the toggle: a fresh page starts untranslated.
-                    view.evaluateJavascript(
-                        "window.DenebTranslate&&window.DenebTranslate.setEnabled(${state.translateEnabled});",
-                        null,
-                    )
-                }
 
-                // Main frame only: every ad-blocked subresource also reports an
-                // error, and surfacing those would cry wolf on every page.
-                override fun onReceivedError(
-                    view: WebView,
-                    request: WebResourceRequest,
-                    error: WebResourceError,
-                ) {
-                    if (!request.isForMainFrame) return
-                    resumeBrowserTranslation(holder, state, view)
-                    // onReceivedSslError may have already set a more specific reason.
-                    if (state.loadError == null) {
-                        state.markMainFrameFailed(
-                            browserPageErrorMessage(error.errorCode, error.description?.toString()),
+                    // First paint of the main frame. Translation used to start only in
+                    // onPageFinished, which waits for every ad, tracker and lazy image —
+                    // so the reader stared at the source text for however long the
+                    // slowest subresource took, on exactly the ad-heavy pages where that
+                    // is longest. Starting here works against the DOM already on screen,
+                    // and the viewport-first dispatch inside the script means the text
+                    // being read is translated first.
+                    //
+                    // Running twice is free and deliberate: the script self-guards
+                    // (`__installed`), its asset is read once into an AtomicReference,
+                    // and resumeForDocument only sets a flag. The onPageFinished pass
+                    // below stays as the backstop for pages that never commit a visible
+                    // frame (immediate redirects, some error paths).
+                    override fun onPageCommitVisible(view: WebView, url: String) {
+                        if (state.loadError != null) return
+                        injectTranslateScript(view)
+                        holder.translateBridge?.resumeForDocument()
+                        view.evaluateJavascript(
+                            "window.DenebTranslate&&window.DenebTranslate.setEnabled(${state.translateEnabled});",
+                            null,
                         )
-                    } else {
-                        state.loading = false
-                        state.progress = 100
                     }
-                }
 
-                override fun onReceivedHttpError(
-                    view: WebView,
-                    request: WebResourceRequest,
-                    errorResponse: WebResourceResponse,
-                ) {
-                    if (!request.isForMainFrame) return
-                    val message = browserHttpErrorMessage(errorResponse.statusCode) ?: return
-                    resumeBrowserTranslation(holder, state, view)
-                    state.markMainFrameFailed(message)
-                }
+                    override fun onPageFinished(view: WebView, url: String) {
+                        if (canBookmarkUrl(url)) {
+                            state.markRendererRecoveryStarted(url)
+                        } else if (!state.rendererRecoveryPending && canShowAsAddress(url)) {
+                            state.currentUrl = url
+                        }
+                        state.canGoBack = view.canGoBack()
+                        state.canGoForward = view.canGoForward()
+                        view.post {
+                            holder.restoreScroll(view, state)
+                            captureBrowserPreview(view)?.let { state.pagePreview = it }
+                            if (holder.restoringDetachedTab) {
+                                holder.restoringDetachedTab = false
+                            } else {
+                                state.commitNavigation(url)
+                            }
+                        }
+                        if (state.loadError != null) return
+                        injectSiteQuirk(view, url)
+                        injectTranslateScript(view)
+                        holder.translateBridge?.resumeForDocument()
+                        // Re-apply the toggle: a fresh page starts untranslated.
+                        view.evaluateJavascript(
+                            "window.DenebTranslate&&window.DenebTranslate.setEnabled(${state.translateEnabled});",
+                            null,
+                        )
+                    }
 
-                // Always cancel: no "proceed anyway" on a device holding
-                // business mail and groupware sessions. Iframe/image cert
-                // failures must not paint the whole page as failed.
-                override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
-                    handler.cancel()
-                    val failing = error.url.orEmpty()
-                    if (
-                        !browserSslErrorAffectsPage(view.url.orEmpty(), failing) &&
-                        !browserSslErrorAffectsPage(state.currentUrl, failing) &&
-                        !browserSslErrorAffectsPage(state.url, failing)
+                    // Main frame only: every ad-blocked subresource also reports an
+                    // error, and surfacing those would cry wolf on every page.
+                    override fun onReceivedError(
+                        view: WebView,
+                        request: WebResourceRequest,
+                        error: WebResourceError,
                     ) {
-                        return
+                        if (!request.isForMainFrame) return
+                        resumeBrowserTranslation(holder, state, view)
+                        // onReceivedSslError may have already set a more specific reason.
+                        if (state.loadError == null) {
+                            state.markMainFrameFailed(
+                                browserPageErrorMessage(error.errorCode, error.description?.toString()),
+                            )
+                        } else {
+                            state.loading = false
+                            state.progress = 100
+                        }
                     }
-                    resumeBrowserTranslation(holder, state, view)
-                    state.markMainFrameFailed(browserSslErrorMessage(error.primaryError))
-                }
 
-                override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-                    // A dead renderer makes this WebView permanently unusable.
-                    // Mark the state first so the keyed caller replaces the
-                    // platform view, then destroy this exact instance.
-                    holder.rendererGone = true
-                    if (holder.web === view) holder.web = null
-                    state.markRendererGone(detail.didCrash())
-                    view.removeJavascriptInterface(BROWSER_TRANSLATE_BRIDGE_NAME)
-                    view.destroy()
-                    return true
-                }
-
-                override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
-                    super.doUpdateVisitedHistory(view, url, isReload)
-                    val previousStable = stableBrowserTabUrl(state.currentUrl, state.url, state.rendererRecoveryUrl)
-                    if (canBookmarkUrl(url)) {
-                        state.markRendererRecoveryStarted(url)
-                    } else if (!(urlScheme(url) == "about" && previousStable.isNotBlank())) {
-                        state.currentUrl = url
+                    override fun onReceivedHttpError(
+                        view: WebView,
+                        request: WebResourceRequest,
+                        errorResponse: WebResourceResponse,
+                    ) {
+                        if (!request.isForMainFrame) return
+                        val message = browserHttpErrorMessage(errorResponse.statusCode) ?: return
+                        resumeBrowserTranslation(holder, state, view)
+                        state.markMainFrameFailed(message)
                     }
-                    state.canGoBack = view.canGoBack()
-                    state.canGoForward = view.canGoForward()
-                    if (!holder.restoringDetachedTab) {
-                        view.post { state.commitNavigation(url, force = isReload) }
+
+                    // Always cancel: no "proceed anyway" on a device holding
+                    // business mail and groupware sessions. Iframe/image cert
+                    // failures must not paint the whole page as failed.
+                    override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
+                        handler.cancel()
+                        val failing = error.url.orEmpty()
+                        if (
+                            !browserSslErrorAffectsPage(view.url.orEmpty(), failing) &&
+                            !browserSslErrorAffectsPage(state.currentUrl, failing) &&
+                            !browserSslErrorAffectsPage(state.url, failing)
+                        ) {
+                            return
+                        }
+                        resumeBrowserTranslation(holder, state, view)
+                        state.markMainFrameFailed(browserSslErrorMessage(error.primaryError))
                     }
-                    // SPA soft-nav keeps the document, so the quirk's observer
-                    // survives; re-running is a no-op behind its re-entry guard
-                    // and covers the case where the lock lands only after the
-                    // first client-side route change.
-                    injectSiteQuirk(view, url)
-                    view.evaluateJavascript(
-                        "window.DenebTranslate&&window.DenebTranslate.onLocationChange&&window.DenebTranslate.onLocationChange();",
-                        null,
-                    )
-                }
-            }
-            web.webChromeClient = object : WebChromeClient() {
-                override fun onReceivedTitle(view: WebView, title: String?) {
-                    val previousStable = stableBrowserTabUrl(state.currentUrl, state.url, state.rendererRecoveryUrl)
-                    state.pageTitle = stableBrowserPageTitle(title, view.url.orEmpty(), previousStable, state.pageTitle)
-                }
 
-                override fun onReceivedIcon(view: WebView, icon: Bitmap) {
-                    browserFaviconImage(icon)?.let { state.pageFavicon = it }
-                }
-
-                override fun onProgressChanged(view: WebView, newProgress: Int) {
-                    state.progress = newProgress
-                    state.loading = newProgress < 100
-                }
-
-                // The default WebChromeClient silently CANCELS these, so a page's
-                // confirm() returns false without ever asking the user — the
-                // button simply looks broken (same trap Andromeda hit).
-                override fun onJsAlert(view: WebView, url: String, message: String, result: JsResult): Boolean {
-                    state.jsDialog = BrowserJsDialog(BrowserJsDialog.Kind.ALERT, message) { _, _ ->
-                        result.confirm()
+                    override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                        // A dead renderer makes this WebView permanently unusable.
+                        // Mark the state first so the keyed caller replaces the
+                        // platform view, then destroy this exact instance.
+                        holder.rendererGone = true
+                        if (holder.web === view) holder.web = null
+                        state.markRendererGone(detail.didCrash())
+                        view.removeJavascriptInterface(BROWSER_TRANSLATE_BRIDGE_NAME)
+                        view.destroy()
+                        return true
                     }
-                    return true
-                }
 
-                override fun onJsConfirm(view: WebView, url: String, message: String, result: JsResult): Boolean {
-                    state.jsDialog = BrowserJsDialog(BrowserJsDialog.Kind.CONFIRM, message) { ok, _ ->
-                        if (ok) result.confirm() else result.cancel()
+                    override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
+                        super.doUpdateVisitedHistory(view, url, isReload)
+                        val previousStable = stableBrowserTabUrl(state.currentUrl, state.url, state.rendererRecoveryUrl)
+                        if (canBookmarkUrl(url)) {
+                            state.markRendererRecoveryStarted(url)
+                        } else if (!(urlScheme(url) == "about" && previousStable.isNotBlank())) {
+                            state.currentUrl = url
+                        }
+                        state.canGoBack = view.canGoBack()
+                        state.canGoForward = view.canGoForward()
+                        if (!holder.restoringDetachedTab) {
+                            view.post { state.commitNavigation(url, force = isReload) }
+                        }
+                        // SPA soft-nav keeps the document, so the quirk's observer
+                        // survives; re-running is a no-op behind its re-entry guard
+                        // and covers the case where the lock lands only after the
+                        // first client-side route change.
+                        injectSiteQuirk(view, url)
+                        view.evaluateJavascript(
+                            "window.DenebTranslate&&window.DenebTranslate.onLocationChange&&window.DenebTranslate.onLocationChange();",
+                            null,
+                        )
                     }
-                    return true
                 }
-
-                override fun onJsPrompt(
-                    view: WebView,
-                    url: String,
-                    message: String,
-                    defaultValue: String?,
-                    result: JsPromptResult,
-                ): Boolean {
-                    state.jsDialog = BrowserJsDialog(
-                        BrowserJsDialog.Kind.PROMPT,
-                        message,
-                        defaultValue.orEmpty(),
-                    ) { ok, value ->
-                        if (ok) result.confirm(value.orEmpty()) else result.cancel()
+                web.webChromeClient = object : WebChromeClient() {
+                    override fun onReceivedTitle(view: WebView, title: String?) {
+                        val previousStable = stableBrowserTabUrl(state.currentUrl, state.url, state.rendererRecoveryUrl)
+                        state.pageTitle = stableBrowserPageTitle(title, view.url.orEmpty(), previousStable, state.pageTitle)
                     }
-                    return true
-                }
 
-                override fun onCreateWindow(
-                    view: WebView,
-                    isDialog: Boolean,
-                    isUserGesture: Boolean,
-                    resultMsg: Message,
-                ): Boolean = holder.popups?.createWindow(isUserGesture, resultMsg) == true
+                    override fun onReceivedIcon(view: WebView, icon: Bitmap) {
+                        browserFaviconImage(icon)?.let { state.pageFavicon = it }
+                    }
 
-                override fun onCloseWindow(window: WebView) {
-                    holder.popups?.closeWindow(window)
-                }
+                    override fun onProgressChanged(view: WebView, newProgress: Int) {
+                        state.progress = newProgress
+                        state.loading = newProgress < 100
+                    }
 
-                override fun onShowFileChooser(
-                    webView: WebView,
-                    callback: ValueCallback<Array<Uri>>,
-                    params: FileChooserParams,
-                ): Boolean = fileChooser.start(callback) { filePicker.launch(params.createIntent()) }
-            }
-            val savedPlatformState = state.platformState as? Bundle
-            // A cold start after process death has no in-memory parked Bundle —
-            // fall back to the disk-parked state (consumed on read) so the
-            // back/forward list and scroll survive the restart.
-            val diskState = if (savedPlatformState == null) BrowserTabStateDisk.load(ctx, state.tabId) else null
-            diskState?.let {
-                state.platformScrollX = it.scrollX
-                state.platformScrollY = it.scrollY
-            }
-            val restoreBundle = savedPlatformState ?: diskState?.bundle
-            holder.restoringDetachedTab = restoreBundle != null
-            val restored = restoreBundle?.let { saved ->
-                state.platformState = null
-                runCatching { web.restoreState(saved) != null }.getOrDefault(false)
-            } ?: false
-            holder.restoringDetachedTab = restored
-            holder.scrollRestorePending = state.platformScrollX != 0 || state.platformScrollY != 0
-            if (!restored && !state.rendererRecoveryPending) {
-                state.currentUrl.ifBlank { state.url }.takeIf { it.isNotBlank() }?.let(web::loadUrl)
-            }
-            root
-        },
-        update = { /* navigation/commands handled via LaunchedEffect below */ },
-        onRelease = { _ ->
-            fileChooser.deliver(null)
-            holder.popups?.destroyAll()
-            holder.popups = null
-            holder.translateBridge?.cancelForNavigation()
-            holder.translateBridge = null
-            val web = holder.web
-            if (web != null && !holder.rendererGone) {
-                state.platformScrollX = web.scrollX
-                state.platformScrollY = web.scrollY
-                captureBrowserPreview(web)?.let { state.pagePreview = it }
-                val saved = Bundle()
-                if (runCatching { web.saveState(saved) }.getOrNull() != null) {
-                    state.platformState = saved
+                    // The default WebChromeClient silently CANCELS these, so a page's
+                    // confirm() returns false without ever asking the user — the
+                    // button simply looks broken (same trap Andromeda hit).
+                    override fun onJsAlert(view: WebView, url: String, message: String, result: JsResult): Boolean {
+                        state.jsDialog = BrowserJsDialog(BrowserJsDialog.Kind.ALERT, message) { _, _ ->
+                            result.confirm()
+                        }
+                        return true
+                    }
+
+                    override fun onJsConfirm(view: WebView, url: String, message: String, result: JsResult): Boolean {
+                        state.jsDialog = BrowserJsDialog(BrowserJsDialog.Kind.CONFIRM, message) { ok, _ ->
+                            if (ok) result.confirm() else result.cancel()
+                        }
+                        return true
+                    }
+
+                    override fun onJsPrompt(
+                        view: WebView,
+                        url: String,
+                        message: String,
+                        defaultValue: String?,
+                        result: JsPromptResult,
+                    ): Boolean {
+                        state.jsDialog = BrowserJsDialog(
+                            BrowserJsDialog.Kind.PROMPT,
+                            message,
+                            defaultValue.orEmpty(),
+                        ) { ok, value ->
+                            if (ok) result.confirm(value.orEmpty()) else result.cancel()
+                        }
+                        return true
+                    }
+
+                    override fun onCreateWindow(
+                        view: WebView,
+                        isDialog: Boolean,
+                        isUserGesture: Boolean,
+                        resultMsg: Message,
+                    ): Boolean = holder.popups?.createWindow(isUserGesture, resultMsg) == true
+
+                    override fun onCloseWindow(window: WebView) {
+                        holder.popups?.closeWindow(window)
+                    }
+
+                    override fun onShowFileChooser(
+                        webView: WebView,
+                        callback: ValueCallback<Array<Uri>>,
+                        params: FileChooserParams,
+                    ): Boolean = fileChooser.start(callback) { filePicker.launch(params.createIntent()) }
                 }
-                // Also park on disk: this release may be the last one before a
-                // background kill, and a restore after that needs the disk copy.
-                BrowserTabStateDisk.save(context, state.tabId, web)
-                web.removeJavascriptInterface(BROWSER_TRANSLATE_BRIDGE_NAME)
-                web.destroy()
-            }
-            holder.web = null
-        },
-    )
+                val savedPlatformState = state.platformState as? Bundle
+                // A cold start after process death has no in-memory parked Bundle —
+                // fall back to the disk-parked state (consumed on read) so the
+                // back/forward list and scroll survive the restart.
+                val diskState = if (savedPlatformState == null) BrowserTabStateDisk.load(ctx, state.tabId) else null
+                diskState?.let {
+                    state.platformScrollX = it.scrollX
+                    state.platformScrollY = it.scrollY
+                }
+                val restoreBundle = savedPlatformState ?: diskState?.bundle
+                holder.restoringDetachedTab = restoreBundle != null
+                val restored = restoreBundle?.let { saved ->
+                    state.platformState = null
+                    runCatching { web.restoreState(saved) != null }.getOrDefault(false)
+                } ?: false
+                holder.restoringDetachedTab = restored
+                holder.scrollRestorePending = state.platformScrollX != 0 || state.platformScrollY != 0
+                if (!restored && !state.rendererRecoveryPending) {
+                    state.currentUrl.ifBlank { state.url }.takeIf { it.isNotBlank() }?.let(web::loadUrl)
+                }
+                root
+            },
+            update = { /* navigation/commands handled via LaunchedEffect below */ },
+            onRelease = { _ ->
+                fileChooser.deliver(null)
+                holder.popups?.destroyAll()
+                holder.popups = null
+                holder.translateBridge?.cancelForNavigation()
+                holder.translateBridge = null
+                val web = holder.web
+                if (web != null && !holder.rendererGone) {
+                    state.platformScrollX = web.scrollX
+                    state.platformScrollY = web.scrollY
+                    captureBrowserPreview(web)?.let { state.pagePreview = it }
+                    val saved = Bundle()
+                    if (runCatching { web.saveState(saved) }.getOrNull() != null) {
+                        state.platformState = saved
+                    }
+                    // Also park on disk: this release may be the last one before a
+                    // background kill, and a restore after that needs the disk copy.
+                    BrowserTabStateDisk.save(context, state.tabId, web)
+                    web.removeJavascriptInterface(BROWSER_TRANSLATE_BRIDGE_NAME)
+                    web.destroy()
+                }
+                holder.web = null
+            },
+        )
+        if (pullFraction > 0f) {
+            PullToRefreshHint(pullFraction)
+        }
+    }
 
     LaunchedEffect(state.diagnosticsTick) {
         if (!holder.commands.consumeDiagnostics(state)) return@LaunchedEffect
@@ -795,4 +829,47 @@ internal class FileChooserHolder {
         pending = null
         cb.onReceiveValue(uris)
     }
+}
+
+/** Pull distance, in dp of finger travel, that arms a reload. */
+private const val PULL_REFRESH_THRESHOLD_DP = 84f
+
+/**
+ * Observe-only pull-to-refresh for a WebView.
+ *
+ * The listener ALWAYS returns false, so the WebView receives and handles every
+ * event exactly as it did before — this cannot change scrolling, link taps, text
+ * selection, or the overscroll glow. It only measures the drag and hands it to
+ * [BrowserPullTracker], which owns the arming rules (and their tests).
+ *
+ * Why not [androidx.compose.material3.pulltorefresh.PullToRefreshBox]: its gesture
+ * rides Compose nested scroll, and a WebView is not a Compose nested-scroll child,
+ * so the box would render an indicator that never fires.
+ */
+private fun attachPullToRefresh(web: WebView, onPull: (Float) -> Unit, onTrigger: () -> Unit) {
+    val tracker = BrowserPullTracker(PULL_REFRESH_THRESHOLD_DP * web.resources.displayMetrics.density)
+    web.setOnTouchListener { _, event ->
+        val phase = when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> BrowserPullPhase.DOWN
+            MotionEvent.ACTION_MOVE -> BrowserPullPhase.MOVE
+            MotionEvent.ACTION_UP -> BrowserPullPhase.UP
+            MotionEvent.ACTION_CANCEL -> BrowserPullPhase.CANCEL
+            else -> null
+        }
+        if (phase != null) {
+            val trigger = tracker.onEvent(phase, event.y, web.scrollY)
+            onPull(tracker.fraction)
+            if (trigger) onTrigger()
+        }
+        false
+    }
+}
+
+/** Material progress ring that fills as the pull approaches the threshold. */
+@Composable
+private fun BoxScope.PullToRefreshHint(fraction: Float) {
+    CircularProgressIndicator(
+        progress = { fraction },
+        modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp).size(28.dp),
+    )
 }
