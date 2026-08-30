@@ -126,27 +126,12 @@ func normalizeErrorSignature(msg string) string {
 	return strings.TrimSpace(s)
 }
 
-// observeOnlyPattern matches an EXPLICIT authorial marker that a line reports
-// an observation rather than a fault. Such a line has no fix — "silencing" it
-// would mean deleting the observation the author wanted — so a candidate built
-// from one can only be declined or land with no effect, burning a scarce
-// dispatch slot either way. Live 2026-07-25: `regression-watch: regression
-// detected (observe-only)` did exactly that, landing with a no_effect impact
-// verdict (23.9h quiet vs the 48h target) because there was nothing to fix.
-//
-// Deliberately narrow: it respects a marker the AUTHOR wrote, and does not try
-// to infer "this mechanism is working as designed". That inference would
-// collide head-on with why WARN lines are admitted at all — graceful
-// degradation DOWNGRADES real defects, so "model failed, trying fallback" is a
-// working fallback AND a real upstream defect signal (see
-// runtimeErrorWarnMinRecurrence). Only the explicit marker is safe to trust.
-var observeOnlyPattern = regexp.MustCompile(`(?i)\(observe.?only\)|\bobserve.?only\b|\badvisory\b|\bdry.?run\b|\bwill recover\b|\bno-?op\b`)
-
-// isObserveOnlySignal reports an intentionally advisory line — see
-// observeOnlyPattern. Checked on the message only: `error` attrs carry the
-// underlying failure text, where these words would be coincidental.
+// isObserveOnlySignal reports an intentionally advisory line. The rule itself
+// is observe.IsAdvisory — anomaly-watch needs the same answer, and two copies
+// drifted apart once already (that lane raised HIGH findings on lines this one
+// had been dropping since 2026-07-25).
 func isObserveOnlySignal(line observe.LogLine) bool {
-	if observeOnlyPattern.MatchString(line.Msg) {
+	if observe.IsAdvisory(line) {
 		return true
 	}
 	// Executor bookkeeping (Info): a tool_result error is not a runtime defect.

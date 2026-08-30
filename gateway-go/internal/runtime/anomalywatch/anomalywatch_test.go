@@ -331,3 +331,34 @@ func TestJudgeBudgetCoversAFullWindow(t *testing.T) {
 			maxJudgeTokens)
 	}
 }
+
+// The 2026-08-30 ledger had 3 of 7 HIGH findings built on observe-only
+// regression-watch lines — a lane behaving as designed, reported as the most
+// serious event in its window. The digest must not hand those to the judge.
+func TestBuildDigestDropsAdvisoryLines(t *testing.T) {
+	d := BuildDigest([]observe.LogLine{
+		{
+			Level: "WARN", Msg: "regression-watch: regression detected (observe-only)",
+			Attrs: map[string]string{"deltaPct": "35", "signal": "agentlog.p95_ms@main-seat"},
+		},
+		{Level: "WARN", Msg: "mail analysis 위키 저장 실패", Attrs: map[string]string{"id": "abc"}},
+	})
+	if strings.Contains(d.Text, "observe-only") {
+		t.Fatalf("advisory line reached the digest:\n%s", d.Text)
+	}
+	if !strings.Contains(d.Text, "mail analysis 위키 저장 실패") {
+		t.Fatalf("real fault was dropped with it:\n%s", d.Text)
+	}
+}
+
+// A window of nothing but advisory lines is an empty window, and the digest
+// must say so rather than hand the judge a silence to explain.
+func TestBuildDigestAllAdvisoryReadsAsEmpty(t *testing.T) {
+	d := BuildDigest([]observe.LogLine{
+		{Level: "WARN", Msg: "regression-watch: regression detected (observe-only)"},
+		{Level: "WARN", Msg: "auto-deploy tick: no-op"},
+	})
+	if !strings.Contains(d.Text, "한 줄도 없었다") {
+		t.Fatalf("want the explicit empty-window reading, got:\n%s", d.Text)
+	}
+}
