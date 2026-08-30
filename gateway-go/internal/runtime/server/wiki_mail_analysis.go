@@ -9,15 +9,19 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
@@ -444,6 +448,8 @@ func (s *Server) pinDealEvidenceToNotebook(msg *gmail.MessageDetail, deal *maila
 		s.logger.Info("mail→notebook: 딜 증거 핀", "id", msg.ID, "deal", dealRef)
 	}
 
+	s.pinDealAttachmentsToNotebook(msg, deal, dealRef)
+
 	// Stamp the analyzer's resolved project linkage onto the deal notebook (각인):
 	// the dealRef is keyed by counterparty, which can differ from the project name,
 	// so without this the project corner can't link the notebook to its project.
@@ -454,6 +460,116 @@ func (s *Server) pinDealEvidenceToNotebook(msg *gmail.MessageDetail, deal *maila
 		}
 	}
 }
+
+// notebookAttachmentTextCap bounds one attachment's extracted text inside a
+// notebook. Grounding stuffs the whole notebook into a wire tail, so a single
+// 200-row 견적서 must not crowd out the rest of the deal.
+const notebookAttachmentTextCap = 8000
+
+// pinDealAttachmentsToNotebook pins the deal mail's ARCHIVED attachments — the
+// actual 견적서/계약서 — onto the same deal notebook, extracted to text.
+//
+// Until now a deal notebook held only the analyzer's ~270-char extraction of the
+// mail. Measured 2026-08-30: 74 notebooks, 103 sources, every one of them
+// kind=note, while the mail archive held 41 xlsx / 46 docx / 202 pdf of the
+// actual quotes and contracts. 76% of the notebooks had exactly one source — a
+// binder with one summary in it, which is strictly worse than reading the mail.
+// The numbers the operator asks about (단가, 수량, 납기 조건) live in the
+// attachment, not in the summary of it.
+//
+// Best-effort and silent, like the note pin: the attachment must already be in
+// the local archive (archiveAttachments put it there earlier in the same cycle),
+// so this reads from disk and never fetches. Deduped per file by Ref, so
+// re-analysis of the same mail never double-pins.
+func (s *Server) pinDealAttachmentsToNotebook(msg *gmail.MessageDetail, deal *mailanalysis.DealInfo, dealRef string) {
+	if s.notebookStore == nil || dealRef == "" || len(msg.Attachments) == 0 {
+		return
+	}
+	store, err := filestore.DefaultLocalStore()
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	for _, att := range msg.Attachments {
+		name := strings.TrimSpace(att.Filename)
+		if name == "" {
+			continue
+		}
+		path, ok := findArchivedAttachment(ctx, store, name)
+		if !ok {
+			continue
+		}
+		data, _, rerr := store.Get(ctx, path)
+		if rerr != nil {
+			continue
+		}
+		text := strings.TrimSpace(document.ExtractAttachmentText(ctx, data, name, att.MimeType))
+		if text == "" {
+			continue
+		}
+		if len(text) > notebookAttachmentTextCap {
+			text = text[:notebookAttachmentTextCap] + "\n…(잘림 — 원본: " + path + ")"
+		}
+		added, perr := s.notebookStore.PinUnique(dealRef, deal.Counterparty, notebook.Source{
+			Kind:  notebook.KindFile,
+			Ref:   "mail:" + msg.ID + "#att:" + name,
+			Title: name,
+			Text:  text,
+		})
+		if perr != nil {
+			s.logger.Warn("mail→notebook: 첨부 핀 실패", "id", msg.ID, "file", name, "error", perr)
+			continue
+		}
+		if added {
+			s.logger.Info("mail→notebook: 첨부 핀", "id", msg.ID, "deal", dealRef, "file", name, "chars", len(text))
+		}
+	}
+}
+
+// findArchivedAttachment locates an archived attachment by filename under the
+// mail archive's dated folders.
+//
+// archiveAttachments writes "<ArchiveFolder>/<today>/<sender>_<filename>" with
+// both components sanitized, and it runs earlier in the same analysis cycle —
+// but reconstructing that exact name here would couple this to another package's
+// sanitizer and break on a midnight rollover. A bounded suffix match over the
+// two most recent day folders is the same answer without the coupling.
+func findArchivedAttachment(ctx context.Context, store *filestore.LocalStore, filename string) (string, bool) {
+	days, err := store.List(ctx, mailArchiveFolder, false, 0)
+	if err != nil {
+		return "", false
+	}
+	folders := make([]string, 0, len(days))
+	for _, d := range days {
+		if d.Tag == "folder" {
+			folders = append(folders, d.PathDisplay)
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(folders)))
+	if len(folders) > 2 {
+		folders = folders[:2]
+	}
+	want := "_" + filename
+	for _, folder := range folders {
+		entries, lerr := store.List(ctx, folder, false, 0)
+		if lerr != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.Tag == "file" && strings.HasSuffix(e.Name, want) {
+				return e.PathDisplay, true
+			}
+		}
+	}
+	return "", false
+}
+
+// mailArchiveFolder mirrors mailanalysis' default ArchiveFolder. Kept as a
+// constant rather than imported so this read path does not depend on the
+// analyzer's config surface.
+const mailArchiveFolder = "/Deneb-Archive/메일"
 
 // directProjectPages filters a related-project list to project 대표페이지 paths
 // (new in-folder or legacy flat form — wiki.IsProjectRepPage owns the rule),

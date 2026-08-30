@@ -86,7 +86,7 @@ func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiD
 		// 거래 집계 turn fetches it. Description leads with the trigger phrases.
 		registry.RegisterTool(toolport.ToolDef{
 			Name:        "deal_ledger",
-			Description: "'총 거래액'·'올해 견적 몇 건'·'거래처별 합계' 류 거래 금액 집계 질문에 쓰는 정형 거래 원장 — 메일 분석이 파일한 거래 문서(견적·계약·세금계산서 등)의 타입드 기록에서 합계·건수·통화별 집계·기간 필터를 코드로 계산한다(위키 산문 눈대중 금지). 금액 미파싱 건은 합계에서 제외되고 원문과 함께 표기된다",
+			Description: "'총 거래액'·'올해 견적 몇 건'·'거래처별 합계'처럼 **합산**이 필요한 거래 질문에 쓰는 정형 거래 원장 (단건 조회 — '그 견적 얼마였지'·'이 거래처 단가' — 는 counterparty/project 필터로 list하면 그 건의 금액·일자·조건이 나온다) — 메일 분석이 파일한 거래 문서(견적·계약·세금계산서 등)의 타입드 기록에서 합계·건수·통화별 집계·기간 필터를 코드로 계산한다(위키 산문 눈대중 금지). 금액 미파싱 건은 합계에서 제외되고 원문과 함께 표기된다",
 			InputSchema: schema.DealLedgerToolSchema(),
 			Fn:          wikitool.ToolDealLedger(wikiDeps.Store),
 			Deferred:    true,
@@ -142,7 +142,7 @@ func RegisterNotebookTool(registry toolport.ToolRegistrar, deps *tooldeps.Notebo
 	// it. Description front-loads the WHEN so the 80-rune deferred summary is useful.
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "notebook",
-		Description: "노트북 — \"이 자료들로 노트북 만들어줘\"·\"이 문서들만 근거로 브리핑\". 딜/프로젝트 자료(메일·문서·메모)를 한데 모아 그 자료만으로 출처 추적 가능한 인용 브리핑을 만드는 NotebookLM식 묶음. action=create (노트북 생성) | list (목록) | show (자료 보기) | add_source (자료 핀: kind=wiki 위키페이지 또는 kind=note 붙여넣기 텍스트) | remove_source (자료 제거) | delete (노트북 삭제) | brief (핀된 자료에만 근거해 [S1] 형식 인용 브리핑 생성).",
+		Description: "거래처·프로젝트별 딜 증거 묶음(노트북) — \"선킨 견적 이력\"·\"이 거래처 계약 조건\"·\"이 자료들로 노트북 만들어줘\"·\"이 문서들만 근거로 브리핑\". 메일 분석이 거래처마다 견적·계약·세금계산서 증거를 자동으로 핀해 둔다(금액·일자·품목·납기가 추출된 상태). 그 자료만으로 출처 추적 가능한 인용 브리핑을 만드는 NotebookLM식 묶음. action=create (노트북 생성) | list (목록) | show (자료 보기) | add_source (자료 핀: kind=wiki 위키페이지 또는 kind=note 붙여넣기 텍스트) | remove_source (자료 제거) | delete (노트북 삭제) | brief (핀된 자료에만 근거해 [S1] 형식 인용 브리핑 생성).",
 		InputSchema: schema.NotebookToolSchema(),
 		Fn:          notebooktool.ToolNotebook(deps),
 		Deferred:    true,
