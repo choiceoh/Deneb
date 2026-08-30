@@ -221,20 +221,52 @@ class AutoDeployShellTests(unittest.TestCase):
         )
         self.assertNotIn("git fetch", self.call_text())
 
-    def test_dirty_tree_is_stashed_deployed_and_restored_on_exit(self) -> None:
+    def test_dirty_tree_stash_is_kept_when_the_deploy_moves_head(self) -> None:
+        """A stash is a diff against ONE commit and means nothing against another.
+
+        This test asserted the opposite until 2026-08-30, and production paid
+        for it twice that day. The stash is taken before the fetch and the trap
+        runs on every exit, so a completed deploy replayed the old diff onto the
+        new head: at 05:41 it conflicted and paused auto-deploy for 4h18m (three
+        landed PRs never shipped), and at 10:2x it silently reverted #4959's
+        seven files — HEAD correct, working tree the exact inverse of that
+        commit, and the next build would have read that tree.
+        """
         proc = self.invoke(self.env(GIT_INDEX_DIRTY="1"))
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         calls = self.call_text()
         self.assertIn("git stash push --message auto-deploy stash", calls)
         self.assertIn("git fetch --quiet --tags origin main", calls)
         self.assertIn("deploy cwd=", calls)
-        self.assertIn("git stash list", calls)
-        self.assertIn("git stash pop --quiet stash@{0}", calls)
-        self.assertIn("auto-stash popped successfully", self.log_text())
+        self.assertNotIn("git stash pop", calls)
+        self.assertIn("HEAD moved local111 → remote222", self.log_text())
+        self.assertIn("keeping auto-stash", self.log_text())
         self.assertEqual(
             (self.state / "auto-deploy.deployed-head").read_text().strip(),
             "remote222",
         )
+
+    def test_dirty_tree_stash_is_restored_when_head_did_not_move(self) -> None:
+        """The common case still self-heals: no deploy ran, so the base is intact.
+
+        A transient dirty tree (build artifact, half-saved edit) must not be
+        left stashed — that was the May-2026 incident the auto-stash exists for.
+        """
+        proc = self.invoke(
+            self.env(
+                GIT_INDEX_DIRTY="1",
+                GIT_REMOTE_TS="1900",
+                FAKE_NOW="2000",
+                DENEB_AUTO_DEPLOY_QUIET_SEC="300",
+            )
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        calls = self.call_text()
+        self.assertIn("git stash push --message auto-deploy stash", calls)
+        self.assertNotIn("deploy cwd=", calls)  # deferred by the quiet period
+        self.assertIn("git stash pop --quiet stash@{0}", calls)
+        self.assertIn("auto-stash popped successfully", self.log_text())
+        self.assertNotIn("HEAD moved", self.log_text())
 
     def test_fetch_failure_is_advisory_and_does_not_record_bad_head(self) -> None:
         proc = self.invoke(self.env(GIT_FETCH_RC="3"))

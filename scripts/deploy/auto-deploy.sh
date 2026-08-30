@@ -255,6 +255,7 @@ fi
 # and an aggressive stash could swallow build outputs we'd want to
 # keep around.
 AUTOSTASH_REF=""
+AUTOSTASH_BASE=""
 unmerged_files=$(git diff --name-only --diff-filter=U)
 if [[ -n "$unmerged_files" ]]; then
     dirty_key="unmerged:$(printf '%s\n' "$unmerged_files" | git hash-object --stdin)"
@@ -279,6 +280,9 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
     # we want a fully clean tree for the upcoming build, so omit it.
     if git stash push --message "$stash_msg" >>"$LOG_FILE" 2>&1; then
         AUTOSTASH_REF="$stash_msg"
+        # The base this diff was taken against. A deploy moves HEAD, and a diff
+        # only means what it meant on its own base — see restore_stash.
+        AUTOSTASH_BASE=$(git rev-parse HEAD 2>/dev/null || true)
         rm -f "$DIRTY_FAIL_FILE"
     else
         record_dirty_failure "$dirty_key"
@@ -289,12 +293,35 @@ else
     rm -f "$DIRTY_FAIL_FILE"
 fi
 
-# Always try to restore stashed changes on exit, even if the deploy
-# fails or the script bails early. `git stash pop` is best-effort: a
-# pop conflict logs loudly but the script still exits 0 so systemd
-# stays green (see the always-exit-0 rationale in the header).
+# Restore stashed changes on exit — but ONLY onto the commit they were taken
+# from. `git stash pop` is best-effort: a pop conflict logs loudly but the
+# script still exits 0 so systemd stays green (see the always-exit-0 rationale
+# in the header).
+#
+# The HEAD check is the whole point. The stash is taken before the fetch, and
+# this trap runs on every exit path including a completed deploy — so without
+# it the pop replays a diff computed against the OLD head onto the NEW one,
+# which reverts whatever those commits changed in the same files. Twice on
+# 2026-08-30: at 05:41 the replay conflicted and paused auto-deploy for 4h18m
+# (three landed PRs never reached production), and at 10:2x it silently
+# reverted #4959's seven files, leaving HEAD correct while the working tree
+# was the exact inverse of that commit — a build from that tree would have
+# shipped code no commit contains. Once reverted the tree is dirty again, so
+# the next tick re-stashes and re-pops it: the staleness sustains itself.
+#
+# A prod checkout is not supposed to carry edits at all (~/deneb is
+# deploy-only), so keeping the entry and warning costs nothing real, while
+# popping onto a moved base corrupts the tree the next build reads.
 restore_stash() {
     if [[ -z "$AUTOSTASH_REF" ]]; then
+        return
+    fi
+    local head_now
+    head_now=$(git rev-parse HEAD 2>/dev/null || true)
+    if [[ -n "$AUTOSTASH_BASE" && -n "$head_now" && "$AUTOSTASH_BASE" != "$head_now" ]]; then
+        log "INFO: HEAD moved ${AUTOSTASH_BASE:0:10} → ${head_now:0:10} during this tick;" \
+            "keeping auto-stash '$AUTOSTASH_REF' instead of replaying it onto a new base" \
+            "(inspect: git -C $PROD_DIR stash list)"
         return
     fi
     # Find the stash slot by message — index numbers shift if other
