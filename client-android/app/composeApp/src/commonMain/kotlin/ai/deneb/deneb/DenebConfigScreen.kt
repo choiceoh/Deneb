@@ -90,6 +90,7 @@ fun DenebConfigScreen(
             tabBar = navigationTabBar,
         ) {
             ConfigSectionList(
+                connected = denebClient != null,
                 onOpen = {
                     // Fleet opens its own full screen (its own pager + scaffold);
                     // every other section pushes into the in-place detail below.
@@ -150,9 +151,14 @@ private val configGroups: List<Pair<String, List<ConfigTab>>> = listOf(
 
 /** The settings-hub section list, in the grouped inset-card idiom ([DenebGroup] +
  *  [DenebListRow]): each [ConfigTab] is a row with its icon, label, and one-line
- *  summary. Tapping pushes into that section's detail. */
+ *  summary. Tapping pushes into that section's detail.
+ *
+ *  Rows carry their group's category tint, and the state layer stays empty unless
+ *  something is actually wrong — right now the only state this screen can see
+ *  first-hand is a missing gateway client, which every section below depends on.
+ *  Fleet/Wormhole/dispatch state needs live RPC and lands with that wiring. */
 @Composable
-private fun ConfigSectionList(onOpen: (ConfigTab) -> Unit) {
+private fun ConfigSectionList(connected: Boolean, onOpen: (ConfigTab) -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
@@ -162,12 +168,17 @@ private fun ConfigSectionList(onOpen: (ConfigTab) -> Unit) {
         configGroups.forEach { (label, tabs) ->
             DenebGroup(label = label) {
                 tabs.forEachIndexed { i, tab ->
+                    // The gateway row is the one place a disconnect is actionable:
+                    // it is where the operator fixes the address/token.
+                    val offline = !connected && tab == ConfigTab.GATEWAY
                     DenebListRow(
                         title = tab.label,
                         onClick = { onOpen(tab) },
                         icon = tab.icon,
                         subtitle = tab.desc,
                         divider = i < tabs.lastIndex,
+                        statusColor = if (offline) MaterialTheme.colorScheme.error else null,
+                        statusText = if (offline) "연결 안 됨" else null,
                     )
                 }
             }

@@ -13,14 +13,17 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.composables.DenebBottomBar
 import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebInsightContainer
+import ai.deneb.ui.denebOnWarningContainer
 import ai.deneb.ui.dynamicui.ChartNode
 import ai.deneb.ui.dynamicui.DenebUiHtml
 import ai.deneb.ui.dynamicui.DenebUiNode
 import ai.deneb.ui.dynamicui.DenebUiRenderer
 import ai.deneb.ui.dynamicui.LocalDenebUiMotion
 import ai.deneb.ui.icons.outlined.AutoAwesome
+import ai.deneb.ui.icons.outlined.Code
 import ai.deneb.ui.icons.outlined.Dns
 import ai.deneb.ui.icons.outlined.Extension
+import ai.deneb.ui.icons.outlined.Hub
 import ai.deneb.ui.icons.outlined.Memory
 import ai.deneb.ui.icons.outlined.Palette
 import ai.deneb.ui.icons.outlined.Schedule
@@ -101,7 +104,7 @@ internal fun renderBottomBar(name: String, scheme: ColorScheme, route: String) {
 // Design-refresh pilot (2026-06): the grouped-inset card idiom + the two-accent
 // system — cool primary on the selected row, warm apricot on the AI-insight callout.
 internal fun renderDesignRefresh(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 1380, density = Density(2f)) {
+    val scene = ImageComposeScene(width = 824, height = 1560, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.fillMaxSize().padding(top = 26.dp)) {
@@ -111,16 +114,39 @@ internal fun renderDesignRefresh(name: String, scheme: ColorScheme) {
                         color = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.padding(start = 24.dp, bottom = 16.dp),
                     )
+                    // Colour appears ONLY where a row has something to report. Icons
+                    // stay neutral and no row is `selected` — a settings row pushes a
+                    // detail screen, so the list never holds a selection, and a preview
+                    // that drew one showed a state the app cannot produce.
                     DenebGroup(label = "시스템") {
                         DenebListRow("게이트웨이", {}, icon = Icons.Outlined.Dns, subtitle = "연결 · 버전 · 동기화")
                         DenebListRow("화면", {}, icon = Icons.Outlined.Palette, subtitle = "테마 · UI 배율")
-                        DenebListRow("모델", {}, icon = Icons.Outlined.Memory, subtitle = "역할별 지정 · 엔드포인트", selected = true, divider = false)
+                        DenebListRow("모델", {}, icon = Icons.Outlined.Memory, subtitle = "역할별 지정 · 엔드포인트", divider = false)
                     }
                     Spacer(Modifier.height(22.dp))
                     DenebGroup(label = "자동화 · 관찰") {
                         DenebListRow("스킬", {}, icon = Icons.Outlined.Extension, subtitle = "설치 · Propus")
+                        DenebListRow(
+                            "자가개선 코딩",
+                            {},
+                            icon = Icons.Outlined.Code,
+                            subtitle = "후보 3건 대기",
+                            statusText = "배차 중",
+                        )
                         DenebListRow("크론", {}, icon = Icons.Outlined.Schedule, subtitle = "예약 작업")
                         DenebListRow("관찰", {}, icon = Icons.Outlined.Visibility, subtitle = "동작 · 로그", divider = false)
+                    }
+                    Spacer(Modifier.height(22.dp))
+                    DenebGroup(label = "라우팅 · 인프라") {
+                        DenebListRow(
+                            "Wormhole",
+                            {},
+                            icon = Icons.Outlined.Hub,
+                            subtitle = "모델 라우터 상태",
+                            divider = false,
+                            statusColor = denebOnWarningContainer(),
+                            statusText = "페일오버",
+                        )
                     }
                     Spacer(Modifier.height(26.dp))
                     Row(
