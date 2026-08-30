@@ -2,10 +2,12 @@ package ai.deneb.deneb
 
 import ai.deneb.PlatformBackHandler
 import ai.deneb.data.AppSettings
+import ai.deneb.deneb.generated.WormholeStatusOut
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.denebOnWarningContainer
 import ai.deneb.ui.icons.outlined.Apps
 import ai.deneb.ui.icons.outlined.Article
 import ai.deneb.ui.icons.outlined.Code
@@ -30,14 +32,18 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 /**
  * Deneb hub + settings as a two-level master/detail screen (the "더보기" surface):
@@ -89,8 +95,26 @@ fun DenebConfigScreen(
             onBack = onBack,
             tabBar = navigationTabBar,
         ) {
+            // Probed each time the list is shown (the detail branch below returns
+            // early, so this effect re-mounts on the way back). Both probes are
+            // best-effort and independent: a hung fleet proxy must not also blank
+            // the wormhole mark, and a failed probe stays null rather than
+            // inventing a fault.
+            var fleet by remember { mutableStateOf<FleetState?>(null) }
+            var wormhole by remember { mutableStateOf<WormholeStatusOut?>(null) }
+            LaunchedEffect(denebClient) {
+                val client = denebClient ?: return@LaunchedEffect
+                coroutineScope {
+                    val fleetProbe = async { runCatching { client.fleetState() }.getOrNull() }
+                    val wormholeProbe = async { runCatching { client.fetchWormholeStatus() }.getOrNull() }
+                    fleet = fleetProbe.await()
+                    wormhole = wormholeProbe.await()
+                }
+            }
             ConfigSectionList(
                 connected = denebClient != null,
+                fleet = fleetSectionStatus(fleet),
+                wormhole = wormholeSectionStatus(wormhole),
                 onOpen = {
                     // Fleet opens its own full screen (its own pager + scaffold);
                     // every other section pushes into the in-place detail below.
@@ -158,7 +182,12 @@ private val configGroups: List<Pair<String, List<ConfigTab>>> = listOf(
  *  first-hand is a missing gateway client, which every section below depends on.
  *  Fleet/Wormhole/dispatch state needs live RPC and lands with that wiring. */
 @Composable
-private fun ConfigSectionList(connected: Boolean, onOpen: (ConfigTab) -> Unit) {
+private fun ConfigSectionList(
+    connected: Boolean,
+    fleet: SectionStatus?,
+    wormhole: SectionStatus?,
+    onOpen: (ConfigTab) -> Unit,
+) {
     Column(
         Modifier
             .fillMaxSize()
@@ -170,15 +199,22 @@ private fun ConfigSectionList(connected: Boolean, onOpen: (ConfigTab) -> Unit) {
                 tabs.forEachIndexed { i, tab ->
                     // The gateway row is the one place a disconnect is actionable:
                     // it is where the operator fixes the address/token.
-                    val offline = !connected && tab == ConfigTab.GATEWAY
+                    val status = when {
+                        tab == ConfigTab.GATEWAY && !connected -> SectionStatus("연결 안 됨", failure = true)
+                        tab == ConfigTab.FLEET -> fleet
+                        tab == ConfigTab.WORMHOLE -> wormhole
+                        else -> null
+                    }
                     DenebListRow(
                         title = tab.label,
                         onClick = { onOpen(tab) },
                         icon = tab.icon,
                         subtitle = tab.desc,
                         divider = i < tabs.lastIndex,
-                        statusColor = if (offline) MaterialTheme.colorScheme.error else null,
-                        statusText = if (offline) "연결 안 됨" else null,
+                        statusColor = status?.let {
+                            if (it.failure) MaterialTheme.colorScheme.error else denebOnWarningContainer()
+                        },
+                        statusText = status?.text,
                     )
                 }
             }
