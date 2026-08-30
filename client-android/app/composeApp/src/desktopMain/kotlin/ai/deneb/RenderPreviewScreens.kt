@@ -572,7 +572,7 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
-                    SkillDetailContent(detail, events)
+                    SkillDetailContent(detail, events, nowMs = PREVIEW_NOW_MS)
                 }
             }
         }

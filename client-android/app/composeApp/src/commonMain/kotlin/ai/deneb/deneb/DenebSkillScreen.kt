@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
 import kotlin.time.Instant
 
 /**
@@ -206,6 +207,11 @@ fun DenebSkillScreen(
 internal fun SkillDetailContent(
     detail: SkillDetailResponse,
     events: List<SkillLifecycleEvent>,
+    // Frozen by the golden renderer. The sample data is pinned to PREVIEW_NOW_MS
+    // while the wall clock keeps moving, so a default here turned "9일 전" into
+    // "10일 전" overnight and failed render-golden-check on unrelated PRs. The app
+    // passes nothing and gets the live clock, which is what it wants.
+    nowMs: Long = Clock.System.now().toEpochMilliseconds(),
     editMode: Boolean = false,
     draftBody: String = detail.body,
     actionBusy: Boolean = false,
@@ -240,7 +246,7 @@ internal fun SkillDetailContent(
     }
 
     Spacer(Modifier.height(8.dp))
-    skillFactLines(skill = skill).forEach { line ->
+    skillFactLines(skill = skill, nowMs = nowMs).forEach { line ->
         Text(
             line,
             style = DenebType.meta,
@@ -359,7 +365,7 @@ internal fun SkillDetailContent(
 }
 
 /** The meta the list row has no room for, one fact per line, blanks omitted. */
-private fun skillFactLines(skill: ai.deneb.deneb.generated.SkillRow): List<String> {
+private fun skillFactLines(skill: ai.deneb.deneb.generated.SkillRow, nowMs: Long): List<String> {
     val identity = listOfNotNull(
         skill.category.takeIf { it.isNotBlank() },
         skillSourceLabel(skill.source).takeIf { it.isNotBlank() },
@@ -388,11 +394,11 @@ private fun skillFactLines(skill: ai.deneb.deneb.generated.SkillRow): List<Strin
     ).joinToString(" · ")
     val usage = listOfNotNull(
         skill.totalUses.takeIf { it > 0 }?.let { "사용 ${it}회" },
-        skill.lastUsedAt.takeIf { it > 0 }?.let { "마지막 사용 ${lifecycleTime(it)}" },
+        skill.lastUsedAt.takeIf { it > 0 }?.let { "마지막 사용 ${lifecycleTime(it, nowMs)}" },
     ).joinToString(" · ")
     val evolve = listOfNotNull(
         skill.evolveCount.takeIf { it > 0 }?.let { "진화 ${it}회" },
-        skill.lastEvolvedAt.takeIf { it > 0 }?.let { "마지막 진화 ${lifecycleTime(it)}" },
+        skill.lastEvolvedAt.takeIf { it > 0 }?.let { "마지막 진화 ${lifecycleTime(it, nowMs)}" },
     ).joinToString(" · ")
     return listOf(identity, homepage, tags, related, dependencies, installs, mutability, genesis, usage, evolve).filter { it.isNotBlank() }
 }
