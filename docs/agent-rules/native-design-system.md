@@ -5,6 +5,8 @@ globs: ["client-android/app/composeApp/src/**/*.kt"]
 
 # Native Client Design System (client-android)
 
+> **디자인 원리는 여기 없다 — [ADR 0007](../adr/0007-design-north-star.md)이 소유한다** (북극성 "메뉴가 아니라 결과" + 제1원리 6개). 이 문서는 그 원리의 **구현 규칙**이다: 어느 컴포넌트를 쓰고 어떻게 검증하는가. **원리와 규칙이 충돌하면 원리가 이긴다.** 규칙을 다 지켜도 원리를 어길 수 있다는 것이 ADR 0007을 쓴 이유다 (설정 트리에서 실제로 11곳).
+
 > **컨트롤은 머티리얼, 외형은 Deneb.** 두 시스템은 경쟁이 아니라 레이어가 다르다. Material을 뜯어내지 말고, 그 위에 Deneb 타이포 스킨을 입힌다.
 
 ## 한 줄 원칙
@@ -34,7 +36,9 @@ globs: ["client-android/app/composeApp/src/**/*.kt"]
 
 ## 도그마 금지 — "실용적 Material"을 지키는 경계 케이스
 
-> **Doctrine (2026-06-14, 슈퍼앱 방향):** 구조·상호작용·접근성은 **Material/Apple이 검증한 패턴을 최대한 채택**, 색·무게·장식·여백은 **Deneb 절제**. 충돌하면 — 동작은 Material/Apple, 외형은 Deneb. 제품 북극성 = 토스식 슈퍼앱(킬러기능+최적화+간편UX+올인원, [[project_superapp_vision]]). 즉 "컨트롤=Material, 외형=Deneb"의 더 공격적 버전.
+> **Doctrine (2026-06-14, 2026-08-30 개정):** 구조·상호작용·접근성은 **Material/Apple이 검증한 패턴을 최대한 채택**, 색·무게·장식·여백은 **Deneb 절제**. 충돌하면 — 동작은 Material/Apple, 외형은 Deneb. 즉 "컨트롤=Material, 외형=Deneb"의 더 공격적 버전.
+>
+> ★**북극성 정정(2026-08-30, ADR 0007)**: 원문은 제품 북극성을 "토스식 슈퍼앱"으로 적고 `[[project_superapp_vision]]`을 인용했으나 **그 위키 페이지는 890페이지 중에 없다** — 존재하지 않는 근거였다. 방향도 제품과 반대다(슈퍼앱=다서비스·대중 온보딩·서비스 메뉴 vs Deneb=단일 사용자 비서실장 단일 페르소나, ADR 0001). 북극성은 **"메뉴가 아니라 결과"**로 대체됐고, 토스는 **장인 참조**(밀도·한국어 타이포·절제·모션 품질)로만 남는다.
 
 idiom 문서엔 "no cards / no icons"라 써 있지만 **기능을 돕는 곳은 남긴다**:
 
@@ -52,6 +56,15 @@ idiom 문서엔 "no cards / no icons"라 써 있지만 **기능을 돕는 곳은
 3. **타이포·여백 리듬** — 모든 텍스트 `DenebType.*`, 수직 여백 4dp 배수, 행 인셋 24dp 표준, 시각·수치 열은 tabular 숫자. 다크/라이트 + 긴 한국어 제목/조밀 데이터로 PNG 검수.
 
 검증 배분: 정적(타이포·상태)은 `renderPreviews` PNG — 상태별 프리뷰 포함. 모션은 토큰 준수를 코드 리뷰로, 체감은 운영자 실기기로 판정한다(움직임은 PNG가 못 본다).
+
+★**PNG는 이제 골든으로 고정된다** (`make render-golden-check`, Kotlin 레인 게이트). 그리기만 하고 아무도 비교하지 않던 117장은 2px 이동을 못 잡았다 — 2026-08-30에 나온 네이티브 결함 셋(한국어 행간 29→36px · 경과 접미가 상태보다 2px 위 · 두 줄일 때 접미 소실)이 전부 그 크기였고 코틀린 diff로는 하나도 안 보였다. 감도 실증: `snippet` lineHeight를 **1sp** 바꾸자 8개 픽스처가 정확한 bbox와 함께 걸렸다.
+
+- 시각 변경이 의도된 것이면 `make render-golden-update` 후 골든을 함께 커밋한다 — **그 PNG diff가 곧 리뷰 자료**다(PR에서 before/after가 보인다).
+- 실패 시 `/tmp/deneb-render-diff/*.png`에 `골든 | 현재 | 증폭 차이` 3단 스트립이 남는다.
+- 전제는 결정성이다: 같은 트리를 두 번 렌더하면 115/117이 바이트 동일. 픽스처 시계는 `PREVIEW_NOW_MS`로 얼렸고(상대 시각이 매 실행 흔들리던 4장 해결), `workfeed_*` 2장은 컴포넌트 내부가 실시각을 읽어 이름으로 제외한다.
+- **새 화면·컴포넌트는 픽스처를 함께 낸다.** 픽스처가 없으면 게이트가 볼 수 없고, 실제로 챗 입력창과 대기 줄이 그렇게 검수 사각에 있었다.
+- ★**실시각을 읽는 코드가 픽스처에 닿으면 골든은 자정에 깨진다.** 샘플 데이터만 `PREVIEW_NOW_MS`로 얼리는 것으로는 부족하다 — `lifecycleTime()`처럼 문자열을 만드는 쪽이 `Clock.System.now()`를 읽으면 한쪽만 얼어 diff가 매일 하루씩 벌어진다. 게이트 가동 다음 날 아침 `self_improvement_coding` 2장이 "12일 전"→"13일 전"으로 실제로 터졌다. **같은 날 두 번 렌더하는 결정성 증명으로는 안 잡힌다** — 이 부류는 단위 경계를 넘을 때만 드러난다. 상대 시각 헬퍼는 `nowMs` 인자를 받게 하고(기본값=실시각, 앱 동작 무변경) 골든에 그려지는 호출자만 얼린 값을 넘긴다.
+- **기기·환경에 따라 달라지는 값을 골든에 담지 않는다.** 대표 사례가 "화면 배율" 카드다 — `defaultUiScale`이 데스크톱에서 `GDK_SCALE`/`GDK_DPI_SCALE`을 읽으므로 퍼센트 텍스트와 슬라이더 눈금이 개발자 환경마다 달라진다. 그런 값이 들어간 화면은 픽스처 높이를 조절해 프레임 밖으로 밀어내거나 픽스처를 만들지 않는다.
 
 ## 행동 불변 (이미 들인 작업 보존)
 
@@ -76,4 +89,4 @@ cd client-android/app && ANDROID_HOME=~/android-sdk ./gradlew :composeApp:render
 3. ✅ 상위 화면 (메일·사람·검색·일정·카테고리·설정·할일·크론). 메일 리스트의 데스크톱 분할 뷰 패널은 scaffold의 `fillWidth` 파라미터로 수용(380dp 패널에서 760dp 캡 대신 부모 채움); 메일상세 우측 패널만 타이틀 없는 bare 프레임 유지(리스트 패널이 곧 내비게이션).
 4. ✅ 드로어 inline 값 → `DenebType` 참조(세션 드로어=`subject`/`rowTitle`/`meta`/`body`, 데스크톱 레일=당시 신설 `railItem` 20sp ExtraLight — 이후 데스크톱 레일 은퇴로 스타일 자체를 삭제) + divider 스윕(deneb 화면의 `outlineVariant` 구분선 25곳 → `denebHairline()`) + hint 스윕(수작업 `onSurfaceVariant.copy(alpha=…)` 6곳 → `denebHint()`; **일반 `onSurfaceVariant` 본문색 ~79곳은 의도적으로 유지** — 카드 내부 등 surface-상대 컨텍스트가 섞여 있어 일괄 치환은 라이브 시각 검증 없이는 위험) + `DenebUi.kt` 닥스트링 수정.
 
-착수 전 `grep -r DenebScreenScaffold`로 진행 상황 확인. 관련: [[project_native_design_system_dead]]
+착수 전 `grep -r DenebScreenScaffold`로 진행 상황 확인.

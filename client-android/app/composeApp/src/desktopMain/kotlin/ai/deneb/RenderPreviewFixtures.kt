@@ -149,7 +149,7 @@ internal val sampleFeed = persistentListOf(
             WorkFeedAction("snooze", "snooze", "나중에"),
             WorkFeedAction("ack", "ack", "완료"),
         ),
-        createdAtMs = System.currentTimeMillis() - 15 * 60_000L,
+        createdAtMs = PREVIEW_NOW_MS - 15 * 60_000L,
     ),
     WorkFeedItem(
         id = "wf2",
@@ -163,7 +163,7 @@ internal val sampleFeed = persistentListOf(
             WorkFeedAction("snooze", "snooze", "나중에"),
             WorkFeedAction("ack", "ack", "완료"),
         ),
-        createdAtMs = System.currentTimeMillis() - 40 * 60_000L,
+        createdAtMs = PREVIEW_NOW_MS - 40 * 60_000L,
     ),
     WorkFeedItem(
         id = "wf3",
@@ -177,7 +177,7 @@ internal val sampleFeed = persistentListOf(
             WorkFeedAction("snooze", "snooze", "나중에"),
             WorkFeedAction("ack", "ack", "완료"),
         ),
-        createdAtMs = System.currentTimeMillis() - 3 * 3_600_000L,
+        createdAtMs = PREVIEW_NOW_MS - 3 * 3_600_000L,
     ),
     WorkFeedItem(
         id = "wf4",
@@ -190,7 +190,7 @@ internal val sampleFeed = persistentListOf(
             WorkFeedAction("followup", "followup", "문서화"),
             WorkFeedAction("ack", "ack", "완료"),
         ),
-        createdAtMs = System.currentTimeMillis() - 5 * 3_600_000L,
+        createdAtMs = PREVIEW_NOW_MS - 5 * 3_600_000L,
     ),
     WorkFeedItem(
         id = "wf5",
@@ -202,7 +202,7 @@ internal val sampleFeed = persistentListOf(
             WorkFeedAction("open", "open", "열기"),
             WorkFeedAction("ack", "ack", "완료"),
         ),
-        createdAtMs = System.currentTimeMillis() - 26 * 3_600_000L,
+        createdAtMs = PREVIEW_NOW_MS - 26 * 3_600_000L,
     ),
 )
 
@@ -214,8 +214,8 @@ internal val sampleDashboard = listOf(
         key = "team1",
         name = "기획조정실 1팀 (인허가)",
         items = listOf(
-            DashboardItem("RE100 고객사 인허가 서류 제출", "본사 3층 · 김민준 부장", "calendar", "calendar", "e1", System.currentTimeMillis() + 2 * 3_600_000L),
-            DashboardItem("남도에코 모듈 입고 점검", "현장 — 1,950매 검수", "calendar", "calendar", "e2", System.currentTimeMillis() + 26 * 3_600_000L),
+            DashboardItem("RE100 고객사 인허가 서류 제출", "본사 3층 · 김민준 부장", "calendar", "calendar", "e1", PREVIEW_NOW_MS + 2 * 3_600_000L),
+            DashboardItem("남도에코 모듈 입고 점검", "현장 — 1,950매 검수", "calendar", "calendar", "e2", PREVIEW_NOW_MS + 26 * 3_600_000L),
         ),
     ),
     LaneOut(key = "team2", name = "기획조정실 2팀 (루프탑)", items = emptyList()),
@@ -223,14 +223,14 @@ internal val sampleDashboard = listOf(
         key = "team3",
         name = "기획조정실 3팀 (모듈)",
         items = listOf(
-            DashboardItem("📧 JOCA Cable 견적 회신 요청", "발신 fred@jocacable.com — 회신 기한 6/13(금)", "mail_report", "workfeed", "wf1", System.currentTimeMillis() - 40 * 60_000L),
+            DashboardItem("📧 JOCA Cable 견적 회신 요청", "발신 fred@jocacable.com — 회신 기한 6/13(금)", "mail_report", "workfeed", "wf1", PREVIEW_NOW_MS - 40 * 60_000L),
         ),
     ),
     LaneOut(
         key = "namdo",
         name = "남도에코에너지",
         items = listOf(
-            DashboardItem("준공정산서 검토 — 남도에코", "₩19,500,000 · 결제 30일", "capture_image", "workfeed", "wf2", System.currentTimeMillis() + 3 * 3_600_000L),
+            DashboardItem("준공정산서 검토 — 남도에코", "₩19,500,000 · 결제 30일", "capture_image", "workfeed", "wf2", PREVIEW_NOW_MS + 3 * 3_600_000L),
         ),
     ),
     LaneOut(
@@ -244,7 +244,7 @@ internal val sampleDashboard = listOf(
         key = "unclassified",
         name = "미분류",
         items = listOf(
-            DashboardItem("무림 울산공장 풍력 검토안", "박종원 부장 — 담당 파트 미지정", "proactive", "workfeed", "wf4", System.currentTimeMillis() + 50 * 3_600_000L),
+            DashboardItem("무림 울산공장 풍력 검토안", "박종원 부장 — 담당 파트 미지정", "proactive", "workfeed", "wf4", PREVIEW_NOW_MS + 50 * 3_600_000L),
         ),
     ),
 )
@@ -511,3 +511,14 @@ internal fun sampleSelfImprovementCodingQueue(now: Long) = SelfImprovementCoding
         lastNudgeAt = 0L,
     ),
 )
+
+/**
+ * The one clock every fixture reads.
+ *
+ * Fixtures used to call System.currentTimeMillis(), which made four renders
+ * ("3분 전" style relative times) differ on every run — 113 of 117 PNGs were
+ * byte-identical across two consecutive renders, and those four were the
+ * exception. A golden that changes by itself cannot be a baseline, so the
+ * preview clock is frozen: 2026-08-30 09:00 KST.
+ */
+internal const val PREVIEW_NOW_MS: Long = 1_787_270_400_000L

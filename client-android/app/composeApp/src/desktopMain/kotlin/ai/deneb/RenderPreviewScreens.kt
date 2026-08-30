@@ -544,7 +544,7 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
         }
     },
     "skill_detail" to { scheme ->
-        val now = System.currentTimeMillis()
+        val now = PREVIEW_NOW_MS
         val detail = SkillDetailResponse(
             skill = sampleSkillRows[1].copy(
                 evolveCount = 1,
@@ -580,7 +580,13 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
     "self_improvement_coding" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
-                SelfImprovementCodingContent(sampleSelfImprovementCodingQueue(System.currentTimeMillis()))
+                // nowMs frozen too, not just the sample data — the relative timestamps
+                // ("12일 전") are computed against it, so a live clock here would redraw
+                // the golden every midnight.
+                SelfImprovementCodingContent(
+                    sampleSelfImprovementCodingQueue(PREVIEW_NOW_MS),
+                    nowMs = PREVIEW_NOW_MS,
+                )
             }
         }
     },
@@ -589,7 +595,7 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column {
                     SkillsViewSwitcher(showLifecycle = true, onSelect = {})
-                    val now = System.currentTimeMillis()
+                    val now = PREVIEW_NOW_MS
                     val events = sampleLifecycleEvents(now)
                     SkillLifecycleRow(events[1], initiallyExpanded = true, onOpenSkill = {})
                     HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
