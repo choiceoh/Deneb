@@ -580,7 +580,13 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
     "self_improvement_coding" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
-                SelfImprovementCodingContent(sampleSelfImprovementCodingQueue(PREVIEW_NOW_MS))
+                // nowMs frozen too, not just the sample data — the relative timestamps
+                // ("12일 전") are computed against it, so a live clock here would redraw
+                // the golden every midnight.
+                SelfImprovementCodingContent(
+                    sampleSelfImprovementCodingQueue(PREVIEW_NOW_MS),
+                    nowMs = PREVIEW_NOW_MS,
+                )
             }
         }
     },

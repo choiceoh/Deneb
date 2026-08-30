@@ -52,7 +52,14 @@ SKIP = {"workfeed_dark.png", "workfeed_light.png"}
 
 
 def render() -> None:
-    """Draw the previews, failing loudly if the Android SDK is not set up."""
+    """Draw the previews into an empty directory, failing loudly if the SDK is missing.
+
+    The directory is cleared first so it holds this run's output and nothing else.
+    Without that, `update` copies whatever else is lying in /tmp/deneb-render into the
+    goldens (it swept up a scratch crop once), and a deleted fixture's stale PNG keeps
+    matching forever instead of showing up as MISSING.
+    """
+    shutil.rmtree(RENDER, ignore_errors=True)
     env = dict(os.environ)
     env.setdefault("ANDROID_HOME", str(Path.home() / "android-sdk"))
     proc = subprocess.run(

@@ -683,9 +683,16 @@ internal fun lifecycleDateTime(epochMs: Long): String {
 /** Short Korean relative time for timeline rows ("방금" / "N분 전" / "N시간 전" /
  *  "N일 전"). Blank for missing/future timestamps so the row omits the stamp.
  *  Shared with [DenebSkillScreen]'s usage/evolve meta lines. */
-internal fun lifecycleTime(epochMs: Long): String {
+internal fun lifecycleTime(
+    epochMs: Long,
+    // Reads the wall clock by default, which is right in the app and wrong under the
+    // preview renderer: sample data is frozen (PREVIEW_NOW_MS) while this side kept
+    // ticking, so "12일 전" became "13일 전" overnight and the golden gate went red on
+    // an unrelated change. Callers that render into a golden pass a frozen now.
+    nowMs: Long = Clock.System.now().toEpochMilliseconds(),
+): String {
     if (epochMs <= 0L) return ""
-    val diff = Clock.System.now().toEpochMilliseconds() - epochMs
+    val diff = nowMs - epochMs
     return when {
         diff < 0L -> ""
         diff < 60_000L -> "방금"

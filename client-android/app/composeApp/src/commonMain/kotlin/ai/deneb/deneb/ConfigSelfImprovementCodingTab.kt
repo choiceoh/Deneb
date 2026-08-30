@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
 
 @Composable
 internal fun SelfImprovementCodingTab(client: DenebGatewayClient) {
@@ -92,6 +93,9 @@ internal fun SelfImprovementCodingContent(
     queue: SelfImprovementCodingListResponse,
     selectedStatus: String = selfImprovementCodingDefaultStatus,
     onSelectStatus: (String) -> Unit = {},
+    // Frozen by the preview renderer so the relative timestamps below stay put; see
+    // lifecycleTime.
+    nowMs: Long = Clock.System.now().toEpochMilliseconds(),
 ) {
     val candidates = queue.candidates
     val pendingCount = if (queue.statusCounts.isEmpty() && selectedStatus == selfImprovementCodingDefaultStatus) {
@@ -122,7 +126,7 @@ internal fun SelfImprovementCodingContent(
                     style = DenebType.meta,
                     color = denebHint(),
                 )
-                val funnelLine = selfImprovementCodingFunnelLine(queue.funnel)
+                val funnelLine = selfImprovementCodingFunnelLine(queue.funnel, nowMs)
                 if (funnelLine.isNotBlank()) {
                     Spacer(Modifier.height(2.dp))
                     Text(funnelLine, style = DenebType.meta, color = denebHint())
@@ -151,7 +155,7 @@ internal fun SelfImprovementCodingContent(
                     .thenByDescending { it.updatedAt },
             )
             items(ordered, key = { it.id }) { candidate ->
-                SelfImprovementCodingCandidateRow(candidate)
+                SelfImprovementCodingCandidateRow(candidate, nowMs)
                 HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
             }
         }
@@ -207,7 +211,7 @@ private fun SelfImprovementCodingStatusFilters(
 }
 
 @Composable
-private fun SelfImprovementCodingCandidateRow(candidate: SelfCorrectionCandidate) {
+private fun SelfImprovementCodingCandidateRow(candidate: SelfCorrectionCandidate, nowMs: Long) {
     val haptics = rememberHaptics()
     var expanded by rememberSaveable(candidate.id) { mutableStateOf(false) }
     Column(
@@ -231,7 +235,7 @@ private fun SelfImprovementCodingCandidateRow(candidate: SelfCorrectionCandidate
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            Text(lifecycleTime(candidate.updatedAt), style = DenebType.meta, color = denebHint())
+            Text(lifecycleTime(candidate.updatedAt, nowMs), style = DenebType.meta, color = denebHint())
         }
         SelfImprovementCodingChips(candidate)
         val primary = candidate.proposedChange.ifBlank { candidate.candidate }
@@ -365,22 +369,22 @@ private fun SelfImprovementCodingStatusBadge(status: String) {
  *  broke" — last capture, how many recent rejections even qualified for
  *  promotion, and when the heartbeat review lane last ran. Blank when the
  *  pipeline has no history at all (fresh install). */
-private fun selfImprovementCodingFunnelLine(funnel: SelfImprovementCodingFunnel): String {
+private fun selfImprovementCodingFunnelLine(funnel: SelfImprovementCodingFunnel, nowMs: Long): String {
     val noHistory = funnel.lastCaptureAt <= 0L && funnel.lastRejectionAt <= 0L &&
         funnel.rejections7d <= 0 && funnel.lastNudgeAt <= 0L
     if (noHistory) return ""
     val parts = mutableListOf<String>()
     parts += if (funnel.lastCaptureAt > 0L) {
-        "후보 포착 ${lifecycleTime(funnel.lastCaptureAt)}"
+        "후보 포착 ${lifecycleTime(funnel.lastCaptureAt, nowMs)}"
     } else {
         "후보 포착 이력 없음"
     }
     parts += "7일 거절 ${funnel.rejections7d}건(승격자격 ${funnel.promotableRejections7d})"
     if (funnel.rejections7d <= 0 && funnel.lastRejectionAt > 0L) {
-        parts += "마지막 거절 ${lifecycleTime(funnel.lastRejectionAt)}"
+        parts += "마지막 거절 ${lifecycleTime(funnel.lastRejectionAt, nowMs)}"
     }
     parts += if (funnel.lastNudgeAt > 0L) {
-        "하트비트 검토 ${lifecycleTime(funnel.lastNudgeAt)}"
+        "하트비트 검토 ${lifecycleTime(funnel.lastNudgeAt, nowMs)}"
     } else {
         "하트비트 검토 이력 없음"
     }
