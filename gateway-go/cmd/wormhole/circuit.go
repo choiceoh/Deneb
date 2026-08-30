@@ -146,6 +146,8 @@ func (b *circuitBook) recordSuccess(name string) bool {
 // and the client, respectively, own those decisions.
 func circuitFailureStatus(status int) (failure, immediate bool) {
 	switch {
+	case status == http.StatusNotFound:
+		return true, true
 	case status == http.StatusTooManyRequests:
 		return true, true
 	case status == http.StatusRequestTimeout || status >= 500:

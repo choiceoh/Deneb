@@ -81,6 +81,38 @@ func TestFallback_5xxPrimaryFailsOver(t *testing.T) {
 	}
 }
 
+// TestFallback_UpstreamModelNotFoundFailsOver: once wormhole has accepted a
+// configured route, an upstream 404 means that route's serving target is gone.
+// The declared fallback can rescue it; the front-door unknown-model 404 remains
+// covered separately by TestChatCompletions_UnknownModelIs404.
+func TestFallback_UpstreamModelNotFoundFailsOver(t *testing.T) {
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, `{"error":{"message":"model not found"}}`)
+	}))
+	defer primary.Close()
+	backup := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"from":"backup"}`)
+	}))
+	defer backup.Close()
+
+	rt := quietRouter(config{
+		Models: []modelEntry{
+			{Name: "dsv4-nothink", URL: primary.URL + "/v1", UpstreamModel: "deepseek-v4-flash", Fallback: "glm-5.3"},
+			{Name: "glm-5.3", URL: backup.URL + "/v1", UpstreamModel: "glm-5.3"},
+		},
+	})
+	srv := httptest.NewServer(rt.handler())
+	defer srv.Close()
+
+	resp, _ := http.Post(srv.URL+"/v1/chat/completions", "application/json",
+		strings.NewReader(`{"model":"dsv4-nothink"}`))
+	out, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(out), `"from":"backup"`) {
+		t.Errorf("expected upstream 404 failover to backup, got status=%d body=%q", resp.StatusCode, out)
+	}
+}
+
 // TestFallback_NoFallbackKeepsTodayBehavior: without a fallback, an
 // unreachable upstream still surfaces as 502 "upstream unreachable".
 func TestFallback_NoFallbackKeepsTodayBehavior(t *testing.T) {
