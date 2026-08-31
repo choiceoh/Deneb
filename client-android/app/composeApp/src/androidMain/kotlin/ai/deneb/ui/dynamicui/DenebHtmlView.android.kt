@@ -60,15 +60,26 @@ private const val BASE_CSS =
 
 // Injected ahead of the document: mobile viewport + base style + the deneb
 // bridge. window.deneb.send(text) → the native "choice" callback (a user chat
-// message); the height reporter grows the frame to fit so the page never
-// double-scrolls (clamping lives in denebHtmlFrameHeight).
+// message); the height reporter sizes the frame to fit so the page never
+// double-scrolls (clamping lives in denebHtmlFrameHeight). Keep in sync with
+// the desktop PRELUDE (denebHtmlSandbox.ts).
 private const val PRELUDE =
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
         "<style>$BASE_CSS</style>" +
         "<script>(function(){" +
         "window.deneb={send:function(t){DenebNative.send(String(t))}};" +
-        "var r=function(){DenebNative.height(document.documentElement.scrollHeight)};" +
+        // Measure the BODY box, never documentElement.scrollHeight: that one is
+        // max(content, viewport), so a frame that has overshot only hears its own
+        // height back and can never shrink. See denebHtmlFrameHeight.
+        "var m=function(){var b=document.body;if(!b){return 0}" +
+        "var s=window.getComputedStyle(b);" +
+        "return Math.ceil(b.getBoundingClientRect().height" +
+        "+(parseFloat(s.marginTop)||0)+(parseFloat(s.marginBottom)||0))};" +
+        "var r=function(){DenebNative.height(m())};" +
         "window.addEventListener(\"load\",r);" +
+        // Fonts land after load and change every line box. Without this report the
+        // pre-swap (taller) measurement is the last one we ever hear.
+        "if(document.fonts&&document.fonts.ready){document.fonts.ready.then(r)}" +
         "if(typeof ResizeObserver===\"function\"){new ResizeObserver(r).observe(document.documentElement)}" +
         "})()</script>"
 
@@ -128,7 +139,7 @@ actual fun DenebHtmlView(
 
                             @JavascriptInterface
                             fun height(h: Int) {
-                                post { heightDp = denebHtmlFrameHeight(heightDp, h) }
+                                post { heightDp = denebHtmlFrameHeight(h) }
                             }
                         },
                         "DenebNative",
