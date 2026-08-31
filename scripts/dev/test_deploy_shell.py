@@ -88,6 +88,22 @@ class DeployShellTests(unittest.TestCase):
             exit "${TOPOLOGY_RC:-0}"
         """)
         write_executable(self.bin / "sleep", "#!/usr/bin/env bash\nexit 0\n")
+        # deploy.sh refreshes the CodeGraph index and the semantic code index
+        # before the cutover. Both are toolchain reaches, not Unix tools: without
+        # these fakes the test ran the operator's real `codegraph`, which scanned
+        # and indexed the temp production dir for real. That was ~95% of every
+        # case's runtime and its duration tracks machine load, so a loaded lane
+        # pushed the slowest case past run_script's 10s cap.
+        write_executable(self.bin / "codegraph", """
+            #!/usr/bin/env bash
+            printf 'codegraph cwd=%s args=%s\n' "$PWD" "$*" >> "$FAKE_LOG"
+            exit "${CODEGRAPH_RC:-0}"
+        """)
+        write_executable(self.bin / "go", """
+            #!/usr/bin/env bash
+            printf 'go cwd=%s args=%s\n' "$PWD" "$*" >> "$FAKE_LOG"
+            exit "${GO_RC:-0}"
+        """)
 
     def env(self, **values: str) -> dict[str, str]:
         defaults = {
@@ -172,6 +188,16 @@ class DeployShellTests(unittest.TestCase):
             self.wormhole_live_sum.read_text(encoding="utf-8"),
             hashlib.sha256(WORMHOLE_FIXTURE).hexdigest() + "\n",
         )
+
+    def test_codegraph_refresh_runs_before_restart_and_never_fails_the_deploy(self) -> None:
+        proc = self.invoke(env=self.env(CODEGRAPH_RC="4"))
+
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("==> codegraph index refresh", proc.stdout)
+        self.assertIn("codegraph init failed (non-fatal)", proc.stdout)
+        calls = self.calls()
+        self.assertIn(f"codegraph cwd={self.prod} args=init .", calls)
+        self.assertLess(calls.index("codegraph cwd="), calls.index("systemctl --user kill"))
 
     def test_pull_failure_stops_before_build_and_propagates_status(self) -> None:
         proc = self.invoke("--build-only", env=self.env(GIT_PULL_RC="7"))

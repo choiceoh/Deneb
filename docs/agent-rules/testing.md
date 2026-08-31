@@ -9,6 +9,7 @@ globs: ["**/*_test.go", "**/tests/**"]
 - Run `make test` before pushing when you touch logic.
 - Treat tests as executable contracts: name the subject, condition, and outcome; assert an observable result; and cover the failure, cancellation, rollback, or malformed-input obligation introduced by the production code.
 - Do not add repetitive test bodies to improve a line/count metric. Prefer named tables for genuinely distinct input classes and keep generated matrices tied to a checked-in generator plus drift check.
+- Shell-script tests must stub every non-Unix command the driven script can reach. `scripts/dev/test_shell_isolation.py` proves it: it shadows each host binary outside `/usr/bin`, `/bin`, `/usr/sbin`, `/sbin` with a logging shim, runs every lane, and requires an empty log. A reached toolchain does real work whose duration tracks machine load, which is how a lane starts timing out — the lane passing is not evidence it was isolated.
 - Keep tests discoverable from the production subject. Large cross-domain `contracts`, `hardening`, or `helpers` files should be split by responsibility unless they describe one explicit boundary.
 - `make health-v2-test` verifies the scorer's anti-gaming behavior. `make health-v2-check` ratchets behavior evidence, test maintainability, and every other Health Bench 2.0 pillar independently; see `codebase-health-v2.md`.
 - `make health-v3-test` covers Health Bench 3.0 composite/anti-compensation/runtime-cache fixtures; `make health-v3-check` ratchets Structure+Runtime (Fitness advisory); see `codebase-health-v3.md`.

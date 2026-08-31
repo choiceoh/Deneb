@@ -59,6 +59,41 @@ def write_executable(path: Path, body: str) -> Path:
     return path
 
 
+CANARY_BIN_ENV = "DENEB_SHELL_CANARY_BIN"
+CANARY_DIRS_ENV = "DENEB_SHELL_CANARY_DIRS"
+CANARY_LOG_ENV = "DENEB_SHELL_CANARY_LOG"
+
+
+def _with_canary(path: str) -> str:
+    """Splice the isolation canary in front of the host directories it shadows.
+
+    `test_shell_isolation` plants a logging shim for every host executable
+    outside the system prefixes and asserts the log stays empty. Placement is
+    the whole contract. The canary must sit *behind* every directory the
+    fixture itself put on PATH -- shadowing a fixture's own fake would make the
+    audit report the stub it was told to use -- and *ahead* of the host
+    directories it stands in for, so a name the fixture forgot is caught before
+    the real binary answers for it.
+
+    Anchoring on the shadowed directories rather than on `fake_bin` is what
+    keeps the audit from fabricating its own findings. A fixture that pins
+    `PATH` to its fake bin plus the system prefixes is already airtight; none of
+    the shadowed directories appear, so the canary stays out entirely. Splicing
+    it in behind the fake bin instead would put ~/.local/bin's binaries back
+    within reach and report a leak the fixture had actually closed.
+    """
+    canary = os.environ.get(CANARY_BIN_ENV)
+    if not canary:
+        return path
+    shadowed = {entry for entry in os.environ.get(CANARY_DIRS_ENV, "").split(os.pathsep) if entry}
+    entries = [entry for entry in path.split(os.pathsep) if entry]
+    at = next((i for i, entry in enumerate(entries) if entry in shadowed), None)
+    if at is None:
+        return path
+    entries.insert(at, canary)
+    return os.pathsep.join(entries)
+
+
 def isolated_env(home: Path, fake_bin: Path | None = None, **values: str) -> dict[str, str]:
     """Build a deterministic environment while retaining standard Unix tools."""
     path = os.environ.get("PATH", "")
@@ -71,6 +106,11 @@ def isolated_env(home: Path, fake_bin: Path | None = None, **values: str) -> dic
         "LC_ALL": "C.UTF-8",
     }
     env.update(values)
+    # Applied after the caller's overrides so a test that pins its own PATH is
+    # audited too, rather than silently opting out of the isolation contract.
+    env["PATH"] = _with_canary(env["PATH"])
+    if CANARY_LOG_ENV in os.environ:
+        env.setdefault(CANARY_LOG_ENV, os.environ[CANARY_LOG_ENV])
     return env
 
 
