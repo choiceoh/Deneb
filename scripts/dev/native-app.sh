@@ -372,7 +372,7 @@ cmd_filmstrip() {
   local dir="$SHOTS_DIR/${base}-frames"
   rm -rf "$dir"; mkdir -p "$dir"
   local dur; dur="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$video")"
-  python3 - "$video" "$dir" "$frames" "$dur" <<'''PY'''
+  python3 - "$video" "$dir" "$frames" "$dur" <<'PY'
 import subprocess, sys
 video, out_dir, n, dur = sys.argv[1], sys.argv[2], int(sys.argv[3]), float(sys.argv[4])
 stamps = [dur * i / (n - 1) for i in range(n)] if n > 1 else [0.0]
@@ -381,7 +381,7 @@ for i, t in enumerate(stamps):
                     "-i", video, "-frames:v", "1", f"{out_dir}/{i:02d}.png"], check=True)
 print(" ".join(f"{t:.2f}s" for t in stamps))
 PY
-  python3 - "$dir" "$SHOTS_DIR/${base}-strip.png" <<'''PY'''
+  python3 - "$dir" "$SHOTS_DIR/${base}-strip.png" <<'PY'
 import sys, glob
 from PIL import Image
 files = sorted(glob.glob(sys.argv[1] + "/*.png"))
