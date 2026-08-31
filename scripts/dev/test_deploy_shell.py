@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -87,7 +88,32 @@ class DeployShellTests(unittest.TestCase):
             printf 'topology-python cwd=%s args=%s\n' "$PWD" "$*" >> "$FAKE_LOG"
             exit "${TOPOLOGY_RC:-0}"
         """)
-        write_executable(self.bin / "sleep", "#!/usr/bin/env bash\nexit 0\n")
+        # deploy.sh refreshes the CodeGraph/code_search indexes near the end, and
+        # both `codegraph` and `go` are real host binaries. Unstubbed, the test
+        # shelled out to the genuine indexer and did real scanning/parsing work in
+        # the temp prod dir — unbounded, load-sensitive, and the actual source of
+        # the `TimeoutExpired` flake on a busy machine. Faking them keeps the lane
+        # hermetic and turns the branch into something assertable.
+        write_executable(self.bin / "codegraph", """
+            #!/usr/bin/env bash
+            printf 'codegraph %s\n' "$*" >> "$FAKE_LOG"
+            rc="${CODEGRAPH_RC:-0}"
+            # Reproduce the real indexer's observable side effect, so the
+            # code_search gate downstream still sees what it would in production.
+            [[ "$rc" == 0 ]] && mkdir -p .codegraph && : > .codegraph/codegraph.db
+            exit "$rc"
+        """)
+        write_executable(self.bin / "go", """
+            #!/usr/bin/env bash
+            printf 'go %s\n' "$*" >> "$FAKE_LOG"
+            exit "${GO_RC:-0}"
+        """)
+        # Paced, not instant. deploy.sh's retry loops are bounded by WALL CLOCK
+        # (`SECONDS`/`date`), not by iteration count, so a no-op `sleep` turns any
+        # unmet retry condition into a fork storm that spins until the deadline
+        # instead of retrying. 20ms keeps the suite fast while letting a transient
+        # blip actually recover on the next pass.
+        write_executable(self.bin / "sleep", "#!/usr/bin/env bash\nexec /bin/sleep 0.02\n")
 
     def env(self, **values: str) -> dict[str, str]:
         defaults = {
@@ -110,6 +136,13 @@ class DeployShellTests(unittest.TestCase):
             "TOPOLOGY_RC": "0",
             "DENEB_MODEL_ROUTE_TOPOLOGY_PYTHON": str(self.topology_python),
             "WORMHOLE_LIVE_SUM_FILE": str(self.wormhole_live_sum),
+            # Bound the script's own wait windows. The production defaults (510s
+            # restart wait, 420s idle gate) are wall-clock budgets sized for a real
+            # gateway; left unbounded here a single missed retry condition outlives
+            # any sane test timeout and surfaces as an opaque TimeoutExpired rather
+            # than the script's own diagnostic.
+            "DENEB_DEPLOY_RESTART_WAIT_SEC": "3",
+            "DENEB_DEPLOY_IDLE_WAIT_SEC": "2",
         }
         defaults.update(values)
         return isolated_env(self.home, self.bin, **defaults)
@@ -267,6 +300,34 @@ class DeployShellTests(unittest.TestCase):
         proc = self.invoke(env=self.env(SS_ADDRESS="100.64.1.5:18789"))
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("curl -sf http://100.64.1.5:18789/health", self.calls())
+
+    def test_codegraph_index_refresh_runs_and_stays_non_fatal(self) -> None:
+        # The index refresh used to run the real host `codegraph` — expensive and
+        # entirely unasserted. Stubbed, its contract is cheap to pin: it runs, and
+        # a failing indexer must not fail the deploy.
+        proc = self.invoke(env=self.env(CODEGRAPH_RC="1"))
+
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("==> codegraph index refresh", proc.stdout)
+        self.assertIn("codegraph init failed (non-fatal)", proc.stdout)
+        self.assertIn("codegraph init .", self.calls())
+
+    def test_unreachable_health_check_fails_fast_instead_of_spinning(self) -> None:
+        # Regression: deploy.sh's health wait is bounded by wall clock, and the
+        # fixture's `sleep` is a stub. With the production 510s default that
+        # combination burned ~350 forks/sec until the caller's subprocess timeout
+        # killed it, surfacing as an opaque TimeoutExpired in whichever test the
+        # blip landed on. A never-healthy gateway must terminate on its own, with
+        # the script's own error, well inside the suite's timeout.
+        start = time.monotonic()
+        proc = self.invoke(
+            env=self.env(SS_LISTEN="0", DENEB_DEPLOY_RESTART_WAIT_SEC="1"),
+        )
+        elapsed = time.monotonic() - start
+
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("gateway service did not become healthy", proc.stderr)
+        self.assertLess(elapsed, 8, f"health wait did not stay bounded ({elapsed:.1f}s)")
 
     def test_wildcard_listen_address_is_normalized_to_loopback(self) -> None:
         proc = self.invoke(env=self.env(SS_ADDRESS="0.0.0.0:18789"))
