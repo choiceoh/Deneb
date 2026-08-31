@@ -18,6 +18,7 @@ a temp dir.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -127,12 +128,28 @@ class BenchRatchetNotifyShellTests(unittest.TestCase):
         self.assertNotIn("issue comment", calls)
 
     def test_missing_gh_degrades_quietly_instead_of_failing_the_unit(self) -> None:
+        # The PATH here has to be gh-less on EVERY machine, not just this one.
+        # Hardcoding "/usr/bin:/bin" only looked gh-less on a dev box that
+        # installs gh somewhere else (~/.local/bin); GitHub runners ship it at
+        # /usr/bin/gh, so `command -v gh` found it there and the script fell
+        # through to the auth branch -- the test then read "gh not
+        # authenticated" and failed in CI while passing locally. Build a bin
+        # dir holding exactly what the script needs before the gh guard: bash
+        # for the `#!/usr/bin/env bash` shebang, dirname for SCRIPT_DIR.
+        nogh = self.root / "nogh-bin"
+        nogh.mkdir()
+        for tool in ("bash", "dirname", "basename"):
+            source = shutil.which(tool)
+            self.assertIsNotNone(source, f"{tool} is required to run the script")
+            (nogh / tool).symlink_to(source)
+        self.assertIsNone(shutil.which("gh", path=str(nogh)), "fixture PATH must not reach gh")
+
         result = subprocess.run(
             [str(self.script), "breach"],
             capture_output=True,
             text=True,
             env={
-                "PATH": "/usr/bin:/bin",
+                "PATH": str(nogh),
                 "HOME": str(self.root),
                 "DENEB_STATE_DIR": str(self.state),
                 "GH_CALLS": str(self.calls),
