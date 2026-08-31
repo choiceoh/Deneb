@@ -48,13 +48,24 @@
 
 - **스트리밍 중(펜스 미닫힘)엔 절대 부분 렌더하지 않는다** — 반쯤 로드된 문서의
   스크립트가 실행되면 안 된다. placeholder("웹 응답 생성/구성 중…") 유지.
-- 높이는 페이지가 보고(scrollHeight)하고 프레임이 clamp(160–900px)해 따라간다 —
-  트랜스크립트 안에서 이중 스크롤 없이 맞춰 자란다.
+- **높이는 프레임이 내용에 맞춰 자란다** — 카드는 트랜스크립트 안에서 스스로
+  스크롤하지 않는다(이중 스크롤 금지). 페이지가 `scrollHeight`를 보고하고
+  `denebHtmlFrameHeight`(네이티브 `DenebHtmlFrame.kt` ↔ 안드로메다
+  `denebHtmlSandbox.ts` 쌍둥이)가 다음 높이를 정한다.
+  - **보고는 대부분 메아리다**: 프레임이 내용을 담은 뒤에는
+    `documentElement.scrollHeight`가 방금 준 프레임 높이를 그대로 돌려준다.
+    그래서 **현재 프레임보다 큰 보고만** 새 정보로 취급한다 — 무조건 여유를
+    더하면 카드가 끝없이 자란다.
+  - 상한 8000px은 **폭주 방지턱이지 분량 예산이 아니다**. `min-height:200vh`처럼
+    뷰포트에 비례하는 페이지만 여기 닿는다. 실제 카드는 한참 아래다 — 구 900px
+    상한은 6KB짜리 브리핑 카드의 9개 섹션 중 3개만 보여주고 나머지를 **닿을 수
+    없게** 잘랐다. 상한이 낮으면 조용히 내용을 잃는다.
 - stale 게이팅: 마지막 어시스턴트 턴이 아닌 행에선 `deneb.send` 회신을 무시한다
   (deneb-ui 콜백과 동일 규칙). 페이지 자체(로컬 스크립트)는 계속 동작.
 
 ## 검증
 
 - 게이트웨이: `go test ./internal/pipeline/chat/denebui` (htmlanswer_test.go).
-- Andromeda: `DenebHtml.test.tsx` (분할·CSP/브리지 주입·샌드박스 속성).
-- 네이티브: `DenebHtmlParsingTest.kt` (라우팅·pending·플레인 프로젝션).
+- Andromeda: `DenebHtml.test.tsx` (분할·CSP/브리지 주입·샌드박스 속성·프레임 높이).
+- 네이티브: `DenebHtmlParsingTest.kt` (라우팅·pending·플레인 프로젝션) +
+  `DenebHtmlFrameTest.kt` (프레임 높이 — 메아리 안정·폭주 정지·잘림 없음).

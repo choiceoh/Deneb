@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
 import { splitDenebUi } from "@/markdown/denebUiParse";
 import { DenebHtmlAnswer } from "./DenebHtml";
-import { buildSrcdoc, parseDenebHtmlMessage } from "./denebHtmlSandbox";
+import {
+  DENEB_HTML_MAX_HEIGHT,
+  DENEB_HTML_MIN_HEIGHT,
+  buildSrcdoc,
+  denebHtmlFrameHeight,
+  parseDenebHtmlMessage,
+} from "./denebHtmlSandbox";
 
 describe("deneb-html splitting", () => {
   it("splits a closed deneb-html fence into an html segment between prose", () => {
@@ -69,5 +75,42 @@ describe("deneb-html sandbox document", () => {
     expect(frame).not.toBeNull();
     expect(frame!.getAttribute("sandbox")).toBe("allow-scripts");
     expect(frame!.getAttribute("srcdoc")).toContain("<div>페이지</div>");
+  });
+});
+
+// The failure this guards is silent: a frame that stops growing shows the top of
+// the card and nothing tells the reader the rest exists. The mirror failure is a
+// frame that grows on its own echo forever. Both are here. Twin:
+// client-android .../dynamicui/DenebHtmlFrameTest.kt.
+describe("deneb-html frame height", () => {
+  it("gives a tall card a frame that fits it", () => {
+    expect(denebHtmlFrameHeight(DENEB_HTML_MIN_HEIGHT, 2800)).toBeGreaterThanOrEqual(2800);
+  });
+
+  it("does not grow on the echo once the frame fits", () => {
+    const fitted = denebHtmlFrameHeight(DENEB_HTML_MIN_HEIGHT, 2800);
+    expect(denebHtmlFrameHeight(fitted, fitted)).toBe(fitted);
+    expect(denebHtmlFrameHeight(fitted, fitted - 1)).toBe(fitted);
+  });
+
+  it("settles on a viewport-sized page instead of climbing", () => {
+    let h = DENEB_HTML_MIN_HEIGHT;
+    for (let i = 0; i < 50; i++) h = denebHtmlFrameHeight(h, h);
+    expect(h).toBe(DENEB_HTML_MIN_HEIGHT);
+  });
+
+  it("stops at the backstop when the page multiplies the viewport", () => {
+    let h = DENEB_HTML_MIN_HEIGHT;
+    for (let i = 0; i < 100; i++) h = denebHtmlFrameHeight(h, h * 2);
+    expect(h).toBe(DENEB_HTML_MAX_HEIGHT);
+  });
+
+  it("keeps growing when content appears later, and ignores nonsense", () => {
+    const first = denebHtmlFrameHeight(DENEB_HTML_MIN_HEIGHT, 600);
+    const second = denebHtmlFrameHeight(first, 1400);
+    expect(second).toBeGreaterThanOrEqual(1400);
+    expect(denebHtmlFrameHeight(second, -5000)).toBe(second);
+    expect(denebHtmlFrameHeight(second, Number.POSITIVE_INFINITY)).toBe(second);
+    expect(denebHtmlFrameHeight(second, 1e9)).toBe(DENEB_HTML_MAX_HEIGHT);
   });
 });

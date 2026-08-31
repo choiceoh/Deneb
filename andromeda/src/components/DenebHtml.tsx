@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { buildSrcdoc, parseDenebHtmlMessage } from "./denebHtmlSandbox";
+import { DENEB_HTML_MIN_HEIGHT, buildSrcdoc, denebHtmlFrameHeight, parseDenebHtmlMessage } from "./denebHtmlSandbox";
 
 // deneb-html — a webpage-style HTML answer the agent authors as a complete
 // self-contained document (```deneb-html fence). It renders sandboxed INLINE
@@ -10,10 +10,7 @@ import { buildSrcdoc, parseDenebHtmlMessage } from "./denebHtmlSandbox";
 // Two-way bridge (the page side is injected below, contract in the gateway
 // system prompt): window.deneb.send(text) posts the text back into the chat
 // as a user message; the page also reports its scrollHeight so the frame
-// grows to fit instead of double-scrolling.
-
-const MIN_HEIGHT = 160;
-const MAX_HEIGHT = 900;
+// grows to fit instead of double-scrolling (clamping: denebHtmlFrameHeight).
 
 export function DenebHtmlAnswer({
   body,
@@ -30,7 +27,7 @@ export function DenebHtmlAnswer({
   interactive?: boolean;
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const [height, setHeight] = useState(MIN_HEIGHT);
+  const [height, setHeight] = useState(DENEB_HTML_MIN_HEIGHT);
   const srcdoc = useMemo(() => buildSrcdoc(body), [body]);
 
   // Live props for the stable message listener (busy flips per stream tick).
@@ -46,7 +43,7 @@ export function DenebHtmlAnswer({
       const msg = parseDenebHtmlMessage(e.data);
       if (!msg) return;
       if (msg.type === "height") {
-        setHeight(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, Math.ceil(msg.h) + 8)));
+        setHeight((h) => denebHtmlFrameHeight(h, msg.h));
         return;
       }
       const { onSubmit: submit, busy: b, interactive: it } = live.current;

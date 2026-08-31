@@ -74,3 +74,30 @@ export function parseDenebHtmlMessage(data: unknown): DenebHtmlMessage {
   }
   return null;
 }
+
+/** Smallest frame an inline deneb-html answer gets, in CSS px. */
+export const DENEB_HTML_MIN_HEIGHT = 160;
+
+/** Runaway backstop — **not** a content budget. See the Kotlin twin for the story. */
+export const DENEB_HTML_MAX_HEIGHT = 8000;
+
+/** Slack over the reported height, so sub-pixel rounding never leaves a scrollbar. */
+const HEIGHT_SLACK = 8;
+
+/**
+ * Next frame height for a page reporting `reported` CSS px while the frame is
+ * `current` px tall. Twin of `denebHtmlFrameHeight` in the native
+ * `DenebHtmlFrame.kt`; contract in `docs/research/deneb-html.md`.
+ *
+ * The frame **grows to fit** — a card must never scroll inside the transcript.
+ * That makes every report after the first an echo: once the frame fits, the
+ * page's `documentElement.scrollHeight` hands the frame's own height back, so
+ * adding slack unconditionally would ratchet the card upward forever. Only a
+ * report that EXCEEDS the current frame is news.
+ */
+export function denebHtmlFrameHeight(current: number, reported: number): number {
+  const floor = Math.min(DENEB_HTML_MAX_HEIGHT, Math.max(DENEB_HTML_MIN_HEIGHT, Math.ceil(current)));
+  if (!Number.isFinite(reported) || Math.ceil(reported) <= floor) return floor;
+  const target = Math.min(Math.ceil(reported), DENEB_HTML_MAX_HEIGHT - HEIGHT_SLACK);
+  return Math.max(floor, target + HEIGHT_SLACK);
+}
