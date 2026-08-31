@@ -9,6 +9,17 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# The toolchain a script under test is allowed to see. These tests exist to pin
+# shell behavior, so the only commands a script may resolve are the standard Unix
+# ones plus whatever fake bin the test supplies — never the operator's user-space
+# installs. Inheriting the host PATH broke that: deploy.sh's `command -v
+# codegraph` gate found a real ~/.npm-global/bin/codegraph and spent ~0.85s per
+# invocation (plus a telemetry HTTP call) building an index inside the fixture's
+# throwaway $PROD_DIR, which blew the deploy tests' 10s timeout whenever the box
+# was busy — and was invisible in CI, where codegraph is not installed at all. A
+# fixed system PATH makes every optional-tool branch decided by the fixture.
+SYSTEM_PATH = os.pathsep.join(("/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"))
+
 
 def _dedent_fixture(body: str) -> str:
     r"""Strip the first non-blank line's indentation from every line carrying it.
@@ -61,7 +72,7 @@ def write_executable(path: Path, body: str) -> Path:
 
 def isolated_env(home: Path, fake_bin: Path | None = None, **values: str) -> dict[str, str]:
     """Build a deterministic environment while retaining standard Unix tools."""
-    path = os.environ.get("PATH", "")
+    path = SYSTEM_PATH
     if fake_bin is not None:
         path = f"{fake_bin}{os.pathsep}{path}"
     env = {

@@ -81,6 +81,9 @@ class DeployShellTests(unittest.TestCase):
         write_executable(self.bin / "curl", """
             #!/usr/bin/env bash
             printf 'curl %s\n' "$*" >> "$FAKE_LOG"
+            case "$*" in
+              *"${DENEB_EMBEDDING_URL:-http://embedder.invalid}"*) exit "${EMBEDDING_CURL_RC:-0}" ;;
+            esac
             exit "${CURL_RC:-0}"
         """)
         self.topology_python = write_executable(self.bin / "model-topology-python", """
@@ -105,7 +108,7 @@ class DeployShellTests(unittest.TestCase):
         """)
         write_executable(self.bin / "go", """
             #!/usr/bin/env bash
-            printf 'go %s\n' "$*" >> "$FAKE_LOG"
+            printf 'go cwd=%s args=%s\n' "$PWD" "$*" >> "$FAKE_LOG"
             exit "${GO_RC:-0}"
         """)
         # Paced, not instant. deploy.sh's retry loops are bounded by WALL CLOCK
@@ -133,6 +136,8 @@ class DeployShellTests(unittest.TestCase):
             "SS_LISTEN": "1",
             "SS_ADDRESS": "127.0.0.1:18789",
             "CURL_RC": "0",
+            "DENEB_EMBEDDING_URL": "http://127.0.0.1:8002",
+            "EMBEDDING_CURL_RC": "0",
             "TOPOLOGY_RC": "0",
             "DENEB_MODEL_ROUTE_TOPOLOGY_PYTHON": str(self.topology_python),
             "WORMHOLE_LIVE_SUM_FILE": str(self.wormhole_live_sum),
@@ -157,6 +162,12 @@ class DeployShellTests(unittest.TestCase):
 
     def calls(self) -> str:
         return self.log.read_text(encoding="utf-8") if self.log.exists() else ""
+
+    def seed_codegraph_index(self) -> None:
+        """Give the production checkout an index, so the refresh syncs it."""
+        index = self.prod / ".codegraph"
+        index.mkdir()
+        (index / "codegraph.db").write_text("", encoding="utf-8")
 
     def topology_env(self, **values: str) -> dict[str, str]:
         deneb_config = self.root / "deneb.json"
@@ -192,6 +203,7 @@ class DeployShellTests(unittest.TestCase):
         self.assertIn("args=-c pull.rebase=false pull --ff-only origin main", calls)
         self.assertIn(f"make cwd={self.prod} args=gateway-prod", calls)
         self.assertNotIn("systemctl", calls)
+        self.assertNotIn("codegraph", calls)
 
     def test_changed_wormhole_binary_restarts_and_records_checksum(self) -> None:
         self.wormhole_live_sum.write_text("stale\n", encoding="utf-8")
@@ -311,6 +323,55 @@ class DeployShellTests(unittest.TestCase):
         self.assertIn("==> codegraph index refresh", proc.stdout)
         self.assertIn("codegraph init failed (non-fatal)", proc.stdout)
         self.assertIn("codegraph init .", self.calls())
+        # The refresh has to land before the swap: the gateway that comes up next
+        # is the one whose self-inspection tools open the index.
+        calls = self.calls()
+        self.assertLess(calls.index("codegraph init ."), calls.index("systemctl --user kill"))
+
+    def test_existing_codegraph_index_is_synced_rather_than_reinitialized(self) -> None:
+        # init and sync are different commands against a ~317MB artifact; a
+        # production checkout always has an index, so sync is the live path.
+        self.seed_codegraph_index()
+
+        proc = self.invoke()
+
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        calls = self.calls()
+        self.assertIn("codegraph sync .", calls)
+        self.assertNotIn("codegraph init .", calls)
+
+    def test_failed_codegraph_sync_is_reported_without_blocking_the_deploy(self) -> None:
+        # The sync path carries its own message, and its own obligation not to
+        # strand production on a stale binary because an indexer broke.
+        self.seed_codegraph_index()
+
+        proc = self.invoke(env=self.env(CODEGRAPH_RC="3"))
+
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("codegraph sync failed (non-fatal); serving prior index", proc.stdout)
+        self.assertIn("deploy OK", proc.stdout)
+
+    def test_semantic_index_refresh_follows_the_graph_sync_when_the_embedder_answers(self) -> None:
+        (self.prod / "gateway-go").mkdir()
+
+        proc = self.invoke()
+
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("==> code_search semantic index refresh", proc.stdout)
+        calls = self.calls()
+        self.assertIn(f"go cwd={self.prod}/gateway-go args=run ./cmd/codesearch index", calls)
+        self.assertLess(calls.index("codegraph init ."), calls.index("go cwd="))
+
+    def test_unreachable_embedder_skips_the_semantic_index_refresh(self) -> None:
+        # Gated on the sidecar, not on the graph index: an embedder that is down
+        # must cost nothing, not a failed re-embed.
+        (self.prod / "gateway-go").mkdir()
+
+        proc = self.invoke(env=self.env(EMBEDDING_CURL_RC="7"))
+
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertNotIn("code_search semantic index refresh", proc.stdout)
+        self.assertNotIn("go cwd=", self.calls())
 
     def test_unreachable_health_check_fails_fast_instead_of_spinning(self) -> None:
         # Regression: deploy.sh's health wait is bounded by wall clock, and the
