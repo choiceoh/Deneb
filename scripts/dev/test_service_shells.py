@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from test_shell_support import REPO_ROOT, isolated_env, run_script, write_executable
+from test_shell_support import REPO_ROOT, isolated_env, run_script, wait_for_text, write_executable
 
 RUNTIME_FILES = (
     Path("/tmp/wormhole.pid"),
@@ -126,9 +126,10 @@ class ManualServiceLauncherTests(unittest.TestCase):
         self.assertIn("building wormhole", proc.stdout)
         self.assertIn("started (pid", proc.stdout)
         self.assertIn("healthy", proc.stdout)
-        calls = self.calls()
+        nohup_call = f"nohup {self.dist / 'wormhole'} --config {self.root / 'wormhole.json'}"
+        calls = wait_for_text(self.log, nohup_call)
         self.assertIn(f"make cwd={self.root} args=wormhole", calls)
-        self.assertIn(f"nohup {self.dist / 'wormhole'} --config {self.root / 'wormhole.json'}", calls)
+        self.assertIn(nohup_call, calls)
         self.assertTrue(Path("/tmp/wormhole.pid").read_text().strip().isdigit())
 
     def test_wormhole_already_running_and_stale_stop_never_signal_wrong_process(self) -> None:
@@ -149,7 +150,10 @@ class ManualServiceLauncherTests(unittest.TestCase):
         self.assertEqual(cpu.returncode, 0, cpu.stdout + cpu.stderr)
         self.assertIn("gpu-layers=0", cpu.stdout)
         self.assertIn("healthy", cpu.stdout)
-        self.assertIn("--port 8001 --host 10.0.0.3 --gpu-layers 0", self.calls())
+        self.assertIn(
+            "--port 8001 --host 10.0.0.3 --gpu-layers 0",
+            wait_for_text(self.log, "--gpu-layers 0"),
+        )
 
         Path("/tmp/bge-m3-server.pid").unlink(missing_ok=True)
         self.log.unlink()
@@ -160,7 +164,7 @@ class ManualServiceLauncherTests(unittest.TestCase):
         )
         self.assertEqual(cuda.returncode, 0, cuda.stdout + cuda.stderr)
         self.assertIn("gpu-layers=99", cuda.stdout)
-        self.assertIn("--gpu-layers 99", self.calls())
+        self.assertIn("--gpu-layers 99", wait_for_text(self.log, "--gpu-layers 99"))
 
         Path("/tmp/bge-m3-server.pid").unlink(missing_ok=True)
         self.log.unlink()
@@ -170,7 +174,7 @@ class ManualServiceLauncherTests(unittest.TestCase):
             self.env(BGE_M3_DEVICE="cuda", BGE_M3_GPU_LAYERS="17"),
         )
         self.assertEqual(override.returncode, 0)
-        self.assertIn("--gpu-layers 17", self.calls())
+        self.assertIn("--gpu-layers 17", wait_for_text(self.log, "--gpu-layers 17"))
 
     def test_bge_status_and_stale_stop_have_stable_exit_codes(self) -> None:
         healthy = self.run_fixture("start-bge-m3.sh", "status")
