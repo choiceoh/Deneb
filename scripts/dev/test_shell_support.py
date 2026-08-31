@@ -4,16 +4,57 @@ from __future__ import annotations
 
 import os
 import subprocess
-import textwrap
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _dedent_fixture(body: str) -> str:
+    r"""Strip the first non-blank line's indentation from every line carrying it.
+
+    `textwrap.dedent` removes the prefix common to *all* lines, so one line at
+    column 0 collapses the common prefix to nothing and turns the dedent into a
+    silent no-op. Fixture bodies hit this constantly: written as non-raw
+    triple-quoted strings, an idiom like `printf 'git args=%s\n' "$*"` embeds a
+    real newline, and the format string's tail becomes a column-0 line. The
+    no-op then leaves `#!/usr/bin/env bash` indented -- an inert comment rather
+    than a shebang.
+
+    Measuring from the first non-blank line keeps the shebang at column 0.
+    Lines that do not carry the prefix are left untouched rather than stripped,
+    which preserves payloads whose leading whitespace is deliberate: heredoc
+    bodies, unindented heredoc terminators, and printf output such as
+    systemctl's "   Active: active".
+    """
+    lines = body.split("\n")
+    first = next((line for line in lines if line.strip()), "")
+    prefix = first[: len(first) - len(first.lstrip(" \t"))]
+    if not prefix:
+        return body
+    dedented = []
+    for line in lines:
+        if line.startswith(prefix):
+            dedented.append(line[len(prefix) :])
+        elif not line.strip():
+            dedented.append("")
+        else:
+            dedented.append(line)
+    return "\n".join(dedented)
+
+
 def write_executable(path: Path, body: str) -> Path:
     """Write a dedented executable fixture and return its path."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(textwrap.dedent(body).lstrip("\n"), encoding="utf-8")
+    text = _dedent_fixture(body).lstrip("\n")
+    if not text.startswith("#!"):
+        raise AssertionError(
+            f"fixture {path} would be written without a leading shebang: {text[:40]!r}. "
+            "An indented shebang is an inert comment; the file only runs because "
+            "bash re-executes ENOEXEC files itself, so it would fail under "
+            "`sh -c`, `env -i`, xargs, or a direct execve."
+        )
+    path.write_text(text, encoding="utf-8")
     path.chmod(0o755)
     return path
 
@@ -52,6 +93,25 @@ def run_script(
         timeout=timeout,
         check=False,
     )
+
+
+def wait_for_text(path: Path, needle: str, timeout: float = 5.0) -> str:
+    """Poll a fixture log until it contains `needle`, then return its contents.
+
+    Scripts under test launch faked commands in the background (`nohup ... &`),
+    so a fake's append to $FAKE_LOG races the parent script's exit. Reading the
+    log once makes the assertion depend on process scheduling -- it passes only
+    while the child happens to win. Polling makes the ordering explicit without
+    weakening what is asserted: on success the text is returned as soon as it
+    lands, and on timeout the caller still gets the log so its own assertion
+    reports the real diff.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
+        if needle in text or time.monotonic() >= deadline:
+            return text
+        time.sleep(0.01)
 
 
 def extract_heredoc(path: Path, opener: str, terminator: str) -> str:
