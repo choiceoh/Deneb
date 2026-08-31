@@ -43,7 +43,7 @@ export function DenebHtmlAnswer({
       const msg = parseDenebHtmlMessage(e.data);
       if (!msg) return;
       if (msg.type === "height") {
-        setHeight((h) => denebHtmlFrameHeight(h, msg.h));
+        setHeight(denebHtmlFrameHeight(msg.h));
         return;
       }
       const { onSubmit: submit, busy: b, interactive: it } = live.current;

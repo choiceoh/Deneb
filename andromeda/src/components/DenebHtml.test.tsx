@@ -61,6 +61,16 @@ describe("deneb-html sandbox document", () => {
     }
   });
 
+  it("reports the body's own height, not the viewport-clamped one", () => {
+    // max(content, viewport) would mean a frame that overshot hears its own height
+    // back and can never shrink — the blank-under-the-card bug. Twin assertion in
+    // DenebHtmlPreludeContractTest.kt covers the native copy of this script.
+    const doc = buildSrcdoc("<div/>");
+    expect(doc).not.toContain("documentElement.scrollHeight");
+    expect(doc).toContain("b.getBoundingClientRect().height");
+    expect(doc).toContain("document.fonts.ready.then(r)");
+  });
+
   it("classifies bridge messages and rejects foreign data", () => {
     expect(parseDenebHtmlMessage({ __deneb: "prompt", text: " 확인 " })).toEqual({ type: "prompt", text: "확인" });
     expect(parseDenebHtmlMessage({ __deneb: "height", h: 320 })).toEqual({ type: "height", h: 320 });
@@ -78,39 +88,31 @@ describe("deneb-html sandbox document", () => {
   });
 });
 
-// The failure this guards is silent: a frame that stops growing shows the top of
-// the card and nothing tells the reader the rest exists. The mirror failure is a
-// frame that grows on its own echo forever. Both are here. Twin:
-// client-android .../dynamicui/DenebHtmlFrameTest.kt.
+// Both failures this guards are silent. A frame that stops growing shows the top
+// of the card and nothing says the rest exists; a frame that cannot shrink keeps
+// whatever inflated number it heard first and leaves screens of blank under the
+// content. Twin: client-android .../dynamicui/DenebHtmlFrameTest.kt.
 describe("deneb-html frame height", () => {
   it("gives a tall card a frame that fits it", () => {
-    expect(denebHtmlFrameHeight(DENEB_HTML_MIN_HEIGHT, 2800)).toBeGreaterThanOrEqual(2800);
+    expect(denebHtmlFrameHeight(2800)).toBeGreaterThanOrEqual(2800);
   });
 
-  it("does not grow on the echo once the frame fits", () => {
-    const fitted = denebHtmlFrameHeight(DENEB_HTML_MIN_HEIGHT, 2800);
-    expect(denebHtmlFrameHeight(fitted, fitted)).toBe(fitted);
-    expect(denebHtmlFrameHeight(fitted, fitted - 1)).toBe(fitted);
+  it("shrinks when a later report is smaller", () => {
+    // THE regression: a first measurement can land before fonts or final width do.
+    const inflated = denebHtmlFrameHeight(3700);
+    const settled = denebHtmlFrameHeight(2800);
+    expect(settled).toBeLessThan(inflated);
+    expect(settled).toBeGreaterThanOrEqual(2800);
   });
 
-  it("settles on a viewport-sized page instead of climbing", () => {
-    let h = DENEB_HTML_MIN_HEIGHT;
-    for (let i = 0; i < 50; i++) h = denebHtmlFrameHeight(h, h);
-    expect(h).toBe(DENEB_HTML_MIN_HEIGHT);
+  it("keeps a short card at the minimum and bounds a runaway page", () => {
+    expect(denebHtmlFrameHeight(40)).toBe(DENEB_HTML_MIN_HEIGHT);
+    expect(denebHtmlFrameHeight(20000)).toBe(DENEB_HTML_MAX_HEIGHT);
   });
 
-  it("stops at the backstop when the page multiplies the viewport", () => {
-    let h = DENEB_HTML_MIN_HEIGHT;
-    for (let i = 0; i < 100; i++) h = denebHtmlFrameHeight(h, h * 2);
-    expect(h).toBe(DENEB_HTML_MAX_HEIGHT);
-  });
-
-  it("keeps growing when content appears later, and ignores nonsense", () => {
-    const first = denebHtmlFrameHeight(DENEB_HTML_MIN_HEIGHT, 600);
-    const second = denebHtmlFrameHeight(first, 1400);
-    expect(second).toBeGreaterThanOrEqual(1400);
-    expect(denebHtmlFrameHeight(second, -5000)).toBe(second);
-    expect(denebHtmlFrameHeight(second, Number.POSITIVE_INFINITY)).toBe(second);
-    expect(denebHtmlFrameHeight(second, 1e9)).toBe(DENEB_HTML_MAX_HEIGHT);
+  it("ignores nonsense reports instead of collapsing the frame", () => {
+    expect(denebHtmlFrameHeight(-5000)).toBe(DENEB_HTML_MIN_HEIGHT);
+    expect(denebHtmlFrameHeight(Number.POSITIVE_INFINITY)).toBe(DENEB_HTML_MIN_HEIGHT);
+    expect(denebHtmlFrameHeight(1e9)).toBe(DENEB_HTML_MAX_HEIGHT);
   });
 });

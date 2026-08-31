@@ -50,8 +50,18 @@ const PRELUDE =
   "</style>" +
   "<script>(function(){" +
   'window.deneb={send:function(t){parent.postMessage({__deneb:"prompt",text:String(t)},"*")}};' +
-  'var r=function(){parent.postMessage({__deneb:"height",h:document.documentElement.scrollHeight},"*")};' +
+  // Measure the BODY box, never documentElement.scrollHeight: that one is
+  // max(content, viewport), so a frame that has overshot only hears its own
+  // height back and can never shrink. See denebHtmlFrameHeight.
+  "var m=function(){var b=document.body;if(!b){return 0}" +
+  "var s=window.getComputedStyle(b);" +
+  "return Math.ceil(b.getBoundingClientRect().height" +
+  "+(parseFloat(s.marginTop)||0)+(parseFloat(s.marginBottom)||0))};" +
+  'var r=function(){parent.postMessage({__deneb:"height",h:m()},"*")};' +
   'window.addEventListener("load",r);' +
+  // Fonts land after load and change every line box. Without this report the
+  // pre-swap (taller) measurement is the last one we ever hear.
+  "if(document.fonts&&document.fonts.ready){document.fonts.ready.then(r)}" +
   'if(typeof ResizeObserver==="function"){new ResizeObserver(r).observe(document.documentElement)}' +
   "})()</script>";
 
@@ -85,19 +95,18 @@ export const DENEB_HTML_MAX_HEIGHT = 8000;
 const HEIGHT_SLACK = 8;
 
 /**
- * Next frame height for a page reporting `reported` CSS px while the frame is
- * `current` px tall. Twin of `denebHtmlFrameHeight` in the native
- * `DenebHtmlFrame.kt`; contract in `docs/research/deneb-html.md`.
+ * Frame height for a page reporting `reported` CSS px of content. Twin of
+ * `denebHtmlFrameHeight` in the native `DenebHtmlFrame.kt`; contract in
+ * `docs/research/deneb-html.md`.
  *
- * The frame **grows to fit** — a card must never scroll inside the transcript.
- * That makes every report after the first an echo: once the frame fits, the
- * page's `documentElement.scrollHeight` hands the frame's own height back, so
- * adding slack unconditionally would ratchet the card upward forever. Only a
- * report that EXCEEDS the current frame is news.
+ * The frame **grows to fit** — a card never scrolls inside the transcript — so
+ * the latest report always wins, in **both directions**. Shrinking is not a
+ * nicety: a page's first measurement can land before its fonts or its final
+ * width do, and a frame that can only grow freezes at that inflated number and
+ * leaves screens of blank under the content (shipped and reverted 2026-08-31).
  */
-export function denebHtmlFrameHeight(current: number, reported: number): number {
-  const floor = Math.min(DENEB_HTML_MAX_HEIGHT, Math.max(DENEB_HTML_MIN_HEIGHT, Math.ceil(current)));
-  if (!Number.isFinite(reported) || Math.ceil(reported) <= floor) return floor;
-  const target = Math.min(Math.ceil(reported), DENEB_HTML_MAX_HEIGHT - HEIGHT_SLACK);
-  return Math.max(floor, target + HEIGHT_SLACK);
+export function denebHtmlFrameHeight(reported: number): number {
+  if (!Number.isFinite(reported)) return DENEB_HTML_MIN_HEIGHT;
+  const safe = Math.min(Math.max(Math.ceil(reported), 0), DENEB_HTML_MAX_HEIGHT - HEIGHT_SLACK);
+  return Math.min(DENEB_HTML_MAX_HEIGHT, Math.max(DENEB_HTML_MIN_HEIGHT, safe + HEIGHT_SLACK));
 }
