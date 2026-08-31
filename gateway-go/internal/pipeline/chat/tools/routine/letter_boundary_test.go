@@ -385,7 +385,7 @@ func TestLetterDiarySummariesIncludeOnlyHealthyNonEmptySections(t *testing.T) {
 			t.Errorf("morning summary missing %q: %s", want, morning)
 		}
 	}
-	for _, unwanted := range []string{"동:", "메일:"} {
+	for _, unwanted := range []string{"동:", "메일:", "🌅"} {
 		if strings.Contains(morning, unwanted) {
 			t.Errorf("morning summary included unhealthy/empty %q: %s", unwanted, morning)
 		}
@@ -396,7 +396,7 @@ func TestLetterDiarySummariesIncludeOnlyHealthyNonEmptySections(t *testing.T) {
 		emailData{OK: false, Messages: []emailEntry{{Subject: "must not count"}}},
 		deadlineData{OK: true},
 	})
-	if !strings.Contains(evening, "일정: 2건") || strings.Contains(evening, "메일:") || strings.Contains(evening, "마감:") {
+	if !strings.Contains(evening, "일정: 2건") || strings.Contains(evening, "메일:") || strings.Contains(evening, "마감:") || strings.Contains(evening, "🌙") {
 		t.Fatalf("evening summary = %s", evening)
 	}
 }
