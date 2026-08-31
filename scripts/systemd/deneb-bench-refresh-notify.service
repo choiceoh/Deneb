@@ -1,0 +1,15 @@
+[Unit]
+# Fired by OnFailure= on deneb-bench-refresh.service. The refresh already exits
+# 1 on a ratchet breach so the oneshot goes `failed` rather than decaying
+# quietly — but a failed unit only speaks to whoever runs `systemctl status`,
+# and for 12 straight retained days (2026-08-20 → 08-31) nobody did. This unit
+# is the missing half: it carries the verdict out to the operator's issue
+# tracker, the same place the sibling health-bench ratchet already reports to.
+Description=Report a Deneb bench-refresh failure (RSI ratchet breach) to the operator
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/deneb
+ExecStart=%h/deneb/scripts/audit/bench-ratchet-notify.sh breach
+Nice=10
+TimeoutStartSec=5min
