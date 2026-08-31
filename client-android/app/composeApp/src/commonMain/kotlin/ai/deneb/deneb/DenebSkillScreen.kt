@@ -309,7 +309,10 @@ internal fun SkillDetailContent(
         Text("이 스킬의 활동 기록이 아직 없습니다.", style = DenebType.hint, color = denebHint())
     } else {
         events.forEachIndexed { idx, event ->
-            SkillLifecycleRow(event, showSkillName = false, horizontalPadding = 0.dp)
+            // nowMs, not the row's live-clock default: our caller froze it, and the
+            // events are pinned to that same instant. Dropping it here is what made
+            // this golden gain a day every day.
+            SkillLifecycleRow(event, showSkillName = false, horizontalPadding = 0.dp, nowMs = nowMs)
             if (idx < events.lastIndex) HorizontalDivider(color = denebHairline())
         }
     }
