@@ -9,6 +9,17 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# The toolchain a script under test is allowed to see. These tests exist to pin
+# shell behavior, so the only commands a script may resolve are the standard Unix
+# ones plus whatever fake bin the test supplies — never the operator's user-space
+# installs. Inheriting the host PATH broke that: deploy.sh's `command -v
+# codegraph` gate found a real ~/.npm-global/bin/codegraph and spent ~0.85s per
+# invocation (plus a telemetry HTTP call) building an index inside the fixture's
+# throwaway $PROD_DIR, which blew the deploy tests' 10s timeout whenever the box
+# was busy — and was invisible in CI, where codegraph is not installed at all. A
+# fixed system PATH makes every optional-tool branch decided by the fixture.
+SYSTEM_PATH = os.pathsep.join(("/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"))
+
 
 def _dedent_fixture(body: str) -> str:
     r"""Strip the first non-blank line's indentation from every line carrying it.
@@ -65,22 +76,25 @@ CANARY_LOG_ENV = "DENEB_SHELL_CANARY_LOG"
 
 
 def _with_canary(path: str) -> str:
-    """Splice the isolation canary in front of the host directories it shadows.
+    """Splice the isolation canary in front of the directories it shadows.
 
-    `test_shell_isolation` plants a logging shim for every host executable
-    outside the system prefixes and asserts the log stays empty. Placement is
-    the whole contract. The canary must sit *behind* every directory the
-    fixture itself put on PATH -- shadowing a fixture's own fake would make the
-    audit report the stub it was told to use -- and *ahead* of the host
+    `test_shell_isolation` audits what the fixed `SYSTEM_PATH` above does not
+    settle -- `/usr/local/bin` is inside it, and a caller can override `PATH`
+    outright -- by planting a logging shim for every executable still reachable
+    outside the Unix prefixes and asserting the log stays empty.
+
+    Placement is the whole audit. The canary must sit *behind* every directory
+    the fixture itself put on PATH -- shadowing a fixture's own fake would make
+    the audit report the stub it was told to use -- and *ahead* of the
     directories it stands in for, so a name the fixture forgot is caught before
     the real binary answers for it.
 
-    Anchoring on the shadowed directories rather than on `fake_bin` is what
-    keeps the audit from fabricating its own findings. A fixture that pins
-    `PATH` to its fake bin plus the system prefixes is already airtight; none of
-    the shadowed directories appear, so the canary stays out entirely. Splicing
-    it in behind the fake bin instead would put ~/.local/bin's binaries back
-    within reach and report a leak the fixture had actually closed.
+    Anchoring on the shadowed directories rather than on `fake_bin` is what keeps
+    the audit from fabricating its own findings. A fixture that pins `PATH` to
+    its fake bin plus the Unix prefixes is already airtight; none of the shadowed
+    directories appear, so the canary stays out entirely. Splicing it in behind
+    the fake bin instead would put those directories back within reach and report
+    a leak the fixture had actually closed.
     """
     canary = os.environ.get(CANARY_BIN_ENV)
     if not canary:
@@ -96,7 +110,7 @@ def _with_canary(path: str) -> str:
 
 def isolated_env(home: Path, fake_bin: Path | None = None, **values: str) -> dict[str, str]:
     """Build a deterministic environment while retaining standard Unix tools."""
-    path = os.environ.get("PATH", "")
+    path = SYSTEM_PATH
     if fake_bin is not None:
         path = f"{fake_bin}{os.pathsep}{path}"
     env = {

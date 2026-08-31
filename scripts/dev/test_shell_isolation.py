@@ -1,35 +1,41 @@
-"""Harness contract: the shell-driving test lanes reach zero real host binaries.
+"""Isolation contract for the shared shell-script test harness, and its audit.
 
-`test_shell_support.isolated_env` keeps the host `PATH` on purpose, so the
-standard Unix tools a script needs (`awk`, `sed`, `head`) resolve without every
-fixture re-stubbing them. The cost of that convenience is that the same opening
-lets *any* command through -- including a toolchain binary the fixture never
-meant to run. Nothing in a fixture announces the gap: the lane still passes,
-because reaching the real tool usually produces roughly the answer a fake would
-have given.
+This file exists because the harness quietly stopped isolating. `isolated_env`
+prepended the fake bin but kept the host PATH, so every script under test could
+still resolve whatever the operator had installed in user space. deploy.sh's
+optional `command -v codegraph` gate found one: each of the eight deploy tests
+that reach the index-refresh block spawned the real binary (~0.85s and a
+telemetry HTTP call) against the fixture's throwaway checkout, which overran the
+suite's 10s timeout whenever the box was busy — and exercised nothing at all in
+CI, where that binary is not installed. Optional-tool branches must be decided by
+the fixture, never by the machine running the suite.
 
-That is how `deploy.sh`'s `codegraph index refresh` went unnoticed. The fixture
-stubbed git/make/systemctl/ss/curl/sleep but not `codegraph`, so every case ran
-the operator's real indexer against the temp production directory -- genuine
-scanning, parsing, and SQLite writes. It was ~95% of each case's runtime (p50
-0.822s against 0.048s once stubbed) and, being real work, its duration tracked
-machine load; a loaded lane pushed the slowest case past `run_script`'s 10s cap
-as a roughly 1-in-6 `TimeoutExpired`. The green lane was the symptom, not the
-alarm.
+`ShellIsolationTests` pins that contract: `isolated_env` hands out a fixed
+`SYSTEM_PATH`, the fake bin shadows it, and a user-space install stays invisible.
 
-So this guard asserts the absence directly instead of inferring it from a pass.
-For each module it plants a logging shim named after every host executable
-living outside the system prefixes, splices the shim directory in behind the
-fixture's own fakes but ahead of the host directories it stands in for, runs the
-lane once, and requires the shim log to come back empty. An empty log is
-positive evidence of zero host reach; a passing lane is evidence of nothing.
+The rest of the file measures what the contract does not settle. Pinning the
+PATH is a claim about how the environment is *built*; it is not evidence about
+what the lanes actually *reach*, and a lane passing has never been evidence of
+either -- reaching a real tool usually produces roughly the answer a fake would
+have given, which is why the codegraph reach survived so long in a green lane.
+Two gaps outlive the pin:
 
-Scope, stated plainly: the audit shadows what this host actually has installed
-outside `/usr/bin`, `/bin`, `/usr/sbin`, and `/sbin`. A machine without
-`codegraph` cannot observe the `codegraph` reach -- on that machine `deploy.sh`'s
-`command -v` gate never opens and there is no reach to observe. The guard is
-therefore strongest on a provisioned developer box, which is exactly where the
-un-faked toolchains live and where the flake was found.
+  * `SYSTEM_PATH` admits `/usr/local/bin`, which is npm's default global prefix.
+    The reach above came from an npm-global `codegraph`; on a machine whose npm
+    prefix is `/usr/local` rather than `~/.npm-global`, the identical bug lands
+    inside the pinned PATH and survives untouched.
+  * A fixture may pass its own `PATH=` in `values`, which overrides the pin
+    outright.
+
+So `HostBinaryReachTests` plants a logging shim for every executable a fixture
+could still resolve outside `/usr/bin`, `/bin`, `/usr/sbin`, and `/sbin`, splices
+the shim directory in behind the fixture's own fakes but ahead of the directories
+it stands in for, runs each lane once, and requires the shim log to come back
+empty. An empty log is positive evidence of zero host reach.
+
+Out of audit range, stated rather than implied: a script that prepends to `PATH`
+at runtime lands ahead of the canary, and an absolute-path invocation never
+consults `PATH` at all. Neither is reachable by shimming.
 """
 
 from __future__ import annotations
@@ -49,6 +55,7 @@ from test_shell_support import (
     CANARY_DIRS_ENV,
     CANARY_LOG_ENV,
     REPO_ROOT,
+    SYSTEM_PATH,
     _with_canary,
     isolated_env,
     write_executable,
@@ -56,10 +63,11 @@ from test_shell_support import (
 
 DEV_DIR = REPO_ROOT / "scripts" / "dev"
 
-# The tools `isolated_env` deliberately keeps reachable. Whatever the
+# The tools a fixture is entitled to resolve without stubbing. Whatever the
 # distribution ships lands here; whatever a toolchain manager installs
-# (~/.local/bin, ~/.cargo/bin, /usr/local/bin, a node prefix) does not -- which
-# is precisely the line the fixtures have to hold.
+# (/usr/local/bin, ~/.local/bin, ~/.cargo/bin, a node prefix) does not -- which
+# is the line the fixtures have to hold. `SYSTEM_PATH` is deliberately wider
+# than this, so the audit covers the difference.
 SYSTEM_PREFIXES = ("/usr/bin", "/bin", "/usr/sbin", "/sbin")
 
 # Interpreters the fixtures themselves run on -- their `#!/usr/bin/env bash`
@@ -96,52 +104,62 @@ def _real(path: str) -> str:
         return path
 
 
+def _executables(directory: str) -> set[str]:
+    """Names of the runnable files in one directory, or nothing if it is unreadable."""
+    names: set[str] = set()
+    try:
+        entries = list(os.scandir(directory))
+    except OSError:
+        return names
+    for entry in entries:
+        try:
+            if entry.is_file() and os.access(entry.path, os.X_OK):
+                names.add(entry.name)
+        except OSError:
+            continue
+    return names
+
+
 def system_dirs() -> set[str]:
     """Resolve the system prefixes, collapsing the usrmerge /bin -> /usr/bin link."""
     return {_real(prefix) for prefix in SYSTEM_PREFIXES}
 
 
-def host_tool_dirs() -> list[str]:
-    """Return the `PATH` directories that are not system prefixes, in `PATH` order."""
+def audited_dirs() -> list[str]:
+    """Directories a fixture can put in front of a script that are not Unix prefixes.
+
+    Two sources, because there are two ways one can still be reached: the part of
+    `SYSTEM_PATH` that is not a Unix prefix (`/usr/local/bin`, handed to every
+    fixture by default), and the host's own `PATH` -- no longer inherited, but a
+    fixture that passes its own `PATH=` can put any of it back.
+    """
     resolved = system_dirs()
     ordered: list[str] = []
-    for entry in os.environ.get("PATH", "").split(os.pathsep):
+    for entry in (*SYSTEM_PATH.split(os.pathsep), *os.environ.get("PATH", "").split(os.pathsep)):
         if not entry or entry in ordered or _real(entry) in resolved:
             continue
         ordered.append(entry)
     return ordered
 
 
-def host_tool_names() -> dict[str, str]:
-    """Map each command name to the directory `PATH` order actually gives it to.
+def host_tool_names(dirs: list[str]) -> dict[str, str]:
+    """Map each shadowable command name to the audited directory it came from.
 
-    Resolution is `which` semantics, done as one ordered walk instead of a
-    lookup per name -- a CI runner's toolcache puts thousands of names on
-    `PATH`, and re-scanning it once per name is quadratic for no gain.
-
-    A name whose winner sits under a system prefix is dropped: shadowing it
-    would put the canary in front of a tool the fixtures are entitled to reach,
-    whatever else on `PATH` happens to share the name.
+    A name the Unix prefixes also carry is skipped: under any PATH a fixture
+    hands out, the canary sits ahead of `/usr/bin` too, so shimming such a name
+    would intercept the standard tool the fixture is entitled to reach and the
+    audit would manufacture its own finding.
     """
-    resolved = system_dirs()
-    winner: dict[str, str] = {}
-    for entry in os.environ.get("PATH", "").split(os.pathsep):
-        if not entry:
-            continue
-        try:
-            names = sorted(os.scandir(entry), key=lambda item: item.name)
-        except OSError:
-            continue
-        for name in names:
-            if name.name in winner or name.name in NEVER_SHADOW:
+    unix: set[str] = set()
+    for prefix in SYSTEM_PREFIXES:
+        unix |= _executables(prefix)
+    found: dict[str, str] = {}
+    for directory in dirs:
+        for name in sorted(_executables(directory)):
+            if name in found or name in unix or name in NEVER_SHADOW:
                 continue
-            try:
-                if not name.is_file() or not os.access(name.path, os.X_OK):
-                    continue
-            except OSError:
-                continue
-            winner[name.name] = entry
-    return {name: at for name, at in winner.items() if _real(at) not in resolved}
+            found[name] = directory
+    return found
 
 
 def plant_canaries(bin_dir: Path, names: list[str]) -> Path:
@@ -180,40 +198,94 @@ def armed(bin_dir: Path, dirs: list[str], log: Path):
                 os.environ[key] = value
 
 
+class ShellIsolationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.home = self.root / "home"
+        self.home.mkdir()
+
+    def resolves(self, command: str, env: dict[str, str]) -> str:
+        """Report whether a script running under `env` can resolve one command."""
+        script = write_executable(
+            self.root / "probe.sh",
+            f"""
+            #!/usr/bin/env bash
+            if command -v {command} >/dev/null 2>&1; then echo VISIBLE; else echo HIDDEN; fi
+            """,
+        )
+        proc = subprocess.run(
+            [str(script)],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        return proc.stdout.strip()
+
+    def test_host_path_is_not_inherited_into_the_isolated_environment(self) -> None:
+        with mock.patch.dict(os.environ, {"PATH": f"/opt/operator-toolchain{os.pathsep}/usr/bin"}):
+            env = isolated_env(self.home)
+        self.assertEqual(env["PATH"], SYSTEM_PATH)
+
+    def test_fake_bin_shadows_the_system_toolchain(self) -> None:
+        fake_bin = self.root / "bin"
+        fake_bin.mkdir()
+        env = isolated_env(self.home, fake_bin)
+        self.assertEqual(env["PATH"], f"{fake_bin}{os.pathsep}{SYSTEM_PATH}")
+
+    def test_a_user_space_install_stays_invisible_to_the_script_under_test(self) -> None:
+        host_bin = self.root / "host-bin"
+        write_executable(host_bin / "operator-tool", "#!/usr/bin/env bash\nexit 0\n")
+        with mock.patch.dict(
+            os.environ, {"PATH": f"{host_bin}{os.pathsep}{os.environ.get('PATH', '')}"}
+        ):
+            env = isolated_env(self.home)
+        self.assertEqual(self.resolves("operator-tool", env), "HIDDEN")
+
+    def test_the_standard_unix_toolchain_stays_reachable(self) -> None:
+        env = isolated_env(self.home)
+        for command in ("bash", "sha256sum", "awk", "cut", "head"):
+            with self.subTest(command=command):
+                self.assertEqual(self.resolves(command, env), "VISIBLE")
+
+
 class CanaryPlacementTests(unittest.TestCase):
-    """Where the canary sits in `PATH` is the whole contract, so pin it."""
+    """Where the canary sits in `PATH` is the whole audit, so pin it."""
 
     def setUp(self) -> None:
-        self.stack = armed(Path("/canary"), ["/home/u/.local/bin"], Path("/dev/null"))
+        self.stack = armed(Path("/canary"), ["/usr/local/bin"], Path("/dev/null"))
         self.stack.__enter__()
         self.addCleanup(self.stack.__exit__, None, None, None)
 
     def test_canary_stays_out_until_an_audit_arms_it(self) -> None:
         os.environ.pop(CANARY_BIN_ENV)
-        untouched = "/fake:/home/u/.local/bin:/usr/bin"
+        untouched = f"/fake{os.pathsep}{SYSTEM_PATH}"
 
         self.assertEqual(_with_canary(untouched), untouched)
 
-    def test_canary_shadows_host_tools_without_shadowing_fixture_fakes(self) -> None:
-        spliced = _with_canary("/fake:/home/u/.local/bin:/usr/bin")
+    def test_canary_shadows_audited_dirs_without_shadowing_fixture_fakes(self) -> None:
+        spliced = _with_canary("/fake:/usr/local/bin:/usr/bin")
 
-        self.assertEqual(spliced, "/fake:/canary:/home/u/.local/bin:/usr/bin")
+        self.assertEqual(spliced, "/fake:/canary:/usr/local/bin:/usr/bin")
 
-    def test_path_pinned_to_system_prefixes_is_left_alone(self) -> None:
-        # A fixture that pins PATH to its fake bin plus the system prefixes is
+    def test_path_pinned_to_unix_prefixes_is_left_alone(self) -> None:
+        # A fixture that pins PATH to its fake bin plus the Unix prefixes is
         # already airtight. Splicing a canary in behind the fake bin anyway would
-        # put ~/.local/bin back within reach and report a leak the fixture had
-        # closed -- the audit inventing its own finding.
+        # put the audited directories back within reach and report a leak the
+        # fixture had closed -- the audit inventing its own finding.
         untouched = "/fake:/usr/bin:/bin"
 
         self.assertEqual(_with_canary(untouched), untouched)
 
     def test_canary_stays_behind_every_directory_the_fixture_prepended(self) -> None:
-        os.environ[CANARY_DIRS_ENV] = os.pathsep.join(["/home/u/.local/bin", "/opt/tools"])
+        os.environ[CANARY_DIRS_ENV] = os.pathsep.join(["/usr/local/bin", "/opt/tools"])
 
-        spliced = _with_canary("/fake:/fixture:/opt/tools:/home/u/.local/bin:/usr/bin")
+        spliced = _with_canary("/fake:/fixture:/opt/tools:/usr/local/bin:/usr/bin")
 
-        self.assertEqual(spliced, "/fake:/fixture:/canary:/opt/tools:/home/u/.local/bin:/usr/bin")
+        self.assertEqual(spliced, "/fake:/fixture:/canary:/opt/tools:/usr/local/bin:/usr/bin")
 
 
 class HostBinaryReachTests(unittest.TestCase):
@@ -224,8 +296,8 @@ class HostBinaryReachTests(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory(prefix="shell-isolation-")
         root = Path(cls.tmp.name)
         cls.log = root / "reach.log"
-        cls.dirs = host_tool_dirs()
-        cls.tools = host_tool_names()
+        cls.dirs = audited_dirs()
+        cls.tools = host_tool_names(cls.dirs)
         cls.bin = plant_canaries(root / "bin", sorted(cls.tools))
         cls.env = {
             **os.environ,
@@ -244,16 +316,12 @@ class HostBinaryReachTests(unittest.TestCase):
     def test_the_audit_intercepts_a_reach_it_is_meant_to_catch(self) -> None:
         # Without this, "no lane reaches a host binary" and "the canary never
         # made it onto PATH" are the same empty log -- and the second is how a
-        # guard rots into a no-op that reports success forever. Staged against a
-        # planted host directory rather than whatever this machine happens to
-        # have installed, so the check proves the same thing on a bare box and
-        # never runs a real binary to find out.
+        # guard rots into a no-op that reports success forever. Staged through a
+        # fixture-supplied `PATH=`, which is how a lane can still reopen the pin,
+        # rather than through whatever this machine happens to have installed.
         stage = Path(self.tmp.name) / "self-check"
         host_dir, witness = stage / "host", stage / "ran-for-real"
-        write_executable(
-            host_dir / "deneb-canary-probe",
-            f'#!/usr/bin/env bash\ntouch "{witness}"\n',
-        )
+        write_executable(host_dir / "deneb-canary-probe", f'#!/usr/bin/env bash\ntouch "{witness}"\n')
         canary = plant_canaries(stage / "canary", ["deneb-canary-probe"])
         log = stage / "reach.log"
         script = write_executable(
@@ -261,12 +329,11 @@ class HostBinaryReachTests(unittest.TestCase):
             "#!/usr/bin/env bash\ndeneb-canary-probe --canary-probe\n",
         )
 
-        with mock.patch.dict(os.environ, {"PATH": os.pathsep.join([str(host_dir), *SYSTEM_PREFIXES])}):
-            with armed(canary, [str(host_dir)], log):
-                env = isolated_env(stage)
+        with armed(canary, [str(host_dir)], log):
+            env = isolated_env(stage, PATH=os.pathsep.join([str(host_dir), SYSTEM_PATH]))
         subprocess.run([str(script)], env=env, capture_output=True, text=True, timeout=30, check=False)
 
-        self.assertEqual(log.read_text(encoding="utf-8").split("\n")[:-1], ["deneb-canary-probe --canary-probe"])
+        self.assertEqual(log.read_text(encoding="utf-8").splitlines(), ["deneb-canary-probe --canary-probe"])
         self.assertFalse(witness.exists(), "the canary logged the reach but the real binary ran anyway")
 
     def test_shell_lanes_reach_no_host_binary(self) -> None:
