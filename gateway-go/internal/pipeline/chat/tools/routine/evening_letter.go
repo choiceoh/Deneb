@@ -79,7 +79,7 @@ func ToolEveningLetter(opts ...EveningLetterOpts) toolport.ToolFunc {
 // formatEveningDiarySummary builds a concise diary entry from evening letter data.
 func formatEveningDiarySummary(dateStr string, results []any) string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "🌙 이브닝레터 수집 (%s)\n\n", dateStr)
+	fmt.Fprintf(&sb, "이브닝레터 수집 (%s)\n\n", dateStr)
 
 	if cal, ok := results[0].(calendarData); ok && cal.OK && len(cal.Events) > 0 {
 		fmt.Fprintf(&sb, "- 일정: %d건\n", len(cal.Events))

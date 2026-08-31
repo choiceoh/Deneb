@@ -7,7 +7,7 @@ metadata:
   {
     "deneb":
       {
-        "emoji": "🌅",
+        "emoji": "☼",
         "tags": ["briefing", "daily", "morning", "summary"],
         "triggers": ["모닝레터", "아침 브리핑", "오늘의 브리핑", "morning letter"],
         "requires_tools": ["morning_letter"],

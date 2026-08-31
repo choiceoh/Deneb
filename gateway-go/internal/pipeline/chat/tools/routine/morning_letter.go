@@ -98,7 +98,7 @@ func CollectMorningLetterData(ctx context.Context, opts MorningLetterOpts, now t
 // formatMorningDiarySummary builds a concise diary entry from morning letter data.
 func formatMorningDiarySummary(dateStr string, results []any) string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "🌅 모닝레터 수집 (%s)\n\n", dateStr)
+	fmt.Fprintf(&sb, "모닝레터 수집 (%s)\n\n", dateStr)
 
 	if w, ok := results[0].(weatherData); ok {
 		if w.OK {
