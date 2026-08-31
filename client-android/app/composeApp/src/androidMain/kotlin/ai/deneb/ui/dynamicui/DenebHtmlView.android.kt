@@ -61,7 +61,7 @@ private const val BASE_CSS =
 // Injected ahead of the document: mobile viewport + base style + the deneb
 // bridge. window.deneb.send(text) → the native "choice" callback (a user chat
 // message); the height reporter grows the frame to fit so the page never
-// double-scrolls.
+// double-scrolls (clamping lives in denebHtmlFrameHeight).
 private const val PRELUDE =
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
         "<style>$BASE_CSS</style>" +
@@ -71,9 +71,6 @@ private const val PRELUDE =
         "window.addEventListener(\"load\",r);" +
         "if(typeof ResizeObserver===\"function\"){new ResizeObserver(r).observe(document.documentElement)}" +
         "})()</script>"
-
-private const val MIN_HEIGHT_DP = 160
-private const val MAX_HEIGHT_DP = 900
 
 /**
  * Real WebView, hard-sandboxed for agent-authored documents: every network
@@ -88,7 +85,7 @@ actual fun DenebHtmlView(
     onSendPrompt: ((String) -> Unit)?,
     modifier: Modifier,
 ) {
-    var heightDp by remember { mutableIntStateOf(MIN_HEIGHT_DP) }
+    var heightDp by remember { mutableIntStateOf(DENEB_HTML_MIN_HEIGHT_DP) }
     val send by rememberUpdatedState(onSendPrompt)
     // Bumped when the renderer dies, to rebuild the WebView from scratch. The dead
     // one cannot be reused: every later call on it throws.
@@ -131,7 +128,7 @@ actual fun DenebHtmlView(
 
                             @JavascriptInterface
                             fun height(h: Int) {
-                                post { heightDp = (h + 8).coerceIn(MIN_HEIGHT_DP, MAX_HEIGHT_DP) }
+                                post { heightDp = denebHtmlFrameHeight(heightDp, h) }
                             }
                         },
                         "DenebNative",
