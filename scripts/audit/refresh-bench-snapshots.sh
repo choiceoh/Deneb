@@ -78,6 +78,14 @@ fi
 
 echo "bench snapshots refreshed under $ROOT/scripts/audit/"
 
+# Green path: retire any open ratchet issue so the issue's open/closed state IS
+# the live ratchet state (the breach half rides OnFailure= on the unit). The
+# notifier is best-effort and always exits 0 — a notification must never turn a
+# green refresh red.
+if [[ $ratchet_breached -eq 0 ]]; then
+  scripts/audit/bench-ratchet-notify.sh green || true
+fi
+
 if [[ $ratchet_breached -eq 1 ]]; then
   echo "ERROR: RSI Bench ratchet check did not pass — snapshots are written, but the" >&2
   echo "       run is reported as failed so the breach surfaces instead of decaying" >&2

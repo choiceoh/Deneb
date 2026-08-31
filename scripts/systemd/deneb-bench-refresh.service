@@ -2,6 +2,10 @@
 Description=Deneb daily Health+RSI bench snapshot refresh
 After=network-online.target
 Wants=network-online.target
+# The refresh raises exit 1 on a ratchet breach on purpose (see
+# refresh-bench-snapshots.sh). A `failed` unit is only an alarm if someone
+# hears it; this routes the verdict to the operator's issue tracker.
+OnFailure=deneb-bench-refresh-notify.service
 
 [Service]
 Type=oneshot

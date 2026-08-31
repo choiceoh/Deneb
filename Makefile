@@ -356,11 +356,13 @@ python-lint:
 shell-lint:
 	@git ls-files -z 'scripts/*.sh' 'scripts/**/*.sh' | xargs -0 shellcheck --severity=warning
 
-# Deterministic behavioral coverage for the operational topology shell. This is
-# named separately in CI so a deployment-script contract failure is visible
-# without searching the full Python support-tooling log.
+# Deterministic behavioral coverage for operational shell (topology parity, the
+# bench-ratchet operator notifier). Named separately in CI so a deployment- or
+# alerting-script contract failure is visible without searching the full Python
+# support-tooling log. The glob is self-extending: name a new suite
+# `test_<thing>_shell.py` and it joins this step.
 shell-behavior-test:
-	@python3 -m unittest discover -s scripts/audit -p 'test_topology_parity_shell.py' -v
+	@python3 -m unittest discover -s scripts/audit -p 'test_*_shell.py' -v
 
 # One-way baseline update. Review the report and diff; the command refuses to
 # lower the composite or any pillar and refuses new high/critical findings.
