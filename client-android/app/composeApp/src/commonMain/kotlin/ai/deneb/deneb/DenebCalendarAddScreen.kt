@@ -337,7 +337,13 @@ internal fun CalendarAddContent(
     }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text("여러 날", style = DenebType.body, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.weight(1f))
-        Switch(checked = multiDay, onCheckedChange = onMultiDay)
+        Switch(
+            checked = multiDay,
+            onCheckedChange = {
+                haptics.toggle(it)
+                onMultiDay(it)
+            },
+        )
     }
     Spacer(Modifier.height(8.dp))
     if (multiDay) {

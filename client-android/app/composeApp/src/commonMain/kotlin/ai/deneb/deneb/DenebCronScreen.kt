@@ -100,7 +100,7 @@ fun DenebCronScreen(
                     onCheckedChange = { e ->
                         scope.launch {
                             busy = true
-                            haptics.tap()
+                            haptics.toggle(e)
                             val ok = client.setCronEnabled(c.id, e)
                             reload()
                             if (!ok) status = "변경 실패"
