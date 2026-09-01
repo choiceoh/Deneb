@@ -2,6 +2,7 @@ package ai.deneb.deneb
 
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.SkeletonList
+import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -135,6 +136,7 @@ fun DenebEmpty(
 @Composable
 fun rememberDiscardGuard(dirty: Boolean, onLeave: () -> Unit): () -> Unit {
     var confirming by remember { mutableStateOf(false) }
+    val haptics = rememberHaptics()
     // System/gesture back: intercept only while there are unsaved edits.
     ai.deneb.PlatformBackHandler(enabled = dirty) { confirming = true }
     if (confirming) {
@@ -144,6 +146,9 @@ fun rememberDiscardGuard(dirty: Boolean, onLeave: () -> Unit): () -> Unit {
             text = { Text("저장하지 않은 변경사항이 사라집니다.") },
             confirmButton = {
                 TextButton(onClick = {
+                    // Throwing the edits away is the destructive commit; 계속 편집 is
+                    // the silent dismiss.
+                    haptics.reject()
                     confirming = false
                     onLeave()
                 }) { Text("나가기") }

@@ -199,6 +199,7 @@ fun DenebTodoAddScreen(
                 TextButton(
                     enabled = !deleting,
                     onClick = {
+                        haptics.reject()
                         confirmDelete = false
                         delete()
                     },
@@ -218,7 +219,7 @@ fun DenebTodoAddScreen(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    haptics.tap()
+                    haptics.confirm()
                     state.selectedDateMillis?.let { dueDate = todoUtcMillisToDate(it) }
                     showDatePicker = false
                 }) { Text("확인") }
@@ -232,7 +233,7 @@ fun DenebTodoAddScreen(
             onDismissRequest = { showTimePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    haptics.tap()
+                    haptics.confirm()
                     dueTime = LocalTime(state.hour, state.minute)
                     showTimePicker = false
                 }) { Text("확인") }

@@ -22,9 +22,16 @@ import androidx.compose.ui.platform.LocalHapticFeedback
  *  - [segmentTick] crossing a discrete step while dragging (slider notches)
  *  - [segmentFrequentTick] same, but tuned for steps crossed in RAPID succession
  *    (fast-scroll index flick) — a lighter tick that stays crisp instead of buzzy
- *  - [refresh]   a drag gesture arming past its threshold (pull-to-refresh commit)
+ *  - [arm]       a hand-rolled drag crossing its commit line — the MOVE on which a
+ *    release WOULD act (sibling swipe). Fires once per line per gesture, never on
+ *    the release: the moving surface is the release's feedback.
+ *  - [refresh]   the same tick named for pull-to-refresh (PullToRefreshBox.onRefresh,
+ *    BrowserPullTracker arming) — call sites pick the name that matches the gesture
  *
- * Back / cancel / dismiss stay silent (no call) by convention. The richer types
+ * Back / cancel / dismiss stay silent (no call) by convention. A DECISION dialog
+ * (one with a dismiss button) commits on its confirm button: [confirm], or [reject]
+ * when the decision destroys or discards — and the button that opened a
+ * destructive dialog already fires [reject] itself. The richer types
  * (Confirm/Reject/ToggleOn/ToggleOff) need Compose's expanded HapticFeedbackType
  * (Compose Multiplatform 1.7+); on Android they degrade gracefully to a sensible
  * vibration when the OS lacks the exact constant.
@@ -43,7 +50,8 @@ class Haptics(private val hf: HapticFeedback) {
     fun longPress() = hf.performHapticFeedback(HapticFeedbackType.LongPress)
     fun segmentTick() = hf.performHapticFeedback(HapticFeedbackType.SegmentTick)
     fun segmentFrequentTick() = hf.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
-    fun refresh() = hf.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+    fun arm() = hf.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+    fun refresh() = arm()
 }
 
 @Composable

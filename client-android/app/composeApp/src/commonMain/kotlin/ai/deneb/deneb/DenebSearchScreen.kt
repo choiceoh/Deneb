@@ -140,6 +140,7 @@ fun DenebSearchScreen(
     var factDetailState by remember { mutableStateOf(CurrentFactDetailState()) }
     var pendingFileOpen by remember { mutableStateOf<SearchFileResult?>(null) }
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
 
     fun run() {
         val q = boundSearchQuery(query.trim())
@@ -215,6 +216,7 @@ fun DenebSearchScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        haptics.confirm()
                         pendingFileOpen = null
                         onOpenFile(hit)
                     },

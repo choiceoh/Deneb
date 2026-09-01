@@ -295,6 +295,7 @@ private fun WormholeRotateDialog(
     var result by remember { mutableStateOf<String?>(null) }
     var resultProblem by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text("키 회전 · $modelName", style = DenebType.subject) },
@@ -326,6 +327,7 @@ private fun WormholeRotateDialog(
             TextButton(
                 enabled = !busy && key.isNotBlank(),
                 onClick = {
+                    haptics.confirm()
                     scope.launch {
                         busy = true
                         result = null

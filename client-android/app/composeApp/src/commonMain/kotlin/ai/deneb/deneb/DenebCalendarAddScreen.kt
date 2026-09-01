@@ -228,7 +228,7 @@ fun DenebCalendarAddScreen(
             onDismissRequest = { showStartDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    haptics.tap()
+                    haptics.confirm()
                     state.selectedDateMillis?.let {
                         val picked = utcMillisToLocalDate(it)
                         startDate = picked
@@ -250,7 +250,7 @@ fun DenebCalendarAddScreen(
             onDismissRequest = { showEndDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    haptics.tap()
+                    haptics.confirm()
                     state.selectedDateMillis?.let {
                         val picked = utcMillisToLocalDate(it)
                         endDate = picked
@@ -423,7 +423,7 @@ private fun TimePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = {
-                haptics.tap()
+                haptics.confirm()
                 onConfirm(LocalTime(state.hour, state.minute))
             }) { Text("확인") }
         },

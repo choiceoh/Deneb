@@ -238,6 +238,7 @@ internal fun WorkFeedRow(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        haptics.reject()
                         confirmTrash = false
                         onRunAction(item.id, "trash")
                     },
@@ -332,7 +333,7 @@ internal fun WorkFeedRow(
                         // the item from the store) and sits one 32dp target away from
                         // 보관, which is merely an ack. Confirm before destroying.
                         FeedActionButton(Icons.Outlined.Delete, "휴지통") {
-                            haptics.confirm()
+                            haptics.reject()
                             confirmTrash = true
                         }
                     }

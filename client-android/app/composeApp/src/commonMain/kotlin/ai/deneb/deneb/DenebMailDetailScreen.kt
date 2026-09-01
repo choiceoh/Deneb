@@ -534,7 +534,7 @@ fun DenebMailDetailScreen(
                         onClick = {
                             val q = askText.trim()
                             if (q.isNotEmpty() && !asking) {
-                                haptics.tap()
+                                haptics.confirm()
                                 askText = ""
                                 scope.launch {
                                     asking = true

@@ -2,6 +2,7 @@ package ai.deneb.deneb
 
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebUnderlineSearchField
+import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -250,6 +251,7 @@ private fun FleetDownloadDialog(
     onNotice: (String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
     var info by remember(model.id) { mutableStateOf<FleetHFInfo?>(null) }
     // 운영 규칙: 새 가중치는 우선 저장 노드(마스터 저장소)로.
     var target by remember(model.id) {
@@ -311,6 +313,7 @@ private fun FleetDownloadDialog(
             TextButton(
                 enabled = target.isNotBlank(),
                 onClick = {
+                    haptics.confirm()
                     onDismiss()
                     scope.launch {
                         val err = client.fleetDownloadModel(target, model.id) { jobId ->

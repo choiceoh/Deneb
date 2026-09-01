@@ -28,6 +28,7 @@ class HapticsTest {
         haptics.longPress()
         haptics.segmentTick()
         haptics.segmentFrequentTick()
+        haptics.arm()
         haptics.refresh()
 
         assertEquals(
@@ -40,6 +41,7 @@ class HapticsTest {
                 HapticFeedbackType.LongPress,
                 HapticFeedbackType.SegmentTick,
                 HapticFeedbackType.SegmentFrequentTick,
+                HapticFeedbackType.GestureThresholdActivate,
                 HapticFeedbackType.GestureThresholdActivate,
             ),
             feedback.events,

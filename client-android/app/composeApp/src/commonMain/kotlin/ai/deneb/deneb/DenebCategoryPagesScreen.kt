@@ -108,7 +108,6 @@ fun DenebCategoryPagesScreen(
 
     fun runDelete() {
         if (busy) return
-        haptics.reject()
         val paths = selected.toList()
         scope.launch {
             busy = true
@@ -124,7 +123,9 @@ fun DenebCategoryPagesScreen(
 
     fun runMove(target: String) {
         if (busy) return
-        haptics.tap()
+        // A move is a commit, and the picker row below turns its own tap off so
+        // this is the only buzz.
+        haptics.confirm()
         val paths = selected.toList()
         scope.launch {
             busy = true
@@ -143,7 +144,15 @@ fun DenebCategoryPagesScreen(
             onDismissRequest = { if (!busy) confirmDelete = false },
             title = { Text("페이지 삭제") },
             text = { Text("선택한 ${selected.size}개 페이지를 삭제할까요? 되돌릴 수 없습니다.") },
-            confirmButton = { TextButton(onClick = { runDelete() }, enabled = !busy) { Text("삭제") } },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        haptics.reject()
+                        runDelete()
+                    },
+                    enabled = !busy,
+                ) { Text("삭제") }
+            },
             dismissButton = { TextButton(onClick = { confirmDelete = false }, enabled = !busy) { Text("취소") } },
         )
     }
@@ -166,7 +175,7 @@ fun DenebCategoryPagesScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .denebPressable(onClick = { if (!busy) runMove(cat) })
+                                .denebPressable(haptic = false, onClick = { if (!busy) runMove(cat) })
                                 .padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

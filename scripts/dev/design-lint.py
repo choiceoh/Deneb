@@ -13,7 +13,7 @@ eye against the preview goldens.
     scripts/dev/design-lint.py          # the gate (also `make design-lint`)
 
 Entry points: main, rule_scaffolding_outweighs_content, rule_haptic_vocabulary,
-rule_no_duplicate_tap, rule_pressable_owns_tap.
+rule_no_duplicate_tap, rule_dialog_decision_haptic, rule_primitive_owns_haptic.
 Verify: scripts/dev/design-lint.py
 Boundary: this owns *mechanical* design rules for client-android only. Component
 choice and verification procedure live in docs/agent-rules/native-design-system.md;
@@ -62,6 +62,34 @@ HAPTIC_RULES = (
      "노치 슬라이더는 segmentTick() — steps 없는 연속 슬라이더는 넣지 말 것"),
     ("detectTapGestures(", "onDoubleTap", (".toggle(", ".toggleOn(", ".toggleOff(", ".tap("),
      "더블탭 줌은 상태 전환 — toggle(on)"),
+)
+
+# A dialog WITH a dismiss button is a decision, and its confirm button is where the
+# decision lands: confirm() for a commit (저장·보내기·다운로드·선택기 확인), reject()
+# when it destroys or discards (삭제·나가기·작업 취소). The 2026-09-01 sweep found 20
+# of 27 silent — every 삭제 dialog buzzed on the button that OPENED it and said
+# nothing on the button that deleted, which is the one decision the whole dialog
+# exists for. A one-button dialog is an acknowledgement (닫기/확인) and stays silent
+# under the dismiss convention, so it is not checked; neither is an empty
+# confirmButton = {} (a picker list that commits from its rows).
+DIALOG_ANCHORS = ("AlertDialog(", "DatePickerDialog(")
+DIALOG_WANTED = re.compile(r"[Hh]aptics?\.(confirm|reject)\(")
+
+# Primitives that own a haptic on behalf of every caller. No call-site rule can see
+# these: delete the call inside the primitive and every surface stays 'correct'
+# precisely BECAUSE it delegates — verified for denebPressable by removing the call
+# and watching the call-site rules stay green. (path under CLIENT_SRC, function
+# anchor, wanted call, hint)
+PRIMITIVE_RULES = (
+    ("commonMain/kotlin/ai/deneb/ui/DenebMotion.kt", "fun Modifier.denebPressable",
+     re.compile(r"[Hh]aptics?\.tap\(\)"),
+     "denebPressable 이 tap() 을 부르지 않는다 — ~26개 표면의 탭 햅틱을 대신 소유한다"),
+    ("commonMain/kotlin/ai/deneb/ui/DenebDesign.kt", "fun DenebSiblingSwipeHost",
+     re.compile(r"[Hh]aptics?\.arm\(\)"),
+     "DenebSiblingSwipeHost 가 arm() 을 부르지 않는다 — 피드|결재|로그 스와이프의 문턱 틱을 소유한다"),
+    ("commonMain/kotlin/ai/deneb/ui/DenebDesign.kt", "fun DenebTitlePivot",
+     re.compile(r"[Hh]aptics?\.tap\(\)"),
+     "DenebTitlePivot 이 tap() 을 부르지 않는다 — 피벗 라벨의 탭을 소유하고 화면은 맨 람다만 넘긴다"),
 )
 
 
@@ -151,35 +179,61 @@ def rule_no_duplicate_tap() -> list[str]:
     return hits
 
 
-def rule_pressable_owns_tap() -> list[str]:
-    """denebPressable must fire the tap itself — ~26 surfaces depend on it.
+def rule_dialog_decision_haptic() -> list[str]:
+    """A decision dialog's confirm button must carry confirm() or reject()."""
+    hits: list[str] = []
+    for path in sorted(CLIENT_SRC.rglob("*.kt")):
+        if "Test" in path.name or "RenderPreview" in path.name:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for anchor in DIALOG_ANCHORS:
+            at = 0
+            while (at := text.find(anchor, at)) >= 0:
+                call = _balanced(text, at + len(anchor) - 1, "(", ")")
+                at += len(anchor)
+                if "confirmButton" not in call or "dismissButton" not in call:
+                    continue
+                body = _balanced(call, call.find("confirmButton"), "{", "}")
+                if body.strip("{} \n\t") == "" or DIALOG_WANTED.search(body):
+                    continue
+                line = text.count("\n", 0, at) + 1
+                hits.append(f"{path.relative_to(REPO)}:{line}")
+    return hits
 
-    The other two rules read call sites. This one reads the primitive, because
-    that is where a single deletion turns every pressable surface silent at once
-    and no call-site rule would notice: they are all correct precisely BECAUSE
-    they delegate. Verified by removing the call and watching the other rules
-    stay green.
+
+def rule_primitive_owns_haptic() -> list[str]:
+    """Each primitive in PRIMITIVE_RULES must fire its haptic itself.
+
+    The other rules read call sites. This one reads the primitives, because
+    that is where a single deletion turns every delegating surface silent at
+    once and no call-site rule would notice.
     """
-    path = CLIENT_SRC / "commonMain/kotlin/ai/deneb/ui/DenebMotion.kt"
-    if not path.exists():
-        return [f"{path.relative_to(REPO)} 없음 — denebPressable 이 옮겨갔다면 이 규칙도 옮겨라"]
-    text = path.read_text(encoding="utf-8")
-    body = _balanced(text, text.find("fun Modifier.denebPressable"), "{", "}")
-    if re.search(r"[Hh]aptics?\.tap\(\)", body):
-        return []
-    return [f"{path.relative_to(REPO)}  — denebPressable 이 tap() 을 부르지 않는다"]
+    hits: list[str] = []
+    for rel, anchor, wanted, hint in PRIMITIVE_RULES:
+        path = CLIENT_SRC / rel
+        if not path.exists():
+            hits.append(f"{path.relative_to(REPO)} 없음 — {anchor} 가 옮겨갔다면 이 규칙도 옮겨라")
+            continue
+        text = path.read_text(encoding="utf-8")
+        start = text.find(anchor)
+        if start < 0:
+            hits.append(f"{path.relative_to(REPO)}  — {anchor} 를 찾지 못했다 (이름이 바뀌었으면 규칙도 바꿔라)")
+            continue
+        if not wanted.search(_balanced(text, start, "{", "}")):
+            hits.append(f"{path.relative_to(REPO)}  — {hint}")
+    return hits
 
 
 def main() -> int:
-    primitive = rule_pressable_owns_tap()
+    primitive = rule_primitive_owns_haptic()
     if primitive:
-        print("design-lint: 누름 프리미티브가 촉각을 잃었다\n")
+        print(f"design-lint: 프리미티브가 촉각을 잃었다 {len(primitive)}건\n")
         for h in primitive:
             print(f"  {h}")
         print(
-            "\ndenebPressable 은 ~26개 표면의 탭 햅틱을 대신 소유한다. 여기서 지우면"
-            "\n호출부는 전부 '올바른' 채로 앱 전체가 조용해지고, 호출부 규칙은 아무것도"
-            "\n눈치채지 못한다."
+            "\n이 프리미티브들은 호출부 대신 햅틱을 소유한다. 여기서 지우면 호출부는 전부"
+            "\n'올바른' 채로 그 표면이 통째로 조용해지고, 호출부 규칙은 아무것도 눈치채지"
+            "\n못한다."
         )
         return 1
 
@@ -206,9 +260,21 @@ def main() -> int:
         )
         return 1
 
+    dialogs = rule_dialog_decision_haptic()
+    if dialogs:
+        print(f"design-lint: 결정 다이얼로그 무음 {len(dialogs)}건 — 확인 버튼에 confirm()/reject() 가 없다\n")
+        for d in dialogs:
+            print(f"  {d}")
+        print(
+            "\n취소 버튼이 있는 다이얼로그는 결정이고, 결정은 확인 버튼에서 난다 — 연 버튼이 아니라."
+            "\n커밋(저장·보내기·선택기 확인)=confirm(), 파괴·폐기(삭제·나가기·작업 취소)=reject()."
+            "\n한 버튼짜리 알림(닫기/확인)은 dismiss 관례대로 무음이며 이 규칙이 검사하지 않는다."
+        )
+        return 1
+
     hits = rule_scaffolding_outweighs_content()
     if not hits:
-        print("design-lint: ADR 0007 원리 위반 없음 · 햅틱 어휘 누락 없음")
+        print("design-lint: ADR 0007 원리 위반 없음 · 햅틱 어휘 누락 없음 · 결정 다이얼로그 무음 없음")
         return 0
 
     print(f"design-lint: 원리 1 위반 {len(hits)}건 — 비계가 콘텐츠보다 무겁다\n")

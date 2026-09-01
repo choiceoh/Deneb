@@ -2,6 +2,7 @@ package ai.deneb.deneb
 
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.JetBrainsMonoFamily
+import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -61,6 +62,7 @@ internal fun FleetNodesPage(nodes: List<FleetNode>, loaded: Boolean) {
 
 @Composable
 internal fun FleetJobsPage(client: DenebGatewayClient, jobs: List<FleetJob>, loaded: Boolean, onNotice: (String) -> Unit) {
+    val haptics = rememberHaptics()
     var openLogJob by remember { mutableStateOf<String?>(null) }
     var cancelTarget by remember { mutableStateOf<FleetJob?>(null) }
     val scope = rememberCoroutineScope()
@@ -90,6 +92,8 @@ internal fun FleetJobsPage(client: DenebGatewayClient, jobs: List<FleetJob>, loa
             text = { Text("\"${job.title}\" 작업을 취소할까요?\n전송류 작업은 재시도하면 끊긴 지점부터 이어받습니다.") },
             confirmButton = {
                 TextButton(onClick = {
+                    // Killing a running job is the negative commit, not a dismiss.
+                    haptics.reject()
                     cancelTarget = null
                     scope.launch {
                         val err = client.fleetCancelJob(job.id)

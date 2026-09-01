@@ -232,7 +232,7 @@ fun DenebOrgChartScreen(
                     notice = null
                 },
                 onDelete = {
-                    haptics.tap()
+                    haptics.reject()
                     nodes = removeSubtree(nodes, editing.id)
                     editingId = null
                     notice = null
