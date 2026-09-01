@@ -247,7 +247,6 @@ fun DenebCategoryPagesScreen(
                                 .fillMaxWidth()
                                 .denebPressable(
                                     onClick = {
-                                        haptics.tap()
                                         if (selecting) {
                                             if (isSelected) selected.remove(page.path) else selected.add(page.path)
                                             if (selected.isEmpty()) selecting = false

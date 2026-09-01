@@ -564,7 +564,6 @@ internal fun CalendarDayList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .denebPressable(onClick = {
-                        haptics.tap()
                         onOpen(event.id)
                     })
                     .padding(vertical = 12.dp),

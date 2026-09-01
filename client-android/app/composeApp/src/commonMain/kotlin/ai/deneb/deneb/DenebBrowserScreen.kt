@@ -1146,7 +1146,6 @@ internal fun BrowserBookmarksList(
                     .fillMaxWidth()
                     .denebPressable(
                         onClick = {
-                            haptics.tap()
                             onOpen(bookmark)
                         },
                         onLongClick = {

@@ -323,7 +323,6 @@ internal fun ModelTab(client: DenebGatewayClient) {
                             .denebPressable(
                                 enabled = !isCurrent && !switching,
                                 onClick = {
-                                    haptics.tap()
                                     scope.launch {
                                         switching = true
                                         switchFailed = !client.setRoleModel(model.id, role.wire)
