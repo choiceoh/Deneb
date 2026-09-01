@@ -62,7 +62,6 @@ internal fun MessageActionsSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .denebPressable(onClick = {
-                            haptics.tap()
                             onDismiss()
                             action.run()
                         })

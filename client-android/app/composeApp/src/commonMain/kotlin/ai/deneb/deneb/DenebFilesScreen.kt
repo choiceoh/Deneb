@@ -305,7 +305,6 @@ fun DenebFilesScreen(
                 Modifier
                     .fillMaxWidth()
                     .denebPressable(onClick = {
-                        haptics.tap()
                         goUp()
                     })
                     .padding(horizontal = 24.dp, vertical = 12.dp),

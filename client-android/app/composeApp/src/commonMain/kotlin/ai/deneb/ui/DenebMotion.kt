@@ -1,5 +1,6 @@
 package ai.deneb.ui
 
+import ai.deneb.ui.components.rememberHaptics
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
@@ -166,6 +167,18 @@ val denebFadeExit: ExitTransition = fadeOut(tween(DenebMotion.DurationMedium, ea
  * long-press affordance (mail multi-select) keep it; [onClickLabel] carries the
  * TalkBack action label for rows that set one. Both default off, so existing
  * call sites are untouched.
+ *
+ * The tap haptic fires HERE, not at the call site. This modifier already owns
+ * what a press feels like — it animates the scale and keeps the ripple — and
+ * touch is the third channel of the same event. Leaving it to call sites meant
+ * every new row had to remember: the 2026-09-01 sweep found 17 pressable
+ * surfaces and 7 settings rows silent while their neighbours buzzed, and the
+ * design rule could only ask people to remember. combinedClickable already
+ * fires the LONG-press haptic for free; this makes the short press match.
+ *
+ * [haptic] opts out for the rare call site whose click means something richer
+ * than a tap (a row that toggles fires toggle(on) itself) — passing false there
+ * keeps it from buzzing twice.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -176,7 +189,17 @@ fun Modifier.denebPressable(
     role: Role? = null,
     onClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
+    haptic: Boolean = true,
 ): Modifier {
+    val haptics = rememberHaptics()
+    val press = if (haptic) {
+        {
+            haptics.tap()
+            onClick()
+        }
+    } else {
+        onClick
+    }
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -196,7 +219,7 @@ fun Modifier.denebPressable(
             onClickLabel = onClickLabel,
             role = role,
             onLongClick = onLongClick,
-            onClick = onClick,
+            onClick = press,
         )
     } else {
         scaled.clickable(
@@ -205,7 +228,7 @@ fun Modifier.denebPressable(
             enabled = enabled,
             onClickLabel = onClickLabel,
             role = role,
-            onClick = onClick,
+            onClick = press,
         )
     }
 }

@@ -123,7 +123,6 @@ fun DenebCategoriesScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .denebPressable(onClick = {
-                                    haptics.tap()
                                     onOpenCategory(cat.name)
                                 })
                                 .padding(vertical = 14.dp),

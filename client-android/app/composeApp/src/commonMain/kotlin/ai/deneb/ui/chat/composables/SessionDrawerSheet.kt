@@ -418,7 +418,6 @@ private fun SessionItem(
                 .fillMaxWidth()
                 .denebPressable(
                     onClick = {
-                        haptics.tap()
                         onClick()
                     },
                     onLongClick = onLongClick,
@@ -650,6 +649,9 @@ private fun SessionFolderHeader(
                 },
                 onClickLabel = if (expanded) collapseLabel else expandLabel,
                 role = Role.Button,
+                // The click means expand/collapse, not a plain tap — this row owns
+                // the richer type and turns the primitive's tap off.
+                haptic = false,
             )
             .handCursor()
             .padding(vertical = 12.dp),
