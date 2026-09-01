@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.components.rememberHaptics
 import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.Context
@@ -91,6 +92,7 @@ actual fun DenebWebView(
     // once the reload starts, the existing determinate progress bar in the
     // browser chrome takes over.
     var pullFraction by remember(state) { mutableFloatStateOf(0f) }
+    val pullHaptics = rememberHaptics()
     val context = LocalContext.current
 
     // Web forms with <input type="file"> need an activity result; without one the
@@ -165,6 +167,10 @@ actual fun DenebWebView(
                 attachPullToRefresh(
                     web = web,
                     onPull = { pullFraction = it },
+                    // Fires while the finger is still down, the instant the pull
+                    // passes its threshold — every other pull-to-refresh surface
+                    // buzzes there, and the browser was the one that stayed silent.
+                    onArm = { pullHaptics.refresh() },
                     onTrigger = {
                         pullFraction = 0f
                         state.reload()
@@ -846,7 +852,12 @@ private const val PULL_REFRESH_THRESHOLD_DP = 84f
  * rides Compose nested scroll, and a WebView is not a Compose nested-scroll child,
  * so the box would render an indicator that never fires.
  */
-private fun attachPullToRefresh(web: WebView, onPull: (Float) -> Unit, onTrigger: () -> Unit) {
+private fun attachPullToRefresh(
+    web: WebView,
+    onPull: (Float) -> Unit,
+    onArm: () -> Unit,
+    onTrigger: () -> Unit,
+) {
     val tracker = BrowserPullTracker(PULL_REFRESH_THRESHOLD_DP * web.resources.displayMetrics.density)
     web.setOnTouchListener { _, event ->
         val phase = when (event.actionMasked) {
@@ -859,6 +870,7 @@ private fun attachPullToRefresh(web: WebView, onPull: (Float) -> Unit, onTrigger
         if (phase != null) {
             val trigger = tracker.onEvent(phase, event.y, web.scrollY)
             onPull(tracker.fraction)
+            if (tracker.justArmed) onArm()
             if (trigger) onTrigger()
         }
         false
