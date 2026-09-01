@@ -22,15 +22,31 @@ internal enum class BrowserPullPhase { DOWN, MOVE, UP, CANCEL }
 internal class BrowserPullTracker(private val thresholdPx: Float) {
     private var startY = 0f
     private var armed = false
+    private var buzzed = false
 
     /** 0f..1f — how close the current drag is to triggering. 0f when not pulling. */
     var fraction: Float = 0f
+        private set
+
+    /**
+     * True on exactly the one MOVE where the drag first reaches the threshold —
+     * the moment the release WOULD reload. That is when the haptic fires, not on
+     * the release itself: the point of the tick is to tell the finger "let go now"
+     * while it can still change its mind, which is the same contract every other
+     * pull-to-refresh surface has (Haptics.refresh, `PTR 트리거=refresh`).
+     *
+     * Once per gesture. A drag that hovers at the threshold, backs off and returns
+     * must not buzz again — the second crossing is the same decision.
+     */
+    var justArmed: Boolean = false
         private set
 
     /** True exactly once, on the release that should reload. */
     fun onEvent(phase: BrowserPullPhase, y: Float, scrollY: Int): Boolean {
         when (phase) {
             BrowserPullPhase.DOWN -> {
+                justArmed = false
+                buzzed = false
                 startY = y
                 // Only a drag that BEGINS at the top can be a pull. Scrolling up to
                 // the top and continuing must stay a scroll, or every read of a long
@@ -40,6 +56,7 @@ internal class BrowserPullTracker(private val thresholdPx: Float) {
             }
 
             BrowserPullPhase.MOVE -> {
+                justArmed = false
                 if (!armed) return false
                 if (scrollY != 0) {
                     // The page moved under the finger; this gesture is a scroll now.
@@ -47,10 +64,15 @@ internal class BrowserPullTracker(private val thresholdPx: Float) {
                     fraction = 0f
                 } else {
                     fraction = if (thresholdPx <= 0f) 0f else ((y - startY) / thresholdPx).coerceIn(0f, 1f)
+                    if (fraction >= 1f && !buzzed) {
+                        justArmed = true
+                        buzzed = true
+                    }
                 }
             }
 
             BrowserPullPhase.UP -> {
+                justArmed = false
                 val trigger = armed && scrollY == 0 && thresholdPx > 0f && y - startY >= thresholdPx
                 armed = false
                 fraction = 0f
@@ -58,6 +80,7 @@ internal class BrowserPullTracker(private val thresholdPx: Float) {
             }
 
             BrowserPullPhase.CANCEL -> {
+                justArmed = false
                 armed = false
                 fraction = 0f
             }
