@@ -30,9 +30,6 @@ func TestIsAdvisory(t *testing.T) {
 			if got := IsAdvisory(LogLine{Msg: tc.msg}); got != tc.want {
 				t.Fatalf("IsAdvisory(%q) = %v, want %v", tc.msg, got, tc.want)
 			}
-			if got := IsAdvisoryMessage(tc.msg); got != tc.want {
-				t.Fatalf("IsAdvisoryMessage(%q) = %v, want %v", tc.msg, got, tc.want)
-			}
 		})
 	}
 }

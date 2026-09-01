@@ -33,8 +33,3 @@ var advisoryPattern = regexp.MustCompile(
 func IsAdvisory(line LogLine) bool {
 	return advisoryPattern.MatchString(line.Msg)
 }
-
-// IsAdvisoryMessage is IsAdvisory for a bare message string.
-func IsAdvisoryMessage(msg string) bool {
-	return advisoryPattern.MatchString(msg)
-}
