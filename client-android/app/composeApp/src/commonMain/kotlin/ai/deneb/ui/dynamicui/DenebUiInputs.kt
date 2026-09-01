@@ -501,6 +501,7 @@ internal fun RenderSlider(
     isInteractive: Boolean,
     formState: SnapshotStateMap<String, String>,
 ) {
+    val inputHaptics = rememberHaptics()
     // Guard degenerate ranges: a model can emit min>=max ("min=100 max=0").
     // Slider needs start < end, and value.coerceIn(min, max) THROWS on an
     // inverted range — which would blank the whole message render. Normalize
@@ -533,7 +534,13 @@ internal fun RenderSlider(
         }
         Slider(
             value = currentValue.coerceIn(min, max),
-            onValueChange = { formState[node.id] = formatSliderValue(it, step) },
+            // formatSliderValue snaps to the step, so a changed formatted value is
+            // a crossed notch; the raw drag changes every pixel.
+            onValueChange = {
+                val snapped = formatSliderValue(it, step)
+                if (snapped != formState[node.id]) inputHaptics.segmentTick()
+                formState[node.id] = snapped
+            },
             valueRange = min..max,
             steps = steps.coerceAtLeast(0),
             enabled = isInteractive,

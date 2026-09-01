@@ -12,7 +12,7 @@ eye against the preview goldens.
 
     scripts/dev/design-lint.py          # the gate (also `make design-lint`)
 
-Entry points: main, rule_scaffolding_outweighs_content.
+Entry points: main, rule_scaffolding_outweighs_content, rule_haptic_vocabulary.
 Verify: scripts/dev/design-lint.py
 Boundary: this owns *mechanical* design rules for client-android only. Component
 choice and verification procedure live in docs/agent-rules/native-design-system.md;
@@ -33,6 +33,35 @@ SETTINGS_TREE = REPO / "client-android/app/composeApp/src/commonMain/kotlin/ai/d
 HEAVY_TOKEN = "DenebType.cardTitle"
 SETTINGS_FILES = ("Config", "DenebConfigScreen")
 
+CLIENT_SRC = REPO / "client-android/app/composeApp/src"
+
+# native-design-system.md: "햅틱은 시맨틱 어휘로만 … 탭=tap, 커밋=confirm, 파괴=reject,
+# 토글=toggle(on), PTR 트리거=refresh". The vocabulary was complete and named in the
+# rule; what was missing was anything that noticed a call site skipping it. The
+# 2026-09-01 sweep found ten — four silent switches, two switches buzzing tap()
+# where the toggle type exists, two stepped sliders with no notch tick, and
+# double-tap zoom. The browser's pull-to-refresh had been silent the same way.
+#
+# Only interactions whose haptic the rule ASSIGNS are checked, and the ones it
+# assigns silence to are deliberately absent: a continuous Slider must not tick
+# (segmentTick is for notches), and back/cancel/dismiss stay quiet by convention.
+#
+# Every wanted token carries its receiver dot on purpose. The first draft of this
+# rule matched a bare "toggle(" and silently passed ConfigWormholeTab, whose
+# handler calls a LOCAL function named toggle() — a lint that reports fewer
+# violations than a hand count is worse than no lint, because the number looks
+# authoritative.
+HAPTIC_RULES = (
+    ("Switch(", "onCheckedChange", (".toggle(", ".toggleOn(", ".toggleOff("),
+     "스위치는 toggle(on) — 상태가 뒤집히는 것이지 눌린 게 아니다"),
+    ("Checkbox(", "onCheckedChange", (".toggle(", ".toggleOn(", ".toggleOff("),
+     "체크박스도 상태 전환 — toggle(on) (부모 행이 처리하면 onCheckedChange = null)"),
+    ("Slider(", "onValueChange", (".segmentTick(", ".segmentFrequentTick("),
+     "노치 슬라이더는 segmentTick() — steps 없는 연속 슬라이더는 넣지 말 것"),
+    ("detectTapGestures(", "onDoubleTap", (".toggle(", ".toggleOn(", ".toggleOff(", ".tap("),
+     "더블탭 줌은 상태 전환 — toggle(on)"),
+)
+
 
 def rule_scaffolding_outweighs_content() -> list[str]:
     """Principle 1 — the heaviest type token must not label a settings screen."""
@@ -46,10 +75,68 @@ def rule_scaffolding_outweighs_content() -> list[str]:
     return hits
 
 
+def _balanced(text: str, start: int, open_ch: str, close_ch: str) -> str:
+    """The substring from the first [open_ch] at/after [start] to its match."""
+    i = text.find(open_ch, start)
+    if i < 0:
+        return ""
+    depth = 0
+    for j in range(i, len(text)):
+        if text[j] == open_ch:
+            depth += 1
+        elif text[j] == close_ch:
+            depth -= 1
+            if depth == 0:
+                return text[i : j + 1]
+    return text[i:]
+
+
+def rule_haptic_vocabulary() -> list[str]:
+    """The semantic haptic the design rule assigns must actually be called."""
+    hits: list[str] = []
+    for path in sorted(CLIENT_SRC.rglob("*.kt")):
+        rel = str(path.relative_to(REPO))
+        # Previews never receive touches, and a test asserts logic, not feel.
+        if "Test" in path.name or "RenderPreview" in path.name:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for anchor, param, wanted, hint in HAPTIC_RULES:
+            at = 0
+            while (at := text.find(anchor, at)) >= 0:
+                call = _balanced(text, at + len(anchor) - 1, "(", ")")
+                at += len(anchor)
+                if param not in call:
+                    continue
+                # A null handler means the parent row owns the click — and its haptic.
+                if f"{param} = null" in call:
+                    continue
+                # A Slider with no steps is continuous; a tick per pixel is a buzz.
+                if anchor == "Slider(" and "steps" not in call:
+                    continue
+                body = _balanced(call, call.find(param), "{", "}")
+                if any(w in body for w in wanted):
+                    continue
+                line = text.count("\n", 0, at) + 1
+                hits.append(f"{rel}:{line}  — {hint}")
+    return hits
+
+
 def main() -> int:
+    haptic = rule_haptic_vocabulary()
+    if haptic:
+        print(f"design-lint: 햅틱 어휘 누락 {len(haptic)}건 — 룰이 지정한 촉각이 호출되지 않는다\n")
+        for h in haptic:
+            print(f"  {h}")
+        print(
+            "\n어휘는 ui/components/Haptics.kt에 이미 있다. 빠진 건 호출부다."
+            "\n의도적 무음(뒤로·취소·dismiss·연속 슬라이더)은 이 규칙이 검사하지 않는다."
+            "\n\n근거: docs/agent-rules/native-design-system.md — 햅틱은 시맨틱 어휘로만"
+        )
+        return 1
+
     hits = rule_scaffolding_outweighs_content()
     if not hits:
-        print("design-lint: ADR 0007 원리 위반 없음")
+        print("design-lint: ADR 0007 원리 위반 없음 · 햅틱 어휘 누락 없음")
         return 0
 
     print(f"design-lint: 원리 1 위반 {len(hits)}건 — 비계가 콘텐츠보다 무겁다\n")

@@ -6,6 +6,7 @@ import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.icons.outlined.Bolt
@@ -60,6 +61,7 @@ import kotlinx.coroutines.launch
 // key-health problems (the two-accent doctrine).
 @Composable
 internal fun WormholeTab(client: DenebGatewayClient) {
+    val wormholeHaptics = rememberHaptics()
     var status by remember { mutableStateOf<WormholeStatusOut?>(null) }
     var loading by remember { mutableStateOf(true) }
     var failed by remember { mutableStateOf(false) }
@@ -113,7 +115,12 @@ internal fun WormholeTab(client: DenebGatewayClient) {
                                 trailing = {
                                     Switch(
                                         checked = s.localOnly,
-                                        onCheckedChange = { if (!busy) toggle("localOnly", it) },
+                                        onCheckedChange = {
+                                            if (!busy) {
+                                                wormholeHaptics.toggle(it)
+                                                toggle("localOnly", it)
+                                            }
+                                        },
                                         enabled = !busy,
                                     )
                                 },
@@ -128,7 +135,12 @@ internal fun WormholeTab(client: DenebGatewayClient) {
                                 trailing = {
                                     Switch(
                                         checked = s.effortRouting,
-                                        onCheckedChange = { if (!busy) toggle("effortRouting", it) },
+                                        onCheckedChange = {
+                                            if (!busy) {
+                                                wormholeHaptics.toggle(it)
+                                                toggle("effortRouting", it)
+                                            }
+                                        },
                                         enabled = !busy,
                                     )
                                 },

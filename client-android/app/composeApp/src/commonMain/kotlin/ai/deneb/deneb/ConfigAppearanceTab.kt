@@ -66,7 +66,12 @@ internal fun AppearanceTab(appSettings: AppSettings) {
             val sliderSteps = (((maxScale - minScale) / 0.05f).roundToInt() - 1).coerceAtLeast(0)
             Slider(
                 value = sliderValue,
-                onValueChange = { sliderValue = it },
+                // steps snaps the value, so a changed value IS a crossed notch —
+                // ticking on every onValueChange would buzz per pixel instead.
+                onValueChange = {
+                    if (it != sliderValue) haptics.segmentTick()
+                    sliderValue = it
+                },
                 onValueChangeFinished = { appSettings.setUiScale(sliderValue) },
                 valueRange = minScale..maxScale,
                 steps = sliderSteps,

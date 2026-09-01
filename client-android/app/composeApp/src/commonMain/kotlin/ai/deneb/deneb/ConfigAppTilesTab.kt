@@ -4,6 +4,7 @@ import ai.deneb.data.AppSettings
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -53,6 +54,7 @@ internal fun AppTilesTab(appSettings: AppSettings) {
  *  called with the tile key and the new HIDDEN state (true = now hidden). */
 @Composable
 internal fun AppTilesContent(hidden: Set<String>, onToggle: (key: String, hidden: Boolean) -> Unit) {
+    val tileHaptics = rememberHaptics()
     Column(
         Modifier
             .fillMaxSize()
@@ -81,7 +83,10 @@ internal fun AppTilesContent(hidden: Set<String>, onToggle: (key: String, hidden
                         Switch(
                             checked = shown,
                             // checked = 표시; flipping it OFF hides the tile (onToggle hidden=true).
-                            onCheckedChange = { isShown -> onToggle(entry.key, !isShown) },
+                            onCheckedChange = { isShown ->
+                                tileHaptics.toggle(isShown)
+                                onToggle(entry.key, !isShown)
+                            },
                         )
                     },
                 )

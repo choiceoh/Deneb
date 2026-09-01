@@ -2,6 +2,7 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.saveFileToDevice
 import ai.deneb.shareImageToApps
+import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.icons.filled.Download
 import androidx.compose.foundation.Image
@@ -56,6 +57,7 @@ internal fun FullScreenImageViewerOverlay(
     pngBytes: ByteArray?,
     onDismiss: () -> Unit,
 ) {
+    val viewerHaptics = rememberHaptics()
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     val scope = rememberCoroutineScope()
@@ -90,10 +92,14 @@ internal fun FullScreenImageViewerOverlay(
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onDoubleTap = {
+                            // Zoom is a state flip, not a press — the tick tells the
+                            // finger which way it went without looking.
                             if (scale > 1f) {
+                                viewerHaptics.toggle(false)
                                 scale = 1f
                                 offset = Offset.Zero
                             } else {
+                                viewerHaptics.toggle(true)
                                 scale = 2.5f
                             }
                         },
@@ -172,6 +178,7 @@ internal fun FullScreenAsyncImageViewerOverlay(
     model: Any?,
     onDismiss: () -> Unit,
 ) {
+    val viewerHaptics = rememberHaptics()
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
 
@@ -204,10 +211,14 @@ internal fun FullScreenAsyncImageViewerOverlay(
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onDoubleTap = {
+                            // Zoom is a state flip, not a press — the tick tells the
+                            // finger which way it went without looking.
                             if (scale > 1f) {
+                                viewerHaptics.toggle(false)
                                 scale = 1f
                                 offset = Offset.Zero
                             } else {
+                                viewerHaptics.toggle(true)
                                 scale = 2.5f
                             }
                         },

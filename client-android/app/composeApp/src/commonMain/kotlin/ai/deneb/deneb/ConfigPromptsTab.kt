@@ -319,6 +319,7 @@ private fun TopicDocDetailPane(
     onBack: () -> Unit,
     onChanged: () -> Unit,
 ) {
+    val promptHaptics = rememberHaptics()
     var doc by remember { mutableStateOf(initial) }
     var saved by rememberSaveable { mutableStateOf(initial?.content.orEmpty()) }
     var draft by rememberSaveable { mutableStateOf(initial?.content.orEmpty()) }
@@ -413,7 +414,10 @@ private fun TopicDocDetailPane(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
                         checked = applyNow,
-                        onCheckedChange = { applyNow = it },
+                        onCheckedChange = {
+                            promptHaptics.toggle(it)
+                            applyNow = it
+                        },
                         enabled = !saving,
                     )
                     Text(
