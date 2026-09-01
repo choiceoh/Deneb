@@ -604,13 +604,17 @@ private fun RenameConversationDialog(
 ) {
     var draft by remember(initial) { mutableStateOf(initial) }
     val trimmed = draft.trim()
+    val haptics = rememberHaptics()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("이름 변경", style = DenebType.rowTitle) },
         confirmButton = {
             TextButton(
                 enabled = trimmed.isNotEmpty(),
-                onClick = { onSave(trimmed) },
+                onClick = {
+                    haptics.confirm()
+                    onSave(trimmed)
+                },
             ) { Text("저장") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },

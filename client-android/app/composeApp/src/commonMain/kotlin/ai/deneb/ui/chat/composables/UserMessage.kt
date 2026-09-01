@@ -232,12 +232,16 @@ internal fun SelectTextDialog(text: String, onDismiss: () -> Unit) {
 @Composable
 internal fun EditResendDialog(initial: String, onSend: (String) -> Unit, onDismiss: () -> Unit) {
     var draft by remember(initial) { mutableStateOf(initial) }
+    val haptics = rememberHaptics()
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(
                 enabled = draft.trim().isNotEmpty(),
-                onClick = { onSend(draft.trim()) },
+                onClick = {
+                    haptics.confirm()
+                    onSend(draft.trim())
+                },
             ) { Text("보내기") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },

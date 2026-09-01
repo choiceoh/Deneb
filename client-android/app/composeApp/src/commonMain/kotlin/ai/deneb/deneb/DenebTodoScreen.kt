@@ -209,6 +209,7 @@ fun DenebTodoScreen(
             text = { Text("'${todo.title.ifBlank { "제목 없음" }}' 할 일을 삭제할까요? 되돌릴 수 없습니다.") },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.reject()
                     confirmDelete = null
                     delete(todo)
                 }) {

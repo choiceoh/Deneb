@@ -2,6 +2,7 @@ package ai.deneb.ui
 
 import ai.deneb.Platform
 import ai.deneb.currentPlatform
+import ai.deneb.ui.components.rememberHaptics
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -293,6 +294,7 @@ fun DenebTitlePivot(
     } else {
         denebHint().copy(alpha = 0.55f)
     }
+    val haptics = rememberHaptics()
     Text(
         text = label,
         style = DenebType.viewTitle,
@@ -303,7 +305,13 @@ fun DenebTitlePivot(
             .then(
                 if (onClick != null) {
                     Modifier
-                        .clickable(onClickLabel = "$label 화면으로", role = Role.Button, onClick = onClick)
+                        .clickable(onClickLabel = "$label 화면으로", role = Role.Button) {
+                            // The pivot owns its tap the way denebPressable does, so the
+                            // screens hand the SAME destination lambda to the sibling
+                            // swipe, whose release stays silent (the arm tick already spoke).
+                            haptics.tap()
+                            onClick()
+                        }
                         .handCursor()
                 } else {
                     Modifier
@@ -356,6 +364,13 @@ private const val SiblingSwipeResistance = 0.6f
  * horizontal drag (damped + clamped), springs back on release, and fires
  * [onSwipeLeft]/[onSwipeRight] past the commit distance. Vertical-dominant
  * drags yield to list scroll / PTR; screen-edge starts yield to system back.
+ *
+ * The host owns the gesture's haptic: [SiblingSwipeTracker] names the MOVE on
+ * which the drag first crosses the commit line and that MOVE fires `arm()` —
+ * "let go now and the page switches" — while the release itself stays silent
+ * (the page sliding is the feedback, the same contract as pull-to-refresh). So
+ * the [onSwipeLeft]/[onSwipeRight] lambdas must not tap: [DenebTitlePivot] fires
+ * the tap for the header labels, and the screens pass the same bare lambda here.
  */
 @Composable
 fun DenebSiblingSwipeHost(
@@ -376,6 +391,7 @@ fun DenebSiblingSwipeHost(
     val edge = with(density) { SiblingSwipeEdge.toPx() }
     val minX = if (onSwipeLeft != null) -maxTravel else 0f
     val maxX = if (onSwipeRight != null) maxTravel else 0f
+    val haptics = rememberHaptics()
 
     Box(
         modifier
@@ -383,11 +399,17 @@ fun DenebSiblingSwipeHost(
             .graphicsLayer { translationX = dragX.value }
             .pointerInput(onSwipeLeft, onSwipeRight, minX, maxX, commit, edge) {
                 val slop = viewConfiguration.touchSlop
+                val tracker = SiblingSwipeTracker(
+                    commitPx = commit,
+                    canSwipeLeft = onSwipeLeft != null,
+                    canSwipeRight = onSwipeRight != null,
+                )
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     if (down.position.x <= edge || down.position.x >= size.width - edge) {
                         return@awaitEachGesture
                     }
+                    tracker.onDown()
                     var dx = 0f
                     var dy = 0f
                     var horizontal = false
@@ -403,61 +425,22 @@ fun DenebSiblingSwipeHost(
                         }
                         if (horizontal) {
                             change.consume()
+                            // Raw travel, not the damped translation: the release below
+                            // reads the same dx, so the tick lands exactly where a
+                            // release starts to switch pages.
+                            if (tracker.onMove(dx)) haptics.arm()
                             val resisted = (dx * SiblingSwipeResistance).coerceIn(minX, maxX)
                             scope.launch { dragX.snapTo(resisted) }
                         }
                     }
-                    val committedLeft = horizontal && dx <= -commit && onSwipeLeft != null
-                    val committedRight = horizontal && dx >= commit && onSwipeRight != null
-                    if (committedLeft) onSwipeLeft?.invoke()
-                    if (committedRight) onSwipeRight?.invoke()
+                    when (tracker.onUp(if (horizontal) dx else 0f)) {
+                        SiblingSwipeDirection.Left -> onSwipeLeft?.invoke()
+                        SiblingSwipeDirection.Right -> onSwipeRight?.invoke()
+                        null -> Unit
+                    }
                     scope.launch { dragX.animateTo(0f, denebSpatialSpring()) }
                 }
             },
         content = { content() },
     )
-}
-
-/**
- * Horizontal sibling swipe for the 피드 ⇄ 결재 pivot pair (same destinations as
- * [DenebTitlePivot] taps). Vertical-dominant drags yield to list scroll / PTR;
- * screen-edge starts yield to the system back gesture. A clearly-horizontal
- * drag past 72dp fires [onSwipeLeft] (finger left → next sibling) or
- * [onSwipeRight] (finger right → previous sibling).
- */
-fun Modifier.denebSiblingSwipe(
-    onSwipeLeft: (() -> Unit)? = null,
-    onSwipeRight: (() -> Unit)? = null,
-): Modifier {
-    if (onSwipeLeft == null && onSwipeRight == null) return this
-    return pointerInput(onSwipeLeft, onSwipeRight) {
-        val edge = 36.dp.toPx()
-        val commit = 72.dp.toPx()
-        val slop = viewConfiguration.touchSlop
-        awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false)
-            if (down.position.x <= edge || down.position.x >= size.width - edge) {
-                return@awaitEachGesture
-            }
-            var dx = 0f
-            var dy = 0f
-            var horizontal = false
-            while (true) {
-                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-                if (!change.pressed) break
-                val delta = change.positionChange()
-                dx += delta.x
-                dy += delta.y
-                if (!horizontal) {
-                    if (abs(dy) > slop && abs(dy) >= abs(dx)) return@awaitEachGesture
-                    if (abs(dx) > slop && abs(dx) > abs(dy)) horizontal = true
-                }
-                if (horizontal) change.consume()
-            }
-            when {
-                horizontal && dx <= -commit -> onSwipeLeft?.invoke()
-                horizontal && dx >= commit -> onSwipeRight?.invoke()
-            }
-        }
-    }
 }

@@ -328,7 +328,7 @@ fun DenebApprovalDetailScreen(
                     ) {
                         FilledTonalButton(
                             onClick = {
-                                haptics.tap()
+                                haptics.confirm()
                                 pendingAct = "approve"
                             },
                             enabled = !acting,
@@ -373,6 +373,9 @@ fun DenebApprovalDetailScreen(
                 TextButton(
                     enabled = !acting,
                     onClick = {
+                        // The decision lands here, not on the button that opened the
+                        // dialog — 승인 commits, 반려 is the negative commit.
+                        if (decision == "approve") haptics.confirm() else haptics.reject()
                         scope.launch {
                             acting = true
                             actError = null

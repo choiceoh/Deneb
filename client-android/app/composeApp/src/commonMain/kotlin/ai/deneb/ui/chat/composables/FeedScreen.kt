@@ -109,33 +109,17 @@ internal fun FeedScreen(
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     val haptics = rememberHaptics()
-    val openApprovals: (() -> Unit)? = onOpenApprovals?.let { open ->
-        {
-            haptics.tap()
-            open()
-        }
-    }
-    val openLog: (() -> Unit)? = onOpenLog?.let { open ->
-        {
-            haptics.tap()
-            open()
-        }
-    }
-    val openFeed: (() -> Unit)? = onOpenFeed?.let { open ->
-        {
-            haptics.tap()
-            open()
-        }
-    }
     val laneItems = remember(items, lane) { items.forFeedLane(lane) }
+    // Bare destination lambdas: DenebTitlePivot taps for the header labels and the
+    // swipe host fires its own arm tick, so neither needs (nor may have) a tap here.
     DenebSiblingSwipeHost(
         onSwipeLeft = when (lane) {
-            FeedLane.Work -> openApprovals
+            FeedLane.Work -> onOpenApprovals
             FeedLane.Log -> null
         },
         onSwipeRight = when (lane) {
             FeedLane.Work -> null
-            FeedLane.Log -> openApprovals
+            FeedLane.Log -> onOpenApprovals
         },
     ) {
         DenebScreenScaffold(
@@ -146,9 +130,9 @@ internal fun FeedScreen(
             titleContent = {
                 DenebFeedApprovalPivots(
                     active = if (lane == FeedLane.Log) DenebFeedApprovalPage.Log else DenebFeedApprovalPage.Feed,
-                    onOpenFeed = openFeed,
-                    onOpenApprovals = openApprovals,
-                    onOpenLog = openLog,
+                    onOpenFeed = onOpenFeed,
+                    onOpenApprovals = onOpenApprovals,
+                    onOpenLog = onOpenLog,
                 )
             },
         ) {

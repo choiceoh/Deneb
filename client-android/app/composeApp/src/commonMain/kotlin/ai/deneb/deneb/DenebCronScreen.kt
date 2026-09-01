@@ -157,7 +157,7 @@ fun DenebCronScreen(
                 Button(
                     enabled = !busy,
                     onClick = {
-                        haptics.tap()
+                        haptics.confirm()
                         scope.launch {
                             busy = true
                             status = if (client.runCron(c.id)) "실행 요청됨" else "실행 실패"

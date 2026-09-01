@@ -132,6 +132,7 @@ fun DenebBrowserScreen(
     var showHistory by remember { mutableStateOf(false) }
     var showTabs by remember { mutableStateOf(false) }
     var pendingTabUrl by remember { mutableStateOf<String?>(null) }
+    val haptics = rememberHaptics()
 
     fun currentStore(): BrowserTabStore = BrowserTabStore(
         activeId = tabStore.activeId,
@@ -380,6 +381,9 @@ fun DenebBrowserScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
+                    // confirm()/prompt() are the page asking a question — answering is
+                    // the commit. alert() has no 취소 and its 확인 is an ack: silent.
+                    if (dialog.kind != BrowserJsDialog.Kind.ALERT) haptics.confirm()
                     finish(true, if (dialog.kind == BrowserJsDialog.Kind.PROMPT) promptValue else null)
                 }) { Text("확인") }
             },
@@ -1031,7 +1035,7 @@ fun DenebBrowserChrome(
                                 text = { Text("홈 지우기") },
                                 leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = denebHint()) },
                                 onClick = {
-                                    haptics.tap()
+                                    haptics.reject()
                                     menuOpen = false
                                     onClearHome()
                                 },
@@ -1197,7 +1201,7 @@ internal fun BrowserBookmarksList(
                         }
                         IconButton(
                             onClick = {
-                                haptics.tap()
+                                haptics.reject()
                                 onDelete(bookmark)
                             },
                             modifier = Modifier.size(40.dp),
@@ -1221,13 +1225,17 @@ private fun EditBrowserBookmarkDialog(
 ) {
     var title by remember(bookmark.url) { mutableStateOf(bookmark.title) }
     var url by remember(bookmark.url) { mutableStateOf(bookmark.url) }
+    val haptics = rememberHaptics()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("북마크 수정", style = DenebType.rowTitle) },
         confirmButton = {
             TextButton(
                 enabled = canBookmarkUrl(url),
-                onClick = { onSave(title, url) },
+                onClick = {
+                    haptics.confirm()
+                    onSave(title, url)
+                },
             ) { Text("저장") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
@@ -1287,7 +1295,7 @@ private fun BrowserHistorySheet(
                 }
                 if (visits.isNotEmpty()) {
                     TextButton(onClick = {
-                        haptics.tap()
+                        haptics.reject()
                         confirmClear = true
                     }) {
                         Icon(
@@ -1344,7 +1352,7 @@ private fun BrowserHistorySheet(
                             }
                             IconButton(
                                 onClick = {
-                                    haptics.tap()
+                                    haptics.reject()
                                     onDelete(visit)
                                 },
                                 modifier = Modifier.size(40.dp),
@@ -1364,6 +1372,7 @@ private fun BrowserHistorySheet(
             text = { Text("최근 방문 ${visits.size}개를 모두 삭제할까요?") },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.reject()
                     confirmClear = false
                     onClearAll()
                 }) { Text("삭제") }

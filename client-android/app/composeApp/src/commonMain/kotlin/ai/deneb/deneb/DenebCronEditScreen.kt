@@ -115,6 +115,7 @@ fun DenebCronEditScreen(
     var error by remember(cronId) { mutableStateOf<String?>(null) }
     var showDatePicker by remember(cronId) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
 
     suspend fun load() {
         prefilling = true
@@ -207,6 +208,7 @@ fun DenebCronEditScreen(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.confirm()
                     state.selectedDateMillis?.let { draft = draft.copy(onceDate = utcMillisToLocalDate(it)) }
                     showDatePicker = false
                 }) { Text("확인") }
@@ -392,7 +394,8 @@ private fun WeekdayChips(draft: ScheduleDraft, onDraft: (ScheduleDraft) -> Unit)
             FilterChip(
                 selected = day in draft.weekdays,
                 onClick = {
-                    haptics.tap()
+                    // A multi-select chip flips its own state — the toggle type, not a tap.
+                    haptics.toggle(day !in draft.weekdays)
                     val next = draft.weekdays.toMutableSet().apply { if (!add(day)) remove(day) }
                     onDraft(draft.copy(weekdays = next))
                 },

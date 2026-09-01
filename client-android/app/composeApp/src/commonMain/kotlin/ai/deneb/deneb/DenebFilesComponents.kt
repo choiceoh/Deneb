@@ -253,6 +253,7 @@ internal fun FilesNameDialog(
     onConfirm: (String) -> Unit,
 ) {
     var value by remember { mutableStateOf(initial) }
+    val haptics = rememberHaptics()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -269,7 +270,10 @@ internal fun FilesNameDialog(
         confirmButton = {
             TextButton(
                 enabled = !busy && value.trim().isNotBlank(),
-                onClick = { onConfirm(value.trim()) },
+                onClick = {
+                    haptics.confirm()
+                    onConfirm(value.trim())
+                },
             ) { Text(confirmLabel) }
         },
         dismissButton = {

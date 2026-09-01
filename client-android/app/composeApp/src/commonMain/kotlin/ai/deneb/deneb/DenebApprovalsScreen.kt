@@ -87,18 +87,6 @@ fun DenebApprovalsScreen(
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    val openFeed: (() -> Unit)? = onOpenFeed?.let { open ->
-        {
-            haptics.tap()
-            open()
-        }
-    }
-    val openLog: (() -> Unit)? = onOpenLog?.let { open ->
-        {
-            haptics.tap()
-            open()
-        }
-    }
 
     suspend fun load(forceRefresh: Boolean = false) {
         failed = false
@@ -145,7 +133,9 @@ fun DenebApprovalsScreen(
     }
     val hasMore = nextAfter != null
 
-    DenebSiblingSwipeHost(onSwipeRight = openFeed, onSwipeLeft = openLog) {
+    // Bare destination lambdas: DenebTitlePivot taps for the header labels and the
+    // swipe host fires its own arm tick, so neither needs (nor may have) a tap here.
+    DenebSiblingSwipeHost(onSwipeRight = onOpenFeed, onSwipeLeft = onOpenLog) {
         DenebScreenScaffold(
             title = "결재",
             onBack = onBack,
@@ -153,8 +143,8 @@ fun DenebApprovalsScreen(
             titleContent = {
                 DenebFeedApprovalPivots(
                     active = DenebFeedApprovalPage.Approvals,
-                    onOpenFeed = openFeed,
-                    onOpenLog = openLog,
+                    onOpenFeed = onOpenFeed,
+                    onOpenLog = onOpenLog,
                 )
             },
         ) {

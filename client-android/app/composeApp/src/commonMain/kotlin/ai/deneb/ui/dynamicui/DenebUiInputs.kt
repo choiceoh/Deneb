@@ -238,6 +238,7 @@ internal fun RenderDateInput(
     val isError = validation?.errors?.get(node.id) == true
     var showPicker by remember { mutableStateOf(false) }
     val value = formState[node.id] ?: ""
+    val haptics = rememberHaptics()
 
     PickerField(
         value = value,
@@ -256,6 +257,7 @@ internal fun RenderDateInput(
             onDismissRequest = { showPicker = false },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.confirm()
                     state.selectedDateMillis?.let {
                         formState[node.id] = utcMillisToIsoDate(it)
                         validation?.errors?.remove(node.id)
@@ -278,6 +280,7 @@ internal fun RenderTimeInput(
     val isError = validation?.errors?.get(node.id) == true
     var showPicker by remember { mutableStateOf(false) }
     val value = formState[node.id] ?: ""
+    val haptics = rememberHaptics()
 
     PickerField(
         value = value,
@@ -299,6 +302,7 @@ internal fun RenderTimeInput(
             onDismissRequest = { showPicker = false },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.confirm()
                     formState[node.id] =
                         "${state.hour.toString().padStart(2, '0')}:${state.minute.toString().padStart(2, '0')}"
                     validation?.errors?.remove(node.id)
