@@ -4,6 +4,7 @@ package wiki
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -496,6 +497,58 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 	return report.Results, err
 }
 
+// stageTimer accumulates per-stage wall time for one search.
+//
+// The per-SOURCE timing the recall preflight already logs (wiki=8(938ms)) says
+// which source is slow, never which part of it. Measured 2026-09-02 on three
+// days of production logs: wiki recall runs a median 922ms, and the two costs
+// a reader would guess — embedding the query (20-31ms round-trip, measured
+// directly against :8002) and scanning the ~5,900-vector semantic index — do
+// not come close to accounting for it. ~930ms was unattributed, against a
+// recall budget whose tail already sits at 1.44s with 59ms of headroom.
+//
+// Off by default: DENEB_WIKI_STAGE_TIMING=on. The cost is a few time.Since
+// calls, but the log line is noise until someone is looking.
+type stageTimer struct {
+	on    bool
+	marks []string
+	last  time.Time
+}
+
+func newStageTimer() *stageTimer {
+	return &stageTimer{on: os.Getenv("DENEB_WIKI_STAGE_TIMING") == "on", last: time.Now()}
+}
+
+func (t *stageTimer) mark(name string) {
+	if t == nil || !t.on {
+		return
+	}
+	now := time.Now()
+	t.marks = append(t.marks, fmt.Sprintf("%s=%dms", name, now.Sub(t.last).Milliseconds()))
+	t.last = now
+}
+
+// The Store carries no logger — this package takes one as a parameter where it
+// needs one — and threading one through Search's signature for a diagnostic
+// that is off by default would be a worse trade than the default logger.
+func (t *stageTimer) report(query string, total time.Duration) {
+	if t == nil || !t.on || len(t.marks) == 0 {
+		return
+	}
+	slog.Default().Info("wiki search stages",
+		"total_ms", total.Milliseconds(),
+		"stages", strings.Join(t.marks, " "),
+		"q", clipRunesForLog(query, 40))
+}
+
+func clipRunesForLog(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
+}
+
 // SearchWithOptions runs a diagnosable or stage-specific search while keeping
 // Search's production defaults unchanged.
 func (s *Store) SearchWithOptions(ctx context.Context, query string, limit int, options QueryOptions) (SearchReport, error) {
@@ -510,6 +563,8 @@ func (s *Store) SearchWithOptions(ctx context.Context, query string, limit int, 
 	if limit <= 0 {
 		limit = 10
 	}
+	timer := newStageTimer()
+	searchStart := time.Now()
 	mode := normalizeSearchMode(options.Mode)
 	// Over-fetch, demote, THEN truncate. validityFactor (archived/superseded/
 	// aging demotion) multiplies scores after ranking — truncating at the
@@ -534,6 +589,7 @@ func (s *Store) SearchWithOptions(ctx context.Context, query string, limit int, 
 			return empty, err
 		}
 	}
+	timer.mark("bm25")
 	// Lexical-leak gate: a query whose only matchable tokens are corpus-common
 	// (no rare anchor term) produces BM25 hits that matched on a frequent word
 	// and are likely off-topic — the measured recall leak. commonOnlyQuery is
@@ -581,12 +637,15 @@ func (s *Store) SearchWithOptions(ctx context.Context, query string, limit int, 
 	var sem []SearchResult
 	if mode != SearchModeBM25 {
 		sem = s.searchSemantic(ctx, query, max(fetchLimit, semanticBlendK))
+		timer.mark("semantic")
 	}
 	loadIntent := func() []SearchResult {
 		intentResults, _ := s.fts.search(ctx, strings.TrimSpace(options.Intent), fetchLimit)
 		return intentResults
 	}
-	return s.composeSearchReport(ctx, query, limit, fetchLimit, bm25, sem, commonOnlyQuery, options, loadIntent), nil
+	report := s.composeSearchReport(ctx, query, limit, fetchLimit, bm25, sem, commonOnlyQuery, options, loadIntent, timer)
+	timer.report(query, time.Since(searchStart))
+	return report, nil
 }
 
 // bm25ClusterCoherent reports whether the lexical hits CONCENTRATE in one
@@ -748,7 +807,7 @@ func (s *Store) SearchBatchWithOptions(ctx context.Context, queries []string, li
 		if qvecs != nil && len(qvecs[i]) > 0 {
 			sem = s.searchSemanticWithVec(ctx, qvecs[i], max(fetchLimit, semanticBlendK))
 		}
-		out[i] = s.composeSearchReport(ctx, query, limit, fetchLimit, bm25, sem, commonOnlyQuery, options, loadIntent)
+		out[i] = s.composeSearchReport(ctx, query, limit, fetchLimit, bm25, sem, commonOnlyQuery, options, loadIntent, nil)
 	}
 	return out, nil
 }
@@ -778,6 +837,7 @@ func (s *Store) composeSearchReport(
 	commonOnlyQuery bool,
 	options QueryOptions,
 	loadIntent func() []SearchResult,
+	timer *stageTimer,
 ) SearchReport {
 	mode := normalizeSearchMode(options.Mode)
 	diagnostics := SearchDiagnostics{
@@ -820,6 +880,7 @@ func (s *Store) composeSearchReport(
 			graphPaths = s.graphRankedPaths(ctx, query, semanticBlendK)
 		} else if mode == SearchModeAuto {
 			graphPaths = s.graphBoostPaths(ctx, query)
+			timer.mark("graph")
 		}
 		diagnostics.GraphCandidates = len(graphPaths)
 		if mode == SearchModeAuto && os.Getenv("DENEB_WIKI_FUSION") == "additive" {
@@ -840,13 +901,16 @@ func (s *Store) composeSearchReport(
 	}
 	if !options.skipValidity {
 		results = s.fts.applyValidity(results)
+		timer.mark("validity")
 		// Transfer-reliability demotion (recall_trs.go): pages repeatedly
 		// injected as evidence and never used rank below pages that earn
 		// their exposure. Same over-fetch-then-demote discipline as validity.
 		results = s.applyRecallTRS(results)
+		timer.mark("trs")
 	}
 	beforeLifecycle := len(results)
 	results = s.filterFactLifecycleSearchResults(query, results, factSnapshot)
+	timer.mark("lifecycle")
 	if dropped := beforeLifecycle - len(results); dropped > 0 {
 		diagnostics.Dropped = appendDrop(diagnostics.Dropped, "superseded_fact_evidence", dropped)
 	}
@@ -855,6 +919,7 @@ func (s *Store) composeSearchReport(
 		intentResults = loadIntent()
 		intentResults = s.filterFactLifecycleSearchResults(query, intentResults, factSnapshot)
 	}
+	timer.mark("intent")
 	intentBonuses, applied := s.applyIntentRerank(results, intentResults, options)
 	diagnostics.IntentApplied = applied
 	// Rerank uses BM25/semantic Content snippets already on the candidates —
@@ -864,6 +929,7 @@ func (s *Store) composeSearchReport(
 	rerankDiagnostics := RerankDiagnostics{Reason: "deferred_to_query_plan"}
 	if !options.SkipRerank {
 		rerankScores, rerankWeights, rerankDiagnostics = s.applyModelRerank(ctx, query, results, options.ForceRerank)
+		timer.mark("rerank")
 	}
 	diagnostics.Rerank = rerankDiagnostics
 	var factResults []SearchResult
@@ -892,7 +958,9 @@ func (s *Store) composeSearchReport(
 	}
 	if !options.skipMetadata {
 		s.attachResultMetadata(query, results)
+		timer.mark("metadata")
 		diagnostics.ContextExpanded = s.attachLateContext(results)
+		timer.mark("late_context")
 	}
 	// Revalidate at the final exposure boundary. A correction may commit while
 	// semantic/rerank work is in flight; using the newest atomic snapshot drops
