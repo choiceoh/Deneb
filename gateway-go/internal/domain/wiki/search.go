@@ -541,6 +541,19 @@ func (t *stageTimer) report(query string, total time.Duration) {
 		"q", clipRunesForLog(query, 40))
 }
 
+// reportPlan is the plan-level twin of report: it also carries the clause
+// count, because a plan's cost is dominated by how many full searches it ran.
+func (t *stageTimer) reportPlan(label string, clauses int, total time.Duration) {
+	if t == nil || !t.on || len(t.marks) == 0 {
+		return
+	}
+	slog.Default().Info("wiki plan stages",
+		"total_ms", total.Milliseconds(),
+		"clauses", clauses,
+		"stages", strings.Join(t.marks, " "),
+		"q", clipRunesForLog(label, 40))
+}
+
 func clipRunesForLog(s string, n int) string {
 	r := []rune(s)
 	if len(r) <= n {
