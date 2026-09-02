@@ -156,6 +156,7 @@ func (s *Store) SearchPlanWithOptions(ctx context.Context, plan QueryPlan, limit
 	timer := newStageTimer()
 	planStart := time.Now()
 	plan = normalizeQueryPlan(plan)
+	timer.mark("normalize")
 	if len(plan.Clauses) == 0 || s == nil || s.fts == nil {
 		return SearchReport{}, nil
 	}
@@ -221,8 +222,10 @@ func (s *Store) SearchPlanWithOptions(ctx context.Context, plan QueryPlan, limit
 	timer.mark("post")
 	lifecycleQuery := factLifecyclePlanQuery(plan)
 	factSnapshot := s.RecallFactSnapshot()
+	timer.mark("fact_snapshot")
 	beforeLifecycle := len(results)
 	results = s.filterFactLifecycleSearchResults(lifecycleQuery, results, factSnapshot)
+	timer.mark("lifecycle")
 	if dropped := beforeLifecycle - len(results); dropped > 0 {
 		diagnostics.Dropped = appendDrop(diagnostics.Dropped, "superseded_fact_evidence", dropped)
 	}
@@ -241,6 +244,7 @@ func (s *Store) SearchPlanWithOptions(ctx context.Context, plan QueryPlan, limit
 		intentResults = s.filterFactLifecycleSearchResults(lifecycleQuery, intentResults, factSnapshot)
 	}
 	bonuses, applied := s.applyIntentRerank(results, intentResults, QueryOptions{Intent: plan.Intent})
+	timer.mark("intent")
 	diagnostics.IntentApplied = applied
 	if len(results) > 0 {
 		s.attachResultMetadata(plan.Clauses[0].Query, results[:min(len(results), rerankCandidateLimit)])
@@ -287,6 +291,7 @@ func (s *Store) SearchPlanWithOptions(ctx context.Context, plan QueryPlan, limit
 		attachRerankExplanations(results, rerankScores, rerankWeights)
 		markFactSearchExplanations(results)
 	}
+	timer.mark("tail")
 	timer.reportPlan(planLabel(plan), len(plan.Clauses), time.Since(planStart))
 	return SearchReport{Results: results, Diagnostics: diagnostics}, nil
 }
