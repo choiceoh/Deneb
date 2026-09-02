@@ -245,6 +245,10 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 - wormhole config cloud 엔트리(openai): `{name, url(openai base), upstreamModel, "key":"${ENV}" 또는 리터럴}` — protocol 생략(openai 기본). **no toggleKwarg**(APC/effort 규칙). wormhole 이 url 뒤에 `/chat/completions` 만 붙이니 url 은 그 base.
   - **zai/glm**: ★**코딩플랜 전용** `https://api.z.ai/api/coding/paas/v4` (일반 `…/api/paas/v4` 는 잔액부족 429). 키 `${ZAI_API_KEY}`.
     - 배선된 모델: `glm-5.2` · `glm-5.3` · **`glm-5.3-flash`**(2026-09-02 추가). 셋 다 컨텍스트 1M · 출력 상한 131,072(`max_tokens` 초과 시 code 1210).
+    - flash 는 **깊이별 3엔트리**로 배선한다(2026-09-02) — 호출자가 이름으로 고르고 Ares 판정을 타지 않는다:
+      `glm-5.3-flash`(`thinkingMode:"on"` = reasoning_effort high 고정) · `glm-5.3-flash-nothink`(`thinkingMode:"off"` = thinking disabled 고정) ·
+      `glm-5.3-flash-local`(srv2 4노드 vLLM, 다운 시 클라우드 flash 로 페일오버). 실측(같은 프롬프트, 엔트리만 교체): 분석형 턴 추론 토큰 **234 → 18**.
+      ⚠️ 인사말 같은 개방형 턴은 끄기를 걸어도 100~200 토큰을 추론한다 — GLM 의 최소 추론이 그만큼이라 '끄기'는 상한이지 0 이 아니다.
     - ★**`glm-5.3-flash` 는 코딩플랜 포함이고 쿼터가 glm-5.3 의 3배**(z.ai 공지) — 볼륨 트래픽을 여기로 흘리는 게 플랜을 아끼는 길이다.
     - ★**이미지: flash 만 받는다.** 실측(2026-09-02, 1x1 PNG 파트): `glm-5.3-flash` 정답 응답 / `glm-5.3`·`glm-5.2`·`glm-5.1`·`glm-4.7` 는 전부 400
       `messages.content.type is invalid, allowed values: ['text']`. 이 400 은 이미지가 트랜스크립트에 남아 **이후 턴까지 오염**시키므로 웜홀
