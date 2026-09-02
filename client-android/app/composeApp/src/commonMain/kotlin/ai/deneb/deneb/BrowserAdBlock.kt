@@ -145,6 +145,27 @@ internal val BROWSER_AD_HOST_SUFFIXES: Set<String> = setOf(
     // Video / native stacks listed in eurasiantimes.com ads.txt
     "vdo.ai",
     "atlas5.co",
+    // --- 2026-09-03 leak sweep (mobile UA, real loads of topwar/donga/hankyung/
+    // news.naver; each host below was observed serving ads or telemetry and
+    // passing every existing rule). Volume in that sweep is in parentheses.
+    "analytics.google.com", // GA4 collect — google-analytics.com was covered, this twin was not
+    "fundingchoicesmessages.google.com", // (23) Google Funding Choices — anti-adblock / consent nag
+    "imasdk.googleapis.com", // (4) IMA outstream video ads; the page's own video still plays
+    "360yield.com", // Improve Digital SSP
+    "sparteo.com",
+    "anymind360.com", // (2) prebid bundle
+    "ladsp.com", // (2) cookie sync
+    "adsappier.com", // (3) Appier
+    "gliastudios.com", // (4) Glia video ads
+    "gliacloud.com", // (6) same stack, player host
+    "ad4989.co.kr", // (2) KR display net
+    "ad-stir.com", // JP display net
+    "mediacategory.com",
+    "dable.io", // KR native recommendation
+    "mobon.net", // (6) KR retargeting
+    // Naver's tag manager / logger. Only this host — pstatic.net also serves the
+    // article images (mimgnews, ssl, static-nnews), which must keep loading.
+    "ntm.pstatic.net",
 )
 
 /** Slash-bounded path segments that mark ad creatives / delivery.
@@ -165,6 +186,12 @@ private val BROWSER_AD_PATH_SEGMENTS: List<String> = listOf(
     "/metrika/",
     "/libtrc/",
     "/prebid/",
+    // Google's measurement endpoints live on www.google.com, which also serves
+    // search, reCAPTCHA and embeds — so these are matched by PATH, never by
+    // host (the same reasoning as connect.facebook.net/signals/ below).
+    // 215 such requests passed on one hankyung.com load.
+    "/ccm/collect",
+    "/measurement/conversion",
 )
 
 /** Host-ish tokens that appear inside ad CDN URLs. */
