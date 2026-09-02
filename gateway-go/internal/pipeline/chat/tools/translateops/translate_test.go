@@ -87,9 +87,12 @@ func TestTranslateSegments_TranslatesBatchesConcurrently(t *testing.T) {
 		return out, true
 	}
 
-	segments := make([]string, 5)
+	// One segment per batch by construction: each is larger than the char bound,
+	// so the fixture keeps producing more batches than the concurrency limit even
+	// when that bound is retuned.
+	segments := make([]string, translateMaxConcurrentBatches+2)
 	for i := range segments {
-		segments[i] = strings.Repeat(fmt.Sprintf("%d", i), 900)
+		segments[i] = strings.Repeat(fmt.Sprintf("%d", i), translateMaxCharsPerBatch+1)
 	}
 
 	done := make(chan struct{})
