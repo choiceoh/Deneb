@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.12.1](https://github.com/choiceoh/Deneb/compare/deneb-v5.12.0...deneb-v5.12.1) (2026-09-02)
+
+
+### 🐛 Bug Fixes
+
+* **eval:** python-lint E702 — main 이 빨개 모든 PR 이 막혀 있었다 ([#5002](https://github.com/choiceoh/Deneb/issues/5002)) ([a49c74a](https://github.com/choiceoh/Deneb/commit/a49c74a010b4b2bb4aafc3646003241ebe387a09))
+
+
+### ⚡ Performance
+
+* **browser:** 사이드카 정착을 고정 수면에서 '렌더+정지' 조기 종료로 — 골든셋 32% 단축 ([#5001](https://github.com/choiceoh/Deneb/issues/5001)) ([ce80d7c](https://github.com/choiceoh/Deneb/commit/ce80d7c2307fb138cb6ce8291b6f6d1f4f012457))
+* **browser:** 정착 판정에 네트워크 추적 + 최소 대기 바닥 — 메뉴만 반환하던 구멍을 막고 더 빨라진다 ([#5003](https://github.com/choiceoh/Deneb/issues/5003)) ([91a9e9f](https://github.com/choiceoh/Deneb/commit/91a9e9fa03dc4171289c968b75a4adc788a635d0))
+
 ## [5.12.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.11.0...deneb-v5.12.0) (2026-09-02)
 
 
