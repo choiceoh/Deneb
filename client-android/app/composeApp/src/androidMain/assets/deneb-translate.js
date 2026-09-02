@@ -74,7 +74,15 @@
   // Keep producer and native/gateway validation aligned. The lower producer
   // budget leaves room for UTF-16/rune differences and JSON escaping.
   var MAX_SEGMENT_PAYLOAD_CHARS = 1100;
-  var MAX_BATCH_PAYLOAD_CHARS = 20000;
+  // ★ Tied to the gateway: one shipped batch should cost ONE server wave.
+  // The gateway splits a request into translateMaxCharsPerBatch (3000) chunks and
+  // runs translateMaxConcurrentBatches (6) of them at a time, so 18,000 source
+  // chars is exactly one wave. At 20,000 the largest batch spilled into a second
+  // wave and paid a full extra DeepL round trip (~1s, measured 2026-09-03).
+  // Payload chars here include the envelope, so they over-count vs the gateway's
+  // own cost function — this bound stays conservative. The Go contract test
+  // TestContractClientBatchFitsOneServerWave fails if either side drifts.
+  var MAX_BATCH_PAYLOAD_CHARS = 18000;
   var MAX_BATCH_JSON_CHARS = 44000;
   var MAX_LONG_TEXT_CHUNK_CHARS = 900;
   // Starts only after the native queue dequeues this batch. The gateway client
