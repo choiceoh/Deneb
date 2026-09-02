@@ -32,13 +32,18 @@ func validateConfig(cfg config) []string {
 		if e.Protocol != "" && e.Protocol != protocolOpenAI && e.Protocol != protocolAnthropic {
 			warns = append(warns, "model "+e.Name+" has unknown protocol "+e.Protocol+" (want openai or anthropic) — it will be treated as openai")
 		}
-		// thinkingMode steers the ToggleKwarg injection, so a mode without the
-		// kwarg name (or an unknown mode) silently does nothing — route wrong.
-		if e.ThinkingMode != thinkingModeJudge && e.ThinkingMode != thinkingModeOff && e.ThinkingMode != thinkingModeOffUnlessHard {
-			warns = append(warns, "model "+e.Name+" has unknown thinkingMode "+e.ThinkingMode+` (want "off" or "off-unless-hard") — it will be treated as the default judge mode`)
+		// thinkingMode steers the ToggleKwarg injection (vLLM) or the cloud
+		// reasoning dialect, so a mode with neither (or an unknown mode) silently
+		// does nothing — route wrong.
+		if e.ThinkingMode != thinkingModeJudge && e.ThinkingMode != thinkingModeOff &&
+			e.ThinkingMode != thinkingModeOffUnlessHard && e.ThinkingMode != thinkingModeOn {
+			warns = append(warns, "model "+e.Name+" has unknown thinkingMode "+e.ThinkingMode+` (want "off", "on" or "off-unless-hard") — it will be treated as the default judge mode`)
 		}
-		if e.ThinkingMode != thinkingModeJudge && e.ToggleKwarg == "" {
-			warns = append(warns, "model "+e.Name+" sets thinkingMode but no toggleKwarg (the model's thinking switch name) — no thinking routing will happen")
+		if e.ThinkingMode != thinkingModeJudge && e.ToggleKwarg == "" && e.Reasoning == "" {
+			warns = append(warns, "model "+e.Name+" sets thinkingMode but has neither toggleKwarg (the vLLM thinking switch) nor reasoning (a cloud dialect) — no thinking routing will happen")
+		}
+		if e.ThinkingMode == thinkingModeOffUnlessHard && e.ToggleKwarg == "" {
+			warns = append(warns, "model "+e.Name+` uses thinkingMode "off-unless-hard", which only the toggleKwarg path implements — a cloud reasoning entry supports "off"/"on"`)
 		}
 		proto := e.protocol()
 		// The anthropic /v1 gotcha: wormhole appends only "/messages" to the entry

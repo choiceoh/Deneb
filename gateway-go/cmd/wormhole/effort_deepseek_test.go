@@ -69,3 +69,25 @@ func TestReasoningRouteLeavesUndeclaredStyleAlone(t *testing.T) {
 		t.Fatalf("body was shaped: off=%v reason=%q out=%s", off, reason, out)
 	}
 }
+
+// TestDeepseekReasoningRouteStaticModes: the entry-level variants on the
+// DeepSeek dialect — "off" zeroes the channel (only "none" does that here),
+// "on" pins high — with no classification either way.
+func TestDeepseekReasoningRouteStaticModes(t *testing.T) {
+	body := []byte(`{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"이 데이터를 심층 분석해줘"}],"reasoning_effort":"max"}`)
+	for _, tc := range []struct {
+		mode, want string
+		wantOff    bool
+	}{
+		{thinkingModeOff, "none", true},
+		{thinkingModeOn, "high", false},
+	} {
+		out, reason, off := deepseekReasoningRoute(body, tc.mode)
+		if off != tc.wantOff || reason != "mode-"+tc.mode {
+			t.Fatalf("mode %q: got off=%v reason=%q", tc.mode, off, reason)
+		}
+		if got, ok := effortOf(t, out); !ok || got != tc.want {
+			t.Errorf("mode %q: reasoning_effort = %q (present=%v), want %q", tc.mode, got, ok, tc.want)
+		}
+	}
+}
