@@ -7,6 +7,26 @@ import kotlin.test.assertTrue
 
 class BrowserAdBlockTest {
     @Test
+    fun `host suffixes match only at a label boundary`() {
+        // isBrowserAdHost walks the host's label boundaries instead of testing
+        // ".$suffix" against every entry. That rewrite is only correct if it
+        // keeps refusing hosts that merely END with a blocked name.
+        assertTrue(shouldBlockBrowserAdRequest("https://criteo.com/x.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://static.criteo.com/x.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://a.b.c.hotjar.com/x.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://hotjar.com/x.js"))
+
+        // Same trailing characters, no label boundary — these are other people's
+        // domains and must load.
+        assertFalse(shouldBlockBrowserAdRequest("https://notcriteo.com/x.js"))
+        assertFalse(shouldBlockBrowserAdRequest("https://mycriteo.com/x.js"))
+        assertFalse(shouldBlockBrowserAdRequest("https://xhotjar.com/x.js"))
+        assertFalse(shouldBlockBrowserAdRequest("https://hotjar.com.example.org/x.js"))
+        // A bare label must not match a dotted suffix by accident.
+        assertFalse(shouldBlockBrowserAdRequest("https://criteo/x.js"))
+    }
+
+    @Test
     fun `blocks known ad hosts and subdomains`() {
         assertTrue(shouldBlockBrowserAdRequest("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"))
         assertTrue(shouldBlockBrowserAdRequest("https://securepubads.g.doubleclick.net/gampad/ads"))

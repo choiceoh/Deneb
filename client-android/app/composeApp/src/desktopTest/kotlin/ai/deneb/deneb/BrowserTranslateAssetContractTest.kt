@@ -23,6 +23,35 @@ class BrowserTranslateAssetContractTest {
     }
 
     @Test
+    fun translationWorkDoesNotRunOnTheUiThread() {
+        // The bridge is handed rememberCoroutineScope() — the Compose MAIN
+        // dispatcher. Everything it launches (the translate-cache disk snapshot,
+        // the per-batch JSON + JS-literal encode) would otherwise run on the UI
+        // thread of the page being read. Every WebView/state touch inside hops to
+        // main explicitly, so those hops are what makes this safe; assert both
+        // halves so neither can be removed without the other being reconsidered.
+        val source = sourceFile(
+            "src/androidMain/kotlin/ai/deneb/deneb/BrowserTranslateBridge.android.kt",
+        ).readText()
+        assertContains(source, "SupervisorJob(scope.coroutineContext[Job]) + Dispatchers.Default")
+        assertContains(source, "withContext(Dispatchers.Main) {")
+        assertContains(source, "withContext(Dispatchers.Main.immediate) {")
+        assertContains(source, "Handler(Looper.getMainLooper()).post {")
+
+        // The disk park splits the same way: WebView.saveState needs the main
+        // thread, the marshal and the file write do not.
+        val disk = sourceFile(
+            "src/androidMain/kotlin/ai/deneb/deneb/BrowserTabStateDisk.android.kt",
+        ).readText()
+        assertContains(disk, "SupervisorJob() + Dispatchers.IO")
+        assertContains(disk, "diskScope.launch { writeSnapshot(")
+        assertTrue(
+            disk.indexOf("web.saveState(bundle)") < disk.indexOf("diskScope.launch"),
+            "saveState must be captured on the caller thread before the write is handed off",
+        )
+    }
+
+    @Test
     fun nativeBridgeQueuesOverflowBehindTheExecutionLimit() {
         val nativeSource = sourceFile(
             "src/androidMain/kotlin/ai/deneb/deneb/BrowserTranslateBridge.android.kt",
