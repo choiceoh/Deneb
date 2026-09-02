@@ -138,4 +138,42 @@ class BrowserAdBlockTest {
         assertFalse(shouldBlockBrowserAdRequest("https://www.eurasiantimes.com/wp-content/uploads/2026/07/x.jpg"))
         assertFalse(shouldBlockBrowserAdRequest("https://www.eurasiantimes.com/_static/??/wp-content/plugins/td-composer/mobile/js/tagdiv_theme.min.js"))
     }
+
+    @Test
+    fun `blocks 2026-09 leak sweep hosts without touching their first-party neighbours`() {
+        // Captured from real mobile loads of topwar/donga/hankyung/news.naver:
+        // every URL below served ads or telemetry and passed every earlier rule.
+        assertTrue(shouldBlockBrowserAdRequest("https://analytics.google.com/g/collect?v=2&tid=G-X"))
+        assertTrue(shouldBlockBrowserAdRequest("https://fundingchoicesmessages.google.com/i/3448900?ers=3"))
+        assertTrue(shouldBlockBrowserAdRequest("https://imasdk.googleapis.com/formats/outstream/versioned/prod2/outstream.min.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://dsp.360yield.com/bid"))
+        assertTrue(shouldBlockBrowserAdRequest("https://bid.sparteo.com/auction"))
+        assertTrue(shouldBlockBrowserAdRequest("https://anymind360.com/js/19464/prebid_2026_7_14.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://cr-p3.ladsp.com/cookiesender/3"))
+        assertTrue(shouldBlockBrowserAdRequest("https://cr.adsappier.com/v1/x"))
+        assertTrue(shouldBlockBrowserAdRequest("https://static-pixel.gliastudios.com/p"))
+        assertTrue(shouldBlockBrowserAdRequest("https://player.gliacloud.com/player/x"))
+        assertTrue(shouldBlockBrowserAdRequest("https://ad.ad4989.co.kr/hb"))
+        assertTrue(shouldBlockBrowserAdRequest("https://ad.ad-stir.com/ad"))
+        assertTrue(shouldBlockBrowserAdRequest("https://www.mediacategory.com/rb"))
+        assertTrue(shouldBlockBrowserAdRequest("https://api.dable.io/widgets/id/x"))
+        assertTrue(shouldBlockBrowserAdRequest("https://img.mobon.net/ad/x.jpg"))
+        assertTrue(shouldBlockBrowserAdRequest("https://ntm.pstatic.net/scripts/ntm_b7032129a433.js"))
+        // The article images live on the same pstatic.net parent and must load.
+        assertFalse(shouldBlockBrowserAdRequest("https://mimgnews.pstatic.net/image/001/2026/09/03/x.jpg"))
+        assertFalse(shouldBlockBrowserAdRequest("https://static-nnews.pstatic.net/js/news.js"))
+        // YouTube attestation is not an ad — blocking it breaks embedded playback.
+        assertFalse(shouldBlockBrowserAdRequest("https://jnn-pa.googleapis.com/\$rpc/google.internal.waa.v1.Waa/GenerateIT"))
+    }
+
+    @Test
+    fun `blocks google measurement endpoints by path and leaves the rest of google_com alone`() {
+        // 215 of these passed on one hankyung.com load — GA4 / Ads conversion
+        // pings served from www.google.com, the same host as search and embeds.
+        assertTrue(shouldBlockBrowserAdRequest("https://www.google.com/ccm/collect?en=page_view&tid=G-X"))
+        assertTrue(shouldBlockBrowserAdRequest("https://www.google.com/measurement/conversion?random=1&tid=G-X"))
+        assertFalse(shouldBlockBrowserAdRequest("https://www.google.com/search?q=%EB%89%B4%EC%8A%A4"))
+        assertFalse(shouldBlockBrowserAdRequest("https://www.google.com/recaptcha/api.js"))
+        assertFalse(shouldBlockBrowserAdRequest("https://www.google.com/maps/embed?pb=x"))
+    }
 }
