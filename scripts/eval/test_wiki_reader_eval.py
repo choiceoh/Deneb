@@ -283,3 +283,137 @@ class RenderPageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+BLOCK = (
+    "서버가 위키를 미리 검색했다. 아래 근거만 사용하라.\n"
+    '- source=wiki ref="프로젝트/알파/메일분석/a.md" confidence=high age=1d\n'
+    "  알파 계약 금액은 1,500만원이다.\n"
+    '- source=wiki ref="프로젝트/알파/대표.md" confidence=medium age=2d\n'
+    "  알파 프로젝트 개요.\n"
+    '- source=wiki ref="프로젝트/베타/대표.md" confidence=low age=9d\n'
+    "  베타는 무관하다.\n"
+    '- source=wiki ref="인물/김철수.md" confidence=low age=9d\n'
+    "  김철수 소개.\n"
+)
+GOLD = ["프로젝트/알파"]
+
+
+class AblationTests(unittest.TestCase):
+    def test_preamble_is_never_dropped(self):
+        # The preamble is the reader's instructions, not its evidence — dropping
+        # it would change what the run is measuring.
+        for mode in ("cited", "random"):
+            kept, _, _ = wre.ablate_block(BLOCK, GOLD, mode, seed=1)
+            self.assertIn("아래 근거만 사용하라", kept, mode)
+
+    def test_cited_drops_every_gold_row_and_only_those(self):
+        kept, dropped, _ = wre.ablate_block(BLOCK, GOLD, "cited", seed=1)
+        self.assertEqual(len(dropped), 2, dropped)
+        self.assertNotIn("프로젝트/알파", kept)
+        self.assertIn("프로젝트/베타/대표.md", kept)
+        self.assertIn("인물/김철수.md", kept)
+        # The body under a dropped header goes with it, not just the ref line.
+        self.assertNotIn("1,500만원", kept)
+
+    def test_random_matches_bytes_not_rows_and_never_takes_gold(self):
+        # The control pays the same PRICE, which is bytes of context — matching
+        # row count let a control remove a third of what the treatment did, and
+        # then a small treatment effect is unreadable.
+        kept, dropped, stat = wre.ablate_block(BLOCK, GOLD, "random", seed=1)
+        self.assertTrue(stat["matched"], stat)
+        self.assertGreaterEqual(stat["bytes"], 0.75 * stat["target_bytes"])
+        self.assertIn("1,500만원", kept, "gold evidence must survive the control")
+        for ref in dropped:
+            self.assertFalse(ref.startswith("프로젝트/알파"), ref)
+
+    def test_random_arm_is_seed_stable(self):
+        a, da, _ = wre.ablate_block(BLOCK, GOLD, "random", seed=7)
+        b, db, _ = wre.ablate_block(BLOCK, GOLD, "random", seed=7)
+        self.assertEqual(da, db)
+        self.assertEqual(a, b)
+
+    def test_none_is_the_identity(self):
+        kept, dropped, _ = wre.ablate_block(BLOCK, GOLD, "none", seed=1)
+        self.assertEqual(kept, BLOCK)
+        self.assertEqual(dropped, [])
+
+    def test_a_block_that_cannot_supply_a_control_says_so(self):
+        # A block that is nearly all gold cannot pay the same price. It must
+        # report matched=False so the analysis EXCLUDES it rather than averaging
+        # an under-powered control into the result — that contamination made the
+        # first n=60 run read a +8.3pp control effect, i.e. pure noise.
+        block = (
+            "머리말\n"
+            '- source=wiki ref="프로젝트/알파/a.md" confidence=high age=1d\n'
+            '- source=wiki ref="프로젝트/알파/b.md" confidence=high age=1d\n'
+            '- source=wiki ref="인물/김.md" confidence=low age=1d\n'
+        )
+        _, _, stat = wre.ablate_block(block, GOLD, "random", seed=3)
+        self.assertFalse(stat["matched"], stat)
+
+    def test_split_keeps_every_byte(self):
+        rows = wre.split_evidence_rows(BLOCK)
+        self.assertEqual("".join(c for _, c in rows), BLOCK)
+        self.assertEqual([r for r, _ in rows][0], None, "preamble carries no ref")
+
+
+class RecipeTests(unittest.TestCase):
+    def _recipe(self, **over):
+        base = {
+            "reader": "dsv4", "judge": "dsv4", "oracle": False, "ablate": "none",
+            "seed": 1, "read_budget": 4,
+            "snapshot": {"path": "s.jsonl", "sha": "aaaa", "cases": 60},
+            "corpus": {"pages": 916, "paths_sha": "bbbb"},
+            "at": "2026-09-02T00:00:00+00:00",
+        }
+        for k, v in over.items():
+            if "." in k:
+                outer, inner = k.split(".")
+                base[outer] = dict(base[outer]); base[outer][inner] = v
+            else:
+                base[k] = v
+        return base
+
+    def test_identical_recipes_compare(self):
+        self.assertEqual(wre.recipe_mismatches(self._recipe(), self._recipe()), [])
+
+    def test_a_different_reader_is_a_different_ruler(self):
+        # The 2026-08-29 lesson: an oracle ceiling measured under one reader is
+        # not a ceiling for another, and the delta reads as a breakthrough.
+        d = wre.recipe_mismatches(self._recipe(reader="kimi"), self._recipe())
+        self.assertEqual(len(d), 1)
+        self.assertIn("reader", d[0])
+
+    def test_judge_corpus_and_snapshot_all_count(self):
+        for key in ("judge", "corpus.paths_sha", "snapshot.sha"):
+            with self.subTest(key):
+                d = wre.recipe_mismatches(self._recipe(**{key: "zzz"}), self._recipe())
+                self.assertEqual(len(d), 1, d)
+
+    def test_oracle_and_ablation_arms_are_not_comparable_to_the_base(self):
+        for key, val in (("oracle", True), ("ablate", "cited")):
+            with self.subTest(key):
+                self.assertTrue(wre.recipe_mismatches(self._recipe(**{key: val}), self._recipe()))
+
+    def test_provenance_alone_does_not_break_comparability(self):
+        # A different wall clock, or a smaller --limit, is a wider error bar the
+        # summary already shows — not a different measurement.
+        same = wre.recipe_mismatches(
+            self._recipe(at="2027-01-01T00:00:00+00:00", **{"snapshot.cases": 30}),
+            self._recipe())
+        self.assertEqual(same, [])
+
+    def test_corpus_fingerprint_notices_an_emptied_copy(self):
+        # 2026-08-29: a /tmp cleanup left one page and every score read 0.0.
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            (root / "a.md").write_text("a", encoding="utf-8")
+            (root / "sub").mkdir()
+            (root / "sub" / "b.md").write_text("b", encoding="utf-8")
+            full = wre.corpus_fingerprint(str(root))
+            self.assertEqual(full["pages"], 2)
+            (root / "sub" / "b.md").unlink()
+            emptied = wre.corpus_fingerprint(str(root))
+            self.assertEqual(emptied["pages"], 1)
+            self.assertNotEqual(full["paths_sha"], emptied["paths_sha"])

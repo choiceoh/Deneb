@@ -46,6 +46,9 @@ reported "breakthrough".
 """
 
 import argparse
+import hashlib
+import datetime
+import random
 import json
 import os
 import pathlib
@@ -154,6 +157,90 @@ def render_page(path: pathlib.Path, limit: int = PAGE_BYTES) -> str:
     return f"### {path.name}\n{body}"
 
 
+EVIDENCE_ROW = re.compile(r'^- source=\w+ ref="([^"]+)"', re.M)
+
+
+def split_evidence_rows(block: str):
+    """[(ref | None, chunk)] — a chunk is a row header plus its body lines.
+
+    The leading text before the first row (the preamble that tells the reader
+    what the block is) carries ref None and is never dropped: removing it would
+    change the reader's instructions, not its evidence.
+    """
+    marks = [m.start() for m in EVIDENCE_ROW.finditer(block)]
+    if not marks:
+        return [(None, block)]
+    out = [(None, block[: marks[0]])]
+    for i, start in enumerate(marks):
+        end = marks[i + 1] if i + 1 < len(marks) else len(block)
+        chunk = block[start:end]
+        m = EVIDENCE_ROW.match(chunk)
+        out.append((m.group(1) if m else None, chunk))
+    return out
+
+
+def ablate_block(block: str, gold_paths: list, mode: str, seed: int):
+    """Drop evidence rows and report which refs went.
+
+    Two arms, and the second is what makes the first mean anything:
+
+      cited  — drop every row under a gold path. If accuracy survives this, the
+               retrieved evidence was not carrying the answer; the reader had it
+               from priors, from the question, or from another row.
+      random — drop the SAME NUMBER of non-gold rows. Without this control a
+               collapse under `cited` is unreadable: any block gets worse when
+               you make it smaller, and the question is whether THESE rows
+               mattered or merely these bytes.
+
+    Method borrowed from MemBukkit (2026-09, arXiv-less repo, reviewed and not
+    adopted): "Excluding the buckets an answer's receipt names collapses
+    accuracy from 80.0% to 1.3%. Excluding a matched random set leaves it at
+    82.3%." The paired control is the whole idea.
+    """
+    if mode == "none":
+        return block, [], {"bytes": 0, "target_bytes": 0, "matched": True}
+    rows = split_evidence_rows(block)
+    golds = [g.rstrip("/") for g in (gold_paths or [])]
+
+    def is_gold(ref):
+        return ref is not None and any(
+            ref == g or ref.startswith(g + "/") or ref.startswith(g.rstrip(".md") + "/")
+            for g in golds
+        )
+
+    gold_idx = [i for i, (ref, _) in enumerate(rows) if is_gold(ref)]
+    gold_bytes = sum(len(rows[i][1]) for i in gold_idx)
+    if mode == "cited":
+        drop = set(gold_idx)
+        matched = True
+    else:
+        # Match on BYTES, not row count. Rows differ in size by an order of
+        # magnitude, so "same number of rows" can remove a third of the context
+        # the treatment removed — and then a small drop under `cited` is
+        # unreadable, because the control never paid the same price. Byte
+        # matching is also far more often satisfiable: at n=60 the row-count
+        # control could pair only 12 of 27 ablated cases, and at that size its
+        # own effect came out POSITIVE, i.e. noise.
+        pool = [i for i, (ref, _) in enumerate(rows)
+                if ref is not None and i not in set(gold_idx)]
+        rng = random.Random(seed)
+        rng.shuffle(pool)
+        drop, taken = set(), 0
+        for i in pool:
+            if taken >= gold_bytes:
+                break
+            drop.add(i)
+            taken += len(rows[i][1])
+        # Within 25% of the treatment's byte budget counts as paired; anything
+        # else is a case whose block cannot support a control, and the analysis
+        # must exclude it rather than average it in.
+        matched = gold_bytes == 0 or abs(taken - gold_bytes) <= 0.25 * gold_bytes
+    kept = "".join(chunk for i, (_, chunk) in enumerate(rows) if i not in drop)
+    dropped = [rows[i][0] for i in sorted(drop) if rows[i][0]]
+    return kept, dropped, {"bytes": sum(len(rows[i][1]) for i in drop),
+                           "target_bytes": gold_bytes, "matched": matched}
+
+
 def resolve_gold_pages(wiki_dir: str, ref: str) -> list:
     """Every page a gold_paths entry designates, most important first.
 
@@ -248,10 +335,88 @@ def parse_directive(text: str):
 
 
 # --- run --------------------------------------------------------------------- #
+def corpus_fingerprint(wiki_dir: str) -> dict:
+    """Identify the corpus without hashing every byte of it.
+
+    Page count plus a hash of the sorted relative paths: enough to catch "the
+    wiki moved on" and "this is a different copy", cheap enough to run every
+    time. A content hash would also catch edits, and is not worth the walk —
+    the failure this guards is comparing runs over different corpora, and that
+    always shows up in the path set. The empty-copy accident of 2026-08-29 (a
+    /tmp cleanup left one page and every score read 0.0) is caught by `pages`
+    alone.
+    """
+    root = pathlib.Path(wiki_dir)
+    rels = sorted(str(p.relative_to(root)) for p in root.rglob("*.md"))
+    digest = hashlib.sha256("\n".join(rels).encode("utf-8")).hexdigest()[:16]
+    return {"pages": len(rels), "paths_sha": digest}
+
+
+def build_recipe(args, n_cases: int) -> dict:
+    """Everything that makes two runs comparable — or not.
+
+    A score is a reading of a (retrieval, reader, judge, corpus) tuple, not of
+    the system. This harness learned that the expensive way on 2026-08-29: an
+    oracle ceiling of 77.5 was measured under one reader, and a later run under
+    a different reader read 80.9 as a breakthrough when it was a different
+    ruler. Stamping the tuple is what lets the next run notice.
+
+    Borrowed from MemBukkit's frozen recipes (reviewed 2026-09-01, not adopted
+    as a dependency): pin reader, judge, encoder and the distill cache, then
+    accept reruns within a tolerance band rather than bit-for-bit.
+    """
+    snap = pathlib.Path(args.export)
+    snap_sha = hashlib.sha256(snap.read_bytes()).hexdigest()[:16] if snap.exists() else ""
+    return {
+        "reader": args.model,
+        "judge": args.judge_model,
+        "oracle": bool(args.oracle),
+        "ablate": args.ablate,
+        "seed": args.seed,
+        "read_budget": args.read_budget,
+        "snapshot": {"path": str(snap), "sha": snap_sha, "cases": n_cases},
+        "corpus": corpus_fingerprint(args.wiki),
+        "at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+    }
+
+
+# The axes that make a score mean something else. `at` and the case count are
+# provenance, not comparability — a smaller --limit is a wider error bar, which
+# the reader of the summary can see, not a different measurement.
+RECIPE_AXES = ("reader", "judge", "oracle", "ablate", "read_budget",
+               "snapshot.sha", "corpus.paths_sha")
+
+
+def _axis(recipe: dict, dotted: str):
+    cur = recipe
+    for part in dotted.split("."):
+        cur = (cur or {}).get(part)
+    return cur
+
+
+def recipe_mismatches(current: dict, prior: dict) -> list:
+    """Which comparability axes differ. Empty means the two scores are on the
+    same ruler; anything here means the delta between them is not a result."""
+    return [f"{a}: {_axis(prior, a)!r} → {_axis(current, a)!r}"
+            for a in RECIPE_AXES if _axis(current, a) != _axis(prior, a)]
+
+
 def run_case(rec: dict, wiki_dir: str, model: str, read_budget: int,
-             use_oracle: bool, verbose: bool = False) -> dict:
+             use_oracle: bool, verbose: bool = False,
+             ablate: str = "none", seed: int = 0) -> dict:
     evidence = (oracle_block(wiki_dir, rec.get("gold_paths"))
                 if use_oracle else (rec.get("block") or "(근거 없음)"))
+    # Dropping a row from the block is not enough: the reader can OPEN the same
+    # page by ref and get the evidence back, which would make every ablation
+    # read as "no effect". The dropped refs are withheld from the read tool too,
+    # so the arm actually removes the evidence rather than one mention of it.
+    dropped: list = []
+    ab_stat = {"bytes": 0, "target_bytes": 0, "matched": True}
+    if ablate != "none":
+        evidence, dropped, ab_stat = ablate_block(
+            evidence, rec.get("gold_paths"), ablate,
+            seed ^ (hash(rec.get("id") or "") & 0xFFFF))
+    withheld = {d.rstrip("/") for d in dropped}
     messages = [{"role": "system", "content": READER_SYSTEM},
                 {"role": "user", "content":
                  f"다음 질문에 답하라.\n\n질문: {rec['question']}\n\n"
@@ -272,7 +437,8 @@ def run_case(rec: dict, wiki_dir: str, model: str, read_budget: int,
         messages.append({"role": "assistant", "content": reply})
         if reads < read_budget:
             reads += 1
-            target = resolve_page(wiki_dir, arg)
+            hidden = any(arg.rstrip("/") == w or arg.startswith(w + "/") for w in withheld)
+            target = None if hidden else resolve_page(wiki_dir, arg)
             served = (render_page(target) if target is not None
                       else f'"{arg}" 는 열 수 있는 페이지가 아니다. 근거의 ref를 그대로 쓰라.')
         else:
@@ -293,6 +459,7 @@ def run_case(rec: dict, wiki_dir: str, model: str, read_budget: int,
             "question": rec["question"], "gold_paths": rec.get("gold_paths"),
             "must_contain": rec.get("must_contain"), "answer": answer,
             "reads": reads, "gold_in_block": rec.get("gold_in_block"),
+            "ablate": ablate, "dropped": dropped, "ablate_stat": ab_stat,
             "error": error}
 
 
@@ -369,6 +536,15 @@ def main() -> int:
     ap.add_argument("--oracle", action="store_true",
                     help="hand over the gold pages whole (ceiling run)")
     ap.add_argument("--read-budget", type=int, default=READ_BUDGET)
+    ap.add_argument("--ablate", choices=("none", "cited", "random"), default="none",
+                    help="drop the gold rows (cited) or an equal count of non-gold "
+                         "rows (random). Run BOTH: a collapse under cited means "
+                         "nothing without the matched control.")
+    ap.add_argument("--seed", type=int, default=1729,
+                    help="random-arm seed; the same seed drops the same rows")
+    ap.add_argument("--compare-to", default="",
+                    help="a prior --out directory: warn when this run is not on "
+                         "the same ruler (reader/judge/corpus/snapshot changed)")
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--references",
@@ -421,7 +597,7 @@ def main() -> int:
 
     def score_one(rec):
         out = run_case(rec, args.wiki, args.model, args.read_budget,
-                       args.oracle, args.verbose)
+                       args.oracle, args.verbose, args.ablate, args.seed)
         label, reason = judge_case(out, args.judge_model, args.wiki,
                                    references.get(str(rec.get("id")), ""))
         out["verdict_label"] = label
@@ -449,14 +625,30 @@ def main() -> int:
     label = f"wiki {'oracle' if args.oracle else 'retrieval'} · {args.model}"
     text = format_summary(label, summary)
     print("\n" + text)
+    recipe = build_recipe(args, len(results))
+    if args.compare_to:
+        prior_path = pathlib.Path(args.compare_to) / "recipe.json"
+        if not prior_path.exists():
+            print(f"\n(비교 대상에 recipe.json 없음: {prior_path} — 예전 실행이면 비교 불가)")
+        else:
+            diffs = recipe_mismatches(recipe, json.loads(prior_path.read_text(encoding="utf-8")))
+            if diffs:
+                print("\n⚠️  같은 자로 잰 점수가 아니다 — 차이를 결과로 읽지 말 것:")
+                for d in diffs:
+                    print(f"     {d}")
+            else:
+                print("\n비교 가능: 리더·저지·코퍼스·스냅샷 동일")
+
     if args.out:
         outdir = pathlib.Path(args.out)
         outdir.mkdir(parents=True, exist_ok=True)
+        (outdir / "recipe.json").write_text(
+            json.dumps(recipe, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         with (outdir / "results.jsonl").open("w", encoding="utf-8") as fh:
             for r in results:
                 fh.write(json.dumps(r, ensure_ascii=False) + "\n")
         (outdir / "summary.txt").write_text(text + "\n", encoding="utf-8")
-        print(f"\nwrote {outdir}/results.jsonl, summary.txt")
+        print(f"\nwrote {outdir}/results.jsonl, summary.txt, recipe.json")
     return 0
 
 
