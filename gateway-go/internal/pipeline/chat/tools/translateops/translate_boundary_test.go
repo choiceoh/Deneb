@@ -180,3 +180,45 @@ func TestBoundaryTranslateSegmentsConcurrentBatchLimit(t *testing.T) {
 		t.Fatalf("max concurrent batches = %d", maxActive.Load())
 	}
 }
+
+// TestBoundaryDeepLRetryClassification pins WHICH failures are worth a second
+// call. Retrying an auth or quota error just doubles the wait before the page
+// falls back to originals; retrying a 429 is the whole point of the retry.
+func TestBoundaryDeepLRetryClassification(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		want   bool
+	}{
+		{429, true},
+		{500, true},
+		{503, true},
+		{599, true},
+		{403, false}, // bad key
+		{456, false}, // quota exhausted — retrying cannot help
+		{400, false},
+		{0, false}, // no response at all
+	} {
+		if got := deepLStatusWorthRetry(tc.status); got != tc.want {
+			t.Errorf("deepLStatusWorthRetry(%d) = %v, want %v", tc.status, got, tc.want)
+		}
+	}
+	if deepLRetryWait(429) != deeplRetryWaitCap {
+		t.Errorf("a rate limit must wait the cap, got %v", deepLRetryWait(429))
+	}
+	if deepLRetryWait(503) >= deeplRetryWaitCap {
+		t.Errorf("a 5xx should back off less than a rate limit, got %v", deepLRetryWait(503))
+	}
+}
+
+// TestBoundarySleepCtxHonoursCancellation: the retry wait must not outlive the
+// caller — a cancelled page navigation should not hold a translate goroutine.
+func TestBoundarySleepCtxHonoursCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if sleepCtx(ctx, time.Minute) {
+		t.Fatal("sleepCtx reported a completed wait on a cancelled context")
+	}
+	if !sleepCtx(context.Background(), time.Millisecond) {
+		t.Fatal("sleepCtx should report completion on a normal wait")
+	}
+}

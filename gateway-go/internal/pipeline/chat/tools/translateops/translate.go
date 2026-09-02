@@ -25,8 +25,15 @@ const (
 	// run of tiny strings doesn't pack hundreds into one call. On a front page the
 	// segments are ~24 chars, so THIS bound decides there — 20 was leaving the
 	// DeepL request two-thirds empty. 50 is DeepL's own per-request text limit.
-	translateMaxSegmentsPerBatch  = 50
-	translateMaxConcurrentBatches = 3
+	translateMaxSegmentsPerBatch = 50
+	// One RPC's batches run together, so this decides how many WAVES a page costs.
+	// Measured 2026-09-03 by replaying a real topwar.ru article through the client
+	// walker with the server's batching simulated: the "rest" tier ships one RPC of
+	// 27 segments / 12,107 chars → 5 batches. At 3 that is two waves and the page
+	// finishes at 3,244ms; at 6 it is one wave and 2,083ms (−36%).
+	// Safe to raise only because callDeepL now retries a 429 with Retry-After —
+	// before that, extra concurrency turned a rate limit into untranslated text.
+	translateMaxConcurrentBatches = 6
 	defaultTranslateTargetLang    = "Korean"
 	// The U+E000 sentinel is written as an ESCAPE on purpose. It is a private-use
 	// rune, so a literal one renders as nothing in terminals, grep, sed and git
