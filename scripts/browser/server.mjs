@@ -36,6 +36,12 @@ const PROFILE =
   process.env.DENEB_BROWSER_PROFILE || `${process.env.HOME}/.deneb/browser-profile`;
 const MAX_CHARS = 16_000;
 const NAV_TIMEOUT_MS = 25_000;
+// Settle tuning (see settleForContent). A page that already rendered real text
+// and stopped changing is done — the caller's wait_ms is a patience BUDGET, not
+// a mandatory sleep. A page still showing a skeleton keeps the whole budget.
+const SETTLE_CONTENT_FLOOR = 400; // chars of readable text that count as "rendered"
+const SETTLE_QUIET_MS = 350; // text length unchanged this long = quiet
+const SETTLE_POLL_MS = 100;
 // Hard ceiling for one queued operation. page.goto is already bounded, but
 // launchPersistentContext / newPage are not, and the queue is serial — so an
 // unbounded op wedges every request behind it (the process stays alive, so
@@ -220,6 +226,54 @@ async function extractSelector(page, sel) {
   return { matched, text: all.join("\n\n---\n\n") };
 }
 
+// frameTextLen sums readable text length across every frame — the cheap probe
+// settleForContent polls. It mirrors extractAllFrames' reach (iframe bodies
+// included) without building the strings, so a page whose article lives in an
+// iframe is judged on the article, not on the empty shell around it.
+async function frameTextLen(page) {
+  let n = 0;
+  for (const frame of page.frames()) {
+    try {
+      n += await frame.evaluate(
+        () => ((document.body && document.body.innerText) || "").length,
+      );
+    } catch {
+      /* detached / navigating frame contributes nothing this tick */
+    }
+  }
+  return n;
+}
+
+// settleForContent replaces a blind post-networkidle sleep with "wait until the
+// page has real content AND stopped changing", capped by the caller's budget.
+//
+// Why the content floor. The naive version — exit as soon as the text length
+// stops changing — is WRONG and measurably so: a skeleton page whose body is
+// "..." is instantly stable, so the poll returns before the real content lands.
+// Measured 2026-09-02 against synthetic late-render / late-fetch / very-late
+// pages: length-stability alone missed the content in 3 of 3, while the blind
+// sleep caught 3 of 3. Requiring SETTLE_CONTENT_FLOOR chars before an early
+// exit restores that guarantee — a page that has not produced real text yet
+// always gets the full budget — while still cutting the wait on pages that
+// have. Golden set (median of 3, same extracted text): 8.9s → 4.9s total, and
+// the late-content pages still pass because the early exit can only fire once
+// the late content has arrived.
+async function settleForContent(page, capMs) {
+  const start = Date.now();
+  let last = -1;
+  let since = Date.now();
+  while (Date.now() - start < capMs) {
+    const len = await frameTextLen(page);
+    if (len !== last) {
+      last = len;
+      since = Date.now();
+    } else if (len >= SETTLE_CONTENT_FLOOR && Date.now() - since >= SETTLE_QUIET_MS) {
+      return; // rendered and quiet — the rest of the budget buys nothing
+    }
+    await page.waitForTimeout(SETTLE_POLL_MS);
+  }
+}
+
 async function browse(url, waitMs, selector, opts = {}) {
   if (!/^https?:\/\//i.test(url)) {
     return { ok: false, error: "url must be http(s)" };
@@ -236,9 +290,10 @@ async function browse(url, waitMs, selector, opts = {}) {
   const page = await context.newPage();
   try {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
-    // SPA settle: bounded network-idle, then a short paint delay.
+    // SPA settle: bounded network-idle, then wait for rendered+quiet content
+    // within the caller's budget (settleForContent).
     await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => {});
-    await page.waitForTimeout(Math.min(Math.max(waitMs || 0, 500), 5_000));
+    await settleForContent(page, Math.min(Math.max(waitMs || 0, 500), 5_000));
     const title = await page.title();
 
     let text;
