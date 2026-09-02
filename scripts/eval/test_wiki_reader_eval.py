@@ -370,7 +370,8 @@ class RecipeTests(unittest.TestCase):
         for k, v in over.items():
             if "." in k:
                 outer, inner = k.split(".")
-                base[outer] = dict(base[outer]); base[outer][inner] = v
+                base[outer] = dict(base[outer])
+                base[outer][inner] = v
             else:
                 base[k] = v
         return base
