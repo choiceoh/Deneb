@@ -74,6 +74,72 @@ const ISO_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 // ---------------------------------------------------------------------------
+// Ad / tracker request blocking (both contexts, per browse tab)
+// ---------------------------------------------------------------------------
+
+// The `web` tool has stripped ad blocks since its HTML→Markdown path was built
+// (StripNoiseElements, Go side) — but the browse path had NO ad handling at all:
+// it returns document.innerText from every frame, so ad iframes land in the
+// model's context and ad requests keep the network busy long past the article.
+//
+// Measured 2026-09-03 (donga.com front page, this sidecar's own settle):
+//   no blocking : 6.3s settle · 359 requests · 8,153 chars
+//   blocking    : 2.5s settle · 169 requests · 7,236 chars (89%, prefix identical)
+// Blocking 12 ad-network requests removed ~190 downstream ones — ad chains load
+// ads. Interception itself costs nothing measurable (a pass-through route was
+// within noise on ad-free pages).
+//
+// Membership rule: third-party AD SERVING and ANALYTICS networks only, matched
+// on the registrable host or a subdomain of it. Never a first-party host, never
+// a substring match — "myads.co.kr" is somebody's real site, not an ad network.
+const AD_HOSTS = [
+  // Google ad stack (googletagmanager is the loader for most of the rest)
+  "doubleclick.net", "googlesyndication.com", "googleadservices.com",
+  "googletagservices.com", "googletagmanager.com", "google-analytics.com",
+  // Exchanges / DSPs / SSPs
+  "criteo.com", "criteo.net", "taboola.com", "outbrain.com", "adnxs.com",
+  "rubiconproject.com", "pubmatic.com", "openx.net", "casalemedia.com",
+  "smartadserver.com", "33across.com", "teads.tv", "sharethrough.com",
+  "amazon-adsystem.com", "adsafeprotected.com", "moatads.com",
+  // Measurement / behavioural analytics
+  "scorecardresearch.com", "quantserve.com", "hotjar.com", "chartbeat.com",
+  // Korean ad networks seen on local news/portal pages
+  "contentsfeed.com", "widerplanet.com", "dable.io", "mobon.net", "cauly.net",
+  "adop.cc", "tenping.kr", "adpick.co.kr", "ad.daum.net",
+];
+// Off switch for debugging a page that genuinely needs its ad stack (a consent
+// gate served through googletagmanager, say): DENEB_BROWSER_ADBLOCK=0.
+const ADBLOCK_ON = process.env.DENEB_BROWSER_ADBLOCK !== "0";
+
+// isAdHost matches the host itself or any subdomain of it — exact labels only,
+// so "notdoubleclick.net" and "doubleclick.net.evil.example" never match.
+export function isAdHost(hostname) {
+  const h = String(hostname || "").toLowerCase().replace(/\.$/, "");
+  return AD_HOSTS.some((d) => h === d || h.endsWith("." + d));
+}
+
+// installAdBlock scopes the blocking to ONE browse tab (page.route), not to the
+// context: the operator context is the human's own browser, and their manual
+// tabs must keep behaving exactly as they did. Requests that are not ads call
+// route.fallback() so the isolated context's private-range egress guard — a
+// context-level route — still gets to judge them.
+async function installAdBlock(page) {
+  if (!ADBLOCK_ON) return;
+  await page.route("**/*", async (route) => {
+    try {
+      const u = new URL(route.request().url());
+      if ((u.protocol === "http:" || u.protocol === "https:") && isAdHost(u.hostname)) {
+        await route.abort("blockedbyclient");
+        return;
+      }
+    } catch {
+      /* unparseable URL: let the next handler decide */
+    }
+    await route.fallback().catch(() => {});
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Private-range egress guard (isolated context only)
 // ---------------------------------------------------------------------------
 
@@ -377,6 +443,7 @@ async function browse(url, waitMs, selector, opts = {}) {
     context = await ensureOperatorContext();
   }
   const page = await context.newPage();
+  await installAdBlock(page);
   const net = trackNetwork(page);
   try {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });

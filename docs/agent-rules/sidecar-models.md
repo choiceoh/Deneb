@@ -27,6 +27,15 @@ globs: ["gateway-go/internal/pipeline/chat/tools/document/paddleocr.go", "gatewa
 > ⑤ **셀렉터 가드가 없으면** 표적 읽기가 `matched:0` 을 사실처럼 반환한다.
 > 회귀 프로브 `npm run probe:settle` — **server.mjs 의 settlePage 를 import 해서** 실제 규칙을 5케이스로 검사한다
 > (첫 판은 로직을 복사해 둬서 가드를 지워도 통과했다 — 리뷰에서 잡혔다).
+> ★**광고·추적 차단**(2026-09-03): browse 경로에는 광고 처리가 **전혀 없었다** — `web` 도구는 HTML→MD 단계에서
+> `StripNoiseElements`(Go)로 광고 블록을 걷어내는데, 사이드카는 모든 프레임의 innerText 를 그대로 실어 보냈다.
+> 이제 browse 탭마다 광고/추적 호스트 요청을 abort 한다(`installAdBlock`). **탭 단위(`page.route`)라 사람이 쓰는
+> 탭은 그대로**고, 광고가 아닌 요청은 `route.fallback()` 으로 넘겨 격리 컨텍스트의 사설망 차단이 계속 판정한다.
+> 실측(donga.com, 이 사이드카 정착 기준): **6.3초→2.5초 · 요청 359→169 · 본문 8,153→7,236자(89%, 접두 동일)**.
+> 광고망 12개를 막으면 그것들이 부르는 190여 요청이 함께 사라진다. 가로채기 자체 비용은 광고 없는 페이지에서 노이즈 수준.
+> 보존율 실측: 위키 100% · 네이버블로그 100% · 네이버뉴스 99% · 한경 90% · 동아 89%(줄어든 건 광고 텍스트, 본문 접두 동일).
+> 명단 규칙 = **제3자 광고·추적망만, 등록 호스트나 그 하위 도메인 정확 일치**(부분 문자열 금지 — `myads.co.kr` 은 남의 진짜 사이트다).
+> 끄기 `DENEB_BROWSER_ADBLOCK=0`(구글태그매니저로 동의 게이트를 서빙하는 페이지 디버깅용). 프로브 `npm run probe:adblock`.
 > 기동 `start-browser-sidecar.sh start` · 게이트웨이 override `DENEB_BROWSE_URL`(Page Agent의 DENEB_BROWSER_URL과 별개) ·
 > 라이브 검증 `DENEB_BROWSE_LIVE=1 go test -run TestToolBrowse_Live ./internal/pipeline/chat/tools`.
 
