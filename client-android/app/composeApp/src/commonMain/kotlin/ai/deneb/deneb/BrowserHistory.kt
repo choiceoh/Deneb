@@ -83,10 +83,16 @@ private fun List<BrowserVisit>.sanitizedBrowserHistory(): List<BrowserVisit> = a
     .take(BROWSER_HISTORY_LIMIT)
     .toList()
 
+// Compiled once. `sanitizedBrowserHistory` runs over the whole list on every
+// history read and every write, and the write path runs on a URL/title change —
+// several times per page load. Inline, this compiled a Pattern per entry per
+// pass: ~300 compilations per load with a full history.
+private val BROWSER_HISTORY_WHITESPACE = Regex("\\s+")
+
 private fun cleanBrowserHistoryTitle(title: String, url: String): String {
     var cleaned = title
         .trim()
-        .replace(Regex("\\s+"), " ")
+        .replace(BROWSER_HISTORY_WHITESPACE, " ")
         .take(BROWSER_HISTORY_TITLE_LIMIT)
     if (cleaned.lastOrNull()?.isHighSurrogate() == true) cleaned = cleaned.dropLast(1)
     return cleaned.ifBlank { browserHistoryHost(url) }

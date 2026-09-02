@@ -270,8 +270,36 @@ internal fun shouldBlockBrowserAdRequest(url: String, isForMainFrame: Boolean = 
     return false
 }
 
-internal fun isBrowserAdHost(host: String): Boolean = BROWSER_AD_HOST_SUFFIXES.any { host == it || host.endsWith(".$it") } ||
-    BrowserRuleRegistry.current().adHostSuffixes.any { host == it || host.endsWith(".$it") }
+internal fun isBrowserAdHost(host: String): Boolean {
+    if (matchesAdHostSuffix(host, BROWSER_AD_HOST_SUFFIXES)) return true
+    val remote = BrowserRuleRegistry.current().adHostSuffixes
+    return remote.isNotEmpty() && matchesAdHostSuffix(host, remote)
+}
+
+/**
+ * `host == s || host.endsWith(".$s")` for any s in [suffixes] — the same
+ * relation as before, walked from the host side instead of the list side.
+ *
+ * This runs inside shouldInterceptRequest, once per subresource. Written as
+ * `suffixes.any { host.endsWith(".$it") }` it built a fresh `".$it"` String for
+ * every one of the 139 compiled-in suffixes on every request that was NOT
+ * blocked — the common case, first-party content — so a Korean news page with
+ * ~300 subresources produced ~42,000 short-lived strings per load, and the GC
+ * pressure lands on a UI thread that is laying the page out.
+ *
+ * A hostname has 2-4 label boundaries, and a suffix can only match at one of
+ * them, so checking those few positions against the set is both allocation-free
+ * per entry and O(labels) instead of O(suffixes).
+ */
+private fun matchesAdHostSuffix(host: String, suffixes: Collection<String>): Boolean {
+    if (suffixes.contains(host)) return true
+    var dot = host.indexOf('.')
+    while (dot >= 0 && dot + 1 < host.length) {
+        if (suffixes.contains(host.substring(dot + 1))) return true
+        dot = host.indexOf('.', dot + 1)
+    }
+    return false
+}
 
 /**
  * MIME hint for the empty [android.webkit.WebResourceResponse] so script/CSS

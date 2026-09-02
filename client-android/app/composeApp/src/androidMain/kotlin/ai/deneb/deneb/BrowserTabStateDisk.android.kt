@@ -4,6 +4,10 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Parcel
 import android.webkit.WebView
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -28,18 +32,45 @@ internal object BrowserTabStateDisk {
     private const val MAX_STATE_BYTES = 1 shl 20 // a back/forward list is KBs; 1MB is a broken outlier
     private const val MAX_FILES = 12 // 8 live tabs + headroom
 
-    /** Serializes [web]'s session now; best-effort, never throws. */
+    // Process-lifetime, deliberately NOT a composable's scope: the two callers
+    // that matter are a tab release (the composable is leaving — its
+    // rememberCoroutineScope is being cancelled) and ON_STOP. A write started
+    // from either must outlive them.
+    private val diskScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Parks [web]'s session. The WebView half runs on the caller's (main)
+     * thread because [WebView.saveState] requires it; the marshal, the file
+     * write and the directory prune are handed to [diskScope].
+     *
+     * That split is the point. Both callers run on the UI thread at a moment
+     * the user can see: a tab switch, and the home-button transition. Marshalling
+     * a back/forward list, writing it, renaming it and then stat-ing every file
+     * in the directory is not work for that thread.
+     *
+     * The cost is a small window — a process killed within milliseconds of
+     * ON_STOP loses this tab's back/forward list and scroll. The last URL is
+     * persisted separately (setBrowserLastUrl), so the tab still reopens; it
+     * reopens without history. Best-effort was already this method's contract.
+     */
     fun save(context: Context, tabId: String, web: WebView) {
         if (tabId.isBlank()) return
         val bundle = Bundle()
         if (runCatching { web.saveState(bundle) }.getOrNull() == null) return
+        val snapshot = SavedState(bundle, web.scrollX, web.scrollY)
+        // applicationContext: diskScope outlives any Activity.
+        val appContext = context.applicationContext ?: context
+        diskScope.launch { writeSnapshot(appContext, tabId, snapshot) }
+    }
+
+    private fun writeSnapshot(context: Context, tabId: String, snapshot: SavedState) {
         val bytes = runCatching {
             val parcel = Parcel.obtain()
             try {
                 parcel.writeInt(FORMAT_VERSION)
-                parcel.writeInt(web.scrollX)
-                parcel.writeInt(web.scrollY)
-                parcel.writeBundle(bundle)
+                parcel.writeInt(snapshot.scrollX)
+                parcel.writeInt(snapshot.scrollY)
+                parcel.writeBundle(snapshot.bundle)
                 parcel.marshall()
             } finally {
                 parcel.recycle()

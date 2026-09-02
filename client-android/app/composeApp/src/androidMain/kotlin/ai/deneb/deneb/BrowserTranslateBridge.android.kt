@@ -190,8 +190,21 @@ internal class BrowserTranslateBridge(
         }
     }
 
+    // ★ Dispatchers.Default, NOT the caller's context. `scope` comes from
+    // rememberCoroutineScope() — the Compose MAIN dispatcher — so without this
+    // every launched batch ran its CPU work on the UI thread while the user was
+    // reading and scrolling the page being translated: the translate-cache disk
+    // snapshot (up to 150k chars serialized, then an EncryptedSharedPreferences
+    // write) and the per-batch double encode (segments → JSON → JS string
+    // literal, up to ~18k chars, eight batches in flight).
+    //
+    // Nothing in the launched body may touch the WebView or Compose state
+    // directly: every such call already hops explicitly (`withContext(Main)` in
+    // launchAll/markStarted, `Handler(mainLooper).post` in reject/onProgress,
+    // and runJavascript's own looper check). Those hops were written when the
+    // body was believed to be off-main; this makes that true.
     private fun newGenerationScope(): CoroutineScope = CoroutineScope(
-        scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]),
+        scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]) + Dispatchers.Default,
     )
 
     private suspend fun markStarted(requestId: String) {
