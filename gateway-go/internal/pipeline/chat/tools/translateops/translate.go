@@ -3,8 +3,10 @@ package translateops
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 const (
@@ -91,14 +93,28 @@ func TranslateSegments(ctx context.Context, segments []string, targetLang string
 	for i, in := range inputs {
 		out[i] = in.Text // safe default: originals, overwritten only on a clean batch
 	}
+	var translatedCount atomic.Int64
 	ranges := translateBatchRanges(inputs)
 	if len(ranges) <= 1 {
 		for _, r := range ranges {
-			translateRange(ctx, inputs, out, r.Start, r.End, lang)
+			translateRange(ctx, inputs, out, &translatedCount, r.Start, r.End, lang)
 		}
-		return out, nil
+	} else {
+		translateRangesConcurrently(ctx, inputs, out, ranges, lang, &translatedCount)
 	}
-	translateRangesConcurrently(ctx, inputs, out, ranges, lang)
+	// Nothing came back at all — no API key, quota exhausted, DeepL down, or the
+	// context died. Saying "here are your segments" with a nil error is a LIE the
+	// callers cannot see through, and it is an expensive one: the in-app browser
+	// caches what it is handed, so a total failure writes `original → original`
+	// into that device's site and global stores and those segments then never ask
+	// again. One outage silently and permanently stops translating them.
+	//
+	// A partial failure still returns originals for the batches that failed —
+	// that is the deliberate never-drop-page-text contract, and translateRange's
+	// bisection makes it rare and narrow. This guard is for the systemic case.
+	if translatedCount.Load() == 0 {
+		return out, fmt.Errorf("translate: all %d segments failed (translator unavailable or rejecting)", len(inputs))
+	}
 	return out, nil
 }
 
@@ -158,7 +174,7 @@ func translateBatchRanges(inputs []translateInput) []translateBatchRange {
 	return ranges
 }
 
-func translateRangesConcurrently(ctx context.Context, inputs []translateInput, out []string, ranges []translateBatchRange, lang string) {
+func translateRangesConcurrently(ctx context.Context, inputs []translateInput, out []string, ranges []translateBatchRange, lang string, translated *atomic.Int64) {
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, translateMaxConcurrentBatches)
 	for _, r := range ranges {
@@ -172,7 +188,7 @@ func translateRangesConcurrently(ctx context.Context, inputs []translateInput, o
 		go func(r translateBatchRange) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			translateRange(ctx, inputs, out, r.Start, r.End, lang)
+			translateRange(ctx, inputs, out, translated, r.Start, r.End, lang)
 		}(r)
 	}
 	wg.Wait()
@@ -228,20 +244,21 @@ func translateInputCost(in translateInput) int {
 // each half, down to a single segment. So one odd batch self-heals instead of
 // leaving a whole span untranslated; only a segment that fails even alone keeps
 // its original.
-func translateRange(ctx context.Context, inputs []translateInput, out []string, start, end int, lang string) {
+func translateRange(ctx context.Context, inputs []translateInput, out []string, done *atomic.Int64, start, end int, lang string) {
 	if start >= end {
 		return
 	}
 	if translated, ok := translateBatchFn(ctx, inputs[start:end], lang); ok {
 		copy(out[start:end], translated)
+		done.Add(int64(end - start))
 		return
 	}
 	if end-start <= 1 {
 		return // single segment failed → keep its original (already in out)
 	}
 	mid := start + (end-start)/2
-	translateRange(ctx, inputs, out, start, mid, lang)
-	translateRange(ctx, inputs, out, mid, end, lang)
+	translateRange(ctx, inputs, out, done, start, mid, lang)
+	translateRange(ctx, inputs, out, done, mid, end, lang)
 }
 
 // translateBatch translates one batch via DeepL. Browser translation is

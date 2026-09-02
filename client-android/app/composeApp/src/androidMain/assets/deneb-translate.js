@@ -288,6 +288,24 @@
 
   function rememberTranslation(original, translated) {
     cache[original] = translated;
+    // ★ Never PERSIST a translation identical to its source.
+    //
+    // The gateway keeps a failed batch's originals rather than dropping page
+    // text, so "translated == original" is exactly what a failure looks like
+    // from here — and it is indistinguishable from a real no-op translation.
+    // Writing it to the site/global stores would make that segment stop asking
+    // FOREVER on this device: cachedTranslation serves the stored original back
+    // and the node counts as applied. One bad batch, permanently untranslated
+    // text, no error anywhere.
+    //
+    // The gateway now reports a total failure as an RPC error (the batch is
+    // rejected and retried); this covers the narrow case it cannot — a single
+    // segment that fails even alone, after bisection.
+    //
+    // Kept in the in-memory `cache` above, so this page view does not re-ship
+    // it; the cost is that a genuinely unchanged segment ("NATO", "2026") is
+    // re-sent on a later visit, riding along in a batch that was going anyway.
+    if (String(translated) === String(original)) return;
     var now = Date.now();
     var pageKey = pageCacheKey();
     var pageStore = loadPersistentStore(pageKey);
