@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // QueryKind selects the retrieval backend for one typed query clause.
@@ -146,7 +147,14 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 // SearchPlanWithOptions executes a typed plan with caller-specific result-plane
 // options. SearchPlan keeps the production all-plane default; page-only
 // consumers set ExcludeFactResults so synthetic facts never consume page slots.
+// SearchPlanWithOptions is the path RECALL takes — not Search. Each lex clause
+// runs a complete SearchWithOptions of its own, so a plan's cost is N searches
+// plus fusion, and the per-source timing the preflight logs (wiki=8(904ms)) is
+// the sum. Instrumenting Search alone measured a median of 38ms and explained
+// nothing, because recall almost never calls it directly.
 func (s *Store) SearchPlanWithOptions(ctx context.Context, plan QueryPlan, limit int, options QueryOptions) (SearchReport, error) {
+	timer := newStageTimer()
+	planStart := time.Now()
 	plan = normalizeQueryPlan(plan)
 	if len(plan.Clauses) == 0 || s == nil || s.fts == nil {
 		return SearchReport{}, nil
@@ -167,7 +175,9 @@ func (s *Store) SearchPlanWithOptions(ctx context.Context, plan QueryPlan, limit
 	}
 	semanticVectors := make(map[int][]float32, len(semanticClauseIndexes))
 	if len(semanticQueries) > 0 {
-		if vectors := s.embedQueriesBatch(ctx, semanticQueries); vectors != nil {
+		vectors := s.embedQueriesBatch(ctx, semanticQueries)
+		timer.mark("embed_batch")
+		if vectors != nil {
 			for i, clauseIndex := range semanticClauseIndexes {
 				semanticVectors[clauseIndex] = vectors[i]
 			}
@@ -180,10 +190,12 @@ func (s *Store) SearchPlanWithOptions(ctx context.Context, plan QueryPlan, limit
 			options.Mode = SearchModeSemantic
 			semantic := s.searchSemanticWithVec(ctx, semanticVectors[clauseIndex], max(fetchLimit, semanticBlendK))
 			report = s.composeSearchReport(ctx, clause.Query, fetchLimit, fetchLimit, nil, semantic, false, options, nil, nil)
+			timer.mark(fmt.Sprintf("vec%d", clauseIndex))
 		} else {
 			options.Mode = SearchModeBM25
 			var err error
 			report, err = s.SearchWithOptions(ctx, clause.Query, fetchLimit, options)
+			timer.mark(fmt.Sprintf("lex%d", clauseIndex))
 			if err != nil {
 				return SearchReport{}, fmt.Errorf("wiki query plan %s: %w", clause.Kind, err)
 			}
@@ -201,10 +213,12 @@ func (s *Store) SearchPlanWithOptions(ctx context.Context, plan QueryPlan, limit
 		diagnostics.SemanticAvailable = diagnostics.SemanticAvailable || ((clause.Kind == QueryKindVec || clause.Kind == QueryKindHyDE) && len(filtered) > 0)
 	}
 	results := fuseQueryPlan(rankings, plan.Clauses, fetchLimit)
+	timer.mark("fuse")
 	diagnostics.CandidateCount = len(results)
 	baseScores := resultScoreMap(results)
 	results = s.fts.applyValidity(results)
 	results = s.applyRecallTRS(results)
+	timer.mark("post")
 	lifecycleQuery := factLifecyclePlanQuery(plan)
 	factSnapshot := s.RecallFactSnapshot()
 	beforeLifecycle := len(results)
@@ -273,6 +287,7 @@ func (s *Store) SearchPlanWithOptions(ctx context.Context, plan QueryPlan, limit
 		attachRerankExplanations(results, rerankScores, rerankWeights)
 		markFactSearchExplanations(results)
 	}
+	timer.reportPlan(planLabel(plan), len(plan.Clauses), time.Since(planStart))
 	return SearchReport{Results: results, Diagnostics: diagnostics}, nil
 }
 
@@ -389,4 +404,13 @@ func (s *Store) attachPlanExplanations(results []SearchResult, rankings [][]Sear
 		}
 		results[i].Explain = explanation
 	}
+}
+
+// planLabel is the first clause's query, clipped — enough to correlate a slow
+// plan with the turn that asked for it without putting a user message in a log.
+func planLabel(plan QueryPlan) string {
+	if len(plan.Clauses) == 0 {
+		return ""
+	}
+	return plan.Clauses[0].Query
 }
