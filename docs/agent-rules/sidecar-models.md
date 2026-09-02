@@ -13,11 +13,15 @@ globs: ["gateway-go/internal/pipeline/chat/tools/document/paddleocr.go", "gatewa
 > (Playwright 상주 headful Chromium, 프로필 `~/.deneb/browser-profile`, API
 > 127.0.0.1:18930). 운영자가 `start-browser-sidecar.sh view`(noVNC)로 로그인해
 > 두면 에이전트가 그 세션으로 로그인 벽 페이지를 읽는다(읽기 전용 v1).
-> ★**정착(settle) 규칙**(2026-09-02): networkidle 뒤에 `wait_ms` 를 통째로 자던 것을 **"본문이 400자 이상 렌더됐고 350ms 동안
-> 안 변하면 조기 종료"**로 바꿨다(`settleForContent`). `wait_ms` 는 이제 **인내 예산**이지 의무 수면이 아니다 — 골든셋 실측
-> 9.996초→6.799초(32%), 추출 텍스트 동일. ⚠️ **길이 안정화만으로 끊으면 안 된다**: 스켈레톤(`...` 3자)은 즉시 안정으로
-> 보여 늦게 오는 본문을 3/3 놓쳤다(실측). 400자 바닥이 그 보장을 되돌린다 — 아직 본문이 없으면 예산을 다 쓴다.
-> 회귀 프로브 `npm run probe:settle`(로컬 합성 페이지, 네트워크 불필요).
+> ★**정착(settle) 규칙**(2026-09-03 최종): `wait_ms` 를 통째로 자던 것을 **"렌더 + 콘텐츠 정지 + 네트워크 정지"가 모두
+> 성립하면 조기 종료**로 바꿨다(`settlePage`). 세 조건 = 본문 400자 이상 · 그 길이가 350ms 무변화 · 인플라이트 요청 0에
+> 400ms 무활동. 여기에 **최소 대기 1.2초 바닥**. `wait_ms` 는 이제 **상한(인내 예산)**이고, 네트워크가 처음 조용해진
+> 시점부터 센다(옛 networkidle→sleep 과 동일한 최악값 보존). 골든셋 실측 8.4초→4.3초.
+> ⚠️ **가드 셋 다 실측으로 벌었다** — 하나라도 빼면 조용히 본문을 잃는다:
+> ① 400자 바닥 없으면 스켈레톤(`...` 3자)이 즉시 안정으로 보여 늦은 본문 3/3 유실.
+> ② 네트워크 추적 없으면(=`networkidle` 일회성 대기만) 그 뒤 시작한 fetch 를 못 본다.
+> ③ 1.2초 바닥 없으면 **내비 메뉴만으로 400자를 넘긴 페이지**가 기사 fetch 시작 전에 종료된다(실측: 435ms 에 메뉴만 반환).
+> 회귀 프로브 `npm run probe:settle`(로컬 합성 3케이스, 네트워크 불필요) — 골든셋이 구조적으로 못 보는 실패 모드다.
 > 기동 `start-browser-sidecar.sh start` · 게이트웨이 override `DENEB_BROWSE_URL`(Page Agent의 DENEB_BROWSER_URL과 별개) ·
 > 라이브 검증 `DENEB_BROWSE_LIVE=1 go test -run TestToolBrowse_Live ./internal/pipeline/chat/tools`.
 
