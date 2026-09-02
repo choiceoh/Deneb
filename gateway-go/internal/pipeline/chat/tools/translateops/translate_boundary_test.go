@@ -39,22 +39,53 @@ func TestBoundaryTranslateInputEnvelopeMatrix(t *testing.T) {
 }
 
 func TestBoundaryTranslateBatchRangeLimits(t *testing.T) {
-	inputs := make([]translateInput, 45)
+	// Sizes derive from the bounds themselves: these constants are tuned against
+	// measured DeepL latency (see translate.go), and a test that hard-codes the
+	// old numbers fails the tuning rather than the behaviour.
+	const tail = 5
+	inputs := make([]translateInput, translateMaxSegmentsPerBatch*2+tail)
 	for i := range inputs {
-		inputs[i] = translateInput{Text: "x"}
+		inputs[i] = translateInput{Text: "x"} // 1 char each → the SEGMENT bound decides
 	}
-	want := []translateBatchRange{{Start: 0, End: 20}, {Start: 20, End: 40}, {Start: 40, End: 45}}
+	want := []translateBatchRange{
+		{Start: 0, End: translateMaxSegmentsPerBatch},
+		{Start: translateMaxSegmentsPerBatch, End: translateMaxSegmentsPerBatch * 2},
+		{Start: translateMaxSegmentsPerBatch * 2, End: translateMaxSegmentsPerBatch*2 + tail},
+	}
 	if got := translateBatchRanges(inputs); !reflect.DeepEqual(got, want) {
 		t.Fatalf("short input ranges = %#v, want %#v", got, want)
 	}
+	// Two inputs that together clear the char bound, then a third that cannot join.
+	half := (translateMaxCharsPerBatch / 2) + 100
 	large := []translateInput{
-		{Text: strings.Repeat("a", 700)},
-		{Text: strings.Repeat("b", 500)},
+		{Text: strings.Repeat("a", half)},
+		{Text: strings.Repeat("b", translateMaxCharsPerBatch-half)},
 		{Text: "c"},
 	}
 	want = []translateBatchRange{{Start: 0, End: 2}, {Start: 2, End: 3}}
 	if got := translateBatchRanges(large); !reflect.DeepEqual(got, want) {
 		t.Fatalf("char-bound ranges = %#v, want %#v", got, want)
+	}
+	// Part-count bound: a batch must never flatten past DeepL's per-request text
+	// limit, because translateBatchDeepL rejects such a batch outright and the
+	// caller then pays a wasted round trip before splitting it.
+	perInput := 10
+	parts := make([]string, perInput)
+	for i := range parts {
+		parts[i] = "p"
+	}
+	withParts := make([]translateInput, 12) // 120 flattened texts
+	for i := range withParts {
+		withParts[i] = translateInput{Text: strings.Repeat("p", perInput), Parts: parts}
+	}
+	for _, r := range translateBatchRanges(withParts) {
+		texts := 0
+		for _, in := range withParts[r.Start:r.End] {
+			texts += translateInputTexts(in)
+		}
+		if texts > maxDeepLTextsPerRequest {
+			t.Fatalf("range %#v flattens to %d texts, over DeepL's %d limit", r, texts, maxDeepLTextsPerRequest)
+		}
 	}
 	if got := translateBatchRanges(nil); len(got) != 0 {
 		t.Fatalf("nil ranges = %#v", got)

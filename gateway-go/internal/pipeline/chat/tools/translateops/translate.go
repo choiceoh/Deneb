@@ -9,12 +9,23 @@ import (
 
 const (
 	// translateMaxCharsPerBatch is the PRIMARY batch bound — total source chars per
-	// DeepL call. ~1200 chars is the researched sweet spot on real article prose;
-	// bigger batches add latency and smaller ones add round-trips without quality gain.
-	translateMaxCharsPerBatch = 1200
+	// DeepL call.
+	//
+	// It used to be 1200 on the belief that "bigger batches add latency". Measured
+	// 2026-09-03 against api.deepl.com with 120 real segments (10,392 chars) from a
+	// topwar.ru article: per-call latency is FLAT in payload size — median 1,004ms
+	// at the 1200-char shape vs 1,054ms at 3000 — so the wall time is round-trip
+	// COUNT, not bytes. Same segments, same concurrency 3:
+	//     20 texts / 1200 chars → 12 calls → 4,395ms
+	//     50 texts / 3000 chars →  5 calls → 2,593ms   (−41%)
+	// DeepL translates each text independently (the `context` hint is separate and
+	// capped), so batch size does not touch translation quality.
+	translateMaxCharsPerBatch = 3000
 	// translateMaxSegmentsPerBatch caps a batch when segments are short (nav/labels) so a
-	// run of tiny strings doesn't pack hundreds into one call. The char bound dominates.
-	translateMaxSegmentsPerBatch  = 20
+	// run of tiny strings doesn't pack hundreds into one call. On a front page the
+	// segments are ~24 chars, so THIS bound decides there — 20 was leaving the
+	// DeepL request two-thirds empty. 50 is DeepL's own per-request text limit.
+	translateMaxSegmentsPerBatch  = 50
 	translateMaxConcurrentBatches = 3
 	defaultTranslateTargetLang    = "Korean"
 	// The U+E000 sentinel is written as an ESCAPE on purpose. It is a private-use
@@ -163,13 +174,38 @@ func translateRangesConcurrently(ctx context.Context, inputs []translateInput, o
 func nextInputBatchEnd(inputs []translateInput, start int) int {
 	end := start + 1
 	chars := translateInputCost(inputs[start])
+	texts := translateInputTexts(inputs[start])
 	for end < len(inputs) &&
 		end-start < translateMaxSegmentsPerBatch &&
-		chars+translateInputCost(inputs[end]) <= translateMaxCharsPerBatch {
+		chars+translateInputCost(inputs[end]) <= translateMaxCharsPerBatch &&
+		texts+translateInputTexts(inputs[end]) <= maxDeepLTextsPerRequest {
 		chars += translateInputCost(inputs[end])
+		texts += translateInputTexts(inputs[end])
 		end++
 	}
 	return end
+}
+
+// translateInputTexts counts the DeepL `text` fields one input will flatten into
+// (see flattenDeepLInputs): a segment with parts contributes one per non-blank
+// part, not one per segment. The batcher bounds this because translateBatchDeepL
+// REJECTS a batch that flattens past maxDeepLTextsPerRequest instead of chunking
+// it — translateRange then splits and retries, so every such batch costs a wasted
+// round trip. Now the rejection is unreachable by construction.
+func translateInputTexts(in translateInput) int {
+	if len(in.Parts) == 0 {
+		if strings.TrimSpace(in.Text) == "" {
+			return 0
+		}
+		return 1
+	}
+	n := 0
+	for _, part := range in.Parts {
+		if strings.TrimSpace(part) != "" {
+			n++
+		}
+	}
+	return n
 }
 
 func translateInputCost(in translateInput) int {
