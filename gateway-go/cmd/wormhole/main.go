@@ -43,8 +43,12 @@ type modelEntry struct {
 	// Qwen3). Set it to enable effort-based thinking routing: wormhole turns
 	// thinking OFF for obviously-simple turns. Empty = no routing (pass through).
 	ToggleKwarg string `json:"toggleKwarg,omitempty"`
-	// ThinkingMode picks the DIRECTION of thinking routing for a ToggleKwarg
-	// model (requires ToggleKwarg to name the switch):
+	// ThinkingMode picks the DIRECTION of thinking routing. It steers the
+	// ToggleKwarg injection (vLLM) or, for a cloud entry, the Reasoning dialect
+	// — "off"/"on" make the ENTRY the variant, so a caller picks depth by model
+	// name and no inherited reasoning_effort overrides it. ("off-unless-hard" is
+	// implemented on the ToggleKwarg path only.) Set at least one of
+	// ToggleKwarg/Reasoning or the mode does nothing (validateConfig warns):
 	//   ""                — judge, thinking-on bias (default): OFF only for an
 	//                       obviously-simple turn; anything ambiguous keeps
 	//                       thinking (a false-easy costs quality).
@@ -55,6 +59,12 @@ type modelEntry struct {
 	//                       even under X-Wormhole-No-Effort: the caller chose
 	//                       this entry, so no-thinking is the contract, not an
 	//                       opportunistic routing decision.
+	//   "on"              — always the deep path: the vLLM toggle is left alone
+	//                       (no injection) and a cloud dialect pins its high
+	//                       level (GLM: reasoning_effort "high" — never "max",
+	//                       which is what GLM resolves any non-explicit value
+	//                       to). The mirror of "off": the entry IS the model's
+	//                       thinking variant, so callers pick it by name.
 	//   "off-unless-hard" — inverted bias: thinking off by default, kept ON only
 	//                       when the turn carries a CLEAR hardness signal
 	//                       (hard-signal/attachments/structured). The ambiguous

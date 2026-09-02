@@ -43,6 +43,7 @@ const (
 	thinkingModeJudge         = ""                // off only when obviously simple (thinking-on bias)
 	thinkingModeOff           = "off"             // always off — the entry is a no-thinking variant
 	thinkingModeOffUnlessHard = "off-unless-hard" // off unless clearly hard (thinking-off bias)
+	thinkingModeOn            = "on"              // always on — the entry is the deep-reasoning variant
 )
 
 // applyThinking runs the effort router for one resolved model and logs when it
@@ -99,6 +100,7 @@ func (rt *router) applyReasoning(entry modelEntry, body []byte) []byte {
 //
 //	"glm": an obviously-simple turn → thinking:{"type":"disabled"} (and drop any
 //	reasoning_effort); otherwise reasoning_effort:"high" + thinking:{"type":"enabled"}.
+//	An entry with thinkingMode "off"/"on" skips the classifier and pins that level.
 //	GLM honors only reasoning_effort high|max and treats anything but an explicit
 //	"high" as MAX, so the on-path must pin "high" — forwarding the gateway's "low"
 //	would silently run GLM at its deepest (max) reasoning.
@@ -106,9 +108,23 @@ func reasoningRoute(body []byte, entry modelEntry) (out []byte, reason string, t
 	switch entry.Reasoning {
 	case reasoningStyleGLM:
 	case reasoningStyleDeepseek:
-		return deepseekReasoningRoute(body)
+		return deepseekReasoningRoute(body, entry.ThinkingMode)
 	default:
 		return body, "", false // unknown/empty style → leave the body untouched
+	}
+	// A static mode makes the ENTRY the variant: the caller picked this name, so
+	// the level is the contract — no Ares classification, and an inherited
+	// reasoning_effort from the caller (or from a failover source shaped for a
+	// different backend) never overrides it.
+	switch entry.ThinkingMode {
+	case thinkingModeOff:
+		b := setBodyField(body, "thinking", map[string]string{"type": "disabled"})
+		b = deleteBodyField(b, "reasoning_effort")
+		return b, "mode-off", true
+	case thinkingModeOn:
+		b := setBodyField(body, "thinking", map[string]string{"type": "enabled"})
+		b = setBodyField(b, "reasoning_effort", "high")
+		return b, "mode-on", false
 	}
 	// Explicit caller intent wins over Ares. The Deneb gateway translates its
 	// thinking config to reasoning_effort on the OpenAI path ("low" = thinking
@@ -158,10 +174,17 @@ func reasoningRoute(body []byte, entry modelEntry) (out []byte, reason string, t
 // output budget its caller sized for a non-thinking helper — which is exactly
 // how the wiki query expander returned empty content on 46% of its calls while
 // the local qwen serving was down.
-func deepseekReasoningRoute(body []byte) (out []byte, reason string, thinkingOff bool) {
+func deepseekReasoningRoute(body []byte, mode string) (out []byte, reason string, thinkingOff bool) {
 	// A caller's vLLM toggle is meaningless to the cloud API and would only
 	// risk a strict-schema rejection; drop it and speak the native dialect.
 	body = deleteBodyField(body, "chat_template_kwargs")
+	// Static entry-level variants (see reasoningRoute): the name is the contract.
+	switch mode {
+	case thinkingModeOff:
+		return setBodyField(body, "reasoning_effort", "none"), "mode-off", true
+	case thinkingModeOn:
+		return setBodyField(body, "reasoning_effort", "high"), "mode-on", false
+	}
 	if eff := strings.ToLower(strings.TrimSpace(getBodyStringField(body, "reasoning_effort"))); eff != "" {
 		switch eff {
 		case "high", "max", "medium":
@@ -193,6 +216,9 @@ func thinkingRoute(body []byte, entry modelEntry) (out []byte, reason string, th
 	case thinkingModeOff:
 		// Static no-thinking variant — no classification, always off.
 		return injectKwarg(body, entry.ToggleKwarg, false), "mode-off", true
+	case thinkingModeOn:
+		// Static thinking variant — never route off, whatever the turn looks like.
+		return body, "mode-on", false
 	case thinkingModeOffUnlessHard:
 		// Inverted bias: default off; only a CLEAR hardness signal keeps the
 		// model's thinking. The ambiguous middle (long, context-heavy) routes

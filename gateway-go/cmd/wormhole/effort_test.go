@@ -325,3 +325,64 @@ func TestReasoningRoute_NoStylePreservesBody(t *testing.T) {
 		t.Errorf("no reasoning style must be a no-op; off=%v reason=%q changed=%v", off, reason, !bytes.Equal(out, body))
 	}
 }
+
+// TestReasoningRoute_GLMStaticModes: a cloud reasoning entry can BE the variant.
+// thinkingMode "off"/"on" skips Ares entirely and pins the level, so the caller
+// picks depth by model name (the dsv4-nothink contract, now on the GLM dialect).
+// An inherited reasoning_effort — from the caller, or attached by a failover
+// source shaped for another backend — must not override the entry's contract.
+func TestReasoningRoute_GLMStaticModes(t *testing.T) {
+	hard := []byte(`{"model":"glm-5.3-flash","messages":[{"role":"user","content":"이 데이터를 심층 분석해줘"}],"reasoning_effort":"max"}`)
+	simple := []byte(`{"model":"glm-5.3-flash","messages":[{"role":"user","content":"안녕"}],"reasoning_effort":"low"}`)
+
+	offEntry := modelEntry{Name: "glm-5.3-flash-nothink", Reasoning: "glm", ThinkingMode: thinkingModeOff}
+	for _, body := range [][]byte{hard, simple} {
+		out, reason, off := reasoningRoute(body, offEntry)
+		if !off || reason != "mode-off" {
+			t.Fatalf(`mode "off" must route off without classifying, got off=%v reason=%q`, off, reason)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(out, &m); err != nil {
+			t.Fatalf("output not JSON: %v", err)
+		}
+		if think, _ := m["thinking"].(map[string]any); think["type"] != "disabled" {
+			t.Errorf("expected thinking.type=disabled, got %v", m["thinking"])
+		}
+		if _, ok := m["reasoning_effort"]; ok {
+			t.Errorf("reasoning_effort must be stripped, got %v", m["reasoning_effort"])
+		}
+	}
+
+	onEntry := modelEntry{Name: "glm-5.3-flash", Reasoning: "glm", ThinkingMode: thinkingModeOn}
+	for _, body := range [][]byte{hard, simple} {
+		out, reason, off := reasoningRoute(body, onEntry)
+		if off || reason != "mode-on" {
+			t.Fatalf(`mode "on" must keep reasoning on without classifying, got off=%v reason=%q`, off, reason)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(out, &m); err != nil {
+			t.Fatalf("output not JSON: %v", err)
+		}
+		if m["reasoning_effort"] != "high" {
+			t.Errorf("expected reasoning_effort=high (never max), got %v", m["reasoning_effort"])
+		}
+		if think, _ := m["thinking"].(map[string]any); think["type"] != "enabled" {
+			t.Errorf("expected thinking.type=enabled, got %v", m["thinking"])
+		}
+	}
+}
+
+// TestThinkingRoute_ModeOnKeepsThinking: the same static "on" contract on the
+// vLLM toggle path — an obviously-simple turn keeps its thinking phase instead
+// of being judged off, and the body is forwarded untouched (APC-safe).
+func TestThinkingRoute_ModeOnKeepsThinking(t *testing.T) {
+	entry := modelEntry{Name: "dsv4-think", ToggleKwarg: "thinking", ThinkingMode: thinkingModeOn}
+	body := []byte(`{"model":"dsv4-think","messages":[{"role":"user","content":"안녕"}]}`)
+	out, reason, off := thinkingRoute(body, entry)
+	if off || reason != "mode-on" {
+		t.Fatalf(`mode "on" must never route off, got off=%v reason=%q`, off, reason)
+	}
+	if string(out) != string(body) {
+		t.Errorf("body must be forwarded untouched, got %s", out)
+	}
+}
