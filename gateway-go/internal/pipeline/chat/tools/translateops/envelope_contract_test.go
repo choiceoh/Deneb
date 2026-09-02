@@ -111,3 +111,43 @@ func TestParserAcceptsClientEnvelopeAndEncoderEmitsClientPrefix(t *testing.T) {
 		t.Errorf("parts reply %q does not carry the prefix the client matches (%q)", out[0], found["PARTS_RESULT_PREFIX"])
 	}
 }
+
+// jsBatchCharsDecl reads the client's per-request payload budget.
+var jsBatchCharsDecl = regexp.MustCompile(`(?m)^\s*var\s+MAX_BATCH_PAYLOAD_CHARS\s*=\s*(\d+)\s*;`)
+
+// TestContractClientBatchFitsOneServerWave binds two constants that live in
+// different languages and repositories-worth of distance, and whose drift is
+// SILENT — nothing fails, the page just gets slower.
+//
+// The client ships one request; this package splits it into
+// translateMaxCharsPerBatch chunks and runs translateMaxConcurrentBatches of them
+// at once. So a request larger than chars×concurrency costs a second DeepL wave
+// — a full round trip (~1s measured) on the tail request that finishes the page.
+//
+// It was already off by 2,000 chars when this test was written (client 20,000 vs
+// a 18,000 wave), which is exactly the failure mode: someone retunes one side for
+// a good reason and the other side quietly stops fitting.
+func TestContractClientBatchFitsOneServerWave(t *testing.T) {
+	m := jsBatchCharsDecl.FindStringSubmatch(clientTranslateAsset(t))
+	if m == nil {
+		t.Fatal("MAX_BATCH_PAYLOAD_CHARS not found in deneb-translate.js — did the declaration change shape?")
+	}
+	clientBudget, err := strconv.Atoi(m[1])
+	if err != nil {
+		t.Fatalf("MAX_BATCH_PAYLOAD_CHARS = %q: %v", m[1], err)
+	}
+	oneWave := translateMaxCharsPerBatch * translateMaxConcurrentBatches
+	if clientBudget > oneWave {
+		t.Fatalf("client ships up to %d chars per request but one server wave covers %d "+
+			"(translateMaxCharsPerBatch %d × translateMaxConcurrentBatches %d) — the tail request "+
+			"pays an extra DeepL round trip. Lower the client budget or raise the server bounds.",
+			clientBudget, oneWave, translateMaxCharsPerBatch, translateMaxConcurrentBatches)
+	}
+	// A budget far under one wave is also a bug: it splits work the server could
+	// have done in a single wave into extra client round trips.
+	if clientBudget*2 < oneWave {
+		t.Fatalf("client budget %d is less than half of one server wave (%d) — the page pays "+
+			"extra gateway round trips for batches the server would have run together",
+			clientBudget, oneWave)
+	}
+}
