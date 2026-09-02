@@ -128,3 +128,26 @@ func TestApplyVisionGate_StripsOrPreservesByModelCapability(t *testing.T) {
 		t.Errorf("gate mutated an image-capable model's request")
 	}
 }
+
+// TestModelAcceptsImages_GLM53FamilySplit pins the measured split inside one GLM
+// generation: the base model rejects image parts with a hard 400 (which then
+// poisons every later turn of that chat), while the flash tier reads them. The
+// table must therefore gate glm-5.3 and leave glm-5.3-flash alone — the reverse
+// of the glm-4.7 generation, where the flash tier was the text-only one.
+// Measured against the coding plan endpoint on 2026-09-02.
+func TestModelAcceptsImages_GLM53FamilySplit(t *testing.T) {
+	for _, tc := range []struct {
+		model string
+		want  bool
+	}{
+		{"glm-5.3", false},
+		{"glm5.3", false},
+		{"glm-5.3-flash", true},
+		{"glm-4.7", false},
+		{"glm-4.7-flash", false},
+	} {
+		if got := modelAcceptsImages(tc.model); got != tc.want {
+			t.Errorf("modelAcceptsImages(%q) = %v, want %v", tc.model, got, tc.want)
+		}
+	}
+}

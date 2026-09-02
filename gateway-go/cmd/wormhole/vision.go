@@ -58,11 +58,19 @@ var textOnlyImageModels = map[string]bool{
 	"glm5.2":           true,
 	"glm-5.2-max":      true,
 	"glm-5-turbo":      true,
+	"glm-5.3":          true,
+	"glm5.3":           true,
 	"glm-4.7":          true,
 	"glm4.7":           true,
 	"zai-glm-4.7":      true,
 	"glm-4.7-flash":    true,
-	"chatglm3-6b":      true,
+	// ★ glm-5.3-flash is deliberately ABSENT: unlike glm-4.7-flash (text-only)
+	// and its own base model glm-5.3, the 5.3 flash tier is multimodal. Measured
+	// on the coding plan endpoint 2026-09-02: a 1x1 PNG content-part answered
+	// "Red" on glm-5.3-flash, while glm-5.3 / glm-5.2 / glm-5.1 / glm-4.7 all
+	// returned 400 "messages.content.type is invalid, allowed values: ['text']".
+	// Adding it here would strip images from the one GLM entry that can read them.
+	"chatglm3-6b": true,
 }
 
 // modelAcceptsImages reports whether a model id accepts image input. Defaults
