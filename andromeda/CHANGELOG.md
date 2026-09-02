@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.124](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.123...andromeda-v0.0.124) (2026-09-02)
+
+
+### ✨ Features
+
+* **wormhole:** 페일오버가 조용히 일어나지 않게 — 서킷 상태를 wire에 싣는다 ([#4972](https://github.com/choiceoh/Deneb/issues/4972)) ([0c738f3](https://github.com/choiceoh/Deneb/commit/0c738f342da96d570ce3f06ced46e7308f0aae93))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** 웹 응답 카드 아래 빈 공간 — 프레임이 다시 줄어들 수 있어야 한다 ([#4979](https://github.com/choiceoh/Deneb/issues/4979)) ([1d96df2](https://github.com/choiceoh/Deneb/commit/1d96df22c3b9b60feff495606c8acf4701cad781))
+
 ## [0.0.123](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.122...andromeda-v0.0.123) (2026-08-29)
 
 

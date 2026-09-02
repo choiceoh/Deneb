@@ -1,5 +1,75 @@
 # Changelog
 
+## [5.12.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.11.0...deneb-v5.12.0) (2026-09-02)
+
+
+### ✨ Features
+
+* **agent:** tool complete 로그에 action 귀속 — 절반이 넘는 도구가 무엇을 했는지 안 남았다 ([#4954](https://github.com/choiceoh/Deneb/issues/4954)) ([aa6de67](https://github.com/choiceoh/Deneb/commit/aa6de67f767c54d10f559534be23fe1f597268c1))
+* **browser:** 당겨서 새로고침 + 매일 깨지던 골든 수리 ([#4975](https://github.com/choiceoh/Deneb/issues/4975)) ([555757b](https://github.com/choiceoh/Deneb/commit/555757b72f78bc3ee8a59e8fd159718336f15349))
+* **chat:** read 배치(file_paths) + 워크스페이스 밖 경로를 '디렉터리'라 답하던 read·grep 수정 ([#4945](https://github.com/choiceoh/Deneb/issues/4945)) ([2f7e7ba](https://github.com/choiceoh/Deneb/commit/2f7e7ba73692b6db2bb86c60c8c3b276f49eb74b))
+* **client-android:** 결정 다이얼로그·형제 스와이프 문턱에 햅틱 + 그걸 세는 규칙 둘 ([#4994](https://github.com/choiceoh/Deneb/issues/4994)) ([83c5aa9](https://github.com/choiceoh/Deneb/commit/83c5aa9cec5eda25fa3bb730c2c08cef9e873ab9))
+* **client-android:** 골든 회귀 게이트 + 디자인 북극성 재설정 (ADR 0007) ([#4957](https://github.com/choiceoh/Deneb/issues/4957)) ([877daf5](https://github.com/choiceoh/Deneb/commit/877daf51f267dd9429f42e183df00c75a18694c2))
+* **client-android:** 누름 프리미티브가 탭 촉각을 소유한다 ([#4991](https://github.com/choiceoh/Deneb/issues/4991)) ([0f7c423](https://github.com/choiceoh/Deneb/commit/0f7c42335ea21efb696e58f0b1fc5908233a55da))
+* **client-android:** 모션을 보고 재는 경로 — 녹화 + 필름스트립 + 측정 ([#4968](https://github.com/choiceoh/Deneb/issues/4968)) ([6c61c35](https://github.com/choiceoh/Deneb/commit/6c61c35ac6212d97e12eda1ec4a986574061dc9c))
+* **client-android:** 브라우저 당겨서 새로고침에 햅틱 — 유일하게 조용하던 표면 ([#4989](https://github.com/choiceoh/Deneb/issues/4989)) ([30c6be4](https://github.com/choiceoh/Deneb/commit/30c6be44649ee63bc52f9fac4d3426672399baf6))
+* **client-android:** 설정 목록이 상태를 말한다 — 실패에만 색, 진행 중엔 말만 ([#4970](https://github.com/choiceoh/Deneb/issues/4970)) ([64b9800](https://github.com/choiceoh/Deneb/commit/64b9800704d64ac722d7b202c80082a820cc732e))
+* **client-android:** 설정 목록이 플릿·웜홀 상태를 직접 본다 ([#4971](https://github.com/choiceoh/Deneb/issues/4971)) ([266d3ed](https://github.com/choiceoh/Deneb/commit/266d3edcaff708181e7a76e32eed1dcff6baed82))
+* **client-android:** 원리 1을 기계 검사로 — design-lint ([#4963](https://github.com/choiceoh/Deneb/issues/4963)) ([5e96cb5](https://github.com/choiceoh/Deneb/commit/5e96cb5f1b805d594c152441d1faee86d2e70117))
+* **client-android:** 테마를 OLED 블랙 단일로 (ADR 0007) ([#4962](https://github.com/choiceoh/Deneb/issues/4962)) ([d6a9b8c](https://github.com/choiceoh/Deneb/commit/d6a9b8c2ac1f2656bf199d7cf9a7628044e1e534))
+* **client-android:** 햅틱 어휘 구멍 10곳 + 그걸 세는 게이트 ([#4990](https://github.com/choiceoh/Deneb/issues/4990)) ([8f9ef6d](https://github.com/choiceoh/Deneb/commit/8f9ef6d91adfc67fbd1a2b4af6540ef830cbb6fe))
+* **codegraph:** 편집 전 파급 범위 확인을 배선·계약·지표로 고정 ([#4941](https://github.com/choiceoh/Deneb/issues/4941)) ([be78adb](https://github.com/choiceoh/Deneb/commit/be78adb040bea9c8b0df448104e37499e98511c0))
+* **groupware:** 결재 분석에 매칭된 프로젝트의 현재 상태 ([#4940](https://github.com/choiceoh/Deneb/issues/4940)) ([9b50810](https://github.com/choiceoh/Deneb/commit/9b508106c130f24c263884c025e803b24c754aea))
+* **mail:** 도착 메일 분석이 위키에서 주제 과거자료를 회상한다 ([#4939](https://github.com/choiceoh/Deneb/issues/4939)) ([d641375](https://github.com/choiceoh/Deneb/commit/d641375e26ad065fe843f7e37f3ed34318ddafb3))
+* **mail:** 딜 노트북에 실제 첨부를 핀한다 + 딜 증거 도구를 닿게 ([#4953](https://github.com/choiceoh/Deneb/issues/4953)) ([ec82d91](https://github.com/choiceoh/Deneb/commit/ec82d9105a7083c34a425c7f4f5c8cc1553ccdf3))
+* **wiki:** 계획 경로 단계 계측 — 회상은 Search 를 부르지 않는다 ([#4995](https://github.com/choiceoh/Deneb/issues/4995)) ([596b0b3](https://github.com/choiceoh/Deneb/commit/596b0b3b8b9b1884aea06301ca8a64a2f53694ec))
+* **wiki:** 계획 꼬리 계측 — 절반이 return 앞 구간에 있었다 ([#4996](https://github.com/choiceoh/Deneb/issues/4996)) ([599d01b](https://github.com/choiceoh/Deneb/commit/599d01bc395d8ba5ddb8499a79c66e9650a05573))
+* **wiki:** 회상 검색 단계별 계측 — 1초의 대부분이 무엇인지 아무도 몰랐다 ([#4993](https://github.com/choiceoh/Deneb/issues/4993)) ([ec16d05](https://github.com/choiceoh/Deneb/commit/ec16d05dfea9dc9131ee4b163fb7b814546cdeff))
+* **wormhole:** 클라우드 추론 방언에도 정적 thinkingMode — no-think·high 변형을 이름으로 고른다 ([#4998](https://github.com/choiceoh/Deneb/issues/4998)) ([de39c29](https://github.com/choiceoh/Deneb/commit/de39c29284aac40cf0d8d118574053eb40f14bea))
+* **wormhole:** 페일오버가 조용히 일어나지 않게 — 서킷 상태를 wire에 싣는다 ([#4972](https://github.com/choiceoh/Deneb/issues/4972)) ([0c738f3](https://github.com/choiceoh/Deneb/commit/0c738f342da96d570ce3f06ced46e7308f0aae93))
+
+
+### 🐛 Bug Fixes
+
+* **audit:** 래칫 알림 테스트가 러너에서만 깨졌다 — gh 부재를 하드코딩 PATH로 흉내낸 탓 ([#4982](https://github.com/choiceoh/Deneb/issues/4982)) ([d10cf19](https://github.com/choiceoh/Deneb/commit/d10cf1946e3f2097636d41cce34dfafc0b0fb495))
+* **chat:** 설정 안 된 브라우저 도구를 광고하지 않는다 ([#4951](https://github.com/choiceoh/Deneb/issues/4951)) ([b9f4c30](https://github.com/choiceoh/Deneb/commit/b9f4c3009bdb37453f185dd1ffbe6c76407728ab))
+* **chat:** 설정 안 된 플릿 도구도 광고하지 않는다 — browser와 같은 규칙 ([#4955](https://github.com/choiceoh/Deneb/issues/4955)) ([9a40f48](https://github.com/choiceoh/Deneb/commit/9a40f488a1b2a55f9d52ccbd8b66319d3888bb8d))
+* **chat:** 웹 응답 카드 아래 빈 공간 — 프레임이 다시 줄어들 수 있어야 한다 ([#4979](https://github.com/choiceoh/Deneb/issues/4979)) ([1d96df2](https://github.com/choiceoh/Deneb/commit/1d96df22c3b9b60feff495606c8acf4701cad781))
+* **chat:** 프롬프트가 없는 도구를 가리키던 것 — contacts 잔해 정리 + 계약 테스트 ([#4949](https://github.com/choiceoh/Deneb/issues/4949)) ([94a8ad6](https://github.com/choiceoh/Deneb/commit/94a8ad63727c7ce3101d4d0b863f35fb65727417))
+* **client-android:** 색이 정보를 나르던 세 곳을 되돌린다 (ADR 0008) ([#4967](https://github.com/choiceoh/Deneb/issues/4967)) ([f1ec59a](https://github.com/choiceoh/Deneb/commit/f1ec59af9689d353bde303d7895a88bf243b9632))
+* **client-android:** 줄바꿈 한국어 행간 + 입력창 렌더 픽스처 + 느린 도구 경과 표시 ([#4956](https://github.com/choiceoh/Deneb/issues/4956)) ([b7cebdd](https://github.com/choiceoh/Deneb/commit/b7cebddb7a200ba770d06bdb8f40235962c3d4e8))
+* **deploy:** CRS812 팬 발진의 남은 절반 — min-speed 바닥이 없었다 ([#4936](https://github.com/choiceoh/Deneb/issues/4936)) ([4edba1c](https://github.com/choiceoh/Deneb/commit/4edba1cf342f4db5ada84c91bd5dc11bc2f9f15d))
+* **deploy:** 스태시를 옮겨간 HEAD에 되돌리지 않는다 — 스테일이 자가 지속됐다 ([#4960](https://github.com/choiceoh/Deneb/issues/4960)) ([5d34cee](https://github.com/choiceoh/Deneb/commit/5d34cee4ed0c3877a1804f8e3545359abf937be1))
+* **deploy:** 웜홀 빌드를 재현 가능하게 — 재시작 가드가 발화한 적이 없었다 ([#4959](https://github.com/choiceoh/Deneb/issues/4959)) ([d66c377](https://github.com/choiceoh/Deneb/commit/d66c377e18bb7dac2c87e9eea220694169c6eb0c))
+* **dev:** shell-lint이 native-app.sh를 파싱조차 못 했다 — 히어독 구분자의 삼중따옴표 ([#4986](https://github.com/choiceoh/Deneb/issues/4986)) ([21b0b90](https://github.com/choiceoh/Deneb/commit/21b0b90f427d5c69ace24165263d916509c619f2))
+* **dev:** 격리 하네스가 호스트 PATH를 상속했다 — 셸 테스트가 유저스페이스 바이너리에 닿던 부류 ([#4984](https://github.com/choiceoh/Deneb/issues/4984)) ([763859e](https://github.com/choiceoh/Deneb/commit/763859e6053e2d9e3bb097b20880b3c02d2cf0ee))
+* **dev:** 셸 픽스처 절반의 셔뱅이 주석이었다 — dedent 무효화와 그것이 가리던 경합 ([#4981](https://github.com/choiceoh/Deneb/issues/4981)) ([e66876d](https://github.com/choiceoh/Deneb/commit/e66876d6225104dd897871a01afd154a137fb943))
+* **genesis:** 잘린 자기교정 id에 리뷰가 증발하던 것 — 유일 접두 해석 ([#4948](https://github.com/choiceoh/Deneb/issues/4948)) ([6d28cd7](https://github.com/choiceoh/Deneb/commit/6d28cd7ad298e0b09e6db15228bcf47ddf0ce8ce))
+* **mail:** 폴 창을 놓친 메일을 되찾고, 파이프라인 구멍에 숫자를 붙인다 ([#4958](https://github.com/choiceoh/Deneb/issues/4958)) ([09474e1](https://github.com/choiceoh/Deneb/commit/09474e126eeb8261c2c847f4ac887989f097b056))
+* **memory:** 주간 기억 다이제스트가 자기 수치를 잘못 말하고 있었다 ([#4969](https://github.com/choiceoh/Deneb/issues/4969)) ([900ce35](https://github.com/choiceoh/Deneb/commit/900ce353941f9761dea84772809d05e923354e7a))
+* **recall:** 위키 confidence 밴드 재보정 — 라벨이 상수였다 ([#4943](https://github.com/choiceoh/Deneb/issues/4943)) ([3001271](https://github.com/choiceoh/Deneb/commit/3001271db1a689a5e8b8a37e00d47b14a9be18a2))
+* **rsi:** 래칫 판정을 읽는 소비자가 0이었다 — breach를 운영자 이슈로 배달 ([#4980](https://github.com/choiceoh/Deneb/issues/4980)) ([524b95a](https://github.com/choiceoh/Deneb/commit/524b95a74efcf88e7aa6f2def19f9e1160423d04))
+* **web:** 페이지를 못 읽던 진짜 이유 — 원문 바이트 예산을 maxChars에서 뽑고 있었다 ([#4947](https://github.com/choiceoh/Deneb/issues/4947)) ([93f447e](https://github.com/choiceoh/Deneb/commit/93f447efe628fb4932be74abaa634a36c712178b))
+* **wiki:** AutoFlow 메일이 이미 기록된 회의를 다시 쓰지 않는다 ([#4950](https://github.com/choiceoh/Deneb/issues/4950)) ([75f40a5](https://github.com/choiceoh/Deneb/commit/75f40a58c694f17412e35c6dd33191449f18b730))
+* **wiki:** 대표페이지 축 미기입을 write 결과가 말해준다 ([#4944](https://github.com/choiceoh/Deneb/issues/4944)) ([263b505](https://github.com/choiceoh/Deneb/commit/263b505f92014e00faafe79138c1ab5d6aa47ded))
+* **wormhole:** fail over on upstream model 404 ([#4974](https://github.com/choiceoh/Deneb/issues/4974)) ([a821952](https://github.com/choiceoh/Deneb/commit/a8219524f1b64d1ea06dfd722a0d8f2c7b193d09))
+* **wormhole:** glm-5.3 이미지 게이트 누락 — 코딩플랜 GLM 세대별 모달리티 실측 반영 ([#4997](https://github.com/choiceoh/Deneb/issues/4997)) ([e3dc326](https://github.com/choiceoh/Deneb/commit/e3dc326d78ebd9172f54e4efe29a64439dcfbe80))
+
+
+### ⚡ Performance
+
+* **browser:** 번역 왕복·시작 시점 + 크롬 색 복구 (ADR 0009) ([#4973](https://github.com/choiceoh/Deneb/issues/4973)) ([9797741](https://github.com/choiceoh/Deneb/commit/9797741f7c92921b328ced3a222db29f040b259a))
+
+
+### 🔧 Internal
+
+* **chat:** split model config out of chatport ([#4938](https://github.com/choiceoh/Deneb/issues/4938)) ([0a91170](https://github.com/choiceoh/Deneb/commit/0a911704ae29cbabf7fc32a5175b930197c73067))
+* **chat:** 툴 표면 실사용 감사 — 데드 노브·0회 eager 정리, sessions·people 병합 ([#4942](https://github.com/choiceoh/Deneb/issues/4942)) ([2157790](https://github.com/choiceoh/Deneb/commit/2157790468943ffd3af64074496ddd74e7d727b2))
+* **client-android:** 설정 트리의 위계를 바로잡는다 — cardTitle 8곳 ([#4964](https://github.com/choiceoh/Deneb/issues/4964)) ([b413c9e](https://github.com/choiceoh/Deneb/commit/b413c9ebe68a9297e5276d5ecb97f62b8fe1dded))
+* **client-android:** 애프리콧 은퇴 — 단일 액센트 + design-lint 게이트 배선 ([#4965](https://github.com/choiceoh/Deneb/issues/4965)) ([6b3e811](https://github.com/choiceoh/Deneb/commit/6b3e811fcfd95ddaf3f8be9a70c78f3822828908))
+* **observe:** 도달 불가 advisory wrapper 제거 ([#4988](https://github.com/choiceoh/Deneb/issues/4988)) ([547a933](https://github.com/choiceoh/Deneb/commit/547a9334478d66f57d0d1feddefe273c9eadbb09))
+* **wiki:** 회의 슬러그 규칙을 레이아웃 소유자로 옮기고 소급 정리 패스를 추가 ([#4952](https://github.com/choiceoh/Deneb/issues/4952)) ([b1bc1f2](https://github.com/choiceoh/Deneb/commit/b1bc1f2f883a4b03302a9f21926f58ebd1fce379))
+
 ## [5.11.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.10.0...deneb-v5.11.0) (2026-08-29)
 
 
