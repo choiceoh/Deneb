@@ -13,6 +13,11 @@ globs: ["gateway-go/internal/pipeline/chat/tools/document/paddleocr.go", "gatewa
 > (Playwright 상주 headful Chromium, 프로필 `~/.deneb/browser-profile`, API
 > 127.0.0.1:18930). 운영자가 `start-browser-sidecar.sh view`(noVNC)로 로그인해
 > 두면 에이전트가 그 세션으로 로그인 벽 페이지를 읽는다(읽기 전용 v1).
+> ★**정착(settle) 규칙**(2026-09-02): networkidle 뒤에 `wait_ms` 를 통째로 자던 것을 **"본문이 400자 이상 렌더됐고 350ms 동안
+> 안 변하면 조기 종료"**로 바꿨다(`settleForContent`). `wait_ms` 는 이제 **인내 예산**이지 의무 수면이 아니다 — 골든셋 실측
+> 9.996초→6.799초(32%), 추출 텍스트 동일. ⚠️ **길이 안정화만으로 끊으면 안 된다**: 스켈레톤(`...` 3자)은 즉시 안정으로
+> 보여 늦게 오는 본문을 3/3 놓쳤다(실측). 400자 바닥이 그 보장을 되돌린다 — 아직 본문이 없으면 예산을 다 쓴다.
+> 회귀 프로브 `npm run probe:settle`(로컬 합성 페이지, 네트워크 불필요).
 > 기동 `start-browser-sidecar.sh start` · 게이트웨이 override `DENEB_BROWSE_URL`(Page Agent의 DENEB_BROWSER_URL과 별개) ·
 > 라이브 검증 `DENEB_BROWSE_LIVE=1 go test -run TestToolBrowse_Live ./internal/pipeline/chat/tools`.
 

@@ -5,7 +5,8 @@
   "description": "Resident headful Chromium the Deneb agent browses through (Playwright persistent context + noVNC-shareable display).",
   "scripts": {
     "start": "node server.mjs",
-    "bench": "node extract-bench.mjs"
+    "bench": "node extract-bench.mjs",
+    "probe:settle": "node settle-probe.mjs"
   },
   "dependencies": {
     "playwright": "^1.58.0"
