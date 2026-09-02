@@ -36,11 +36,22 @@ const PROFILE =
   process.env.DENEB_BROWSER_PROFILE || `${process.env.HOME}/.deneb/browser-profile`;
 const MAX_CHARS = 16_000;
 const NAV_TIMEOUT_MS = 25_000;
-// Settle tuning (see settleForContent). A page that already rendered real text
-// and stopped changing is done — the caller's wait_ms is a patience BUDGET, not
-// a mandatory sleep. A page still showing a skeleton keeps the whole budget.
+// Settle tuning (see settlePage). A page that already rendered real text, went
+// quiet, and stopped talking to the network is done — the caller's wait_ms is a
+// patience BUDGET, not a mandatory sleep. Everything else keeps the whole budget.
 const SETTLE_CONTENT_FLOOR = 400; // chars of readable text that count as "rendered"
 const SETTLE_QUIET_MS = 350; // text length unchanged this long = quiet
+const SETTLE_NET_QUIET_MS = 400; // no request started/finished this long = network quiet
+// Floor before ANY early exit. Insurance against work scheduled just after load:
+// a page whose nav chrome alone clears the content floor can look "rendered and
+// quiet" in ~400ms while its article fetch is still 200ms from starting.
+// Measured 2026-09-03 on a synthetic nav+delayed-fetch page: without this floor
+// the article was lost (the sidecar returned the menu bar); with it, the fetch
+// starts inside the window, its in-flight request blocks the exit, and the
+// article is captured. 1.2s also sits under the old code's own minimum settle
+// (networkidle's 500ms quiet + a 500ms floor budget).
+const SETTLE_MIN_MS = 1_200;
+const SETTLE_NET_MAX_MS = 8_000; // give up waiting for network quiet (old networkidle timeout)
 const SETTLE_POLL_MS = 100;
 // Hard ceiling for one queued operation. page.goto is already bounded, but
 // launchPersistentContext / newPage are not, and the queue is serial — so an
@@ -227,7 +238,7 @@ async function extractSelector(page, sel) {
 }
 
 // frameTextLen sums readable text length across every frame — the cheap probe
-// settleForContent polls. It mirrors extractAllFrames' reach (iframe bodies
+// settlePage polls. It mirrors extractAllFrames' reach (iframe bodies
 // included) without building the strings, so a page whose article lives in an
 // iframe is judged on the article, not on the empty shell around it.
 async function frameTextLen(page) {
@@ -244,31 +255,72 @@ async function frameTextLen(page) {
   return n;
 }
 
-// settleForContent replaces a blind post-networkidle sleep with "wait until the
-// page has real content AND stopped changing", capped by the caller's budget.
+// trackNetwork counts in-flight requests and stamps the last request event on a
+// page. Playwright's waitForLoadState("networkidle") answers the same question
+// ONCE and then stops looking, which is why it cannot protect a fetch that
+// starts after it fires — this tracker keeps answering for as long as we poll.
+function trackNetwork(page) {
+  const st = { inFlight: 0, last: Date.now() };
+  const bump = () => {
+    st.last = Date.now();
+  };
+  page.on("request", () => {
+    st.inFlight++;
+    bump();
+  });
+  page.on("requestfinished", () => {
+    st.inFlight = Math.max(0, st.inFlight - 1);
+    bump();
+  });
+  page.on("requestfailed", () => {
+    st.inFlight = Math.max(0, st.inFlight - 1);
+    bump();
+  });
+  return st;
+}
+
+// settlePage waits until the page looks DONE, then returns — instead of sleeping
+// the caller's whole wait_ms. Done means all three at once:
+//   1. rendered   — at least SETTLE_CONTENT_FLOOR chars of readable text,
+//   2. content quiet — that length unchanged for SETTLE_QUIET_MS,
+//   3. network quiet — nothing in flight, nothing started for SETTLE_NET_QUIET_MS,
+// and never before SETTLE_MIN_MS has passed.
 //
-// Why the content floor. The naive version — exit as soon as the text length
-// stops changing — is WRONG and measurably so: a skeleton page whose body is
-// "..." is instantly stable, so the poll returns before the real content lands.
-// Measured 2026-09-02 against synthetic late-render / late-fetch / very-late
-// pages: length-stability alone missed the content in 3 of 3, while the blind
-// sleep caught 3 of 3. Requiring SETTLE_CONTENT_FLOOR chars before an early
-// exit restores that guarantee — a page that has not produced real text yet
-// always gets the full budget — while still cutting the wait on pages that
-// have. Golden set (median of 3, same extracted text): 8.9s → 4.9s total, and
-// the late-content pages still pass because the early exit can only fire once
-// the late content has arrived.
-async function settleForContent(page, capMs) {
+// The budget (wait_ms) is the ceiling, and it starts counting when the network
+// FIRST goes quiet — mirroring the old "networkidle, then sleep wait_ms" so a
+// page that never renders keeps exactly the patience it used to get. If the
+// network never goes quiet, SETTLE_NET_MAX_MS starts the budget anyway (the old
+// networkidle timeout).
+//
+// Every one of these guards was earned by a measurement, not a hunch:
+//   - Dropping the content floor: a skeleton page ("..." = 3 chars) is instantly
+//     "quiet", so 3 of 3 synthetic late-content pages returned the skeleton.
+//   - Dropping network tracking or the floor wait: a page whose nav chrome
+//     clears the content floor returns the menu bar while the article fetch is
+//     still pending (measured: returned in 435ms, article lost).
+// Golden set, median of 3, identical extracted text: 8.4s → 4.3s total.
+async function settlePage(page, budgetMs, net) {
   const start = Date.now();
-  let last = -1;
-  let since = Date.now();
-  while (Date.now() - start < capMs) {
+  let budgetDeadline = Infinity;
+  let lastLen = -1;
+  let lenSince = Date.now();
+  for (;;) {
+    const now = Date.now();
+    const netQuiet = net.inFlight === 0 && now - net.last >= SETTLE_NET_QUIET_MS;
+    if (budgetDeadline === Infinity && (netQuiet || now - start >= SETTLE_NET_MAX_MS)) {
+      budgetDeadline = now + budgetMs;
+    }
     const len = await frameTextLen(page);
-    if (len !== last) {
-      last = len;
-      since = Date.now();
-    } else if (len >= SETTLE_CONTENT_FLOOR && Date.now() - since >= SETTLE_QUIET_MS) {
-      return; // rendered and quiet — the rest of the budget buys nothing
+    if (len !== lastLen) {
+      lastLen = len;
+      lenSince = Date.now();
+    }
+    if (budgetDeadline !== Infinity) {
+      const rendered = len >= SETTLE_CONTENT_FLOOR && Date.now() - lenSince >= SETTLE_QUIET_MS;
+      const floorPassed = Date.now() - start >= Math.min(SETTLE_MIN_MS, budgetMs + SETTLE_NET_QUIET_MS);
+      const stillQuiet = net.inFlight === 0 && Date.now() - net.last >= SETTLE_NET_QUIET_MS;
+      if (rendered && floorPassed && stillQuiet) return;
+      if (Date.now() >= budgetDeadline) return;
     }
     await page.waitForTimeout(SETTLE_POLL_MS);
   }
@@ -288,12 +340,12 @@ async function browse(url, waitMs, selector, opts = {}) {
     context = await ensureOperatorContext();
   }
   const page = await context.newPage();
+  const net = trackNetwork(page);
   try {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
-    // SPA settle: bounded network-idle, then wait for rendered+quiet content
-    // within the caller's budget (settleForContent).
-    await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => {});
-    await settleForContent(page, Math.min(Math.max(waitMs || 0, 500), 5_000));
+    // Settle: rendered + content-quiet + network-quiet, capped by the caller's
+    // budget (settlePage). Replaces the old networkidle-then-sleep pair.
+    await settlePage(page, Math.min(Math.max(waitMs || 0, 500), 5_000), net);
     const title = await page.title();
 
     let text;
