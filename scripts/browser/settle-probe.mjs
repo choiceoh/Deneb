@@ -1,45 +1,47 @@
 // settle-probe.mjs — offline correctness probe for the sidecar's settle rule.
 //
-// Its reason to exist: the extraction golden set (extract-bench.mjs) is made of
-// pages that render immediately, so it cannot see the failure mode that matters
-// here — a skeleton page ("...", a spinner) whose real content arrives later.
-// A length-stability settle looks perfect on the golden set and silently
-// returns the skeleton on those pages (measured 2026-09-02: 3 of 3 missed).
-// This probe pins the guarantee with LOCAL synthetic pages: no network, no
-// login, deterministic timings, so it can run anywhere Playwright is installed.
+// It imports settlePage/trackNetwork FROM server.mjs and drives them against
+// local synthetic pages. Importing the real functions is the point: the first
+// version of this probe carried its own copy of the rule, so it would have
+// printed 3/3 PASS with every guard deleted from the server (found in review,
+// 2026-09-03). server.mjs only calls listen() when run as a program, so the
+// import costs nothing.
+//
+// Its other reason to exist: the extraction golden set (extract-bench.mjs) is
+// made of pages that render immediately, so it cannot see the failure mode that
+// matters here — a page whose real content arrives after the settle would like
+// to return. No network, no login, deterministic timings, headless.
 //
 //   cd scripts/browser && npm run probe:settle
-// Exit 0 = the late content was captured in every case · 1 = a regression.
-//
-// Headless on purpose: the settle rule under test is timing logic shared with
-// the headful resident browser, and headless needs no display here.
+// Exit 0 = every case captured its late content · 1 = a regression.
 import http from "node:http";
 import { chromium } from "playwright";
+import { settlePage, trackNetwork } from "./server.mjs";
 
 const PORT = Number(process.env.DENEB_SETTLE_PROBE_PORT || 18999);
-// Must match server.mjs settle tuning.
-const FLOOR = 400;
-const QUIET_MS = 350;
-const NET_QUIET_MS = 400;
-const MIN_SETTLE_MS = 1_200;
-const NET_MAX_MS = 8_000;
-const POLL_MS = 100;
+const LATE = "x".repeat(500);
 
-// Each page starts as a 3-char skeleton and only later becomes real content —
-// the shape a naive "text stopped changing" settle gets wrong.
+// Each page withholds its real content until after the moment a naive settle
+// would return. The shapes differ in WHY they fool a naive rule.
 const PAGES = {
+  // Skeleton: "..." is 3 chars — instantly "stable" if there is no content floor.
   "/late-render": `<html><body><div id=x>...</div><script>
-    setTimeout(() => { document.getElementById('x').innerText = 'LATE_RENDER_MARKER ' + 'x'.repeat(500); }, 1200);
+    setTimeout(() => { document.getElementById('x').innerText = 'LATE_RENDER_MARKER ' + '${LATE}'; }, 1200);
     </script></body></html>`,
+  // Same, but the content comes over the wire — caught only if the network is
+  // still being watched when the fetch starts.
   "/late-fetch": `<html><body><div id=x>...</div><script>
     setTimeout(async () => { const r = await fetch('/slow-data'); document.getElementById('x').innerText = await r.text(); }, 800);
     </script></body></html>`,
-  // The nastiest shape, and the one a content floor alone does NOT catch: the
-  // nav chrome already clears the floor and is perfectly quiet, so the page
-  // looks finished while its article fetch has not even started yet. Only the
-  // minimum-settle floor keeps the poll alive long enough to see that fetch.
+  // The nav chrome alone clears the content floor and is perfectly quiet, so the
+  // page looks finished while its article fetch has not started yet.
   "/chrome-then-article": `<html><body><div id=nav>${"메뉴 ".repeat(200)}</div><div id=x></div><script>
     setTimeout(async () => { const r = await fetch('/slow-data'); document.getElementById('x').innerText = await r.text(); }, 600);
+    </script></body></html>`,
+  // No network at all: hydration from an inline blob after the minimum settle.
+  // Only an explicit wait_ms floor can wait this out.
+  "/late-hydrate": `<html><body><div id=nav>${"메뉴 ".repeat(200)}</div><div class="article-body"></div><script>
+    setTimeout(() => { document.querySelector('.article-body').innerText = 'LATE_HYDRATE_MARKER ' + '${LATE}'; }, 1500);
     </script></body></html>`,
 };
 
@@ -64,92 +66,56 @@ function startServer() {
   return new Promise((resolve) => srv.listen(PORT, "127.0.0.1", () => resolve(srv)));
 }
 
-// Mirrors server.mjs settlePage — kept in sync by the constants above; the probe
-// fails loudly if the rule regresses to bare stability or drops a guard.
-async function frameTextLen(page) {
-  let n = 0;
-  for (const frame of page.frames()) {
-    try {
-      n += await frame.evaluate(() => ((document.body && document.body.innerText) || "").length);
-    } catch {
-      /* detached frame */
-    }
-  }
-  return n;
-}
-
-function trackNetwork(page) {
-  const st = { inFlight: 0, last: Date.now() };
-  const bump = () => {
-    st.last = Date.now();
-  };
-  page.on("request", () => {
-    st.inFlight++;
-    bump();
-  });
-  page.on("requestfinished", () => {
-    st.inFlight = Math.max(0, st.inFlight - 1);
-    bump();
-  });
-  page.on("requestfailed", () => {
-    st.inFlight = Math.max(0, st.inFlight - 1);
-    bump();
-  });
-  return st;
-}
-
-async function settlePage(page, budgetMs, net) {
-  const start = Date.now();
-  let budgetDeadline = Infinity;
-  let lastLen = -1;
-  let lenSince = Date.now();
-  for (;;) {
-    const now = Date.now();
-    const netQuiet = net.inFlight === 0 && now - net.last >= NET_QUIET_MS;
-    if (budgetDeadline === Infinity && (netQuiet || now - start >= NET_MAX_MS)) {
-      budgetDeadline = now + budgetMs;
-    }
-    const len = await frameTextLen(page);
-    if (len !== lastLen) {
-      lastLen = len;
-      lenSince = Date.now();
-    }
-    if (budgetDeadline !== Infinity) {
-      const rendered = len >= FLOOR && Date.now() - lenSince >= QUIET_MS;
-      const floorPassed = Date.now() - start >= Math.min(MIN_SETTLE_MS, budgetMs + NET_QUIET_MS);
-      const stillQuiet = net.inFlight === 0 && Date.now() - net.last >= NET_QUIET_MS;
-      if ((rendered && floorPassed && stillQuiet) || Date.now() >= budgetDeadline) return;
-    }
-    await page.waitForTimeout(POLL_MS);
-  }
-}
+// Each case says what the caller asked for, because the contract differs:
+// an explicit wait_ms is a floor, an omitted one leaves the pace to the sidecar.
+const CASES = [
+  { path: "/late-render", marker: "LATE_RENDER_MARKER", wait: 2_000, explicit: true },
+  { path: "/late-fetch", marker: "LATE_FETCH_MARKER", wait: 2_000, explicit: true },
+  { path: "/chrome-then-article", marker: "LATE_FETCH_MARKER", wait: 2_000, explicit: true },
+  { path: "/late-hydrate", marker: "LATE_HYDRATE_MARKER", wait: 2_500, explicit: true },
+  // Same late-hydrating page read through a SELECTOR: the settle must wait for
+  // the requested subtree, not for the page's total text.
+  {
+    path: "/late-hydrate",
+    marker: "LATE_HYDRATE_MARKER",
+    wait: 2_500,
+    explicit: true,
+    selector: ".article-body",
+  },
+];
 
 async function main() {
   const srv = await startServer();
   const browser = await chromium.launch({ headless: true });
   let failed = 0;
   try {
-    for (const [path, marker] of [
-      ["/late-render", "LATE_RENDER_MARKER"],
-      ["/late-fetch", "LATE_FETCH_MARKER"],
-      ["/chrome-then-article", "LATE_FETCH_MARKER"],
-    ]) {
+    for (const kase of CASES) {
       const page = await browser.newPage();
       const net = trackNetwork(page);
       const t0 = Date.now();
-      await page.goto(`http://127.0.0.1:${PORT}${path}`, { waitUntil: "domcontentloaded" });
-      await settlePage(page, 2_000, net); // the caller's patience budget
-      const text = await page.evaluate(() => (document.body && document.body.innerText) || "");
+      await page.goto(`http://127.0.0.1:${PORT}${kase.path}`, { waitUntil: "domcontentloaded" });
+      await settlePage(page, kase.wait, net, {
+        selector: kase.selector,
+        explicitWait: kase.explicit,
+      });
+      const text = kase.selector
+        ? await page
+            .$$eval(kase.selector, (nodes) => nodes.map((n) => n.innerText || "").join("\n"))
+            .catch(() => "")
+        : await page.evaluate(() => (document.body && document.body.innerText) || "");
       await page.close().catch(() => {});
-      const ok = text.includes(marker);
+      const ok = text.includes(kase.marker);
       if (!ok) failed++;
-      console.log(`[${ok ? "PASS" : "FAIL"}] ${path} — ${Date.now() - t0}ms, ${text.length} chars`);
+      const label = kase.selector ? `${kase.path} [${kase.selector}]` : kase.path;
+      console.log(
+        `[${ok ? "PASS" : "FAIL"}] ${label} — ${Date.now() - t0}ms, ${text.length} chars`,
+      );
     }
   } finally {
     await browser.close().catch(() => {});
     srv.close();
   }
-  console.log(`PROBE_RESULT passed=${3 - failed}/3`);
+  console.log(`PROBE_RESULT passed=${CASES.length - failed}/${CASES.length}`);
   process.exit(failed > 0 ? 1 : 0);
 }
 

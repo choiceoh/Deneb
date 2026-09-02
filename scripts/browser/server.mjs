@@ -29,6 +29,8 @@
 import http from "node:http";
 import net from "node:net";
 import dns from "node:dns/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
 const PORT = Number(process.env.DENEB_BROWSER_PORT || 18930);
@@ -51,6 +53,12 @@ const SETTLE_NET_QUIET_MS = 400; // no request started/finished this long = netw
 // article is captured. 1.2s also sits under the old code's own minimum settle
 // (networkidle's 500ms quiet + a 500ms floor budget).
 const SETTLE_MIN_MS = 1_200;
+// Explicit wait_ms is a FLOOR, not just a ceiling. Measured 2026-09-03: with the
+// budget treated as a ceiling only, a page whose nav chrome clears the content
+// floor and whose article hydrates from an inline blob at 1.5s (no network at
+// all) returned the nav bar even at wait_ms=4000 — raising wait_ms, the one
+// remedy the tool documents, did nothing. So a caller that NAMES a wait gets at
+// least that wait; a caller that omits it gets the fast auto-settle.
 const SETTLE_NET_MAX_MS = 8_000; // give up waiting for network quiet (old networkidle timeout)
 const SETTLE_POLL_MS = 100;
 // Hard ceiling for one queued operation. page.goto is already bounded, but
@@ -241,7 +249,7 @@ async function extractSelector(page, sel) {
 // settlePage polls. It mirrors extractAllFrames' reach (iframe bodies
 // included) without building the strings, so a page whose article lives in an
 // iframe is judged on the article, not on the empty shell around it.
-async function frameTextLen(page) {
+export async function frameTextLen(page) {
   let n = 0;
   for (const frame of page.frames()) {
     try {
@@ -259,7 +267,7 @@ async function frameTextLen(page) {
 // page. Playwright's waitForLoadState("networkidle") answers the same question
 // ONCE and then stops looking, which is why it cannot protect a fetch that
 // starts after it fires — this tracker keeps answering for as long as we poll.
-function trackNetwork(page) {
+export function trackNetwork(page) {
   const st = { inFlight: 0, last: Date.now() };
   const bump = () => {
     st.last = Date.now();
@@ -299,8 +307,13 @@ function trackNetwork(page) {
 //     clears the content floor returns the menu bar while the article fetch is
 //     still pending (measured: returned in 435ms, article lost).
 // Golden set, median of 3, identical extracted text: 8.4s → 4.3s total.
-async function settlePage(page, budgetMs, net) {
+export async function settlePage(page, budgetMs, net, opts = {}) {
   const start = Date.now();
+  const selector = typeof opts.selector === "string" ? opts.selector.trim() : "";
+  // A named wait is the caller's floor; an omitted one leaves the pace to us.
+  const minWaitMs = opts.explicitWait
+    ? budgetMs
+    : Math.min(SETTLE_MIN_MS, budgetMs + SETTLE_NET_QUIET_MS);
   let budgetDeadline = Infinity;
   let lastLen = -1;
   let lenSince = Date.now();
@@ -316,14 +329,38 @@ async function settlePage(page, budgetMs, net) {
       lenSince = Date.now();
     }
     if (budgetDeadline !== Infinity) {
+      const elapsed = Date.now() - start;
       const rendered = len >= SETTLE_CONTENT_FLOOR && Date.now() - lenSince >= SETTLE_QUIET_MS;
-      const floorPassed = Date.now() - start >= Math.min(SETTLE_MIN_MS, budgetMs + SETTLE_NET_QUIET_MS);
       const stillQuiet = net.inFlight === 0 && Date.now() - net.last >= SETTLE_NET_QUIET_MS;
-      if (rendered && floorPassed && stillQuiet) return;
-      if (Date.now() >= budgetDeadline) return;
+      // A targeted read is judged on ITS OWN target, not on the page's total
+      // text: the nav bar alone can satisfy "rendered" while the requested
+      // subtree has not been written yet, and the sidecar would then report
+      // matched:0 to the model as a fact (measured 2026-09-03: matched=0 at
+      // wait_ms 2000 AND 4000 on a page whose .article-body hydrates at 1.5s).
+      const targetReady = selector === "" || (await selectorHasMatch(page, selector));
+      if (elapsed >= minWaitMs && rendered && stillQuiet && targetReady) return;
+      if (Date.now() >= budgetDeadline && elapsed >= minWaitMs) return;
     }
     await page.waitForTimeout(SETTLE_POLL_MS);
   }
+}
+
+// selectorHasMatch reports whether the requested selector matches anything in
+// any frame yet. An invalid selector throws in every frame — that is not a
+// "wait longer" condition, so it counts as ready and extractSelector reports the
+// syntax error to the caller instead of the settle loop stalling on it.
+async function selectorHasMatch(page, selector) {
+  let sawFrame = false;
+  for (const frame of page.frames()) {
+    try {
+      const n = await frame.$$eval(selector, (nodes) => nodes.length);
+      sawFrame = true;
+      if (n > 0) return true;
+    } catch {
+      /* detached frame, or an invalid selector — decided by sawFrame below */
+    }
+  }
+  return !sawFrame; // no frame could even evaluate it → don't stall on it
 }
 
 async function browse(url, waitMs, selector, opts = {}) {
@@ -345,7 +382,10 @@ async function browse(url, waitMs, selector, opts = {}) {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
     // Settle: rendered + content-quiet + network-quiet, capped by the caller's
     // budget (settlePage). Replaces the old networkidle-then-sleep pair.
-    await settlePage(page, Math.min(Math.max(waitMs || 0, 500), 5_000), net);
+    await settlePage(page, Math.min(Math.max(waitMs || 0, 500), 5_000), net, {
+      selector,
+      explicitWait: Number(waitMs) > 0,
+    });
     const title = await page.title();
 
     let text;
@@ -483,6 +523,12 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`deneb-browser-sidecar listening on 127.0.0.1:${PORT} (profile: ${PROFILE})`);
-});
+// Only listen when run as a program. The settle probe imports settlePage from
+// this file so it tests the REAL rule instead of a copy that can drift.
+const runAsProgram =
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (runAsProgram) {
+  server.listen(PORT, "127.0.0.1", () => {
+    console.log(`deneb-browser-sidecar listening on 127.0.0.1:${PORT} (profile: ${PROFILE})`);
+  });
+}
