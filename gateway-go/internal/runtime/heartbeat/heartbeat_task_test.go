@@ -138,6 +138,9 @@ func TestHeartbeatSyncRequestWithoutTranscriptPersistence(t *testing.T) {
 	if req.MaxToolCallAttempts == nil || *req.MaxToolCallAttempts != heartbeatMaxToolCallAttempts {
 		t.Fatalf("heartbeat tool-call cap = %v, want %d", req.MaxToolCallAttempts, heartbeatMaxToolCallAttempts)
 	}
+	if req.SoftDeadline != heartbeatSoftDeadline {
+		t.Fatalf("heartbeat soft deadline = %s, want %s", req.SoftDeadline, heartbeatSoftDeadline)
+	}
 	if !req.EphemeralUser {
 		t.Fatal("heartbeat trigger must not persist as a user message")
 	}

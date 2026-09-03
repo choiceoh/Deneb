@@ -14,6 +14,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 )
 
+var errSoftDeadline = errors.New("agent soft deadline reached")
+
 // agentRunner owns the mutable execution state shared by preparation,
 // streaming, accounting, recovery, tool dispatch, and grace handling.
 type agentRunner struct {
@@ -144,15 +146,27 @@ func (r *agentRunner) shouldRunTurn(turn int) bool {
 }
 
 func (r *agentRunner) runTurn(turn int) (bool, error) {
-	prepared, done, err := r.prepareTurn(turn)
-	if done || err != nil {
-		return done, err
-	}
-	llmStart := time.Now()
-	turnResult, done, err := r.streamTurn(prepared)
-	r.result.LLMMs += time.Since(llmStart).Milliseconds()
-	if done || err != nil {
-		return done, err
+	var (
+		prepared   preparedAgentTurn
+		turnResult *turnResult
+		done       bool
+		err        error
+	)
+	for {
+		prepared, done, err = r.prepareTurn(turn)
+		if done || err != nil {
+			return done, err
+		}
+		llmStart := time.Now()
+		turnResult, done, err = r.streamTurn(prepared)
+		r.result.LLMMs += time.Since(llmStart).Milliseconds()
+		if errors.Is(err, errSoftDeadline) {
+			continue
+		}
+		if done || err != nil {
+			return done, err
+		}
+		break
 	}
 	stats, err := r.validateAndAccountTurn(prepared, turnResult)
 	if err != nil {
@@ -198,10 +212,16 @@ func (r *agentRunner) prepareTurn(turn int) (preparedAgentTurn, bool, error) {
 	prepared := r.preparer.prepare(r.runCtx, turn, r.journal.messages, r.result.ToolActivities)
 	if r.softDeadlineFinal {
 		// A soft deadline is a final-answer preference, not cancellation. Remove
-		// tools and explicitly disable tool choice so this and any defensive retry
-		// spend the remaining hard-budget headroom writing the answer.
+		// tools and reasoning, and explicitly disable tool choice so this and any
+		// defensive retry spend the remaining hard-budget headroom writing the answer.
 		prepared.request.Tools = nil
 		prepared.request.ToolChoice = llm.FlexibleFromValue("none")
+		thinking := r.cfg.ThinkingOffRetry
+		if thinking == nil {
+			thinking = &llm.ThinkingConfig{Type: "disabled"}
+		}
+		prepared.request.Thinking = thinking
+		prepared.thinking = thinking
 	}
 	prepared.request.MaxTokens = requestMaxTokens
 	return preparedAgentTurn{
@@ -256,9 +276,11 @@ func (r *agentRunner) remainingStreamBudget() (int, error) {
 }
 
 func (r *agentRunner) streamTurn(prepared preparedAgentTurn) (*turnResult, bool, error) {
+	streamCtx, stopSoftDeadline := r.streamContext(prepared.request.ctx)
+	defer stopSoftDeadline()
 	// Fresh per turn: a collector reused across turns would report the run's
 	// total on every row and make a single bad turn look like a whole bad run.
-	turnCtx, collector := llm.WithRetryCollector(prepared.request.ctx)
+	turnCtx, collector := llm.WithRetryCollector(streamCtx)
 	r.turnRetries = collector
 	outcome, err := runStreamingTurnWithPolicy(
 		turnCtx,
@@ -276,6 +298,10 @@ func (r *agentRunner) streamTurn(prepared preparedAgentTurn) (*turnResult, bool,
 	if err == nil {
 		return outcome.result, false, nil
 	}
+	if errors.Is(context.Cause(streamCtx), errSoftDeadline) && r.runCtx.Err() == nil {
+		r.maybeEnterSoftDeadlineFinalMode()
+		return nil, false, errSoftDeadline
+	}
 	if outcome.preOutputIdle() {
 		r.result.StopReason = "timeout"
 		return nil, true, nil
@@ -289,6 +315,24 @@ func (r *agentRunner) streamTurn(prepared preparedAgentTurn) (*turnResult, bool,
 		return nil, false, fmt.Errorf("stream chat (turn %d): %w", prepared.index, err)
 	}
 	return nil, false, fmt.Errorf("consume stream (turn %d): %w", prepared.index, err)
+}
+
+func (r *agentRunner) streamContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if r.softDeadlineFinal || r.softDeadlineAt.IsZero() {
+		return parent, func() {}
+	}
+	remaining := time.Until(r.softDeadlineAt)
+	if remaining <= 0 {
+		return parent, func() {}
+	}
+	ctx, cancelCause := context.WithCancelCause(parent)
+	timer := time.AfterFunc(remaining, func() {
+		cancelCause(errSoftDeadline)
+	})
+	return ctx, func() {
+		timer.Stop()
+		cancelCause(context.Canceled)
+	}
 }
 
 func (r *agentRunner) validateAndAccountTurn(prepared preparedAgentTurn, result *turnResult) (agentTurnStats, error) {

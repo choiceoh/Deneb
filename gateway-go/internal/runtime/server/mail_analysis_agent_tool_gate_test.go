@@ -68,3 +68,16 @@ func TestMailAnalysisAgentToolGateAllowsReadOnlyAndUnknownCalls(t *testing.T) {
 		})
 	}
 }
+
+func TestMailAnalysisAgentSyncOptionsReserveWrapUpBudget(t *testing.T) {
+	opts := mailAnalysisAgentSyncOptions()
+	if opts.SoftDeadline != mailAnalysisAgentSoftDeadline {
+		t.Fatalf("mail-analysis soft deadline = %s, want %s", opts.SoftDeadline, mailAnalysisAgentSoftDeadline)
+	}
+	if opts.BeforeToolCall == nil || !opts.AutoDeliveredOutput || !opts.EphemeralUser || !opts.EphemeralAssistant {
+		t.Fatalf("mail-analysis sync options lost safety flags: %+v", opts)
+	}
+	if lmtpAnalysisItemTimeout <= opts.SoftDeadline {
+		t.Fatalf("LMTP item timeout %s must leave headroom after soft deadline %s", lmtpAnalysisItemTimeout, opts.SoftDeadline)
+	}
+}
