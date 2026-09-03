@@ -317,6 +317,53 @@ class LoadAndMineTests(unittest.TestCase):
         self.assertIn("model call failed", rejects[0][1])
 
 
+class CliWiringTests(unittest.TestCase):
+    """The corpus grounding is only real if the CLI actually reaches it.
+
+    Every guard above is exercised through mine()/build_prompt() directly, which
+    stays green even when --wiki is not wired to them — that is exactly how the
+    flag went missing once.
+    """
+
+    def run_cli(self, extra_argv, pages=None):
+        seen = {}
+
+        def fake_mine(cases, model, index=None, excerpt_chars=1500, **_kw):
+            seen["index"], seen["excerpt_chars"] = index, excerpt_chars
+            return [miner.direct_case(cases[0])], []
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gold = root / "gold.jsonl"
+            gold.write_text(json.dumps(DIRECT, ensure_ascii=False) + "\n", encoding="utf-8")
+            wiki = root / "wiki"
+            for rel, text in (pages or {}).items():
+                page = wiki / rel
+                page.parent.mkdir(parents=True, exist_ok=True)
+                page.write_text(text, encoding="utf-8")
+            argv = ["--gold", str(gold), "--out", str(root / "out.jsonl")] + [
+                str(wiki) if token == "<WIKI>" else token for token in extra_argv]
+            real_mine, miner.mine = miner.mine, fake_mine
+            try:
+                rc = miner.main(argv)
+            finally:
+                miner.mine = real_mine
+        return rc, seen
+
+    def test_wiki_flag_reaches_the_miner_as_a_built_index(self) -> None:
+        rc, seen = self.run_cli(
+            ["--wiki", "<WIKI>", "--excerpt-chars", "40"],
+            pages={"프로젝트/com-sds-epc-001/대표.md": "하자보수 4·5번"})
+        self.assertEqual(rc, 0)
+        self.assertEqual(seen["excerpt_chars"], 40)
+        self.assertEqual(sorted(seen["index"]), ["프로젝트/com-sds-epc-001"])
+
+    def test_without_the_flag_the_miner_is_told_there_is_no_corpus(self) -> None:
+        rc, seen = self.run_cli([])
+        self.assertEqual(rc, 0)
+        self.assertIsNone(seen["index"])
+
+
 class RetryTests(unittest.TestCase):
     def test_only_transient_failures_are_worth_waiting_out(self) -> None:
         import urllib.error

@@ -390,7 +390,15 @@ def main(argv=None) -> int:
     ap.add_argument("--model", default="glm-5.2", help="재작성 모델 (웜홀이 서빙 중이어야 함)")
     ap.add_argument("--limit", type=int, default=0, help="처음 N건만 (0=전부)")
     ap.add_argument("--out", default="", help="출력 JSONL (미지정 시 stdout)")
+    ap.add_argument("--wiki", default="", help="위키 COPY 경로 — 단서 모호도 측정 + 발췌 주입")
+    ap.add_argument("--excerpt-chars", type=int, default=1500, help="발췌 최대 길이")
     a = ap.parse_args(argv)
+
+    index = load_wiki(a.wiki) if a.wiki else None
+    if index:
+        sys.stderr.write(f"== wiki {a.wiki}: {len(index)} subtrees indexed\n")
+    else:
+        sys.stderr.write("== no --wiki: 단서 모호도는 모델 판단에만 의존한다\n")
 
     cases = load_gold(a.gold)
     if a.limit > 0:
@@ -400,7 +408,8 @@ def main(argv=None) -> int:
         return 1
     sys.stderr.write(f"== {len(cases)} direct cases → reverse via {a.model}\n")
 
-    emitted, rejects = mine(cases, a.model)
+    emitted, rejects = mine(cases, a.model, index=index,
+                            excerpt_chars=a.excerpt_chars)
 
     lines = [json.dumps(c, ensure_ascii=False) for c in emitted]
     body = "\n".join(lines) + "\n"
