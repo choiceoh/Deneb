@@ -60,23 +60,43 @@ SYSTEM = (
 )
 
 PROMPT = """아래는 사내 위키 검색 평가용 질문이다. 이 질문은 **정방향**이다:
-프로젝트(현장)를 이름으로 지목하고 그 프로젝트에 기록된 세부사항을 묻는다.
+{kind}을(를) 이름으로 지목하고 거기에 기록된 세부사항을 묻는다.
 
 이것을 **역방향** 질문으로 바꿔라. 역방향이란 세부사항을 단서로 주고
-"그게 어느 프로젝트/현장이냐"를 묻는 형태다.
+"그게 어느 {kind}이냐"를 묻는 형태다.
 
 원 질문: {question}
 그 질문의 정답에 해당하는 세부 토큰: {detail}
 
 규칙:
-- 역방향 질문에는 프로젝트/현장 이름이 **절대 들어가면 안 된다**. 그 이름을 맞히는 게 질문의 목적이다.
+- 역방향 질문에는 {kind} 이름이 **절대 들어가면 안 된다**. 그 이름을 맞히는 게 질문의 목적이다.
 - 세부 토큰의 내용은 질문 안에 단서로 남겨라.
 - 실무자가 실제로 물어볼 법한 자연스러운 한국어 한 문장으로 쓴다.
-- 단서가 너무 흔해서 여러 현장이 답이 될 것 같으면 reverse 를 빈 문자열로 두어라.
+- 묻는 대상은 반드시 {kind} 이다. 다른 종류로 바꿔 묻지 마라.
+- 단서가 너무 흔해서 여러 개가 답이 될 것 같으면 reverse 를 빈 문자열로 두어라.
 
 JSON 으로만 답한다:
-{{"subject": "<원 질문에서 프로젝트/현장을 가리키는 부분을 그대로 복사>",
+{{"subject": "<원 질문에서 {kind}을(를) 가리키는 부분을 그대로 복사>",
   "reverse": "<역방향 질문 또는 빈 문자열>"}}"""
+
+# What the reverse question should ask FOR. The gold sets target three page
+# families and only one of them is a site: asking "which 현장?" about 업무/BEP
+# (a fund profile) or 인물/에코프로-담당자 (a contact card) produces a question
+# with no valid answer, which then scores as a retrieval failure forever.
+PAGE_KINDS = {"프로젝트": "현장", "인물": "인물", "업무": "문서"}
+
+
+def page_kind(gold_paths: list) -> str:
+    """The noun the reverse question must ask for, from the gold target family.
+
+    Falls back to 프로젝트's noun: paths that carry no family prefix are vendor
+    or site fragments in practice, which are sites.
+    """
+    for path in gold_paths or []:
+        head = str(path).split("/")[0]
+        if head in PAGE_KINDS:
+            return PAGE_KINDS[head]
+    return PAGE_KINDS["프로젝트"]
 
 
 # --- model transport --------------------------------------------------------- #
@@ -220,7 +240,8 @@ def mine(cases: list, model: str, ask=call_model, log=sys.stderr.write) -> tuple
     for case in cases:
         emitted.append(direct_case(case))
         detail = " / ".join(detail_tokens(case.get("must_contain"))) or "(없음)"
-        prompt = PROMPT.format(question=case["question"], detail=detail)
+        prompt = PROMPT.format(question=case["question"], detail=detail,
+                               kind=page_kind(case.get("gold_paths")))
         try:
             reply = parse_reply(ask(model, prompt))
         except Exception as exc:  # noqa: BLE001 - one case must not kill the run

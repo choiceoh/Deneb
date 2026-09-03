@@ -49,6 +49,26 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(miner.detail_tokens(None), [])
 
 
+class PageKindTests(unittest.TestCase):
+    def test_the_asked_for_noun_follows_the_gold_target_family(self) -> None:
+        # Asking "which 현장?" about a fund profile or a contact card yields a
+        # question with no valid answer, which then scores as a permanent miss.
+        self.assertEqual(miner.page_kind(["프로젝트/com-sds-epc-001"]), "현장")
+        self.assertEqual(miner.page_kind(["업무/BEP"]), "문서")
+        self.assertEqual(miner.page_kind(["인물/에코프로-담당자"]), "인물")
+
+    def test_a_prefixless_fragment_is_treated_as_a_site(self) -> None:
+        # Vendor/site fragments like "sunkean" or "라이젠" appear as bare gold
+        # paths in the live sets; they resolve to project pages.
+        self.assertEqual(miner.page_kind(["sunkean"]), "현장")
+        self.assertEqual(miner.page_kind([]), "현장")
+        self.assertEqual(miner.page_kind(None), "현장")
+
+    def test_a_recognized_family_wins_over_a_leading_fragment(self) -> None:
+        self.assertEqual(miner.page_kind(["라이젠", "프로젝트/pl3-ghg-mod-001"]), "현장")
+        self.assertEqual(miner.page_kind(["카이엠", "업무/BEP"]), "문서")
+
+
 class GuardTests(unittest.TestCase):
     def keep(self, subject: str, reverse: str, must_contain=None):
         return miner.reject_reason(
