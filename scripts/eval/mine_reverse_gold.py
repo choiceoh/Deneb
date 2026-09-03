@@ -103,6 +103,9 @@ PAD_ALLOWED = ("- 단서 하나로는 부족하니 이 {kind}을(를) 특정할 
                "- 둘 이상 보태지 마라 — 길어질수록 검색이 쉬워져 측정이 망가진다.\n"
                "- 발췌를 봐도 특정할 단서가 없을 때만 reverse 를 빈 문자열로 둔다.\n")
 
+PAD_NO_SOURCE = ("- 보탤 발췌가 없으니 원 질문의 정보만으로 자연스럽게 뒤집어 쓴다.\n"
+                 "- 새 사실을 지어내지 마라. 뒤집을 수 없을 때만 reverse 를 빈 문자열로 둔다.\n")
+
 # How much longer than its direct twin a reverse question may be. Calibrated on
 # the 2026-09-03 ungoverned run, where Korean's density made a first guess of +70
 # admit the very example that motivated the guard: one added clue measured +18
@@ -143,66 +146,94 @@ def page_kind(gold_paths: list) -> str:
 # --- corpus grounding (pure) -------------------------------------------------- #
 # The paper's pipeline filters candidate questions by searching for alternative
 # answers and discarding the ambiguous ones. The wiki is small enough to do that
-# exactly rather than by sampling: count the subtrees whose text carries the
-# clue. One subtree means the clue pins the answer; several mean the reverse
-# question needs a second clue to be answerable at all.
-def subtree_of(relpath: str) -> str:
-    """The page family a file belongs to — 프로젝트/<code>, 업무/<doc>, ….
+# exactly rather than by sampling.
+#
+# Two things were wrong in the first attempt and both mattered. Folding pages
+# into a fixed two-segment "subtree" mangled the nested targets — gold aims at
+# 프로젝트/거래/현대에너지솔루션 while the fold produced 프로젝트/거래, so the
+# match failed and 37 sound cases were condemned as dead gold against a
+# measured truth of 3. And the answer space is not "folders on disk": it is the
+# set of targets the benchmark actually scores, which is the gold set's own
+# distinct gold_paths. Counting in that space is what makes "how many answers
+# could this question have" mean anything.
+def path_hit(gold: str, relpath: str) -> bool:
+    """recall-bench's gold-path rule: match only at a path-segment start.
 
-    Gold targets are folders, not files, so ambiguity has to be counted over
-    folders: three files inside one project are one candidate answer, not three.
+    Without it "영덕" would claim "남영덕/…" and the ambiguity count would
+    collapse toward 1 — hiding exactly the cases the count exists to flag.
     """
-    parts = [p for p in str(relpath).replace("\\", "/").split("/") if p]
-    if not parts:
-        return ""
-    return "/".join(parts[:2]) if len(parts) > 1 else parts[0]
-
-
-def index_subtrees(pages: dict) -> dict:
-    """Fold {relpath: text} into {subtree: concatenated text}."""
-    index = {}
-    for relpath, text in (pages or {}).items():
-        key = subtree_of(relpath)
-        if key:
-            index[key] = index.get(key, "") + "\n" + (text or "")
-    return index
-
-
-def gold_matches(subtree: str, gold_paths: list) -> bool:
-    """Gold-path semantics from recall-bench: match only at a segment start.
-
-    Without the segment rule "영덕" would claim "남영덕/…" and the ambiguity
-    count would collapse toward 1 for exactly the cases it must flag.
-    """
-    for gold in gold_paths or []:
-        g = str(gold).rstrip("/")
-        if not g:
-            continue
-        if subtree == g or subtree.startswith(g + "/") or ("/" + g) in ("/" + subtree):
+    g = str(gold or "").rstrip("/")
+    p = str(relpath or "").replace("\\", "/")
+    if not g:
+        return False
+    if p.endswith(".md"):
+        p = p[:-3]
+    start = 0
+    while True:
+        idx = p.find(g, start)
+        if idx == -1:
+            return False
+        if idx == 0 or p[idx - 1] == "/":
             return True
-    return False
+        start = idx + 1
 
 
-def subtrees_with(index: dict, tokens: list) -> list:
-    """Subtrees whose text carries ANY of the clue tokens (gold '|' is OR)."""
-    return sorted(key for key, text in (index or {}).items()
-                  if any(t and t in text for t in tokens or []))
+def pages_for(pages: dict, gold_paths: list) -> list:
+    """Every page file the given gold target covers."""
+    return [rel for rel in (pages or {})
+            if any(path_hit(g, rel) for g in gold_paths or [])]
 
 
-def clue_verdict(index: dict, gold_paths: list, tokens: list):
-    """(reject reason or None, number of subtrees the clue reaches).
+def pages_with(pages: dict, tokens: list) -> list:
+    """Page files whose text carries ANY clue token (gold '|' is OR)."""
+    return [rel for rel, text in (pages or {}).items()
+            if any(t and t in text for t in tokens or [])]
 
-    A clue absent from its own target is the case the baseline of 2026-08-23
-    called dead gold: unwinnable no matter how good retrieval gets, and it reads
-    as a retrieval miss forever. Reject it here rather than mine it into a new
-    set — an inherited defect is still a defect once it has a new id.
+
+def gold_targets(cases: list) -> list:
+    """The answer space: distinct gold_paths the benchmark can score."""
+    seen = []
+    for case in cases or []:
+        for gold in case.get("gold_paths") or []:
+            if gold not in seen:
+                seen.append(gold)
+    return seen
+
+
+def clue_reach(pages: dict, targets: list, tokens: list) -> int:
+    """How many scoreable targets the clue could name."""
+    hits = pages_with(pages, tokens)
+    return sum(1 for t in targets or []
+               if any(path_hit(t, rel) for rel in hits))
+
+
+def clue_verdict(pages: dict, targets: list, gold_paths: list, tokens: list):
+    """(reject reason or None, number of targets the clue reaches).
+
+    Distinguishes two failures that look alike but mean different things: a gold
+    path that resolves to no page at all is a pre-existing defect in the source
+    set (recall-bench warns about it separately, and mining a twin off it would
+    only give the defect a second id), while a resolvable page that lacks its own
+    clue is the dead-gold class the 2026-08-23 baseline described.
     """
-    if not index or not tokens:
+    if not pages or not tokens:
         return None, 0
-    hits = subtrees_with(index, tokens)
-    if not any(gold_matches(h, gold_paths) for h in hits):
-        return "clue absent from its own gold page", len(hits)
-    return None, len(hits)
+    if not gold_paths:
+        return "no gold path to target", 0
+    own = pages_for(pages, gold_paths)
+    if not own:
+        return "gold path resolves to no page", 0
+    if not any(any(t and t in pages[rel] for t in tokens) for rel in own):
+        return "clue absent from its own gold page", clue_reach(pages, targets, tokens)
+    return None, clue_reach(pages, targets, tokens)
+
+
+def excerpt_for(pages: dict, gold_paths: list, limit: int) -> str:
+    """Longest page under the target — the one most likely to carry a clue."""
+    bodies = [(pages or {}).get(rel, "") for rel in pages_for(pages, gold_paths)]
+    if not bodies:
+        return ""
+    return max(bodies, key=len).strip()[:limit]
 
 
 # --- model transport --------------------------------------------------------- #
@@ -340,27 +371,25 @@ def load_gold(path: str) -> list:
 
 
 # --- run --------------------------------------------------------------------- #
-def build_prompt(case: dict, index: dict, excerpt_chars: int) -> str:
+def build_prompt(case: dict, pages: dict, targets: list, excerpt_chars: int) -> str:
     """Assemble the rewrite prompt, grounded in the corpus when one is given."""
     kind = page_kind(case.get("gold_paths"))
     tokens = detail_tokens(case.get("must_contain"))
-    _, reach = clue_verdict(index, case.get("gold_paths"), tokens)
-    if reach > 1:
-        ambiguity = AMBIGUOUS_NOTE.format(n=reach)
+    _, reach = clue_verdict(pages, targets, case.get("gold_paths"), tokens)
+    body = "" if reach == 1 else excerpt_for(pages, case.get("gold_paths"), excerpt_chars)
+    if reach == 1:
+        # The clue already names one target; there is nothing to disambiguate,
+        # so neither the permission to pad nor the material to pad with.
+        ambiguity, padding_rule = UNIQUE_NOTE.format(kind=kind), PAD_FORBIDDEN
+    elif body:
+        ambiguity = AMBIGUOUS_NOTE.format(n=reach) if reach > 1 else ""
         padding_rule = PAD_ALLOWED.format(kind=kind)
-    elif reach == 1:
-        ambiguity = UNIQUE_NOTE.format(kind=kind)
-        padding_rule = PAD_FORBIDDEN
     else:
-        ambiguity, padding_rule = "", PAD_ALLOWED.format(kind=kind)
-    # The excerpt is the raw material for padding, so it is withheld whenever
-    # padding is forbidden — the cheapest way to stop it is not to offer it.
-    body = ""
-    if reach != 1:
-        for key, text in (index or {}).items():
-            if gold_matches(key, case.get("gold_paths")):
-                body = text.strip()[:excerpt_chars]
-                break
+        # No excerpt to draw from. Telling the model to "pick one from the
+        # excerpt below" when there is no excerpt is what drove the decline rate
+        # to 95% — ask for a plain rewrite instead of an impossible one.
+        ambiguity = AMBIGUOUS_NOTE.format(n=reach) if reach > 1 else ""
+        padding_rule = PAD_NO_SOURCE
     excerpt = f"\n대상 페이지 발췌:\n---\n{body}\n---\n" if body else ""
     return PROMPT.format(question=case["question"],
                          detail=" / ".join(tokens) or "(없음)",
@@ -369,7 +398,7 @@ def build_prompt(case: dict, index: dict, excerpt_chars: int) -> str:
 
 
 def mine(cases: list, model: str, ask=call_model, log=sys.stderr.write,
-         index=None, excerpt_chars: int = 1500) -> tuple:
+         pages=None, targets=None, excerpt_chars: int = 1500) -> tuple:
     """Return (emitted cases, rejection reasons) for the given direct cases."""
     emitted, rejects = [], []
     for case in cases:
@@ -378,12 +407,12 @@ def mine(cases: list, model: str, ask=call_model, log=sys.stderr.write,
         # Corpus check first: a case whose clue is not even on its own page is
         # broken at the source, and no rewrite can rescue it — refusing before
         # the model call also keeps the run from paying for it.
-        broken, reach = clue_verdict(index, case.get("gold_paths"), tokens)
+        broken, reach = clue_verdict(pages, targets, case.get("gold_paths"), tokens)
         if broken:
             rejects.append((case["id"], broken))
             continue
         try:
-            reply = parse_reply(ask(model, build_prompt(case, index, excerpt_chars)))
+            reply = parse_reply(ask(model, build_prompt(case, pages, targets, excerpt_chars)))
         except Exception as exc:  # noqa: BLE001 - one case must not kill the run
             rejects.append((case["id"], f"model call failed: {exc}"))
             continue
@@ -405,16 +434,17 @@ def mine(cases: list, model: str, ask=call_model, log=sys.stderr.write,
 
 
 def load_wiki(wiki_dir: str) -> dict:
-    """Read the wiki COPY into {subtree: text}. Read-only, whole corpus."""
+    """Read the wiki COPY into {relpath: text}. Read-only, whole corpus."""
     import pathlib
     root = pathlib.Path(wiki_dir)
     pages = {}
     for path in root.rglob("*.md"):
         try:
-            pages[str(path.relative_to(root))] = path.read_text(encoding="utf-8")
+            pages[str(path.relative_to(root)).replace("\\", "/")] = path.read_text(
+                encoding="utf-8")
         except OSError:
             continue
-    return index_subtrees(pages)
+    return pages
 
 
 def main(argv=None) -> int:
@@ -428,9 +458,9 @@ def main(argv=None) -> int:
     ap.add_argument("--excerpt-chars", type=int, default=1500, help="발췌 최대 길이")
     a = ap.parse_args(argv)
 
-    index = load_wiki(a.wiki) if a.wiki else None
-    if index:
-        sys.stderr.write(f"== wiki {a.wiki}: {len(index)} subtrees indexed\n")
+    pages = load_wiki(a.wiki) if a.wiki else None
+    if pages:
+        sys.stderr.write(f"== wiki {a.wiki}: {len(pages)} pages indexed\n")
     else:
         sys.stderr.write("== no --wiki: 단서 모호도는 모델 판단에만 의존한다\n")
 
@@ -442,7 +472,8 @@ def main(argv=None) -> int:
         return 1
     sys.stderr.write(f"== {len(cases)} direct cases → reverse via {a.model}\n")
 
-    emitted, rejects = mine(cases, a.model, index=index,
+    targets = gold_targets(cases)
+    emitted, rejects = mine(cases, a.model, pages=pages, targets=targets,
                             excerpt_chars=a.excerpt_chars)
 
     lines = [json.dumps(c, ensure_ascii=False) for c in emitted]
