@@ -450,7 +450,7 @@ export function RsiPane() {
       .catch((e) => setErr(errText(e)))
       .finally(() => setLoading(false));
     // Best-effort drill data — a failure here leaves the overview intact.
-    void callRpc<SkillsLifecycleResponse>(cfg, RSI_RPC.lifecycle, { limit: 12 })
+    void callRpc<SkillsLifecycleResponse>(cfg, RSI_RPC.lifecycle, { limit: 12, translate: true })
       .then((d) => setLifecycle(d.events ?? []))
       .catch(() => setLifecycle([]));
     void Promise.all([

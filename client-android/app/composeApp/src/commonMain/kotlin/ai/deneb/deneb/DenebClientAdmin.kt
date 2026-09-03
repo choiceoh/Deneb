@@ -273,6 +273,11 @@ suspend fun DenebGatewayClient.fetchSkillLifecycleResponse(
     buildJsonObject {
         put("limit", limit)
         if (!skillName.isNullOrBlank()) put("skillName", skillName)
+        // Propus verdicts come from review models that answer in English —
+        // measured 2026-09-03, 298 of 735 log reasons carried no Hangul. This
+        // timeline is read by a person; tooling that reads the same log does not
+        // send the flag and keeps the original words.
+        put("translate", true)
     },
 )
 
