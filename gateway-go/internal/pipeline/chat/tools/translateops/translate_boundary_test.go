@@ -3,6 +3,7 @@ package translateops
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 	"sync"
@@ -115,7 +116,7 @@ func TestBoundaryTranslateRangeFailureBisectsAndPreservesOrder(t *testing.T) {
 	t.Cleanup(func() { translateBatchFn = original })
 	var mu sync.Mutex
 	var calls [][]string
-	translateBatchFn = func(_ context.Context, batch []translateInput, _ string) ([]string, bool) {
+	translateBatchFn = func(_ context.Context, batch []translateInput, _ string) ([]string, translateBatchOutcome) {
 		texts := make([]string, len(batch))
 		for i := range batch {
 			texts[i] = batch[i].Text
@@ -124,19 +125,19 @@ func TestBoundaryTranslateRangeFailureBisectsAndPreservesOrder(t *testing.T) {
 		calls = append(calls, texts)
 		mu.Unlock()
 		if len(batch) > 1 {
-			return nil, false
+			return nil, batchRetryable
 		}
-		return []string{"T:" + batch[0].Text}, true
+		return []string{"T:" + batch[0].Text}, batchOK
 	}
 	inputs := []translateInput{{Text: "a"}, {Text: "b"}, {Text: "c"}, {Text: "d"}}
 	out := []string{"a", "b", "c", "d"}
-	var done atomic.Int64
-	translateRange(context.Background(), inputs, out, &done, 0, len(inputs), "Korean")
+	var st translateRangeState
+	translateRange(context.Background(), inputs, out, &st, 0, len(inputs), "Korean")
 	if !reflect.DeepEqual(out, []string{"T:a", "T:b", "T:c", "T:d"}) {
 		t.Fatalf("translated output = %v", out)
 	}
-	if done.Load() != int64(len(inputs)) {
-		t.Fatalf("translated count = %d, want %d", done.Load(), len(inputs))
+	if st.done.Load() != int64(len(inputs)) {
+		t.Fatalf("translated count = %d, want %d", st.done.Load(), len(inputs))
 	}
 	if len(calls) != 7 {
 		t.Fatalf("bisection calls = %d, want 7: %#v", len(calls), calls)
@@ -148,7 +149,7 @@ func TestBoundaryTranslateSegmentsConcurrentBatchLimit(t *testing.T) {
 	t.Cleanup(func() { translateBatchFn = original })
 	var active atomic.Int32
 	var maxActive atomic.Int32
-	translateBatchFn = func(_ context.Context, batch []translateInput, _ string) ([]string, bool) {
+	translateBatchFn = func(_ context.Context, batch []translateInput, _ string) ([]string, translateBatchOutcome) {
 		current := active.Add(1)
 		defer active.Add(-1)
 		for {
@@ -162,7 +163,7 @@ func TestBoundaryTranslateSegmentsConcurrentBatchLimit(t *testing.T) {
 		for i := range batch {
 			out[i] = "T:" + batch[i].Text
 		}
-		return out, true
+		return out, batchOK
 	}
 	segments := make([]string, translateMaxSegmentsPerBatch*8)
 	for i := range segments {
@@ -224,5 +225,114 @@ func TestBoundarySleepCtxHonoursCancellation(t *testing.T) {
 	}
 	if !sleepCtx(context.Background(), time.Millisecond) {
 		t.Fatal("sleepCtx should report completion on a normal wait")
+	}
+}
+
+// A refusing TRANSLATOR must cost one call, not 2n-1. translateRange answers a
+// failure by splitting, which is right for a batch DeepL choked on and exactly
+// wrong for an auth error, an exhausted quota or a rate limit: every half gets
+// the identical answer. With the 429 retry from #5010 each of those doomed
+// leaves could also sleep 3s first, so a 40-segment range could burn ~79 calls
+// and most of a minute to learn one thing.
+func TestBoundaryHopelessTranslatorDoesNotBisect(t *testing.T) {
+	original := translateBatchFn
+	t.Cleanup(func() { translateBatchFn = original })
+	var calls atomic.Int32
+	translateBatchFn = func(_ context.Context, _ []translateInput, _ string) ([]string, translateBatchOutcome) {
+		calls.Add(1)
+		return nil, batchHopeless
+	}
+
+	inputs := make([]translateInput, 40)
+	out := make([]string, len(inputs))
+	for i := range inputs {
+		inputs[i] = translateInput{Text: fmt.Sprintf("segment-%02d", i)}
+		out[i] = inputs[i].Text
+	}
+	var st translateRangeState
+	translateRange(context.Background(), inputs, out, &st, 0, len(inputs), "Korean")
+
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("hopeless range made %d calls, want exactly 1 (bisection would make 79)", got)
+	}
+	if st.done.Load() != 0 {
+		t.Fatalf("translated count = %d, want 0", st.done.Load())
+	}
+	if !st.hopeless.Load() {
+		t.Fatal("hopeless was not latched for the sibling ranges")
+	}
+}
+
+// The latch is shared across a whole TranslateSegments call, so the ranges still
+// queued behind a refusing translator are never sent at all.
+func TestBoundaryHopelessStopsTheRemainingRanges(t *testing.T) {
+	original := translateBatchFn
+	t.Cleanup(func() { translateBatchFn = original })
+	var calls atomic.Int32
+	translateBatchFn = func(_ context.Context, _ []translateInput, _ string) ([]string, translateBatchOutcome) {
+		calls.Add(1)
+		return nil, batchHopeless
+	}
+
+	segments := make([]string, translateMaxSegmentsPerBatch*8)
+	for i := range segments {
+		segments[i] = fmt.Sprintf("segment-%03d", i)
+	}
+	got, err := TranslateSegments(context.Background(), segments, "Korean")
+	if err == nil {
+		t.Fatal("a refusing translator reported success")
+	}
+	if len(got) != len(segments) {
+		t.Fatalf("out length = %d, want %d", len(got), len(segments))
+	}
+	// Ranges already dispatched into the semaphore still run; the point is that
+	// the rest never queue and nothing bisects. Without the latch this same input
+	// costs one call per range PLUS a full bisection under each.
+	if n := calls.Load(); n > int32(translateMaxConcurrentBatches) {
+		t.Fatalf("calls = %d, want at most the concurrency limit %d", n, translateMaxConcurrentBatches)
+	}
+}
+
+// The status classification is where the bisect decision is actually made, so
+// pin both sides of it against real HTTP responses.
+func TestBoundaryDeepLStatusDecidesWhetherSplittingCanHelp(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+		want   translateBatchOutcome
+		calls  int
+	}{
+		// Account-level: the same answer comes back for every half.
+		{"quota exhausted", 456, `{"message":"Quota exceeded"}`, batchHopeless, 1},
+		{"auth", http.StatusForbidden, `{"message":"Authorization failed"}`, batchHopeless, 1},
+		// Payload-level: a smaller request is exactly the remedy.
+		{"bad request", http.StatusBadRequest, `{"message":"Bad request"}`, batchRetryable, 1},
+		// Rate limit is account-level too — and splitting makes it WORSE, since
+		// the halves are more requests, not fewer. Retried first, then hopeless.
+		{"rate limited", http.StatusTooManyRequests, `{"message":"Too many requests"}`, batchHopeless, deeplRetryAttempts},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetTranslateTextCache()
+			oldClient := deeplHTTPClient
+			t.Cleanup(func() { deeplHTTPClient = oldClient })
+			calls := 0
+			deeplHTTPClient = &http.Client{Transport: deepLRoundTripFunc(func(*http.Request) (*http.Response, error) {
+				calls++
+				return deepLTestResponse(tc.status, tc.body), nil
+			})}
+			t.Setenv("DEEPL_API_KEY", "test-key")
+
+			out, outcome := translateBatchDeepL(context.Background(), []translateInput{{Text: "Hello"}}, "ko")
+			if outcome != tc.want {
+				t.Fatalf("status %d → outcome %v, want %v", tc.status, outcome, tc.want)
+			}
+			if out != nil {
+				t.Fatalf("status %d returned out=%v, want nil", tc.status, out)
+			}
+			if calls != tc.calls {
+				t.Fatalf("status %d made %d HTTP calls, want %d", tc.status, calls, tc.calls)
+			}
+		})
 	}
 }
