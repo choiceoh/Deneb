@@ -39,8 +39,8 @@ func TestTranslateSegments_Empty(t *testing.T) {
 
 func TestTranslateSegments_EnvelopeFallbackKeepsOriginalText(t *testing.T) {
 	old := translateBatchFn
-	translateBatchFn = func(context.Context, []translateInput, string) ([]string, bool) {
-		return nil, false
+	translateBatchFn = func(context.Context, []translateInput, string) ([]string, translateBatchOutcome) {
+		return nil, batchRetryable
 	}
 	defer func() { translateBatchFn = old }()
 
@@ -63,8 +63,8 @@ func TestTranslateSegments_EnvelopeFallbackKeepsOriginalText(t *testing.T) {
 // forever — one DeepL outage silently ending translation for them.
 func TestTranslateSegments_TotalFailureIsAnError(t *testing.T) {
 	old := translateBatchFn
-	translateBatchFn = func(context.Context, []translateInput, string) ([]string, bool) {
-		return nil, false
+	translateBatchFn = func(context.Context, []translateInput, string) ([]string, translateBatchOutcome) {
+		return nil, batchRetryable
 	}
 	defer func() { translateBatchFn = old }()
 
@@ -83,14 +83,14 @@ func TestTranslateSegments_TotalFailureIsAnError(t *testing.T) {
 // narrows it to the individual segment. Only "nothing at all" is the signal.
 func TestTranslateSegments_PartialFailureStaysSuccessful(t *testing.T) {
 	old := translateBatchFn
-	translateBatchFn = func(_ context.Context, batch []translateInput, _ string) ([]string, bool) {
+	translateBatchFn = func(_ context.Context, batch []translateInput, _ string) ([]string, translateBatchOutcome) {
 		if len(batch) == 1 && batch[0].Text == "World" {
-			return nil, false
+			return nil, batchRetryable
 		}
 		if len(batch) > 1 {
-			return nil, false // force the bisection down to singles
+			return nil, batchRetryable // force the bisection down to singles
 		}
-		return []string{"T:" + batch[0].Text}, true
+		return []string{"T:" + batch[0].Text}, batchOK
 	}
 	defer func() { translateBatchFn = old }()
 
@@ -113,7 +113,7 @@ func TestTranslateSegments_TranslatesBatchesConcurrently(t *testing.T) {
 	calls := 0
 	entered := make(chan struct{}, 16)
 	release := make(chan struct{})
-	translateBatchFn = func(ctx context.Context, batch []translateInput, lang string) ([]string, bool) {
+	translateBatchFn = func(ctx context.Context, batch []translateInput, lang string) ([]string, translateBatchOutcome) {
 		mu.Lock()
 		calls++
 		inFlight++
@@ -125,7 +125,7 @@ func TestTranslateSegments_TranslatesBatchesConcurrently(t *testing.T) {
 		select {
 		case <-release:
 		case <-ctx.Done():
-			return nil, false
+			return nil, batchRetryable
 		}
 		out := make([]string, len(batch))
 		for i, in := range batch {
@@ -134,7 +134,7 @@ func TestTranslateSegments_TranslatesBatchesConcurrently(t *testing.T) {
 		mu.Lock()
 		inFlight--
 		mu.Unlock()
-		return out, true
+		return out, batchOK
 	}
 
 	// One segment per batch by construction: each is larger than the char bound,
@@ -238,12 +238,12 @@ func TestTranslateBatchDeepL_ReturnsTranslatedTextAndParts(t *testing.T) {
 	})}
 	t.Setenv("DEEPL_API_KEY", "test-key")
 
-	out, ok := translateBatchDeepL(context.Background(), []translateInput{
+	out, outcome := translateBatchDeepL(context.Background(), []translateInput{
 		{Text: "Hello world", Parts: []string{"Hello ", "world"}, Context: "Greeting block", Role: "body"},
 		{Text: "Read more"},
 	}, "ko")
-	if !ok {
-		t.Fatal("translateBatchDeepL returned !ok")
+	if outcome != batchOK {
+		t.Fatalf("translateBatchDeepL outcome=%v, want batchOK", outcome)
 	}
 	if sawTarget != "KO" {
 		t.Fatalf("target_lang=%q want KO", sawTarget)
@@ -263,9 +263,11 @@ func TestTranslateBatchDeepL_ReturnsTranslatedTextAndParts(t *testing.T) {
 func TestTranslateBatchDeepLDisabledWithoutKey(t *testing.T) {
 	resetTranslateTextCache()
 	t.Setenv("DEEPL_API_KEY", "")
-	out, ok := translateBatchDeepL(context.Background(), []translateInput{{Text: "Hello"}}, "ko")
-	if ok || out != nil {
-		t.Fatalf("out=%v ok=%v, want nil,false", out, ok)
+	// No key is a property of the deployment, not of this batch: hopeless, so
+	// translateRange must not split the range looking for a luckier half.
+	out, outcome := translateBatchDeepL(context.Background(), []translateInput{{Text: "Hello"}}, "ko")
+	if outcome != batchHopeless || out != nil {
+		t.Fatalf("out=%v outcome=%v, want nil,batchHopeless", out, outcome)
 	}
 }
 
@@ -286,12 +288,13 @@ func TestTranslateBatchDeepLMismatchTriggersFallback(t *testing.T) {
 	})}
 	t.Setenv("DEEPL_API_KEY", "test-key")
 
-	out, ok := translateBatchDeepL(context.Background(), []translateInput{
+	// A count mismatch IS about this batch — a smaller one may line up.
+	out, outcome := translateBatchDeepL(context.Background(), []translateInput{
 		{Text: "Hello"},
 		{Text: "World"},
 	}, "Korean")
-	if ok || out != nil {
-		t.Fatalf("out=%v ok=%v, want nil,false", out, ok)
+	if outcome != batchRetryable || out != nil {
+		t.Fatalf("out=%v outcome=%v, want nil,batchRetryable", out, outcome)
 	}
 }
 
@@ -307,13 +310,13 @@ func TestTranslateBatchDeepL_UsesServerCacheOnSecondCall(t *testing.T) {
 	})}
 	t.Setenv("DEEPL_API_KEY", "test-key")
 
-	first, ok := translateBatchDeepL(context.Background(), []translateInput{{Text: "Hello"}}, "ko")
-	if !ok || len(first) != 1 || first[0] != "안녕" {
-		t.Fatalf("first out=%v ok=%v", first, ok)
+	first, outcome := translateBatchDeepL(context.Background(), []translateInput{{Text: "Hello"}}, "ko")
+	if outcome != batchOK || len(first) != 1 || first[0] != "안녕" {
+		t.Fatalf("first out=%v outcome=%v", first, outcome)
 	}
-	second, ok := translateBatchDeepL(context.Background(), []translateInput{{Text: "Hello"}}, "ko")
-	if !ok || len(second) != 1 || second[0] != "안녕" {
-		t.Fatalf("second out=%v ok=%v", second, ok)
+	second, outcome := translateBatchDeepL(context.Background(), []translateInput{{Text: "Hello"}}, "ko")
+	if outcome != batchOK || len(second) != 1 || second[0] != "안녕" {
+		t.Fatalf("second out=%v outcome=%v", second, outcome)
 	}
 	if calls != 1 {
 		t.Fatalf("DeepL calls=%d want 1 (second served from server cache)", calls)
@@ -347,9 +350,9 @@ func TestTranslateBatchDeepL_SingleflightCollapsesConcurrentMisses(t *testing.T)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			out, ok := translateBatchDeepL(context.Background(), []translateInput{{Text: "World"}}, "ko")
-			if !ok || len(out) != 1 || out[0] != "세계" {
-				errs <- fmt.Sprintf("out=%v ok=%v", out, ok)
+			out, outcome := translateBatchDeepL(context.Background(), []translateInput{{Text: "World"}}, "ko")
+			if outcome != batchOK || len(out) != 1 || out[0] != "세계" {
+				errs <- fmt.Sprintf("out=%v outcome=%v", out, outcome)
 			}
 		}()
 	}
@@ -390,12 +393,12 @@ func TestTranslateBatchDeepL_PartialCacheSkipsCachedTexts(t *testing.T) {
 	})}
 	t.Setenv("DEEPL_API_KEY", "test-key")
 
-	out, ok := translateBatchDeepL(context.Background(), []translateInput{
+	out, outcome := translateBatchDeepL(context.Background(), []translateInput{
 		{Text: "Hello"},
 		{Text: "World"},
 	}, "ko")
-	if !ok {
-		t.Fatal("translateBatchDeepL returned !ok")
+	if outcome != batchOK {
+		t.Fatalf("translateBatchDeepL outcome=%v, want batchOK", outcome)
 	}
 	if got, want := strings.Join(sawTexts, "|"), "World"; got != want {
 		t.Fatalf("DeepL texts=%q want only miss %q", got, want)

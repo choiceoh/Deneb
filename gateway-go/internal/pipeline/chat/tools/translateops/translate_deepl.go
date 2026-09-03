@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	denhttp "github.com/choiceoh/deneb/gateway-go/pkg/httputil"
@@ -43,26 +44,32 @@ var (
 	deeplLangCodeRE = regexp.MustCompile(`^[A-Za-z]{2}(?:[-_][A-Za-z]{2,4})?$`)
 )
 
-func translateBatchDeepL(ctx context.Context, batch []translateInput, lang string) ([]string, bool) {
+func translateBatchDeepL(ctx context.Context, batch []translateInput, lang string) ([]string, translateBatchOutcome) {
+	// These three are properties of the deployment, not of this batch: no amount
+	// of splitting the range produces a key, an endpoint or a supported language.
 	key := strings.TrimSpace(os.Getenv("DEEPL_API_KEY"))
 	if key == "" {
-		return nil, false
+		return nil, batchHopeless
 	}
 	target := deepLTargetLang(lang)
 	if target == "" {
-		return nil, false
+		return nil, batchHopeless
 	}
 	endpoint := deepLTranslateEndpoint()
 	if endpoint == "" {
-		return nil, false
+		return nil, batchHopeless
 	}
 
 	out, partOut, texts, mapping := flattenDeepLInputs(batch)
 	if len(texts) == 0 {
-		return out, encodeDeepLParts(out, partOut)
+		if encodeDeepLParts(out, partOut) {
+			return out, batchOK
+		}
+		return nil, batchRetryable
 	}
+	// Too many flattened texts for one request — splitting is exactly the remedy.
 	if len(texts) > maxDeepLTextsPerRequest {
-		return nil, false
+		return nil, batchRetryable
 	}
 
 	resolved := make([]string, len(texts))
@@ -77,6 +84,9 @@ func translateBatchDeepL(ctx context.Context, batch []translateInput, lang strin
 		missTexts = append(missTexts, text)
 	}
 	if len(missTexts) > 0 {
+		// The singleflight leader reports its verdict out here: followers share
+		// the leader's result, so they must share its "stop splitting" too.
+		var hopeless atomic.Bool
 		contextHint := deepLContext(batch)
 		flightKey := translateMissFlightKey(target, missTexts)
 		translated, ok := translateFlight.do(flightKey, func() ([]string, bool) {
@@ -96,8 +106,11 @@ func translateBatchDeepL(ctx context.Context, batch []translateInput, lang strin
 			if len(stillMiss) == 0 {
 				return filled, true
 			}
-			fresh, ok := callDeepL(ctx, endpoint, key, target, stillMiss, contextHint)
-			if !ok || len(fresh) != len(stillMiss) {
+			fresh, outcome := callDeepL(ctx, endpoint, key, target, stillMiss, contextHint)
+			if outcome != batchOK || len(fresh) != len(stillMiss) {
+				if outcome == batchHopeless {
+					hopeless.Store(true)
+				}
 				return nil, false
 			}
 			for i, text := range fresh {
@@ -107,9 +120,12 @@ func translateBatchDeepL(ctx context.Context, batch []translateInput, lang strin
 			return filled, true
 		})
 		if !ok || len(translated) != len(missTexts) {
-			// Full DeepL miss → false so translateRange can bisect. Cache hits
-			// still help on the smaller retries.
-			return nil, false
+			if hopeless.Load() {
+				return nil, batchHopeless
+			}
+			// Full DeepL miss → retryable so translateRange can bisect. Cache
+			// hits still help on the smaller retries.
+			return nil, batchRetryable
 		}
 		for i, text := range translated {
 			resolved[missIdx[i]] = text
@@ -125,9 +141,9 @@ func translateBatchDeepL(ctx context.Context, batch []translateInput, lang strin
 		out[m.segment] = text
 	}
 	if !encodeDeepLParts(out, partOut) {
-		return nil, false
+		return nil, batchRetryable
 	}
-	return out, true
+	return out, batchOK
 }
 
 func encodeDeepLParts(out []string, partOut [][]string) bool {
@@ -171,7 +187,7 @@ func flattenDeepLInputs(batch []translateInput) ([]string, [][]string, []string,
 	return out, partOut, texts, mapping
 }
 
-func callDeepL(ctx context.Context, endpoint, key, target string, texts []string, contextHint string) ([]string, bool) {
+func callDeepL(ctx context.Context, endpoint, key, target string, texts []string, contextHint string) ([]string, translateBatchOutcome) {
 	form := url.Values{}
 	for _, text := range texts {
 		form.Add("text", text)
@@ -184,16 +200,32 @@ func callDeepL(ctx context.Context, endpoint, key, target string, texts []string
 	for attempt := 0; attempt < deeplRetryAttempts; attempt++ {
 		out, status, ok := postDeepLOnce(ctx, endpoint, key, body)
 		if ok {
-			return out, true
+			return out, batchOK
 		}
 		if attempt == deeplRetryAttempts-1 || !deepLStatusWorthRetry(status) {
-			return nil, false
+			if deepLStatusSplittable(status) {
+				return nil, batchRetryable
+			}
+			return nil, batchHopeless
 		}
 		if !sleepCtx(ctx, deepLRetryWait(status)) {
-			return nil, false
+			return nil, batchHopeless // the caller's context ended
 		}
 	}
-	return nil, false
+	return nil, batchHopeless
+}
+
+// deepLStatusSplittable: only a complaint about THIS request's payload can be
+// answered by sending a smaller one, and that is the only reason translateRange
+// splits a range. Auth (401/403), exhausted quota (456), rate limit (429),
+// server error and transport failure are all account- or service-level — every
+// half gets the identical answer, so splitting a 40-segment range into 79 calls
+// only asks 79 times. An over-long flattened batch is caught before the request
+// is even built (maxDeepLTextsPerRequest), which is the common legitimate split.
+func deepLStatusSplittable(status int) bool {
+	return status == http.StatusBadRequest ||
+		status == http.StatusRequestEntityTooLarge ||
+		status == http.StatusRequestURITooLong
 }
 
 // deepLStatusWorthRetry: 429 is the documented rate limit and 5xx is DeepL's own
