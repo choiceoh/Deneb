@@ -309,3 +309,21 @@ type translateRangeState struct {
 func translateBatch(ctx context.Context, batch []translateInput, lang string) ([]string, translateBatchOutcome) {
 	return translateBatchDeepL(ctx, batch, lang)
 }
+
+// Segment wraps one text in the envelope TranslateSegments understands, so a
+// caller can hand DeepL the surrounding meaning without it being translated.
+//
+// role and context reach DeepL's `context` parameter, which disambiguates
+// vocabulary the sentence alone cannot: the same word is "평가" in one domain
+// and "심사" in another. Both are optional — an empty envelope is equivalent to
+// passing the bare text.
+func Segment(text, context, role string) string {
+	if strings.TrimSpace(context) == "" && strings.TrimSpace(role) == "" {
+		return text
+	}
+	blob, err := json.Marshal(translateSegmentEnvelope{Text: text, Context: context, Role: role})
+	if err != nil {
+		return text
+	}
+	return translateSegmentEnvelopePrefix + string(blob)
+}

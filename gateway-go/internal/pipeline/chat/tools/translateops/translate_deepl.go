@@ -371,3 +371,10 @@ func deepLTargetLang(lang string) string {
 	}
 	return ""
 }
+
+// DeepLConfigured reports whether a translation can work at all. Callers that
+// would otherwise build a batch, take a deadline and log a failure for a
+// feature nobody configured ask this first.
+func DeepLConfigured() bool {
+	return strings.TrimSpace(os.Getenv("DEEPL_API_KEY")) != "" && deepLTranslateEndpoint() != ""
+}

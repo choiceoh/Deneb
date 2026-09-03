@@ -287,6 +287,12 @@ suspend fun DenebGatewayClient.fetchSelfImprovementCodingQueue(
     buildJsonObject {
         put("limit", limit)
         if (status.isNotBlank()) put("status", status)
+        // The review models answer in English — measured 2026-09-03, 78% of the
+        // live queue's titles carried no Hangul. This screen is read by a person,
+        // so it asks for Korean. The flag is opt-in precisely so the L4 miners and
+        // the dispatch selector, which feed a coding agent its instructions, keep
+        // the untranslated text.
+        put("translate", true)
     },
 )
 

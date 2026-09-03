@@ -5,7 +5,8 @@ import (
 	"os"
 	"strings"
 	"time"
-	"unicode"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 const (
@@ -36,25 +37,9 @@ func ThinkingTranslatorEnabled() bool {
 	return strings.TrimSpace(os.Getenv("DEEPL_API_KEY")) != ""
 }
 
-// hangulRatio reports the share of letters that are Hangul, or 0 when there are
-// no letters at all. Code, punctuation, and digits are ignored so a block that
-// is Korean prose around English identifiers still reads as Korean.
-func hangulRatio(s string) float64 {
-	var letters, hangul int
-	for _, r := range s {
-		if !unicode.IsLetter(r) {
-			continue
-		}
-		letters++
-		if unicode.Is(unicode.Hangul, r) {
-			hangul++
-		}
-	}
-	if letters == 0 {
-		return 0
-	}
-	return float64(hangul) / float64(letters)
-}
+// hangulRatio delegates to the shared implementation so this file and
+// opstranslate cannot drift on what "already Korean" means.
+func hangulRatio(s string) float64 { return textutil.HangulRatio(s) }
 
 // TranslateThinking renders a block of extended-thinking text into Korean.
 //
