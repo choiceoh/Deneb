@@ -1,6 +1,10 @@
 package modelrole
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
+)
 
 // Profile holds model-specific tuning the gateway applies whenever a given model
 // is selected: whether the model emits a reasoning channel, and vendor-
@@ -67,12 +71,12 @@ func ProfileFor(model string) Profile {
 		// generation_config.json says 1.0/1.0, which loops on long agentic
 		// turns). repetition_penalty 1.2 is also recommended but has no
 		// ChatRequest field — it is applied server-side via the vLLM launcher's
-		// --override-generation-config. Reasoning stays false on purpose: the
-		// thinking channel is toggled per-request through
-		// modelcaps.ThinkingToggleKwarg (chat_template_kwargs.thinking), and
-		// flipping Reasoning here would re-order the localai hub fallback chain
-		// for a model the hub never serves.
+		// --override-generation-config. Local serving toggles thinking through
+		// chat_template_kwargs, while a wormhole *-api alias is a remote reasoning
+		// endpoint: classifying that alias as non-reasoning makes raw callers send
+		// the local-only kwarg and omit the transport-native off signal.
 		return Profile{
+			Reasoning:   modelcaps.IsRemoteAPIAlias(m),
 			Temperature: ptr(0.6),
 			TopP:        ptr(0.95),
 		}

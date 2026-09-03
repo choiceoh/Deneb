@@ -91,10 +91,10 @@ func HasContentPrefixCache(providerID string) bool {
 // per-request template toggle. Gated to vLLM-backed providers because
 // chat_template_kwargs is a vLLM serving feature: the same model name via
 // OpenRouter or an Anthropic-wire relay must NOT receive the field. The
-// model-name gate below still discriminates, so a cloud model fronted by a
-// vLLM-backed proxy never gets the toggle.
+// model-name gate below still discriminates. Wormhole's explicit *-api aliases
+// are remote cloud routes, not vLLM, and must not receive template kwargs.
 func ThinkingToggleKwarg(providerID, model string) string {
-	if !ServesVllmBacked(providerID) {
+	if !ServesVllmBacked(providerID) || IsRemoteAPIAlias(model) {
 		return ""
 	}
 	m := strings.ToLower(model)
@@ -102,6 +102,18 @@ func ThinkingToggleKwarg(providerID, model string) string {
 		return "thinking"
 	}
 	return ""
+}
+
+// IsRemoteAPIAlias reports whether a wormhole model name identifies a remote
+// API route rather than the same-named local vLLM serving. Wormhole fronts both
+// kinds, so provider identity alone cannot decide whether chat-template kwargs
+// are valid. Remote aliases use the stable "-api" segment in their public id.
+func IsRemoteAPIAlias(model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if i := strings.LastIndex(m, "/"); i >= 0 {
+		m = m[i+1:]
+	}
+	return strings.HasSuffix(m, "-api") || strings.Contains(m, "-api-")
 }
 
 // ServesVllmBacked reports whether a provider id forwards requests to a vLLM
