@@ -52,6 +52,28 @@ class BrowserTranslateAssetContractTest {
     }
 
     @Test
+    fun aTranslationIdenticalToItsSourceIsNeverPersisted() {
+        // The gateway keeps a failed batch's originals rather than dropping page
+        // text, so "translated == original" is what a failure looks like from the
+        // page's side. Persisting it to the site/global stores would make those
+        // segments stop asking forever on that device — silently untranslated
+        // text with no error anywhere. Verified end-to-end in a real browser
+        // (2026-09-03): with the guard, an echoing gateway persists 0 entries;
+        // without it, 32 page / 31 site / 13 global entries of original→original.
+        val source = sourceFile("src/androidMain/assets/deneb-translate.js").readText()
+        val remember = source.substringAfter("function rememberTranslation(original, translated) {")
+            .substringBefore("\n  }")
+        assertContains(remember, "if (String(translated) === String(original)) return;")
+        // The in-memory page cache must still take it, so this page view does not
+        // re-ship the segment it just applied.
+        assertTrue(
+            remember.indexOf("cache[original] = translated;") <
+                remember.indexOf("if (String(translated) === String(original)) return;"),
+            "the page-view cache write must happen before the persistence guard returns",
+        )
+    }
+
+    @Test
     fun nativeBridgeQueuesOverflowBehindTheExecutionLimit() {
         val nativeSource = sourceFile(
             "src/androidMain/kotlin/ai/deneb/deneb/BrowserTranslateBridge.android.kt",

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -45,11 +46,60 @@ func TestTranslateSegments_EnvelopeFallbackKeepsOriginalText(t *testing.T) {
 
 	raw := translateSegmentEnvelopePrefix + `{"text":"Hello","context":"Hello world","role":"body"}`
 	out, err := TranslateSegments(context.Background(), []string{raw}, "Korean")
-	if err != nil {
-		t.Fatalf("TranslateSegments error: %v", err)
+	// The never-corrupt-page-text guarantee: out still carries the unwrapped
+	// ORIGINAL, never the raw envelope. But nothing was translated, and the
+	// caller has to be told — see TestTranslateSegments_TotalFailureIsAnError.
+	if err == nil {
+		t.Fatal("total failure returned a nil error")
 	}
 	if len(out) != 1 || out[0] != "Hello" {
 		t.Fatalf("fallback out=%q, want original text only", out)
+	}
+}
+
+// A total failure must not masquerade as success. The in-app browser caches what
+// this function returns, so `originals + nil error` writes original→original into
+// that device's persistent site/global stores and those segments then stop asking
+// forever — one DeepL outage silently ending translation for them.
+func TestTranslateSegments_TotalFailureIsAnError(t *testing.T) {
+	old := translateBatchFn
+	translateBatchFn = func(context.Context, []translateInput, string) ([]string, bool) {
+		return nil, false
+	}
+	defer func() { translateBatchFn = old }()
+
+	segments := []string{"Hello", "World", "Again"}
+	out, err := TranslateSegments(context.Background(), segments, "Korean")
+	if err == nil {
+		t.Fatal("every batch failed but TranslateSegments reported success")
+	}
+	if !reflect.DeepEqual(out, segments) {
+		t.Fatalf("out=%v, want the originals preserved alongside the error", out)
+	}
+}
+
+// A partial failure is NOT an error: keeping the failed batch's originals while
+// the rest translates is the deliberate contract, and translateRange's bisection
+// narrows it to the individual segment. Only "nothing at all" is the signal.
+func TestTranslateSegments_PartialFailureStaysSuccessful(t *testing.T) {
+	old := translateBatchFn
+	translateBatchFn = func(_ context.Context, batch []translateInput, _ string) ([]string, bool) {
+		if len(batch) == 1 && batch[0].Text == "World" {
+			return nil, false
+		}
+		if len(batch) > 1 {
+			return nil, false // force the bisection down to singles
+		}
+		return []string{"T:" + batch[0].Text}, true
+	}
+	defer func() { translateBatchFn = old }()
+
+	out, err := TranslateSegments(context.Background(), []string{"Hello", "World", "Again"}, "Korean")
+	if err != nil {
+		t.Fatalf("partial failure reported as an error: %v", err)
+	}
+	if !reflect.DeepEqual(out, []string{"T:Hello", "World", "T:Again"}) {
+		t.Fatalf("out=%v, want the one failed segment kept as its original", out)
 	}
 }
 

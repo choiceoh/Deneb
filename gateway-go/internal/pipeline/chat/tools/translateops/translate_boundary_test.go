@@ -130,9 +130,13 @@ func TestBoundaryTranslateRangeFailureBisectsAndPreservesOrder(t *testing.T) {
 	}
 	inputs := []translateInput{{Text: "a"}, {Text: "b"}, {Text: "c"}, {Text: "d"}}
 	out := []string{"a", "b", "c", "d"}
-	translateRange(context.Background(), inputs, out, 0, len(inputs), "Korean")
+	var done atomic.Int64
+	translateRange(context.Background(), inputs, out, &done, 0, len(inputs), "Korean")
 	if !reflect.DeepEqual(out, []string{"T:a", "T:b", "T:c", "T:d"}) {
 		t.Fatalf("translated output = %v", out)
+	}
+	if done.Load() != int64(len(inputs)) {
+		t.Fatalf("translated count = %d, want %d", done.Load(), len(inputs))
 	}
 	if len(calls) != 7 {
 		t.Fatalf("bisection calls = %d, want 7: %#v", len(calls), calls)
