@@ -461,14 +461,16 @@ func invalidateSkills(deps SkillsDeps) {
 }
 
 func skillsLifecycle(deps SkillsDeps) rpcutil.HandlerFunc {
-	return minibind.BindOptional[struct {
+	type params struct {
 		Limit     int    `json:"limit"`
 		SkillName string `json:"skillName"`
-	}](func(ctx context.Context, req *protocol.RequestFrame, p struct {
-		Limit     int    `json:"limit"`
-		SkillName string `json:"skillName"`
-	},
-	) *protocol.ResponseFrame {
+		// Translate renders the Propus verdicts into Korean for a human reader.
+		// Opt-in for the same reason as the self-improvement queue: the native
+		// clients ask, out-of-process tooling that reads this log keeps the
+		// original words. See translatePropusProse.
+		Translate bool `json:"translate"`
+	}
+	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		if p.Limit <= 0 || p.Limit > lifecycleScanLimit {
 			p.Limit = 60
 		}
@@ -498,6 +500,9 @@ func skillsLifecycle(deps SkillsDeps) rpcutil.HandlerFunc {
 			}
 		}
 		summary := propusLifecycleSummary(deps, lifecycleEntries, strings.TrimSpace(p.SkillName), p.Limit)
+		if p.Translate {
+			translatePropusProse(ctx, events)
+		}
 
 		return rpcutil.RespondOK(req.ID, SkillsLifecycleResponse{
 			Events:  events,
@@ -508,6 +513,40 @@ func skillsLifecycle(deps SkillsDeps) rpcutil.HandlerFunc {
 }
 
 // lifecycleEvent projects a tracker log entry into the slim wire event.
+// translatePropusProse renders the skill lifecycle verdicts into Korean in
+// place. Measured over the live log on 2026-09-03: of 735 entries, 298 reasons
+// and 140 evidence blocks carried no Hangul at all.
+//
+// Unlike the self-improvement queue, evidence here IS translated. Its evidence
+// is a written observation of a session — "Session used 18 exec calls and 3
+// reads across 13 turns... The agent struggled with file path resolution" —
+// not the telemetry line that field holds on a self-correction row. Prose
+// translates; measurements do not.
+//
+// Type, Route, Version, SkillName, TargetSignature and EditedSurface stay as
+// they are: they are enum values and identifiers the UI switches on.
+func translatePropusProse(ctx context.Context, events []SkillLifecycleEvent) {
+	if len(events) == 0 {
+		return
+	}
+	fields := make([]*string, 0, len(events)*4)
+	for i := range events {
+		e := &events[i]
+		fields = append(fields, &e.Detail, &e.Evidence, &e.ExpectedBehaviorChange, &e.RegressionRisk)
+	}
+	texts := make([]string, len(fields))
+	for i, f := range fields {
+		texts[i] = *f
+	}
+	rendered := translateProseFn(ctx, texts)
+	if len(rendered) != len(fields) {
+		return
+	}
+	for i, f := range fields {
+		*f = rendered[i]
+	}
+}
+
 func lifecycleEvent(e genesis.LifecycleLogEntry) SkillLifecycleEvent {
 	ev := SkillLifecycleEvent{SkillName: e.SkillName, At: e.CreatedAt}
 	if e.SelfHarnessAudit != nil {

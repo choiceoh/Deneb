@@ -195,9 +195,13 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("POST", request.method.value)
             assertEquals(ContentType.Application.Json, request.bodyContentType?.withoutParameters())
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
-            assertEquals(setOf("limit", "skillName"), params.keys)
+            assertEquals(setOf("limit", "skillName", "translate"), params.keys)
             assertEquals(17, params["limit"]?.jsonPrimitive?.content?.toInt())
             assertEquals("coding/github", params["skillName"]?.jsonPrimitive?.content)
+            // The Propus timeline is read by a person and the review models
+            // answer in English, so the client asks for Korean. Tooling that
+            // reads the same log omits the flag and keeps the original words.
+            assertEquals("true", params["translate"]?.jsonPrimitive?.content)
         },
         {
             val f = gatewayClientFixture(token = "")
