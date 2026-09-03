@@ -282,6 +282,9 @@ func translateRange(ctx context.Context, inputs []translateInput, out []string, 
 		// Latch it so the sibling ranges already in flight stop too.
 		st.hopeless.Store(true)
 		return
+	case batchRetryable:
+		// This batch is what DeepL choked on — a smaller one may go through.
+		// Handled by the split below.
 	}
 	if end-start <= 1 {
 		return // single segment failed → keep its original (already in out)
