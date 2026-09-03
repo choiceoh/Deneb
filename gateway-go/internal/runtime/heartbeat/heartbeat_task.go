@@ -211,6 +211,10 @@ const (
 	// above observed healthy self-coding runs (~23 calls) while bounding a
 	// runaway loop before it floods runtime-health with tool-complete errors.
 	heartbeatMaxToolCallAttempts = 24
+	// Leave one minute of the five-minute hard budget for a no-tools wrap-up.
+	// The executor interrupts an in-flight reasoning stream at this boundary;
+	// checking only between model calls let long streams consume the hard cap.
+	heartbeatSoftDeadline = 4 * time.Minute
 )
 
 // heartbeatTriggerTemplate is injected as a user-role message into the active
@@ -552,6 +556,7 @@ func heartbeatSyncRequest() chatport.SyncRequest {
 	return chatport.SyncRequest{
 		MaxHistoryTokens:    heartbeatHistoryBudget,
 		MaxToolCallAttempts: &maxToolCallAttempts,
+		SoftDeadline:        heartbeatSoftDeadline,
 		EphemeralUser:       true,
 		EphemeralAssistant:  true,
 		// The report is delivered by the proactive relay after the run (see Run),

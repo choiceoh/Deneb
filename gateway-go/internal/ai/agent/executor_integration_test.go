@@ -113,6 +113,100 @@ func TestRunAgentSoftDeadlineForcesNoToolsWrapUp(t *testing.T) {
 	}
 }
 
+type softDeadlineRetryStreamer struct {
+	mu        sync.Mutex
+	requests  []llm.ChatRequest
+	deadlines []bool
+}
+
+func (s *softDeadlineRetryStreamer) StreamChat(ctx context.Context, req llm.ChatRequest) (<-chan llm.StreamEvent, error) {
+	s.mu.Lock()
+	call := len(s.requests)
+	s.requests = append(s.requests, req)
+	_, hasDeadline := ctx.Deadline()
+	s.deadlines = append(s.deadlines, hasDeadline)
+	s.mu.Unlock()
+
+	if call == 0 {
+		ch := make(chan llm.StreamEvent)
+		go func() {
+			<-ctx.Done()
+			close(ch)
+		}()
+		return ch, nil
+	}
+	ch := make(chan llm.StreamEvent, 8)
+	for _, event := range buildTextTurnEvents("마감 전에 정리한 결과입니다.", 10, 8) {
+		ch <- event
+	}
+	close(ch)
+	return ch, nil
+}
+
+func (s *softDeadlineRetryStreamer) Complete(context.Context, llm.ChatRequest) (string, error) {
+	return "", nil
+}
+
+func TestRunAgentSoftDeadlineInterruptsInFlightTurnForWrapUp(t *testing.T) {
+	client := &softDeadlineRetryStreamer{}
+	notifications := 0
+	result, err := RunAgent(
+		context.Background(),
+		AgentConfig{
+			MaxTurns:       1,
+			Timeout:        time.Second,
+			SoftDeadline:   20 * time.Millisecond,
+			Model:          "test-model",
+			MaxTokens:      1024,
+			Tools:          []llm.Tool{{Name: "read"}},
+			Thinking:       &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 4096},
+			OnSoftDeadline: func() { notifications++ },
+		},
+		[]llm.Message{llm.NewTextMessage("user", "오래 걸리는 작업")},
+		client,
+		newFakeToolExecutor(),
+		StreamHooks{},
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("RunAgent: %v", err)
+	}
+	if result.Text != "마감 전에 정리한 결과입니다." || result.StopReason != "end_turn" {
+		t.Fatalf("result = text %q stop %q", result.Text, result.StopReason)
+	}
+	if result.Turns != 1 {
+		t.Fatalf("turns = %d, want interrupted request retried within turn 1", result.Turns)
+	}
+	if notifications != 1 {
+		t.Fatalf("soft deadline notifications = %d, want 1", notifications)
+	}
+
+	client.mu.Lock()
+	requests := append([]llm.ChatRequest(nil), client.requests...)
+	deadlines := append([]bool(nil), client.deadlines...)
+	client.mu.Unlock()
+	if len(requests) != 2 {
+		t.Fatalf("requests = %d, want interrupted request plus wrap-up", len(requests))
+	}
+	if deadlines[0] || deadlines[1] {
+		t.Fatalf("LLM request contexts exposed deadlines = %v, want hidden hard/soft cancellation", deadlines)
+	}
+	if len(requests[0].Tools) != 1 || len(requests[1].Tools) != 0 {
+		t.Fatalf("request tools = %d then %d, want 1 then 0", len(requests[0].Tools), len(requests[1].Tools))
+	}
+	if got := requests[1].ToolChoice.String(); got != `"none"` {
+		t.Fatalf("wrap-up tool choice = %s, want none", got)
+	}
+	if requests[1].Thinking == nil || requests[1].Thinking.Type != "disabled" {
+		t.Fatalf("wrap-up thinking = %+v, want disabled", requests[1].Thinking)
+	}
+	last := requests[1].Messages[len(requests[1].Messages)-1].Content.Bytes()
+	if !strings.Contains(string(last), softDeadlineWrapUpPrompt) {
+		t.Fatalf("wrap-up request missing soft-deadline prompt: %q", last)
+	}
+}
+
 func (f *fakeLLMStreamer) Complete(_ context.Context, _ llm.ChatRequest) (string, error) {
 	return "", nil
 }

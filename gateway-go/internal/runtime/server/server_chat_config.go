@@ -46,11 +46,17 @@ type mailIngestHealth struct {
 }
 
 const (
-	lmtpAnalysisWorkers     = 4
-	lmtpQueueMaxAttempts    = 6
-	lmtpQueueIdleDelay      = 2 * time.Second
-	lmtpQueueRetryDelay     = 10 * time.Second
-	lmtpAnalysisItemTimeout = 5 * time.Minute
+	lmtpAnalysisWorkers  = 4
+	lmtpQueueMaxAttempts = 6
+	lmtpQueueIdleDelay   = 2 * time.Second
+	lmtpQueueRetryDelay  = 10 * time.Second
+	// The stage-2 pipeline owns a six-minute synthesis budget. Keep the outer
+	// intake item alive long enough for that budget plus archive/delivery work;
+	// the old five-minute cap canceled healthy synthesis runs from above.
+	lmtpAnalysisItemTimeout = 7 * time.Minute
+	// Reserve the final two minutes of stage 2 for a bounded no-tools answer.
+	// The shared executor can interrupt an in-flight reasoning stream here.
+	mailAnalysisAgentSoftDeadline = 4 * time.Minute
 )
 
 func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
@@ -194,16 +200,21 @@ func (s *Server) mailAnalysisAgentSynthesis(ctx context.Context, prompt string) 
 	if s.chatHandler == nil {
 		return "", fmt.Errorf("chat handler unavailable")
 	}
-	result, err := s.chatHandler.SendSync(ctx, "system:mailpoll", prompt, s.mailAnalysisAgentModel(), &chat.SyncOptions{
-		AutoDeliveredOutput: true,
-		EphemeralUser:       true,
-		EphemeralAssistant:  true,
-		BeforeToolCall:      mailAnalysisAgentToolGate,
-	})
+	result, err := s.chatHandler.SendSync(ctx, "system:mailpoll", prompt, s.mailAnalysisAgentModel(), mailAnalysisAgentSyncOptions())
 	if err != nil {
 		return "", err
 	}
 	return result.BestText(), nil
+}
+
+func mailAnalysisAgentSyncOptions() *chat.SyncOptions {
+	return &chat.SyncOptions{
+		AutoDeliveredOutput: true,
+		EphemeralUser:       true,
+		EphemeralAssistant:  true,
+		BeforeToolCall:      mailAnalysisAgentToolGate,
+		SoftDeadline:        mailAnalysisAgentSoftDeadline,
+	}
 }
 
 func (s *Server) mailAnalysisAgentModel() string {

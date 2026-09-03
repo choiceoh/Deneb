@@ -14,10 +14,11 @@ type AgentConfig struct {
 	MaxTurns int           // Maximum tool-call turns before stopping. Default: 25.
 	Timeout  time.Duration // Maximum wall time for the entire agent run. Default: 30m.
 	// SoftDeadline does not cancel the run. When SoftDeadlineAt is unset it is
-	// measured from this RunAgent invocation. At the next model boundary after it
-	// expires, the executor injects a wrap-up instruction and removes tools from
-	// subsequent requests so the remaining hard-deadline headroom is spent on a
-	// user-visible final answer. Zero disables it.
+	// measured from this RunAgent invocation. When it expires, the executor
+	// interrupts any in-flight non-final model request and retries that same turn
+	// with a wrap-up instruction, tools and reasoning disabled. This preserves the
+	// remaining hard-deadline headroom for a user-visible final answer. Zero
+	// disables it.
 	SoftDeadline time.Duration
 	// SoftDeadlineAt pins the preference to an absolute end-to-end turn time so
 	// retries and model fallbacks cannot restart the soft budget. When set it
