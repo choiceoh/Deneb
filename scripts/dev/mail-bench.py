@@ -20,9 +20,17 @@ AutoMem(arXiv:2607.01224) 루프①의 측정 게이트를 메일 파이프라�
           나란히 실행해 사람 판독용 파일로 저장. --anchor 를 켜면 헤더에서
           결정적으로 조립한 당사자 앵커 블록(누가 우리 측인가)을 주입한다.
 
+          --reps 를 2 이상으로 주면 TRAP_TOTAL 뒤에 TRAP_STABILITY 가 붙는다:
+          지표를 "한 번이라도 통과"(availability)와 "매번 통과"(robustness)로
+          나눠 세므로, 점수가 올라간 이유가 실제 개선인지 실행 간 변동인지를
+          단일 비율로는 못 하던 방식으로 가른다 (stability() 참조).
+
 사용 예:
   # 게이트: 모델/프롬프트 변경 후 함정 벤치 (A/B)
   python3 scripts/dev/mail-bench.py trap --model glm-5.2 --model-b dsv4-nothink
+
+  # 변동까지 보려면 반복 (TRAP_STABILITY 출력)
+  python3 scripts/dev/mail-bench.py trap --model glm-5.2 --reps 3
 
   # 실메일 섀도런 + 당사자 앵커 실험
   python3 scripts/dev/mail-bench.py shadow --uids 139,151,154,147,132,143 \
@@ -261,6 +269,55 @@ def score_probes(mail, out):
         hits += 1 if ok else 0
     return hits, detail
 
+def stability(results):
+    """모델별 지표 단위 availability / robustness (순수 함수).
+
+    reps>1 로 돌리면 같은 지표가 어떤 실행에서는 잡히고 어떤 실행에서는 놓친다.
+    TRAP_TOTAL 의 단일 비율은 그 둘을 한 숫자로 눌러버려서, 모델·프롬프트를
+    바꿨을 때 "진짜 좋아졌는지"와 "운 좋게 한 번 맞았는지"를 구분하지 못한다.
+    그래서 두 끝을 따로 센다:
+
+      availability  reps 중 **한 번이라도** 통과한 지표 비율 (pass@k 유형)
+      robustness    reps **전부** 통과한 지표 비율
+
+    둘의 차이(flaky)가 곧 그 모델이 해당 지표에서 흔들리는 폭이다. 다양성만
+    늘리는 변경은 availability 만 올리고 robustness 는 못 올린다 — 그래서
+    robustness 가 함께 올라야 실제 개선으로 채택한다.
+
+    반환: {model: {"reps", "probes", "available", "robust", "flaky"}}
+    """
+    seen = {}  # model -> {(mail, probe): [ok, ...]}
+    for row in results:
+        by_probe = seen.setdefault(row["model"], {})
+        for name, ok in row.get("detail") or []:
+            by_probe.setdefault((row["mail"], name), []).append(bool(ok))
+    out = {}
+    for model, by_probe in seen.items():
+        available = sum(1 for runs in by_probe.values() if any(runs))
+        robust = sum(1 for runs in by_probe.values() if all(runs))
+        out[model] = {
+            "reps": max((len(runs) for runs in by_probe.values()), default=0),
+            "probes": len(by_probe),
+            "available": available,
+            "robust": robust,
+            "flaky": available - robust,
+        }
+    return out
+
+
+def print_stability(stats, out=print):
+    """reps>1 일 때만 출력 — reps=1 이면 두 값이 TRAP_TOTAL 과 같아 정보가 0이다."""
+    for model, s in stats.items():
+        if s["reps"] < 2 or not s["probes"]:
+            continue
+        avail_pct = 100 * s["available"] / s["probes"]
+        robust_pct = 100 * s["robust"] / s["probes"]
+        out(f"TRAP_STABILITY model={model} reps={s['reps']} probes={s['probes']}"
+            f" available={s['available']}({avail_pct:.1f}%)"
+            f" robust={s['robust']}({robust_pct:.1f}%)"
+            f" flaky={s['flaky']}")
+
+
 def run_trap(args, token):
     models = [m for m in (args.model, args.model_b) if m]
     results, totals = [], {m: [0, 0, 0, 0] for m in models}  # hits, probes, ms, in_tok
@@ -288,6 +345,7 @@ def run_trap(args, token):
         n = len(TRAP_MAILS) * args.reps
         print(f"TRAP_TOTAL model={model} probes={h}/{p} pct={100*h//max(p,1)}"
               f" avg_latency_ms={ms//max(n,1)} avg_in_tokens={tok//max(n,1)}")
+    print_stability(stability(results))
     return results
 
 # ---------------------------------------------------------------- shadow 모드: 실메일

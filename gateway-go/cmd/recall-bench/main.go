@@ -25,6 +25,12 @@
 // The `make recall-health` target wires the wiki copy + --health end to end;
 // see health.go.
 //
+// Gold cases may carry a "direction" label ("direct"/"reverse"); when any does,
+// every run adds a per-direction P@1/r@K split, and under --pool-depth also the
+// ranking-miss vs generation-miss breakdown per direction. That pairing is the
+// point: it separates a reverse deficit a reranker could fix from one only
+// candidate generation can. Free — it reuses the searches already run.
+//
 // Gold sets live outside the repo in ~/.deneb/ (real data): wiki-qa-gold.jsonl
 // (hand-written chat-style questions, the default) plus themed sets like
 // wiki-qa-gold-hard/-multiturn/-analysis-xl.jsonl. The analysis-xl set — real
@@ -76,6 +82,15 @@ type goldCase struct {
 	// --content the stale-value rate counts cases whose top-K result bodies
 	// still expose one.
 	StaleValues []string `json:"stale_values"`
+	// Direction tags the relational direction the question probes: "" (unlabeled)
+	// or "direct" — the question names the page's own subject and asks for a
+	// detail recorded on it — vs "reverse", which names the detail and asks which
+	// page holds it. The wiki is project-major, so the direct direction is the
+	// one the index is built for and the reverse direction is where candidate
+	// GENERATION is expected to fail; see writeDirectionSplit for why that
+	// distinction, and not the raw P@1 gap, is the actionable number. Any other
+	// value counts as a malformed row.
+	Direction string `json:"direction"`
 }
 
 // pathHit mirrors wiki-qa-bench.py path_hit: gold matches p only from a
@@ -710,10 +725,12 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 			return err
 		}
 		writeBenchmarkResult(stdout, cfg.k, fusion, result)
+		var pool poolCeiling
 		if cfg.poolDepth > 0 {
-			pool := evaluatePoolCeiling(ctx, cases, result.ranks, cfg.k, cfg.poolDepth, pagePlaneSearch(store, wiki.SearchModeAuto), content)
+			pool = evaluatePoolCeiling(ctx, cases, result.ranks, cfg.k, cfg.poolDepth, pagePlaneSearch(store, wiki.SearchModeAuto), content)
 			writePoolCeilingResult(stdout, cfg.k, cfg.poolDepth, pool)
 		}
+		writeDirectionSplit(stdout, cfg.k, cfg.poolDepth, directionSplit(cases, result.ranks, pool.outcomes))
 	}
 
 	if cfg.health || cfg.emitGold {
@@ -907,7 +924,25 @@ type poolCeiling struct {
 	rankingMiss    int // gold in the pool but below K — reachable by better ranking
 	generationMiss int // gold absent from the pool — only generation can fix it
 	searchErrs     int
+	// outcomes is the per-case classification in evaluation order, kept so the
+	// direction split can reuse this probe's verdicts instead of paying for a
+	// second pass over the same searches.
+	outcomes []poolOutcome
 }
+
+// poolOutcome pairs a probed case with how the pool probe classified it.
+type poolOutcome struct {
+	id    string
+	class poolClass
+}
+
+type poolClass int
+
+const (
+	poolHitK poolClass = iota
+	poolRankingMiss
+	poolGenerationMiss
+)
 
 // evaluatePoolCeiling probes only the cases the top-K pass MISSED: a case that
 // already hit at K is in the pool by construction, so re-searching it would buy
@@ -935,6 +970,7 @@ func evaluatePoolCeiling(
 			out.scored++
 			out.inPool++
 			out.hitK++
+			out.outcomes = append(out.outcomes, poolOutcome{id: c.ID, class: poolHitK})
 			continue
 		}
 		matches, err := search(ctx, c.Question, poolDepth)
@@ -946,8 +982,10 @@ func evaluatePoolCeiling(
 		if findGoldRank(matches, c, poolDepth, content) >= 0 {
 			out.inPool++
 			out.rankingMiss++
+			out.outcomes = append(out.outcomes, poolOutcome{id: c.ID, class: poolRankingMiss})
 		} else {
 			out.generationMiss++
+			out.outcomes = append(out.outcomes, poolOutcome{id: c.ID, class: poolGenerationMiss})
 		}
 	}
 	return out
@@ -1250,6 +1288,114 @@ func writePoolCeilingResult(out io.Writer, k, depth int, p poolCeiling) {
 		depth, k)
 }
 
+// directionStat is one direction bucket's outcome, computed from data the
+// benchmark already gathered.
+type directionStat struct {
+	name           string
+	scored         int
+	hit1           int
+	hitK           int
+	poolScored     int // cases the pool probe classified (0 when --pool-depth is off)
+	rankingMiss    int
+	generationMiss int
+}
+
+// directionSplit buckets the already-scored cases by their direction label.
+//
+// The reverse direction is the one a project-major wiki is NOT indexed for: the
+// question names a detail (a part number, a counterparty, an amount) and asks
+// which project page carries it, so the query's strongest tokens are the ones
+// scattered thinnest across the corpus. Splitting P@1 alone would only restate
+// that reverse is harder. Pairing it with the pool probe answers the question
+// that decides what to build: a reverse deficit made of RANKING misses is
+// recoverable by reranking or fusion weights, while one made of GENERATION
+// misses is not reachable by any reranker and needs query expansion or a
+// reverse index instead.
+//
+// Costs nothing extra — it reads the top-K ranks and the pool probe's verdicts.
+// Returns nil when no case carries a direction label, so unlabeled gold sets
+// keep byte-identical output.
+func directionSplit(cases []goldCase, ranks []caseRank, outcomes []poolOutcome) []directionStat {
+	direction := make(map[string]string, len(cases))
+	labeled := false
+	for _, c := range cases {
+		direction[c.ID] = c.Direction
+		if c.Direction != "" {
+			labeled = true
+		}
+	}
+	if !labeled {
+		return nil
+	}
+	// Fixed bucket order keeps the report stable regardless of gold ordering.
+	order := []string{"direct", "reverse", ""}
+	index := map[string]int{"direct": 0, "reverse": 1, "": 2}
+	stats := make([]directionStat, len(order))
+	for i, name := range order {
+		stats[i].name = name
+	}
+	for _, r := range ranks {
+		s := &stats[index[direction[r.id]]]
+		s.scored++
+		if r.rank == 0 {
+			s.hit1++
+		}
+		if r.rank >= 0 {
+			s.hitK++
+		}
+	}
+	for _, o := range outcomes {
+		s := &stats[index[direction[o.id]]]
+		s.poolScored++
+		switch o.class {
+		case poolRankingMiss:
+			s.rankingMiss++
+		case poolGenerationMiss:
+			s.generationMiss++
+		case poolHitK:
+			// Already counted as a hit by the rank pass; it carries no miss.
+		}
+	}
+	out := make([]directionStat, 0, len(stats))
+	for _, s := range stats {
+		if s.scored > 0 {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// writeDirectionSplit prints one machine-readable line per populated direction
+// bucket. Silent when the gold set carries no direction labels.
+func writeDirectionSplit(out io.Writer, k, depth int, stats []directionStat) {
+	if len(stats) == 0 {
+		return
+	}
+	probed := false
+	for _, s := range stats {
+		name := s.name
+		if name == "" {
+			name = "(unlabeled)"
+		}
+		pct := func(n int) float64 { return 100 * float64(n) / float64(s.scored) }
+		fmt.Fprintf(out, "RECALL_BENCH_DIRECTION k=%d direction=%s n=%d p@1=%.1f%% r@%d=%.1f%%",
+			k, name, s.scored, pct(s.hit1), k, pct(s.hitK))
+		if s.poolScored > 0 {
+			probed = true
+			fmt.Fprintf(out, " pool_depth=%d ranking_miss=%d generation_miss=%d", depth, s.rankingMiss, s.generationMiss)
+		}
+		fmt.Fprintln(out)
+	}
+	legend := "  (reverse = the question names a detail and asks which page holds it — the direction a project-major wiki is not indexed for."
+	if probed {
+		// Only claim the actionable reading when the probe that produces it ran.
+		legend += " Read the miss split, not the P@1 gap: ranking_miss is reachable by reranking/fusion weights, generation_miss is not reachable by any reranker and needs query expansion or a reverse index.)"
+	} else {
+		legend += " Add --pool-depth to split each miss into ranking vs generation — the P@1 gap alone does not say which is fixable.)"
+	}
+	fmt.Fprintln(out, legend)
+}
+
 func writeBenchmarkMatrixResult(out io.Writer, k int, mode wiki.SearchMode, result benchmarkResult) {
 	if result.searchErrs > 0 {
 		fmt.Fprintf(out, "recall-bench: mode=%s %d search error(s) excluded from the metric\n", mode, result.searchErrs)
@@ -1467,6 +1613,15 @@ func loadGold(path string) ([]goldCase, int, error) {
 		// misreport the lifecycle rates — treat it as malformed instead.
 		switch c.OpType {
 		case "", "remember", "update", "forget":
+		default:
+			skipped++
+			continue
+		}
+		// Same reasoning for direction: a typo'd label would drop the case into
+		// the unlabeled bucket and quietly shrink the very split it was written
+		// to populate.
+		switch c.Direction {
+		case "", "direct", "reverse":
 		default:
 			skipped++
 			continue

@@ -122,6 +122,60 @@ class PromptAndProbeTests(unittest.TestCase):
         self.assertEqual(hits, 1)
         self.assertEqual(detail[0], ("complete", False))
 
+    def test_stability_separates_a_probe_passed_once_from_one_passed_every_run(self) -> None:
+        def run(mail, model, detail):
+            return {"mail": mail, "model": model, "detail": detail}
+
+        results = [
+            run("m1", "a", [("always", True), ("flaky", True), ("never", False)]),
+            run("m1", "a", [("always", True), ("flaky", False), ("never", False)]),
+            run("m2", "a", [("other", True)]),
+            run("m2", "a", [("other", True)]),
+            run("m1", "b", [("always", False)]),
+        ]
+
+        stats = mail_bench.stability(results)
+
+        self.assertEqual(
+            stats["a"],
+            {"reps": 2, "probes": 4, "available": 3, "robust": 2, "flaky": 1},
+        )
+        self.assertEqual(stats["b"]["available"], 0)
+        self.assertEqual(stats["b"]["reps"], 1)
+
+    def test_stability_keys_probes_per_mail_so_shared_names_do_not_merge(self) -> None:
+        # Two mails can plant a probe under the same name; merging them would let
+        # one mail's pass mask the other's failure.
+        results = [
+            {"mail": "m1", "model": "a", "detail": [("dup", True)]},
+            {"mail": "m2", "model": "a", "detail": [("dup", False)]},
+        ]
+
+        stats = mail_bench.stability(results)
+
+        self.assertEqual(stats["a"]["probes"], 2)
+        self.assertEqual(stats["a"]["available"], 1)
+        self.assertEqual(stats["a"]["robust"], 1)
+
+    def test_stability_report_is_silent_for_a_single_rep(self) -> None:
+        # With reps=1 availability and robustness both equal TRAP_TOTAL's ratio,
+        # so printing them would add a line that carries no information.
+        lines: list[str] = []
+        mail_bench.print_stability(
+            {"a": {"reps": 1, "probes": 3, "available": 2, "robust": 2, "flaky": 0}},
+            out=lines.append,
+        )
+        self.assertEqual(lines, [])
+
+        mail_bench.print_stability(
+            {"a": {"reps": 3, "probes": 4, "available": 3, "robust": 2, "flaky": 1}},
+            out=lines.append,
+        )
+        self.assertEqual(
+            lines,
+            ["TRAP_STABILITY model=a reps=3 probes=4 available=3(75.0%) robust=2(50.0%) flaky=1"],
+        )
+
     def test_hit_any_is_literal_and_empty_variants_do_not_match(self) -> None:
         self.assertTrue(mail_bench.hit_any("Alpha beta", ["beta", "gamma"]))
         self.assertFalse(mail_bench.hit_any("Alpha beta", ["Beta"]))
