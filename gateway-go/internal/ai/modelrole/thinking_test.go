@@ -33,7 +33,7 @@ func TestThinkingOffDirectiveReturnsPerModelToggle(t *testing.T) {
 	})
 
 	t.Run("untoggleable reasoning models get nil (budget for thinking)", func(t *testing.T) {
-		for _, model := range []string{"qwen3.6-35b-a3b", "deepseek-r1", "step3p7"} {
+		for _, model := range []string{"qwen3.6-35b-a3b", "deepseek-r1", "step3p7", "deepseek-v4-flash-api"} {
 			if got := ThinkingOffDirectiveFor("vllm", model); got != nil {
 				t.Errorf("%s: directive = %v, want nil", model, got)
 			}

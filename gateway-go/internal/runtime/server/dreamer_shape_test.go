@@ -59,6 +59,16 @@ func TestDreamerLLMShapeReturnsToggleAndBudgetByModel(t *testing.T) {
 		assertToggle(t, extra, "thinking")
 	})
 
+	t.Run("dsv4 remote API alias gets transport-native thinking off", func(t *testing.T) {
+		extra, synthMax := shape("wormhole/deepseek-v4-flash-api")
+		if extra != nil {
+			t.Errorf("extra = %v, want nil (wormhole drops local vLLM template kwargs for API routes)", extra)
+		}
+		if synthMax != 16384 {
+			t.Errorf("synthMax = %d, want 16384 so the dreamer emits typed thinking-off plus headroom", synthMax)
+		}
+	})
+
 	t.Run("srv4 tiny alias stays thinking off", func(t *testing.T) {
 		extra, synthMax := shape("wormhole/dsv4-nothink")
 		assertToggle(t, extra, "enable_thinking")

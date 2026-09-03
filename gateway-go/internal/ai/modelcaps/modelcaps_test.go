@@ -58,12 +58,13 @@ func TestThinkingToggleKwargAllowsVLLMDeniesOtherProviders(t *testing.T) {
 		}
 	}
 	for _, c := range []struct{ p, m string }{
-		{"vllm", "step3p7"},               // non-dual-mode model
-		{"openrouter", "deepseek-v4"},     // non-vLLM provider must NOT get the kwarg
-		{"deepseek", "deepseek-v4-flash"}, // official API is not vLLM serving
-		{"", "deepseek-v4-flash"},         // no provider
-		{"wormhole", "glm-5.2"},           // cloud model fronted by wormhole — model gate excludes
-		{"wormhole", "mimo-v2.5-pro"},     // cloud model fronted by wormhole
+		{"vllm", "step3p7"},                   // non-dual-mode model
+		{"openrouter", "deepseek-v4"},         // non-vLLM provider must NOT get the kwarg
+		{"deepseek", "deepseek-v4-flash"},     // official API is not vLLM serving
+		{"", "deepseek-v4-flash"},             // no provider
+		{"wormhole", "glm-5.2"},               // cloud model fronted by wormhole — model gate excludes
+		{"wormhole", "mimo-v2.5-pro"},         // cloud model fronted by wormhole
+		{"wormhole", "deepseek-v4-flash-api"}, // remote API alias, not the local vLLM model
 	} {
 		if got := ThinkingToggleKwarg(c.p, c.m); got != "" {
 			t.Errorf("ThinkingToggleKwarg(%q,%q) = %q, want \"\"", c.p, c.m, got)
@@ -71,5 +72,18 @@ func TestThinkingToggleKwargAllowsVLLMDeniesOtherProviders(t *testing.T) {
 	}
 	if Builtin("wormhole", "deepseek-v4-flash").ThinkingToggleKwarg != "thinking" {
 		t.Error("Builtin must surface the toggle kwarg for wormhole/dsv4")
+	}
+}
+
+func TestIsRemoteAPIAlias(t *testing.T) {
+	for _, model := range []string{"deepseek-v4-flash-api", "wormhole/deepseek-v4-pro-api", "deepseek-v4-flash-api-nothink"} {
+		if !IsRemoteAPIAlias(model) {
+			t.Errorf("IsRemoteAPIAlias(%q) = false, want true", model)
+		}
+	}
+	for _, model := range []string{"deepseek-v4-flash", "api-compatible-model", ""} {
+		if IsRemoteAPIAlias(model) {
+			t.Errorf("IsRemoteAPIAlias(%q) = true, want false", model)
+		}
 	}
 }
