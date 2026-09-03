@@ -69,6 +69,101 @@ class PageKindTests(unittest.TestCase):
         self.assertEqual(miner.page_kind(["카이엠", "업무/BEP"]), "문서")
 
 
+class CorpusGroundingTests(unittest.TestCase):
+    PAGES = {
+        "프로젝트/com-sds-epc-001/대표.md": "강진 신다산 하자보수 조항 4·5번",
+        "프로젝트/com-sds-epc-001/로그.md": "하자보수 재확인",
+        "프로젝트/pl2-dsv-epc-001/대표.md": "당진 솔라빌리지 하자보수 및 Deviation",
+        "업무/BEP.md": "블랙록 펀드",
+        "index.md": "루트 문서",
+    }
+
+    def index(self):
+        return miner.index_subtrees(self.PAGES)
+
+    def test_files_fold_into_the_folder_that_is_the_gold_target(self) -> None:
+        # Gold points at folders, so three files in one project must count as
+        # ONE candidate answer, not three.
+        index = self.index()
+        self.assertIn("프로젝트/com-sds-epc-001", index)
+        self.assertIn("하자보수 조항", index["프로젝트/com-sds-epc-001"])
+        self.assertIn("하자보수 재확인", index["프로젝트/com-sds-epc-001"])
+        self.assertEqual(miner.subtree_of("index.md"), "index.md")
+        self.assertEqual(miner.subtree_of(""), "")
+
+    def test_clue_reach_counts_folders_not_files(self) -> None:
+        index = self.index()
+        self.assertEqual(
+            miner.subtrees_with(index, ["하자보수"]),
+            ["프로젝트/com-sds-epc-001", "프로젝트/pl2-dsv-epc-001"])
+        self.assertEqual(miner.subtrees_with(index, ["Deviation"]),
+                         ["프로젝트/pl2-dsv-epc-001"])
+        self.assertEqual(miner.subtrees_with(index, ["없는토큰"]), [])
+
+    def test_gold_path_matches_only_at_a_segment_start(self) -> None:
+        # Without the segment rule a short gold string would claim unrelated
+        # folders and the ambiguity count would collapse toward 1 — hiding
+        # exactly the cases the count exists to flag.
+        self.assertTrue(miner.gold_matches("프로젝트/com-sds-epc-001",
+                                           ["프로젝트/com-sds-epc-001"]))
+        self.assertTrue(miner.gold_matches("프로젝트/com-sds-epc-001", ["com-sds-epc-001"]))
+        self.assertFalse(miner.gold_matches("프로젝트/남com-sds-epc-001",
+                                            ["com-sds-epc-001"]))
+        self.assertFalse(miner.gold_matches("업무/BEP", ["프로젝트/com-sds-epc-001"]))
+
+    def test_a_clue_missing_from_its_own_target_is_refused_as_dead_gold(self) -> None:
+        reason, reach = miner.clue_verdict(
+            self.index(), ["프로젝트/com-sds-epc-001"], ["Deviation"])
+        self.assertEqual(reason, "clue absent from its own gold page")
+        self.assertEqual(reach, 1)
+
+    def test_a_clue_on_its_own_target_is_kept_and_its_reach_reported(self) -> None:
+        reason, reach = miner.clue_verdict(
+            self.index(), ["프로젝트/com-sds-epc-001"], ["하자보수"])
+        self.assertIsNone(reason)
+        self.assertEqual(reach, 2, "a two-project clue needs an added detail")
+
+    def test_without_a_corpus_the_check_abstains_rather_than_guesses(self) -> None:
+        self.assertEqual(miner.clue_verdict(None, ["프로젝트/x"], ["t"]), (None, 0))
+        self.assertEqual(miner.clue_verdict(self.index(), ["프로젝트/x"], []), (None, 0))
+
+
+class PromptGroundingTests(unittest.TestCase):
+    def test_an_ambiguous_clue_tells_the_model_to_add_one_not_to_give_up(self) -> None:
+        index = miner.index_subtrees({
+            "프로젝트/a/대표.md": "하자보수 300MW 해남",
+            "프로젝트/b/대표.md": "하자보수",
+        })
+        prompt = miner.build_prompt(
+            {"question": "a 하자보수?", "gold_paths": ["프로젝트/a"],
+             "must_contain": ["하자보수"]}, index, 1500)
+        self.assertIn("2곳에 나타난다", prompt)
+        self.assertIn("포기하지 말고", prompt)
+        self.assertIn("300MW 해남", prompt, "the excerpt must supply the extra clue")
+
+    def test_a_unique_clue_is_reported_as_already_pinning_the_answer(self) -> None:
+        index = miner.index_subtrees({"프로젝트/a/대표.md": "Deviation 기록"})
+        prompt = miner.build_prompt(
+            {"question": "a 상황?", "gold_paths": ["프로젝트/a"],
+             "must_contain": ["Deviation"]}, index, 1500)
+        self.assertIn("한 곳에만", prompt)
+
+    def test_excerpt_is_capped_so_one_long_page_cannot_blow_the_prompt(self) -> None:
+        index = miner.index_subtrees({"프로젝트/a/대표.md": "가" * 5000})
+        prompt = miner.build_prompt(
+            {"question": "q", "gold_paths": ["프로젝트/a"], "must_contain": ["가"]},
+            index, 100)
+        self.assertIn("가" * 100, prompt)
+        self.assertNotIn("가" * 101, prompt)
+
+    def test_without_a_corpus_the_prompt_carries_neither_note_nor_excerpt(self) -> None:
+        prompt = miner.build_prompt(
+            {"question": "q", "gold_paths": ["프로젝트/a"], "must_contain": ["t"]},
+            None, 1500)
+        self.assertNotIn("대상 페이지 발췌", prompt)
+        self.assertNotIn("나타난다", prompt)
+
+
 class GuardTests(unittest.TestCase):
     def keep(self, subject: str, reverse: str, must_contain=None):
         return miner.reject_reason(
@@ -171,6 +266,37 @@ class LoadAndMineTests(unittest.TestCase):
              ("other", "direct")],
         )
         self.assertEqual(rejects, [("other", "model declined (clue too generic)")])
+
+    def test_dead_gold_is_refused_before_the_model_is_paid_for_it(self) -> None:
+        # The clue is not on the target, so no rewrite could ever be answerable;
+        # calling the model first would buy a candidate that must be thrown away.
+        index = miner.index_subtrees({"프로젝트/other/대표.md": "하자보수"})
+        calls = []
+
+        emitted, rejects = miner.mine(
+            [DIRECT], "m",
+            ask=lambda *a: calls.append(a) or '{"subject":"x","reverse":"y"}',
+            log=lambda _s: None, index=index)
+
+        self.assertEqual(calls, [], "a dead-gold case must not reach the model")
+        self.assertEqual(rejects, [("gangjin-epc-legal", "clue absent from its own gold page")])
+        self.assertEqual([c["id"] for c in emitted], ["gangjin-epc-legal"])
+
+    def test_kept_twin_records_how_far_the_clue_reaches(self) -> None:
+        index = miner.index_subtrees({
+            "프로젝트/com-sds-epc-001/대표.md": "하자보수 4·5번",
+            "프로젝트/other/대표.md": "하자보수",
+        })
+
+        emitted, _ = miner.mine(
+            [DIRECT], "m",
+            ask=lambda *_a: '{"subject": "강진 신다산", '
+                            '"reverse": "4·5번 조항 하자보수 현장이 어디였지?"}',
+            log=lambda _s: None, index=index)
+
+        twin = emitted[1]
+        self.assertEqual(twin["direction"], "reverse")
+        self.assertEqual(twin["clue_reach"], 2)
 
     def test_a_failing_model_call_drops_one_case_and_keeps_going(self) -> None:
         second = dict(DIRECT, id="other")

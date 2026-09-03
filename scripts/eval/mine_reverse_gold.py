@@ -35,7 +35,13 @@ sample before pointing a baseline at the output.
 
 Usage:
   scripts/eval/mine_reverse_gold.py --gold ~/.deneb/wiki-qa-gold.jsonl \\
-      --model glm-5.2 [--limit 40] [--out ~/.deneb/wiki-qa-gold-reverse.jsonl]
+      --model glm-5.2 --wiki <wiki-copy-dir> \\
+      [--limit 40] [--out ~/.deneb/wiki-qa-gold-reverse.jsonl]
+
+--wiki is what makes the filtering real rather than a model's opinion: it counts
+how many page subtrees actually carry the clue, refuses a case whose clue is
+missing from its own target, and hands the rewrite an excerpt so it can ADD a
+distinguishing detail instead of giving up on a common one. Point it at a COPY.
 
 Without --out the set is written to stdout, so a dry run costs nothing.
 """
@@ -68,16 +74,24 @@ PROMPT = """아래는 사내 위키 검색 평가용 질문이다. 이 질문은
 원 질문: {question}
 그 질문의 정답에 해당하는 세부 토큰: {detail}
 
+{ambiguity}
 규칙:
 - 역방향 질문에는 {kind} 이름이 **절대 들어가면 안 된다**. 그 이름을 맞히는 게 질문의 목적이다.
 - 세부 토큰의 내용은 질문 안에 단서로 남겨라.
 - 실무자가 실제로 물어볼 법한 자연스러운 한국어 한 문장으로 쓴다.
 - 묻는 대상은 반드시 {kind} 이다. 다른 종류로 바꿔 묻지 마라.
-- 단서가 너무 흔해서 여러 개가 답이 될 것 같으면 reverse 를 빈 문자열로 두어라.
-
+- 단서가 흔해서 여러 개가 답이 될 것 같으면 **포기하지 말고**, 아래 발췌에서
+  이 {kind}을(를) 특정할 수 있는 단서를 하나 더 골라 질문에 넣어라
+  (설비 용량·상대 회사·날짜·금액·지역 특성 등). 단, {kind} 이름 자체는 안 된다.
+- 발췌를 봐도 특정할 단서가 없을 때만 reverse 를 빈 문자열로 둔다.
+{excerpt}
 JSON 으로만 답한다:
 {{"subject": "<원 질문에서 {kind}을(를) 가리키는 부분을 그대로 복사>",
   "reverse": "<역방향 질문 또는 빈 문자열>"}}"""
+
+AMBIGUOUS_NOTE = ("주의: 이 세부 토큰은 위키에서 {n}곳에 나타난다 — 단서 하나만으로는 "
+                  "답이 하나로 좁혀지지 않으니 반드시 단서를 더 보태라.\n")
+UNIQUE_NOTE = "참고: 이 세부 토큰은 위키에서 이 {kind} 한 곳에만 나타난다.\n"
 
 # What the reverse question should ask FOR. The gold sets target three page
 # families and only one of them is a site: asking "which 현장?" about 업무/BEP
@@ -97,6 +111,71 @@ def page_kind(gold_paths: list) -> str:
         if head in PAGE_KINDS:
             return PAGE_KINDS[head]
     return PAGE_KINDS["프로젝트"]
+
+
+# --- corpus grounding (pure) -------------------------------------------------- #
+# The paper's pipeline filters candidate questions by searching for alternative
+# answers and discarding the ambiguous ones. The wiki is small enough to do that
+# exactly rather than by sampling: count the subtrees whose text carries the
+# clue. One subtree means the clue pins the answer; several mean the reverse
+# question needs a second clue to be answerable at all.
+def subtree_of(relpath: str) -> str:
+    """The page family a file belongs to — 프로젝트/<code>, 업무/<doc>, ….
+
+    Gold targets are folders, not files, so ambiguity has to be counted over
+    folders: three files inside one project are one candidate answer, not three.
+    """
+    parts = [p for p in str(relpath).replace("\\", "/").split("/") if p]
+    if not parts:
+        return ""
+    return "/".join(parts[:2]) if len(parts) > 1 else parts[0]
+
+
+def index_subtrees(pages: dict) -> dict:
+    """Fold {relpath: text} into {subtree: concatenated text}."""
+    index = {}
+    for relpath, text in (pages or {}).items():
+        key = subtree_of(relpath)
+        if key:
+            index[key] = index.get(key, "") + "\n" + (text or "")
+    return index
+
+
+def gold_matches(subtree: str, gold_paths: list) -> bool:
+    """Gold-path semantics from recall-bench: match only at a segment start.
+
+    Without the segment rule "영덕" would claim "남영덕/…" and the ambiguity
+    count would collapse toward 1 for exactly the cases it must flag.
+    """
+    for gold in gold_paths or []:
+        g = str(gold).rstrip("/")
+        if not g:
+            continue
+        if subtree == g or subtree.startswith(g + "/") or ("/" + g) in ("/" + subtree):
+            return True
+    return False
+
+
+def subtrees_with(index: dict, tokens: list) -> list:
+    """Subtrees whose text carries ANY of the clue tokens (gold '|' is OR)."""
+    return sorted(key for key, text in (index or {}).items()
+                  if any(t and t in text for t in tokens or []))
+
+
+def clue_verdict(index: dict, gold_paths: list, tokens: list):
+    """(reject reason or None, number of subtrees the clue reaches).
+
+    A clue absent from its own target is the case the baseline of 2026-08-23
+    called dead gold: unwinnable no matter how good retrieval gets, and it reads
+    as a retrieval miss forever. Reject it here rather than mine it into a new
+    set — an inherited defect is still a defect once it has a new id.
+    """
+    if not index or not tokens:
+        return None, 0
+    hits = subtrees_with(index, tokens)
+    if not any(gold_matches(h, gold_paths) for h in hits):
+        return "clue absent from its own gold page", len(hits)
+    return None, len(hits)
 
 
 # --- model transport --------------------------------------------------------- #
@@ -234,16 +313,44 @@ def load_gold(path: str) -> list:
 
 
 # --- run --------------------------------------------------------------------- #
-def mine(cases: list, model: str, ask=call_model, log=sys.stderr.write) -> tuple:
+def build_prompt(case: dict, index: dict, excerpt_chars: int) -> str:
+    """Assemble the rewrite prompt, grounded in the corpus when one is given."""
+    kind = page_kind(case.get("gold_paths"))
+    tokens = detail_tokens(case.get("must_contain"))
+    _, reach = clue_verdict(index, case.get("gold_paths"), tokens)
+    if reach > 1:
+        ambiguity = AMBIGUOUS_NOTE.format(n=reach)
+    elif reach == 1:
+        ambiguity = UNIQUE_NOTE.format(kind=kind)
+    else:
+        ambiguity = ""
+    body = ""
+    for key, text in (index or {}).items():
+        if gold_matches(key, case.get("gold_paths")):
+            body = text.strip()[:excerpt_chars]
+            break
+    excerpt = f"\n대상 페이지 발췌:\n---\n{body}\n---\n" if body else ""
+    return PROMPT.format(question=case["question"],
+                         detail=" / ".join(tokens) or "(없음)",
+                         kind=kind, ambiguity=ambiguity, excerpt=excerpt)
+
+
+def mine(cases: list, model: str, ask=call_model, log=sys.stderr.write,
+         index=None, excerpt_chars: int = 1500) -> tuple:
     """Return (emitted cases, rejection reasons) for the given direct cases."""
     emitted, rejects = [], []
     for case in cases:
         emitted.append(direct_case(case))
-        detail = " / ".join(detail_tokens(case.get("must_contain"))) or "(없음)"
-        prompt = PROMPT.format(question=case["question"], detail=detail,
-                               kind=page_kind(case.get("gold_paths")))
+        tokens = detail_tokens(case.get("must_contain"))
+        # Corpus check first: a case whose clue is not even on its own page is
+        # broken at the source, and no rewrite can rescue it — refusing before
+        # the model call also keeps the run from paying for it.
+        broken, reach = clue_verdict(index, case.get("gold_paths"), tokens)
+        if broken:
+            rejects.append((case["id"], broken))
+            continue
         try:
-            reply = parse_reply(ask(model, prompt))
+            reply = parse_reply(ask(model, build_prompt(case, index, excerpt_chars)))
         except Exception as exc:  # noqa: BLE001 - one case must not kill the run
             rejects.append((case["id"], f"model call failed: {exc}"))
             continue
@@ -252,9 +359,28 @@ def mine(cases: list, model: str, ask=call_model, log=sys.stderr.write) -> tuple
         if reason:
             rejects.append((case["id"], reason))
             continue
-        emitted.append(reverse_case(case, reply["reverse"]))
-        log(f"  + {case['id']}-rev  {reply['reverse']}\n")
+        twin = reverse_case(case, reply["reverse"])
+        if reach:
+            # Kept on the case so a reviewer can see how hard the clue had to
+            # work: reach=1 is pinned by the clue alone, higher needed the
+            # model's added context to be answerable.
+            twin["clue_reach"] = reach
+        emitted.append(twin)
+        log(f"  + {case['id']}-rev [reach={reach}]  {reply['reverse']}\n")
     return emitted, rejects
+
+
+def load_wiki(wiki_dir: str) -> dict:
+    """Read the wiki COPY into {subtree: text}. Read-only, whole corpus."""
+    import pathlib
+    root = pathlib.Path(wiki_dir)
+    pages = {}
+    for path in root.rglob("*.md"):
+        try:
+            pages[str(path.relative_to(root))] = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+    return index_subtrees(pages)
 
 
 def main(argv=None) -> int:
