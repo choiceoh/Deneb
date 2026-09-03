@@ -26,6 +26,12 @@ type UsageQualitySummary struct {
 	// path the run actually broke. ADVISORY: nothing here feeds a gate yet
 	// (see SkillFailureLayers).
 	FailureLayers SkillFailureLayers `json:"failureLayers"`
+	// Bypass is the success-side complement: counted real-use SUCCESSES split
+	// by whether the declared procedure ran. A skill that is delivered, walked
+	// past, and succeeds anyway is invisible to every existing signal — its
+	// success rate rises and the idle curator can never reach it. ADVISORY
+	// (see SkillBypassSignal).
+	Bypass SkillBypassSignal `json:"bypass"`
 }
 
 // SkillFailureLayers decomposes counted real-use records by the layer the
@@ -101,6 +107,7 @@ func (t *Tracker) UsageQualitySummary(skillName string) (UsageQualitySummary, er
 		default:
 			summary.CountedRecords++
 			summary.FailureLayers.observe(r)
+			summary.Bypass.observe(r)
 		}
 	}
 	summary.IgnoredRecords = summary.TotalRecords - summary.CountedRecords
@@ -114,7 +121,8 @@ func (t *Tracker) UsageQualitySummary(skillName string) (UsageQualitySummary, er
 }
 
 // observe folds one counted record into the layer split. Successes carry no
-// failure to locate, so only failures are counted.
+// failure to locate, so only failures are counted; the success side is split by
+// SkillBypassSignal.observe over the same counted-record set.
 func (l *SkillFailureLayers) observe(r UsageRecord) {
 	if r.Success {
 		return

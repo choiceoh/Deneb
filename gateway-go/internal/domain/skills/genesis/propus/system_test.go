@@ -144,3 +144,56 @@ func containsString(values []string, want string) bool {
 	}
 	return false
 }
+
+// A skill that keeps being delivered, keeps being walked past, and keeps
+// succeeding is invisible to every other pressure in the overview: its success
+// rate is healthy and it is never idle. The bypass advisory is the only thing
+// that can put it in front of an operator.
+func TestBuildPropusOverviewRaisesBacklogForBypassedSkillRuns(t *testing.T) {
+	overview := BuildPropusOverview(PropusOverviewInput{
+		Scope: PropusScopeGlobal,
+		Stats: []UsageStats{
+			{SkillName: "deploy-helper", TotalUses: 6, SuccessCount: 6, SuccessRate: 1},
+		},
+		UsageQuality: UsageQualitySummary{
+			TotalRecords: 6, CountedRecords: 6,
+			BypassedSuccesses: 5, AttributedSuccesses: 6, BypassActionable: true,
+		},
+		ValidationSummary: SkillValidationCaseSummary{UniqueRecords: 1, SkillsWithCases: 1},
+	})
+
+	if overview.BypassedSkillRuns != 5 {
+		t.Fatalf("bypassed runs = %d, want 5", overview.BypassedSkillRuns)
+	}
+	if !containsString(overview.NextActions, "inspect_bypassed_skill_runs") {
+		t.Fatalf("missing bypass action: %#v", overview.NextActions)
+	}
+	// A backlog, not an alarm: nothing failed, so this must not outrank a real
+	// failure signal by inflating the state.
+	if overview.State != "has_backlog" {
+		t.Fatalf("state = %q, want has_backlog", overview.State)
+	}
+}
+
+// Below the floors the advisory must stay silent — a healthy all-exercised
+// skill set has to leave the overview steady.
+func TestBuildPropusOverviewOmitsBypassActionBelowFloors(t *testing.T) {
+	overview := BuildPropusOverview(PropusOverviewInput{
+		Scope: PropusScopeGlobal,
+		Stats: []UsageStats{
+			{SkillName: "deploy-helper", TotalUses: 6, SuccessCount: 6, SuccessRate: 1},
+		},
+		UsageQuality: UsageQualitySummary{
+			TotalRecords: 6, CountedRecords: 6,
+			BypassedSuccesses: 1, AttributedSuccesses: 6, BypassActionable: false,
+		},
+		ValidationSummary: SkillValidationCaseSummary{UniqueRecords: 1, SkillsWithCases: 1},
+	})
+
+	if containsString(overview.NextActions, "inspect_bypassed_skill_runs") {
+		t.Fatalf("bypass action raised below the floors: %#v", overview.NextActions)
+	}
+	if overview.BypassedSkillRuns != 1 {
+		t.Fatalf("bypassed runs = %d, want the count reported even when not actionable", overview.BypassedSkillRuns)
+	}
+}
