@@ -229,9 +229,14 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("POST", request.method.value)
             assertEquals(ContentType.Application.Json, request.bodyContentType?.withoutParameters())
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
-            assertEquals(setOf("limit", "status"), params.keys)
+            assertEquals(setOf("limit", "status", "translate"), params.keys)
             assertEquals(23, params["limit"]?.jsonPrimitive?.content?.toInt())
             assertEquals("review", params["status"]?.jsonPrimitive?.content)
+            // This screen is read by a person and the review models answer in
+            // English, so the client always asks for Korean. The flag is opt-in
+            // on the gateway so the dispatch selector and the L4 miners — which
+            // feed a coding agent its instructions — keep the original text.
+            assertEquals("true", params["translate"]?.jsonPrimitive?.content)
         },
         {
             val f = gatewayClientFixture(token = "")

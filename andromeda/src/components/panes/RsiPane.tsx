@@ -454,8 +454,12 @@ export function RsiPane() {
       .then((d) => setLifecycle(d.events ?? []))
       .catch(() => setLifecycle([]));
     void Promise.all([
-      callRpc<SelfImprovementCodingListResponse>(cfg, RSI_RPC.coding, { limit: 24, status: "proposed" }),
-      callRpc<SelfImprovementCodingListResponse>(cfg, RSI_RPC.coding, { limit: 24, status: "accepted" }),
+      // translate: the review models answer in English (measured 2026-09-03: 78%
+      // of live queue titles carried no Hangul). Opt-in so the dispatch selector
+      // and the L4 miners, which feed a coding agent its instructions, keep the
+      // untranslated text.
+      callRpc<SelfImprovementCodingListResponse>(cfg, RSI_RPC.coding, { limit: 24, status: "proposed", translate: true }),
+      callRpc<SelfImprovementCodingListResponse>(cfg, RSI_RPC.coding, { limit: 24, status: "accepted", translate: true }),
     ])
       .then(([proposed, accepted]) => {
         // Fetch statuses separately so applied/rejected churn cannot crowd the

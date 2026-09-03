@@ -8,6 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/opstranslate"
 	miniappcontract "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/contract"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -240,6 +241,13 @@ func selfImprovementCodingList(deps SelfImprovementCodingDeps) rpcutil.HandlerFu
 		Status           string   `json:"status"`
 		DispatchableOnly bool     `json:"dispatchableOnly"`
 		ExcludeIDs       []string `json:"excludeIds"`
+		// Translate renders the review prose into Korean for a human reader.
+		// OPT-IN on purpose. The native clients ask for it; the L4 miners and
+		// scripts/dev/self_correction_dispatch.py must not get it, because the
+		// candidate they read is fed to a coding agent as its instructions —
+		// translating those would silently rewrite what the agent is told to do.
+		// The dispatchableOnly selector ignores this flag for the same reason.
+		Translate bool `json:"translate"`
 	}
 	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		if p.DispatchableOnly {
@@ -274,6 +282,9 @@ func selfImprovementCodingList(deps SelfImprovementCodingDeps) rpcutil.HandlerFu
 		candidates := make([]SelfCorrectionCandidate, 0, len(recs))
 		for _, rec := range recs {
 			candidates = append(candidates, selfCorrectionCandidate(rec))
+		}
+		if p.Translate {
+			translateSelfCorrectionProse(ctx, candidates)
 		}
 		return rpcutil.RespondOK(req.ID, SelfImprovementCodingListResponse{
 			Candidates:   candidates,
@@ -330,6 +341,48 @@ func selfImprovementCodingFunnel(deps SelfImprovementCodingDeps) SelfImprovement
 		out.LastNudgeAt = deps.LastNudgeAtMs()
 	}
 	return out
+}
+
+// translateSelfCorrectionProse renders the operator-facing review text into
+// Korean in place. Measured over the live queue on 2026-09-03: 78% of titles and
+// 71% of reasons carried no Hangul at all, because the review models answer in
+// English.
+//
+// Evidence is deliberately NOT translated. It is the raw proof an operator
+// judges the candidate by — telemetry lines like
+// "observe.behavior 7d vs 30d baseline: mail_archive calls=113 avgMs=750" and
+// session keys. Machine-translating a measurement is how a review screen starts
+// lying about numbers; English proof beats mangled proof.
+// translateProseFn is a package var so tests can pin the WHICH-fields and
+// WHICH-requests contract without a live translator.
+var translateProseFn = opstranslate.Fields
+
+func translateSelfCorrectionProse(ctx context.Context, candidates []SelfCorrectionCandidate) {
+	if len(candidates) == 0 {
+		return
+	}
+	// Pointers rather than index arithmetic: the input and output slices must
+	// stay aligned, and off-by-one here would put one candidate's reason on
+	// another's title.
+	fields := make([]*string, 0, len(candidates)*6)
+	for i := range candidates {
+		c := &candidates[i]
+		fields = append(fields,
+			&c.Title, &c.Candidate, &c.Reason,
+			&c.ProposedChange, &c.Risk, &c.ReviewNote, &c.OutcomeNote,
+		)
+	}
+	texts := make([]string, len(fields))
+	for i, p := range fields {
+		texts[i] = *p
+	}
+	rendered := translateProseFn(ctx, texts)
+	if len(rendered) != len(fields) {
+		return // never partially apply a misaligned result
+	}
+	for i, p := range fields {
+		*p = rendered[i]
+	}
 }
 
 func selfCorrectionCandidate(rec genesis.SelfCorrectionCandidateRecord) SelfCorrectionCandidate {
