@@ -367,7 +367,8 @@ func translateSelfCorrectionProse(ctx context.Context, candidates []SelfCorrecti
 	fields := make([]*string, 0, len(candidates)*6)
 	for i := range candidates {
 		c := &candidates[i]
-		fields = append(fields,
+		fields = append(
+			fields,
 			&c.Title, &c.Candidate, &c.Reason,
 			&c.ProposedChange, &c.Risk, &c.ReviewNote, &c.OutcomeNote,
 		)
