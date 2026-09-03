@@ -1352,6 +1352,8 @@ func directionSplit(cases []goldCase, ranks []caseRank, outcomes []poolOutcome) 
 			s.rankingMiss++
 		case poolGenerationMiss:
 			s.generationMiss++
+		case poolHitK:
+			// Already counted as a hit by the rank pass; it carries no miss.
 		}
 	}
 	out := make([]directionStat, 0, len(stats))
