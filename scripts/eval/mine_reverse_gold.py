@@ -80,18 +80,45 @@ PROMPT = """아래는 사내 위키 검색 평가용 질문이다. 이 질문은
 - 세부 토큰의 내용은 질문 안에 단서로 남겨라.
 - 실무자가 실제로 물어볼 법한 자연스러운 한국어 한 문장으로 쓴다.
 - 묻는 대상은 반드시 {kind} 이다. 다른 종류로 바꿔 묻지 마라.
-- 단서가 흔해서 여러 개가 답이 될 것 같으면 **포기하지 말고**, 아래 발췌에서
-  이 {kind}을(를) 특정할 수 있는 단서를 하나 더 골라 질문에 넣어라
-  (설비 용량·상대 회사·날짜·금액·지역 특성 등). 단, {kind} 이름 자체는 안 된다.
-- 발췌를 봐도 특정할 단서가 없을 때만 reverse 를 빈 문자열로 둔다.
-{excerpt}
+{padding_rule}{excerpt}
 JSON 으로만 답한다:
 {{"subject": "<원 질문에서 {kind}을(를) 가리키는 부분을 그대로 복사>",
   "reverse": "<역방향 질문 또는 빈 문자열>"}}"""
 
 AMBIGUOUS_NOTE = ("주의: 이 세부 토큰은 위키에서 {n}곳에 나타난다 — 단서 하나만으로는 "
-                  "답이 하나로 좁혀지지 않으니 반드시 단서를 더 보태라.\n")
+                  "답이 하나로 좁혀지지 않는다.\n")
 UNIQUE_NOTE = "참고: 이 세부 토큰은 위키에서 이 {kind} 한 곳에만 나타난다.\n"
+
+# Padding is the failure mode this measurement exists to prevent. A reverse
+# question stuffed with four extra distinctive tokens retrieves EASILY — BM25
+# has more to match on — so an over-specified reverse arm reports a deficit that
+# is smaller than the real one, which is the opposite of what the split is for.
+# The corpus count decides whether an extra clue is even permitted.
+PAD_FORBIDDEN = ("- 단서가 이미 답을 하나로 좁힌다. 다른 정보를 **절대 보태지 마라** — "
+                 "질문을 길게 만들면 검색이 쉬워져 측정이 망가진다.\n"
+                 "- 원 질문과 비슷한 길이의 한 문장으로 쓴다.\n")
+PAD_ALLOWED = ("- 단서 하나로는 부족하니 이 {kind}을(를) 특정할 단서를 아래 발췌에서 "
+               "**딱 하나만** 고른다 (설비 용량·상대 회사·날짜·금액 중 가장 짧은 것). "
+               "{kind} 이름 자체는 안 된다.\n"
+               "- 둘 이상 보태지 마라 — 길어질수록 검색이 쉬워져 측정이 망가진다.\n"
+               "- 발췌를 봐도 특정할 단서가 없을 때만 reverse 를 빈 문자열로 둔다.\n")
+
+# How much longer than its direct twin a reverse question may be. Calibrated on
+# the 2026-09-03 ungoverned run, where Korean's density made a first guess of +70
+# admit the very example that motivated the guard: one added clue measured +18
+# chars ("154kV 케이블을 ZTT에서 공급받은 신안군 태양광 현장이…"), four measured
+# +66, and a pure rephrase of a pinned clue fits inside +30.
+MAX_GROWTH_PINNED = 30   # clue already unique — rephrasing slack only
+MAX_GROWTH_PADDED = 40   # room for exactly one added clue, not four
+
+
+def growth_reject(question: str, reverse: str, reach: int):
+    """Reject a reverse question that grew past what its clue budget allows."""
+    budget = MAX_GROWTH_PADDED if reach > 1 else MAX_GROWTH_PINNED
+    grew = len((reverse or "").strip()) - len((question or "").strip())
+    if grew > budget:
+        return f"over-specified (+{grew} chars, budget +{budget})"
+    return None
 
 # What the reverse question should ask FOR. The gold sets target three page
 # families and only one of them is a site: asking "which 현장?" about 업무/BEP
@@ -320,19 +347,25 @@ def build_prompt(case: dict, index: dict, excerpt_chars: int) -> str:
     _, reach = clue_verdict(index, case.get("gold_paths"), tokens)
     if reach > 1:
         ambiguity = AMBIGUOUS_NOTE.format(n=reach)
+        padding_rule = PAD_ALLOWED.format(kind=kind)
     elif reach == 1:
         ambiguity = UNIQUE_NOTE.format(kind=kind)
+        padding_rule = PAD_FORBIDDEN
     else:
-        ambiguity = ""
+        ambiguity, padding_rule = "", PAD_ALLOWED.format(kind=kind)
+    # The excerpt is the raw material for padding, so it is withheld whenever
+    # padding is forbidden — the cheapest way to stop it is not to offer it.
     body = ""
-    for key, text in (index or {}).items():
-        if gold_matches(key, case.get("gold_paths")):
-            body = text.strip()[:excerpt_chars]
-            break
+    if reach != 1:
+        for key, text in (index or {}).items():
+            if gold_matches(key, case.get("gold_paths")):
+                body = text.strip()[:excerpt_chars]
+                break
     excerpt = f"\n대상 페이지 발췌:\n---\n{body}\n---\n" if body else ""
     return PROMPT.format(question=case["question"],
                          detail=" / ".join(tokens) or "(없음)",
-                         kind=kind, ambiguity=ambiguity, excerpt=excerpt)
+                         kind=kind, ambiguity=ambiguity,
+                         padding_rule=padding_rule, excerpt=excerpt)
 
 
 def mine(cases: list, model: str, ask=call_model, log=sys.stderr.write,
@@ -356,6 +389,7 @@ def mine(cases: list, model: str, ask=call_model, log=sys.stderr.write,
             continue
         reason = reject_reason(case["question"], reply.get("subject", ""),
                                reply.get("reverse", ""), case.get("must_contain"))
+        reason = reason or growth_reject(case["question"], reply.get("reverse", ""), reach)
         if reason:
             rejects.append((case["id"], reason))
             continue

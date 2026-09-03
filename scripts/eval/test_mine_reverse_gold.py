@@ -138,7 +138,7 @@ class PromptGroundingTests(unittest.TestCase):
             {"question": "a 하자보수?", "gold_paths": ["프로젝트/a"],
              "must_contain": ["하자보수"]}, index, 1500)
         self.assertIn("2곳에 나타난다", prompt)
-        self.assertIn("포기하지 말고", prompt)
+        self.assertIn("딱 하나만", prompt)
         self.assertIn("300MW 해남", prompt, "the excerpt must supply the extra clue")
 
     def test_a_unique_clue_is_reported_as_already_pinning_the_answer(self) -> None:
@@ -149,7 +149,10 @@ class PromptGroundingTests(unittest.TestCase):
         self.assertIn("한 곳에만", prompt)
 
     def test_excerpt_is_capped_so_one_long_page_cannot_blow_the_prompt(self) -> None:
-        index = miner.index_subtrees({"프로젝트/a/대표.md": "가" * 5000})
+        # Two pages carry the clue, so reach > 1 and the excerpt is offered at
+        # all; a pinned clue withholds it entirely (see MinimalismTests).
+        index = miner.index_subtrees({"프로젝트/a/대표.md": "가" * 5000,
+                                      "프로젝트/b/대표.md": "가"})
         prompt = miner.build_prompt(
             {"question": "q", "gold_paths": ["프로젝트/a"], "must_contain": ["가"]},
             index, 100)
@@ -162,6 +165,65 @@ class PromptGroundingTests(unittest.TestCase):
             None, 1500)
         self.assertNotIn("대상 페이지 발췌", prompt)
         self.assertNotIn("나타난다", prompt)
+
+
+class MinimalismTests(unittest.TestCase):
+    """Padding is retrieval help, so an over-specified reverse arm reports a
+    smaller deficit than the real one — the opposite of the split's purpose."""
+
+    DIRECT_Q = "당진 솔라빌리지 최근 진행 상황 어때?"
+
+    def test_a_clue_that_already_pins_the_answer_buys_no_extra_room(self) -> None:
+        padded = ("Deviation 이슈가 기록된 걸 보려는데, 감리사를 한빛디엔에스로 선정해서 "
+                  "EPC 공급가액을 1,042.78억으로 조정했던 그 현장이 어디지?")
+        reason = miner.growth_reject(self.DIRECT_Q, padded, reach=1)
+        self.assertIsNotNone(reason)
+        self.assertIn("over-specified", reason)
+
+    def test_a_plain_rephrasing_fits_the_pinned_budget(self) -> None:
+        self.assertIsNone(miner.growth_reject(
+            self.DIRECT_Q, "Deviation 이슈가 기록된 현장이 어디였지?", reach=1))
+
+    def test_an_ambiguous_clue_earns_room_for_exactly_one_addition(self) -> None:
+        one_clue = "154kV 케이블을 ZTT에서 공급받은 신안군 태양광 현장이 어디였지?"
+        self.assertIsNone(miner.growth_reject(self.DIRECT_Q, one_clue, reach=12))
+        four_clues = ("부산항만공사 소유 건물 4개소에 약 1,975kW 자가소비로 깔고 진코 640Wp "
+                      "모듈 쓰는 제이티에너지 건에서 추가 가배치 요청이 들어온 현장이 어디더라?")
+        self.assertIsNotNone(miner.growth_reject(self.DIRECT_Q, four_clues, reach=12))
+
+    def test_a_pinned_clue_gets_neither_permission_nor_material_to_pad_with(self) -> None:
+        index = miner.index_subtrees({"프로젝트/a/대표.md": "Deviation 감리사 한빛디엔에스"})
+        prompt = miner.build_prompt(
+            {"question": self.DIRECT_Q, "gold_paths": ["프로젝트/a"],
+             "must_contain": ["Deviation"]}, index, 1500)
+        self.assertIn("절대 보태지 마라", prompt)
+        self.assertNotIn("대상 페이지 발췌", prompt,
+                         "withholding the excerpt is the cheapest way to stop padding")
+        self.assertNotIn("한빛디엔에스", prompt)
+
+    def test_an_ambiguous_clue_gets_the_excerpt_and_a_one_clue_cap(self) -> None:
+        index = miner.index_subtrees({
+            "프로젝트/a/대표.md": "가배치 부산항만공사 1,975kW",
+            "프로젝트/b/대표.md": "가배치",
+        })
+        prompt = miner.build_prompt(
+            {"question": "부산항터미널 가배치 상태?", "gold_paths": ["프로젝트/a"],
+             "must_contain": ["가배치"]}, index, 1500)
+        self.assertIn("딱 하나만", prompt)
+        self.assertIn("둘 이상 보태지 마라", prompt)
+        self.assertIn("부산항만공사", prompt)
+
+    def test_an_over_specified_rewrite_is_rejected_by_the_run(self) -> None:
+        index = miner.index_subtrees({"프로젝트/com-sds-epc-001/대표.md": "하자보수"})
+        padded = ("하자보수 조항이 쟁점이고 감리사가 한빛디엔에스이며 공급가액 1,042.78억으로 "
+                  "조정되고 4·5번 조항 삭제를 요청한 그 현장이 어디였는지 알려줄래?")
+        emitted, rejects = miner.mine(
+            [DIRECT], "m",
+            ask=lambda *_a: json.dumps({"subject": "강진 신다산", "reverse": padded},
+                                       ensure_ascii=False),
+            log=lambda _s: None, index=index)
+        self.assertEqual([c["id"] for c in emitted], ["gangjin-epc-legal"])
+        self.assertIn("over-specified", rejects[0][1])
 
 
 class GuardTests(unittest.TestCase):
