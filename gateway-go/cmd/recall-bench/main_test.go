@@ -752,3 +752,122 @@ func TestPoolDepthValidation(t *testing.T) {
 		}
 	}
 }
+
+// Direction is a scoring label, so a typo must be loud: silently bucketing a
+// mislabeled case as unlabeled would shrink the very split it was written to
+// populate, and the split would still print a plausible-looking number.
+func TestLoadGoldParsesDirectionAndRejectsUnknownValue(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gold.jsonl")
+	data := `{"id":"fwd","question":"q","gold_paths":["a.md"],"direction":"direct"}` + "\n" +
+		`{"id":"rev","question":"q","gold_paths":["b.md"],"direction":"reverse"}` + "\n" +
+		`{"id":"typo","question":"q","gold_paths":["c.md"],"direction":"reversed"}` + "\n" +
+		`{"id":"plain","question":"q","gold_paths":["d.md"]}` + "\n"
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cases, malformed, err := loadGold(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cases) != 3 || malformed != 1 {
+		t.Fatalf("cases=%d malformed=%d, want 3/1 (unknown direction must count malformed)", len(cases), malformed)
+	}
+	if cases[0].Direction != "direct" || cases[1].Direction != "reverse" || cases[2].Direction != "" {
+		t.Fatalf("directions = %q/%q/%q, want direct/reverse/(empty)",
+			cases[0].Direction, cases[1].Direction, cases[2].Direction)
+	}
+}
+
+// The split exists to answer "is the reverse deficit reachable by ranking work?"
+// — so the contract is that each direction carries BOTH its recall and its miss
+// attribution, and that buckets never leak into each other.
+func TestDirectionSplitPairsRecallWithMissAttribution(t *testing.T) {
+	cases := []goldCase{
+		{ID: "d1", Direction: "direct"},
+		{ID: "d2", Direction: "direct"},
+		{ID: "r1", Direction: "reverse"},
+		{ID: "r2", Direction: "reverse"},
+		{ID: "u1"},
+	}
+	ranks := []caseRank{
+		{id: "d1", rank: 0},  // top-1
+		{id: "d2", rank: 3},  // in top-K, not top-1
+		{id: "r1", rank: -1}, // miss
+		{id: "r2", rank: -1}, // miss
+		{id: "u1", rank: 0},
+	}
+	outcomes := []poolOutcome{
+		{id: "d1", class: poolHitK},
+		{id: "d2", class: poolHitK},
+		{id: "r1", class: poolGenerationMiss},
+		{id: "r2", class: poolRankingMiss},
+		{id: "u1", class: poolHitK},
+	}
+
+	got := directionSplit(cases, ranks, outcomes)
+
+	if len(got) != 3 {
+		t.Fatalf("buckets = %+v, want direct/reverse/unlabeled", got)
+	}
+	if got[0].name != "direct" || got[0].scored != 2 || got[0].hit1 != 1 || got[0].hitK != 2 {
+		t.Fatalf("direct bucket = %+v, want scored=2 hit1=1 hitK=2", got[0])
+	}
+	if got[0].generationMiss != 0 || got[0].rankingMiss != 0 {
+		t.Fatalf("direct bucket leaked reverse misses: %+v", got[0])
+	}
+	if got[1].name != "reverse" || got[1].scored != 2 || got[1].hitK != 0 {
+		t.Fatalf("reverse bucket = %+v, want scored=2 hitK=0", got[1])
+	}
+	if got[1].generationMiss != 1 || got[1].rankingMiss != 1 {
+		t.Fatalf("reverse miss attribution = %+v, want one of each kind", got[1])
+	}
+	if got[2].name != "" || got[2].scored != 1 {
+		t.Fatalf("unlabeled bucket = %+v, want the single unlabeled case", got[2])
+	}
+
+	var out bytes.Buffer
+	writeDirectionSplit(&out, 2, 5, got)
+	for _, want := range []string{
+		"RECALL_BENCH_DIRECTION k=2 direction=direct n=2 p@1=50.0% r@2=100.0% pool_depth=5 ranking_miss=0 generation_miss=0\n",
+		"RECALL_BENCH_DIRECTION k=2 direction=reverse n=2 p@1=0.0% r@2=0.0% pool_depth=5 ranking_miss=1 generation_miss=1\n",
+		"RECALL_BENCH_DIRECTION k=2 direction=(unlabeled) n=1 ",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("direction report missing %q\ngot:\n%s", want, out.String())
+		}
+	}
+}
+
+// An unlabeled gold set must produce byte-identical output to before the axis
+// existed — the same rule the lifecycle metrics follow. And with the pool probe
+// off, the split must still report recall rather than printing zeroed miss
+// counts that read as "no generation misses".
+func TestDirectionSplitIsSilentUnlabeledAndOmitsMissesWithoutPoolProbe(t *testing.T) {
+	unlabeled := []goldCase{{ID: "a"}, {ID: "b"}}
+	if got := directionSplit(unlabeled, []caseRank{{id: "a", rank: 0}, {id: "b", rank: -1}}, nil); got != nil {
+		t.Fatalf("unlabeled gold produced a split: %+v", got)
+	}
+	var quiet bytes.Buffer
+	writeDirectionSplit(&quiet, 8, 0, nil)
+	if quiet.Len() != 0 {
+		t.Fatalf("unlabeled run wrote %q, want no output", quiet.String())
+	}
+
+	labeled := []goldCase{{ID: "r1", Direction: "reverse"}}
+	got := directionSplit(labeled, []caseRank{{id: "r1", rank: -1}}, nil)
+	if len(got) != 1 || got[0].poolScored != 0 {
+		t.Fatalf("split without pool probe = %+v, want a single bucket with poolScored=0", got)
+	}
+	var out bytes.Buffer
+	writeDirectionSplit(&out, 8, 0, got)
+	dataLine := strings.SplitN(out.String(), "\n", 2)[0]
+	if strings.Contains(dataLine, "miss") {
+		t.Fatalf("miss counts printed without a pool probe to measure them: %s", dataLine)
+	}
+	if dataLine != "RECALL_BENCH_DIRECTION k=8 direction=reverse n=1 p@1=0.0% r@8=0.0%" {
+		t.Fatalf("recall line = %q", dataLine)
+	}
+	if !strings.Contains(out.String(), "Add --pool-depth") {
+		t.Fatalf("legend must point at the flag that makes the split actionable: %s", out.String())
+	}
+}
