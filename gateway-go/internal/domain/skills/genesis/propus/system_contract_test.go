@@ -248,6 +248,11 @@ func TestPropusActionPriorityReturnsRanksForKnownActionsCaseSensitively(t *testi
 			want:   20,
 		},
 		{
+			name:   "bypass",
+			action: "inspect_bypassed_skill_runs",
+			want:   20,
+		},
+		{
 			name:   "continue",
 			action: "continue_observing",
 			want:   0,
@@ -430,6 +435,12 @@ func TestPropusNextCueSelectsMessageByFirstMatchingActionOrStateFallback(t *test
 			state:   "steady",
 			actions: []string{"tag_validation_cases_easy_mixed_hard"},
 			want:    "validation case에 easy/mixed/hard frontier tier를 붙이세요",
+		},
+		{
+			name:    "bypass",
+			state:   "steady",
+			actions: []string{"inspect_bypassed_skill_runs"},
+			want:    "성공했지만 스킬 절차가 실행되지 않은 런을 확인하세요 — 트리거가 넓거나 본문이 낡았습니다",
 		},
 		{
 			name:    "idle",

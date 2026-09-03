@@ -63,6 +63,7 @@ attempt; it does not mean the change shipped. Delivery advances through
 | `surfaces/surfaces.go` | `EditableSurface`, `ClassifySurface`, `DeclaredEditableSurfaces` whitelist |
 | `workout.go` | Synthetic exercise lane — evidence only, never real usage |
 | `curriculum.go` | Demand-generation lane (RSI P5-1) — coverage-gap mining; files route=genesis opportunities with validation cases authored first (source=`curriculum`, propose-only) |
+| `tracker_usage_bypass.go` | Success-side evidence split — counted successes where a delivered skill's declared procedure never ran (`SkillBypassSignal`). ADVISORY: surfaces a Propus backlog action, never feeds the evolver gate. |
 | `tracker_self_correction.go` | Self-correction candidate record/query + forbidden-surface gate |
 | `tracker_self_correction_dispatch_selection.go` | Canonical O(n) L4 candidate selection across review, delivery, source, and surface policy |
 | `lifecycle/` | Stable L1-L4 display identity and authoritative L4 review/delivery state kernel |
@@ -97,6 +98,28 @@ thrash (`genesis/tracker.go:58`, PR #2328 — 6 evolves in ~2 days on one skill,
 | `real` (client/cron turn) | ✅ Yes |
 | `review-verdict`, `review-consult` (review fork) | ❌ No |
 | `workout` (synthetic) | ❌ No |
+
+## Bypassed Successes — the success-side blind spot (`tracker_usage_bypass.go`)
+
+성공률 게이트와 idle 큐레이터는 **성공하는데 아무 일도 안 하는 스킬**에 절대 닿지
+못한다. 스킬이 턴에 배달되고, 선언된 절차(`exercise_tools` / 출력 증거)는 하나도
+실행되지 않았는데, 턴은 성공한 경우 — 그 기록은 성공으로 집계돼 성공률을 **올리고**,
+진화는 저성과자에게만 발동하므로 영원히 재검토되지 않는다. 배달은 계속되니 idle도
+아니다. 즉 기여를 멈춘 순간이 가장 건강해 보인다.
+
+`SkillBypassSignal`이 그 성공들을 센다 (`SkillFailureLayers`의 성공 쪽 여집합 —
+같은 counted-record 집합을 정확히 반으로 나눈다). 분모는 `AttributedSuccesses()`
+= exercised + bypassed 로, 귀속 불가 기록은 **무죄 추정 없이 제외**한다. 배달 경로별
+분리(`AutoLoadBypasses` / `ModelReadBypasses`)는 서로 다른 수리를 가리킨다 —
+auto-load 우회는 트리거가 넓다는 뜻, model-read 우회는 본문이 쓸모없다는 뜻.
+
+- **자문 전용.** evolver의 성공률 게이트를 건드리지 않는다. 증거 이력 없는 신호에
+  게이트를 다시 가중하는 것이 evolve thrash의 시작이다 (PR #2328).
+- **두 바닥값을 모두 넘어야** 표면화된다: 귀속 성공 ≥ 4, 우회율 ≥ 50%
+  (`Actionable()`). 넘으면 Propus overview가 `has_backlog` +
+  `inspect_bypassed_skill_runs`를 올린다 — 실패가 아니므로 경보가 아니라 backlog다.
+- 출처: EvoHarness-RL (arXiv 2608.05446)의 write-back 규칙 — 회상한 경험이 비었거나
+  실제와 어긋났으면 **성공한 턴에서도** 정정을 기록해야 한다.
 
 ## Self-Correction Capture Funnel
 

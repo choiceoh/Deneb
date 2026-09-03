@@ -66,10 +66,15 @@ func Curator(records []genesis.SkillCuratorRecord) []propus.SkillCuratorRecord {
 	return out
 }
 
-// UsageQuality projects usage filtering counts.
+// UsageQuality projects usage filtering counts plus the success-side bypass
+// split. Actionable() is evaluated here rather than in propus so the evidence
+// and rate floors stay next to the evidence that defines them.
 func UsageQuality(summary genesis.UsageQualitySummary) propus.UsageQualitySummary {
 	return propus.UsageQualitySummary{
 		TotalRecords: summary.TotalRecords, CountedRecords: summary.CountedRecords, IgnoredRecords: summary.IgnoredRecords,
+		BypassedSuccesses:   summary.Bypass.BypassedSuccesses,
+		AttributedSuccesses: summary.Bypass.AttributedSuccesses(),
+		BypassActionable:    summary.Bypass.Actionable(),
 	}
 }
 

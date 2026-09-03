@@ -52,6 +52,14 @@ type UsageQualitySummary struct {
 	TotalRecords   int
 	CountedRecords int
 	IgnoredRecords int
+	// BypassedSuccesses / AttributedSuccesses carry the success-side bypass
+	// split: runs where a skill was delivered, its declared procedure never
+	// ran, and the turn succeeded anyway. BypassActionable is the genesis-side
+	// verdict (evidence + rate floors) — the thresholds stay with the evidence,
+	// so this projection renders a decision it does not make.
+	BypassedSuccesses   int
+	AttributedSuccesses int
+	BypassActionable    bool
 }
 
 // SkillValidationCaseSummary is the validation-corpus projection used by Propus.
@@ -266,6 +274,7 @@ type PropusOverview struct {
 	SuccessRate            float64                `json:"successRate,omitempty"`
 	CountedUsageRecords    int                    `json:"countedUsageRecords"`
 	IgnoredUsageRecords    int                    `json:"ignoredUsageRecords"`
+	BypassedSkillRuns      int                    `json:"bypassedSkillRuns,omitempty"`
 	ValidationCases        int                    `json:"validationCases"`
 	SkillsWithValidation   int                    `json:"skillsWithValidation,omitempty"`
 	PendingSelfCorrections int                    `json:"pendingSelfCorrections"`
@@ -345,6 +354,14 @@ func BuildPropusOverview(input PropusOverviewInput) PropusOverview {
 			nextActions = append(nextActions, "route_opportunity_backlog")
 		}
 	}
+	// Bypassed successes are a backlog, not an alarm: the runs SUCCEEDED, so
+	// nothing is broken right now. What they say is that a delivered skill has
+	// stopped earning its place in the turn, which no other signal can raise —
+	// its success rate is fine and it is never idle enough for the curator.
+	if input.UsageQuality.BypassActionable {
+		state = propusMaxState(state, "has_backlog")
+		nextActions = append(nextActions, "inspect_bypassed_skill_runs")
+	}
 
 	doctrineCoverage, doctrineActions := EvaluatePropusDoctrineCoverage(counts, input.ValidationSummary, len(input.Opportunities))
 	nextActions = appendUniqueStrings(nextActions, doctrineActions...)
@@ -362,6 +379,7 @@ func BuildPropusOverview(input PropusOverviewInput) PropusOverview {
 		LowSuccessSkills:       lowSuccessSkills,
 		CountedUsageRecords:    input.UsageQuality.CountedRecords,
 		IgnoredUsageRecords:    input.UsageQuality.IgnoredRecords,
+		BypassedSkillRuns:      input.UsageQuality.BypassedSuccesses,
 		ValidationCases:        input.ValidationSummary.UniqueRecords,
 		SkillsWithValidation:   input.ValidationSummary.SkillsWithCases,
 		PendingSelfCorrections: len(input.SelfCorrections),
@@ -614,6 +632,8 @@ func PropusNextCue(state string, nextActions []string) string {
 			return "Self-Harness target signature 재발을 확인하세요"
 		case "triage_opportunity_backlog", "route_opportunity_backlog":
 			return "opportunity backlog를 route/evolve/no-op로 정리하세요"
+		case "inspect_bypassed_skill_runs":
+			return "성공했지만 스킬 절차가 실행되지 않은 런을 확인하세요 — 트리거가 넓거나 본문이 낡았습니다"
 		case "tag_validation_cases_easy_mixed_hard":
 			return "validation case에 easy/mixed/hard frontier tier를 붙이세요"
 		}
@@ -697,7 +717,7 @@ func propusActionPriority(action string) int {
 		return 40
 	case "record_validation_case_from_session", "backfill_validation_cases_for_active_skills", "require_failure_signature_audit_before_next_evolve", "tag_validation_cases_easy_mixed_hard", "collect_more_validation_cases_before_large_rewrite":
 		return 30
-	case "triage_opportunity_backlog", "route_opportunity_backlog", "record_repeated_noop_or_near_miss_as_opportunity":
+	case "triage_opportunity_backlog", "route_opportunity_backlog", "record_repeated_noop_or_near_miss_as_opportunity", "inspect_bypassed_skill_runs":
 		return 20
 	default:
 		return 0
