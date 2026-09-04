@@ -242,6 +242,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		// Refine the live "thinking" chip into a fast-model Korean progress line
 		// (Option A). Uses the enriched run ctx so summaries stop when the run does.
 		broadcaster.SetThinkingSummarizer(newThinkingSummarizer(ctx))
+		broadcaster.SetReasoningVisible(showThinkingInChat(deps, params.SessionKey))
 	}
 	typingSignaler := startRunTypingSignaler(ctx, params, deps)
 

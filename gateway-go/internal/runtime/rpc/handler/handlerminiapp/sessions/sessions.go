@@ -146,6 +146,13 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 			return rpcerr.WrapUnavailable("transcript load failed", err).Response(req.ID)
 		}
 
+		// A session that asked not to see reasoning (ShowThinkingInChat) must not
+		// get it back on reload either — the live stream already withholds it.
+		showReasoning := true
+		if sess := deps.Manager.Get(key); sess != nil && sess.ShowThinkingInChat != nil {
+			showReasoning = *sess.ShowThinkingInChat
+		}
+
 		// Display-only sanitation, same pipeline as chat.history: hide
 		// link-enrichment appendages from user bubbles, drop tool_result
 		// messages so raw tool output (ps dumps, command stdout) never renders
@@ -212,11 +219,15 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 			if strings.HasPrefix(id, syntheticTraceAnchor) {
 				id = ""
 			}
+			reasoning := ""
+			if showReasoning {
+				reasoning = decodeThinkingContent(m.Content)
+			}
 			rows = append(rows, transcriptMsgOut{
 				ID:          id,
 				Role:        m.Role,
 				Content:     content,
-				Reasoning:   decodeThinkingContent(m.Content),
+				Reasoning:   reasoning,
 				Attachments: atts,
 				TimestampMs: m.Timestamp,
 				ToolTrace:   trace,

@@ -2,12 +2,14 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
@@ -95,5 +97,63 @@ func TestDeliverDirectiveReplyTextSkipsFormattingWithNoChannelPush(t *testing.T)
 	cancel()
 	if calls != 1 {
 		t.Fatalf("translator called %d times, want 1 when the reply still needs a channel push", calls)
+	}
+}
+
+func TestSessionShowsThinkingGatesEveryReasoningSurface(t *testing.T) {
+	// The setting used to gate only the 🧠 blockquote, whose delivery has no
+	// production wiring — so turning thinking off changed nothing the operator
+	// could see. It has to answer for the surfaces that do render reasoning.
+	mgr := session.NewManager()
+	off := false
+	on := true
+	// Manager.Get hands back a copy, so a stored session is the only one that
+	// counts — mutating the value Create returned would change nothing.
+	quiet := mgr.Create("client:quiet", session.KindDirect)
+	quiet.ShowThinkingInChat = &off
+	if err := mgr.Set(quiet); err != nil {
+		t.Fatalf("store quiet session: %v", err)
+	}
+	loud := mgr.Create("client:loud", session.KindDirect)
+	loud.ShowThinkingInChat = &on
+	if err := mgr.Set(loud); err != nil {
+		t.Fatalf("store loud session: %v", err)
+	}
+
+	if sessionShowsThinking(mgr, "client:quiet") {
+		t.Fatal("a session with thinking off still reports it visible")
+	}
+	if !sessionShowsThinking(mgr, "client:loud") {
+		t.Fatal("a session with thinking on reports it hidden")
+	}
+	// Unknown session, unset field, and no manager all default to showing it.
+	if !sessionShowsThinking(mgr, "client:never-seen") || !sessionShowsThinking(nil, "client:x") {
+		t.Fatal("the default must stay ON")
+	}
+}
+
+func TestAttachThinkingDisplaySkipsSessionsWithThinkingOff(t *testing.T) {
+	// Nothing is spent translating reasoning the session asked not to see.
+	mgr := session.NewManager()
+	off := false
+	sess := mgr.Create("client:quiet", session.KindDirect)
+	sess.ShowThinkingInChat = &off
+	if err := mgr.Set(sess); err != nil {
+		t.Fatalf("store session: %v", err)
+	}
+
+	calls := 0
+	deps := runDeps{
+		sessions: mgr,
+		translateThinking: func(context.Context, string) (string, bool) {
+			calls++
+			return "한국어", true
+		},
+	}
+	if got := attachThinkingDisplay(deps, "client:quiet", json.RawMessage(signedThinkingBlocks), nil); string(got) != signedThinkingBlocks {
+		t.Fatal("a session with thinking off got a display copy")
+	}
+	if calls != 0 {
+		t.Fatalf("translator called %d times for hidden reasoning", calls)
 	}
 }

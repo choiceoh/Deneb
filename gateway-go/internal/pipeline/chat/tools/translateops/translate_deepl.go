@@ -131,6 +131,11 @@ func translateBatchDeepL(ctx context.Context, batch []translateInput, lang strin
 			resolved[missIdx[i]] = text
 			rememberTranslated(target, missTexts[i], text)
 		}
+		// Land what was just paid for. The write thresholds only fire on the
+		// NEXT write, so without this the last batch before a restart — exactly
+		// the one the durable layer exists to keep — would still be lost. One
+		// file write per provider request, right after a network round trip.
+		translateDisk.flush()
 	}
 	for i, text := range resolved {
 		m := mapping[i]
@@ -197,6 +202,14 @@ func callDeepL(ctx context.Context, endpoint, key, target string, texts []string
 		form.Set("context", contextHint)
 	}
 	body := form.Encode()
+	// Characters actually sent — what the provider bills. Cache hits never
+	// reach here, which is exactly why this is the number worth recording:
+	// DeepL's /v2/usage reports only document counts on this plan.
+	chars := 0
+	for _, text := range texts {
+		chars += len([]rune(text))
+	}
+	translateDisk.recordUsage(chars, 1)
 	for attempt := 0; attempt < deeplRetryAttempts; attempt++ {
 		out, status, ok := postDeepLOnce(ctx, endpoint, key, body)
 		if ok {

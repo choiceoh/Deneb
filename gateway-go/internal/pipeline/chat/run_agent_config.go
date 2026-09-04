@@ -821,7 +821,7 @@ func buildMessagePersister(
 			}
 			// Carry the Korean the reader watched live into the transcript, so a
 			// reloaded conversation does not revert to the model's own language.
-			content = llm.FlexibleFromRaw(attachThinkingDisplay(deps, sanitized, logger))
+			content = llm.FlexibleFromRaw(attachThinkingDisplay(deps, params.SessionKey, sanitized, logger))
 		}
 		now := time.Now()
 		if deps.briefcaseMode {
