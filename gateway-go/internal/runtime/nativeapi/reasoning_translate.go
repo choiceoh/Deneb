@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
@@ -16,6 +17,10 @@ const (
 	// under the translator's own size cap — which refuses the whole text rather
 	// than part of it, so an uncut backlog would translate nothing at all.
 	liveReasoningChunkBytes = 4000
+	// finish runs on the path of the terminal frame, so the work it may do there
+	// is bounded: past this the remainder ships in the model's own language
+	// rather than holding the turn open.
+	liveReasoningFinishBudget = 8 * time.Second
 )
 
 // liveReasoningTranslator renders the live reasoning stream into Korean while it
@@ -47,6 +52,9 @@ type liveReasoningTranslator struct {
 	translate func(context.Context, string) (string, bool)
 	emit      func(text string)
 	logger    *slog.Logger
+	// finishBudget caps the terminal frame's tail work; a field so tests can
+	// shrink it without sleeping for the real one.
+	finishBudget time.Duration
 
 	mu sync.Mutex
 	// pending is the newest reasoning-so-far handed in by the sink.
@@ -70,7 +78,10 @@ func newLiveReasoningTranslator(
 	emit func(text string),
 	logger *slog.Logger,
 ) *liveReasoningTranslator {
-	return &liveReasoningTranslator{ctx: ctx, translate: translate, emit: emit, logger: logger}
+	return &liveReasoningTranslator{
+		ctx: ctx, translate: translate, emit: emit, logger: logger,
+		finishBudget: liveReasoningFinishBudget,
+	}
 }
 
 // observe records the newest reasoning-so-far and starts a translation pass when
@@ -116,42 +127,98 @@ func (t *liveReasoningTranslator) stop() {
 	}
 }
 
-// finish renders the turn's final reasoning by extending what the live pass
-// already translated with the tail it never saw, and reports false when the live
-// block cannot stand in for the final text: nothing was translated, a chunk was
-// declined mid-stream, or the text is no longer an extension of what we hold
-// (the rolling window). The caller then translates the whole block instead.
+// finish renders the turn's final reasoning for the terminal frame: whatever the
+// live pass already translated, extended with everything it never covered.
 //
-// Reusing the live text is not only the cheaper call. Translating the block
-// again re-segments it, so its already-settled wording shifts under the reader
-// at the exact moment the turn completes — measured on a live turn: the same
-// opening sentence came back reworded once the done frame landed.
+// The final text is not the live stream verbatim. The executor joins each turn's
+// thinking blocks with a blank line (joinAllThinkingTexts, appendRunSection) and
+// the pipeline trims the result, so a byte-exact prefix test fails on every
+// multi-step turn — measured: sourceLen 1150, finalLen 1406, hasPrefix false.
+// Coverage is therefore matched on non-whitespace content.
 //
-// Call it after stop(): source and rendered are frozen from then on, because a
-// pass still inside the translator returns without touching them.
-func (t *liveReasoningTranslator) finish(final string) (string, bool) {
-	if t == nil {
-		return "", false
+// Nothing here re-translates the whole block. That one call is size-capped and
+// deadlined by the translator, and a long agentic turn is exactly when it
+// refuses — which turned a block that had been Korean all through the stream
+// back into English on its last frame. Instead the uncovered part is translated
+// in chunks within a budget, and whatever the budget does not reach ships as the
+// model wrote it: partly translated, never wholly undone.
+func (t *liveReasoningTranslator) finish(final string) string {
+	if t == nil || strings.TrimSpace(final) == "" {
+		return ""
 	}
 	t.mu.Lock()
-	source, rendered, declined := t.source, t.rendered, t.declined
+	source, rendered := t.source, t.rendered
 	t.mu.Unlock()
 
-	if rendered == "" || declined > 0 || !strings.HasPrefix(final, source) {
-		return "", false
+	base, rest := "", final
+	if covered, ok := coveredPrefix(final, source); ok && rendered != "" {
+		// Coverage ends at the last matched content byte, so the whitespace that
+		// follows it belongs to the remainder. Drop the rendered copy of it or
+		// the seam gets it twice — and the final text is the authority on what
+		// that whitespace is (a live sentence cut's space is a blank line there).
+		base, rest = strings.TrimRight(rendered, " \n\t\r"), final[covered:]
 	}
-	tail := final[len(source):]
-	if strings.TrimSpace(tail) == "" {
-		// Only trailing whitespace is left; keep it rather than translate it.
-		return rendered + tail, true
+
+	deadline := time.Now().Add(t.finishBudget)
+	for rest != "" {
+		// Whitespace carries over verbatim — the blank line between two turns is
+		// structure, not text to translate, and sending it would spend a call to
+		// get the same bytes back.
+		if lead := len(rest) - len(strings.TrimLeft(rest, " \n\t\r")); lead > 0 {
+			base += rest[:lead]
+			rest = rest[lead:]
+			continue
+		}
+		if time.Now().After(deadline) {
+			return joinRenderedChunk(base, rest)
+		}
+		chunk := rest
+		if len(chunk) > liveReasoningChunkBytes {
+			chunk = rest[:boundedReasoningCut(rest)]
+		}
+		rest = rest[len(chunk):]
+		out, ok := t.translate(t.ctx, chunk)
+		if !ok {
+			// Already Korean, or a refusal: show what the model wrote.
+			out = chunk
+		}
+		base = joinRenderedChunk(base, out)
 	}
-	// The turn is over, so the tail is settled by definition — no cut this time.
-	out, ok := t.translate(t.ctx, tail)
-	if !ok {
-		out = tail
-	}
-	return joinRenderedChunk(rendered, out), true
+	return base
 }
+
+// coveredPrefix reports how many bytes of final the already-translated source
+// covers, comparing non-whitespace content so the blank lines the executor
+// inserts between turns do not read as a mismatch. ok is false when source is
+// not the beginning of final at all — the rolling window dropped the head, the
+// final text is shorter than what streamed, or nothing was translated yet.
+func coveredPrefix(final, source string) (int, bool) {
+	if strings.TrimSpace(source) == "" {
+		return 0, false
+	}
+	i, j, end := 0, 0, 0
+	for {
+		for j < len(source) && isSpaceByte(source[j]) {
+			j++
+		}
+		if j == len(source) {
+			return end, true
+		}
+		for i < len(final) && isSpaceByte(final[i]) {
+			i++
+		}
+		// Byte comparison is rune comparison here: a whitespace byte never
+		// appears inside a multi-byte UTF-8 sequence.
+		if i == len(final) || final[i] != source[j] {
+			return 0, false
+		}
+		i++
+		j++
+		end = i
+	}
+}
+
+func isSpaceByte(b byte) bool { return b == ' ' || b == '\n' || b == '\t' || b == '\r' }
 
 // drain translates settled text until nothing is settled or the stream stops.
 func (t *liveReasoningTranslator) drain() {

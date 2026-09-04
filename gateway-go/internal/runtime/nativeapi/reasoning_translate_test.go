@@ -213,62 +213,117 @@ func TestLiveReasoningTranslatorPicksUpTextArrivingAsAPassEnds(t *testing.T) {
 	}
 }
 
-func TestLiveReasoningFinishExtendsTheLiveBlock(t *testing.T) {
-	// The done frame must continue the text the reader has been watching, not
-	// re-translate it: only the tail the live cut held back reaches the
-	// translator, and the settled part comes back untouched.
+func TestLiveReasoningFinishExtendsAcrossTheExecutorSeparator(t *testing.T) {
+	// The bug this shape exists for: the executor joins each turn's thinking
+	// blocks with a blank line, so the final text is never a byte-exact
+	// extension of what streamed. Coverage must survive that, or the whole block
+	// gets re-translated and reverts to English when that call is refused.
 	h := newLiveHarness(t, markKorean)
-	h.live.observe("settled sentence. ")
-	if got := h.nextFrame(t); got != "[ko]settled sentence. " {
+	h.live.observe("step one thought. ")
+	if got := h.nextFrame(t); got != "[ko]step one thought. " {
 		t.Fatalf("live frame = %q", got)
 	}
 	h.live.stop()
 
-	got, ok := h.live.finish("settled sentence. and the tail.")
-	if !ok {
-		t.Fatal("finish declined a final text that extends the live block")
-	}
-	if got != "[ko]settled sentence. [ko]and the tail." {
+	// The separator comes from the final text, not from the live cut's space.
+	got := h.live.finish("step one thought.\n\nstep two thought.")
+	if got != "[ko]step one thought.\n\n[ko]step two thought." {
 		t.Fatalf("finish = %q, want the live block plus the translated tail", got)
 	}
-	if calls := h.translated(); len(calls) != 2 || calls[1] != "and the tail." {
-		t.Fatalf("translator saw %q, want only the tail on the second call", calls)
+	calls := h.translated()
+	if len(calls) != 2 || strings.Contains(calls[1], "step one") {
+		t.Fatalf("translator saw %q, want only the uncovered tail on the second call", calls)
 	}
 }
 
-func TestLiveReasoningFinishDeclinesWhatItCannotExtend(t *testing.T) {
-	h := newLiveHarness(t, markKorean)
-	h.live.observe("head.\n")
-	if got := h.nextFrame(t); got != "[ko]head.\n" {
-		t.Fatalf("live frame = %q", got)
-	}
-	h.live.stop()
-
-	// Not an extension of what we rendered (the rolling window dropped the head):
-	// the caller must translate the whole block instead of splicing.
-	if _, ok := h.live.finish("a different block entirely."); ok {
-		t.Fatal("finish accepted a final text the live block cannot cover")
-	}
-
-	// Nothing rendered at all — the same answer, without a live block to reuse.
+func TestLiveReasoningFinishTranslatesWhatTheLiveBlockCannotCover(t *testing.T) {
+	// No live block at all (a model that streams no reasoning deltas), and a
+	// rolling window that dropped the head: both must still come back Korean —
+	// the old whole-block retry is what shipped English here.
 	fresh := newLiveHarness(t, markKorean)
-	if _, ok := fresh.live.finish("anything"); ok {
-		t.Fatal("finish accepted with no live translation behind it")
+	if got := fresh.live.finish("a block that never streamed."); got != "[ko]a block that never streamed." {
+		t.Fatalf("finish with no live block = %q", got)
+	}
+
+	rolled := newLiveHarness(t, markKorean)
+	rolled.live.observe("dropped head.\n")
+	if got := rolled.nextFrame(t); got != "[ko]dropped head.\n" {
+		t.Fatalf("live frame = %q", got)
+	}
+	rolled.live.stop()
+	if got := rolled.live.finish("an entirely different block."); got != "[ko]an entirely different block." {
+		t.Fatalf("finish after a roll = %q, want the whole text translated", got)
 	}
 }
 
-func TestLiveReasoningFinishDeclinesAfterARefusal(t *testing.T) {
-	// A chunk the translator declined is still English inside the rendered
-	// block; the whole-text retry at the done frame is what repairs it.
-	h := newLiveHarness(t, func(string) (string, bool) { return "", false })
-	h.live.observe("english that was not translated.\n")
-	if got := h.nextFrame(t); got != "english that was not translated.\n" {
-		t.Fatalf("live frame = %q", got)
-	}
-	h.live.stop()
+func TestLiveReasoningFinishChunksPastTheWholeBlockCap(t *testing.T) {
+	// A block far past one call's budget must not be all-or-nothing: it arrives
+	// in chunks, each small enough that the translator's size cap cannot refuse
+	// it, and every byte of the source is accounted for.
+	h := newLiveHarness(t, markKorean)
+	block := strings.Repeat("A settled sentence about the code. ", 500) // ~17KB
+	got := h.live.finish(block)
 
-	if _, ok := h.live.finish("english that was not translated.\nmore."); ok {
-		t.Fatal("finish reused a block that still holds a declined chunk")
+	calls := h.translated()
+	if len(calls) < 4 {
+		t.Fatalf("translator calls = %d, want the block split into several", len(calls))
+	}
+	for i, c := range calls {
+		if len(c) > liveReasoningChunkBytes {
+			t.Fatalf("chunk %d = %d bytes, want <= %d", i, len(c), liveReasoningChunkBytes)
+		}
+	}
+	if joined := strings.ReplaceAll(got, "[ko]", ""); joined != block {
+		t.Fatalf("finish lost or reordered source text (%d bytes vs %d)", len(joined), len(block))
+	}
+}
+
+func TestLiveReasoningFinishShipsTheRemainderWhenTheBudgetRunsOut(t *testing.T) {
+	// The terminal frame must not hang on a slow translator: what the budget
+	// does not reach ships as the model wrote it — partly translated, never
+	// held open.
+	h := newLiveHarness(t, func(text string) (string, bool) {
+		time.Sleep(30 * time.Millisecond)
+		return "[ko]" + text, true
+	})
+	h.live.finishBudget = 10 * time.Millisecond
+
+	block := strings.Repeat("A settled sentence about the code. ", 500)
+	start := time.Now()
+	got := h.live.finish(block)
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("finish took %s, want it bounded by the budget", elapsed)
+	}
+	if !strings.HasPrefix(got, "[ko]") {
+		t.Fatalf("finish = %q…, want the first chunk translated", got[:40])
+	}
+	if joined := strings.ReplaceAll(got, "[ko]", ""); joined != block {
+		t.Fatal("finish lost source text when the budget ran out")
+	}
+}
+
+func TestLiveReasoningFinishKeepsSourceOnRefusal(t *testing.T) {
+	h := newLiveHarness(t, func(string) (string, bool) { return "", false })
+	if got := h.live.finish("이미 한국어인 최종 추론입니다."); got != "이미 한국어인 최종 추론입니다." {
+		t.Fatalf("finish = %q, want the original text", got)
+	}
+}
+
+func TestCoveredPrefixStopsAtTheFirstRealMismatch(t *testing.T) {
+	if _, ok := coveredPrefix("a totally different block", "streamed text"); ok {
+		t.Fatal("coveredPrefix accepted a text that does not start with the source")
+	}
+	if _, ok := coveredPrefix("short", "a much longer streamed source"); ok {
+		t.Fatal("coveredPrefix accepted a final text shorter than the source")
+	}
+	if _, ok := coveredPrefix("anything", "   \n  "); ok {
+		t.Fatal("coveredPrefix accepted a blank source")
+	}
+	// Whitespace differences are not mismatches, and the cut lands right after
+	// the last matched byte so the separator rides along with the tail.
+	n, ok := coveredPrefix("one two.\n\nthree", "one\ntwo.")
+	if !ok || n != len("one two.") {
+		t.Fatalf("coveredPrefix = %d, %v; want %d, true", n, ok, len("one two."))
 	}
 }
 

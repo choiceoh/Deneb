@@ -401,6 +401,24 @@ func writeChatStreamSSE(
 	// join below, this is what guarantees nothing writes once this returns.
 	live.stop()
 
+	// Settle the reasoning while the keepalive is still ticking. The tail is a
+	// network call, and the client should keep hearing from us while it runs.
+	settledReasoning := ""
+	if runErr == nil && result != nil {
+		settledReasoning = result.Reasoning
+		if translateThinking != nil && strings.TrimSpace(settledReasoning) != "" {
+			// The client overwrites its expandable block with the done frame, so
+			// this is where the reasoning settles for good. finish extends what
+			// the stream already rendered instead of translating the block again
+			// — a second whole-block pass re-words text the reader has been
+			// watching, and when it is refused the block reverts to English.
+			// Fail-open: a blank result leaves the model's own text.
+			if out := live.finish(settledReasoning); strings.TrimSpace(out) != "" {
+				settledReasoning = out
+			}
+		}
+	}
+
 	// Stop and join the keepalive before the terminal frame so no comment can
 	// interleave after "done"/"error" and nothing writes once this returns.
 	close(stop)
@@ -415,25 +433,11 @@ func writeChatStreamSSE(
 	case result == nil:
 		writeEvent("error", map[string]string{"error": "empty result"})
 	default:
-		// The client overwrites its expandable reasoning block with this frame, so
-		// this is where the reasoning settles. Prefer extending what the live path
-		// already rendered — translating the block again would re-segment it and
-		// visibly reword text the reader has been watching — and fall back to
-		// translating the whole thing when the live text cannot stand in for it.
-		// Fail-open either way: the original ships on any refusal.
-		reasoning := result.Reasoning
-		if translateThinking != nil && strings.TrimSpace(reasoning) != "" {
-			if settled, ok := live.finish(reasoning); ok && strings.TrimSpace(settled) != "" {
-				reasoning = settled
-			} else if translated, ok := translateThinking(ctx, reasoning); ok && strings.TrimSpace(translated) != "" {
-				reasoning = translated
-			}
-		}
 		writeEvent("done", map[string]any{
 			"text":      result.Text,
 			"model":     result.Model,
 			"fellBack":  result.FellBack,
-			"reasoning": reasoning,
+			"reasoning": settledReasoning,
 		})
 	}
 }
