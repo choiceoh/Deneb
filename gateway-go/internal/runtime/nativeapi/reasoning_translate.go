@@ -220,23 +220,30 @@ func isSpaceByte(b byte) bool { return b == ' ' || b == '\n' || b == '\t' || b =
 
 // drain translates settled text until nothing is settled or the stream stops.
 func (t *liveReasoningTranslator) drain() {
-	// The worker clears inFlight itself on every ordinary exit (see below), so
-	// the only thing left to unwedge is a panic: without this the flag would
-	// stay set and no later frame could ever start a pass again. Re-panic so
-	// safego still logs it.
+	// GoWithSlog owns panic recovery and logging at the goroutine boundary. This
+	// defer only restores the worker invariant while a panic unwinds through
+	// drain; ordinary exits clear inFlight under mu before unlocking so a new
+	// observer cannot start a worker that this cleanup would then overwrite.
+	muHeld := false
+	cleanupOnUnwind := true
 	defer func() {
-		if r := recover(); r != nil {
-			t.mu.Lock()
-			t.inFlight = false
-			t.mu.Unlock()
-			panic(r)
+		if !cleanupOnUnwind {
+			return
 		}
+		if !muHeld {
+			t.mu.Lock()
+		}
+		t.inFlight = false
+		t.mu.Unlock()
 	}()
 
 	for {
 		t.mu.Lock()
+		muHeld = true
 		if t.stopped {
 			t.inFlight = false
+			cleanupOnUnwind = false
+			muHeld = false
 			t.mu.Unlock()
 			return
 		}
@@ -255,9 +262,12 @@ func (t *liveReasoningTranslator) drain() {
 			// sees no pass running and starts one, instead of being swallowed by a
 			// worker that had already read pending and was on its way out.
 			t.inFlight = false
+			cleanupOnUnwind = false
+			muHeld = false
 			t.mu.Unlock()
 			return
 		}
+		muHeld = false
 		t.mu.Unlock()
 
 		out, ok := t.translate(t.ctx, chunk)
@@ -271,8 +281,11 @@ func (t *liveReasoningTranslator) drain() {
 		display := joinRenderedChunk(rendered, out)
 
 		t.mu.Lock()
+		muHeld = true
 		if t.stopped {
 			t.inFlight = false
+			cleanupOnUnwind = false
+			muHeld = false
 			t.mu.Unlock()
 			return
 		}
@@ -284,6 +297,7 @@ func (t *liveReasoningTranslator) drain() {
 			t.declined++
 		}
 		t.emit(display)
+		muHeld = false
 		t.mu.Unlock()
 	}
 }
