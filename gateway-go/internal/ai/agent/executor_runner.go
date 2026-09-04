@@ -348,7 +348,14 @@ func (r *agentRunner) validateAndAccountTurn(prepared preparedAgentTurn, result 
 	if err := r.reserveToolCallAttempts(prepared.index, len(result.toolCalls)); err != nil {
 		return agentTurnStats{}, err
 	}
-	return r.state.recordTurn(result), nil
+	stats := r.state.recordTurn(result)
+	// The seam this turn just created in the run's thinking text: recordTurn
+	// appends the next section behind a blank line, so a live consumer of the
+	// raw deltas is told here rather than left to guess where turns met.
+	if r.hooks.OnThinkingBreak != nil {
+		r.hooks.OnThinkingBreak()
+	}
+	return stats, nil
 }
 
 func (r *agentRunner) validateProviderModel(turn int, result *turnResult) error {

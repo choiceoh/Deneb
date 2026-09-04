@@ -360,6 +360,17 @@ func deliverDirectiveReplyText(
 			"hasMedia", len(directives.MediaURLs) > 0)
 		return func() {}
 	}
+	// Nothing will be pushed to a channel: the native client already has the
+	// reply over SSE, or this is a sub-agent / channel-less run. Decide that
+	// BEFORE formatting, because formatRunReplyText translates the whole
+	// reasoning block for the 🧠 blockquote — a DeepL round trip, on the turn's
+	// completion path, for text this branch then throws away.
+	if deps.callbacks.replyFunc == nil && channelReplyAlreadyHandled(params, deps, sseDelivered) {
+		logger.Debug("reply needs no channel push (native SSE, sub-agent, or channel-less run); skipping formatting",
+			"session", params.SessionKey,
+			"channel", params.Delivery.Channel)
+		return func() {}
+	}
 	replyText := formatRunReplyText(params, deps, result, directives.Text)
 	if replyText == "" {
 		return func() {}
@@ -403,6 +414,10 @@ func channelReplyAlreadyHandled(params RunParams, deps runDeps, sseDelivered boo
 
 func handleMissingChannelReply(params RunParams, deps runDeps, replyText string, sseDelivered bool, logger *slog.Logger) {
 	if channelReplyAlreadyHandled(params, deps, sseDelivered) {
+		// deliverDirectiveReplyText returns before formatting in this shape, so
+		// reaching here means a caller took another route to a run whose reply
+		// was already delivered. Not an outage — the output is read via
+		// LastOutput — but keep the observation rather than assume.
 		logger.Debug("run produced reply text but has no channel replyFunc (expected: sub-agent or channel-less session; output read via LastOutput)",
 			"session", params.SessionKey,
 			"channel", params.Delivery.Channel,

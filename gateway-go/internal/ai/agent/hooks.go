@@ -4,11 +4,19 @@ package agent
 // StreamHooks contains optional callbacks for agent streaming events.
 // All fields are optional — nil callbacks are silently skipped.
 type StreamHooks struct {
-	OnTextDelta  func(text string)                                // text delta streamed from LLM
-	OnThinking   func(delta string)                               // reasoning/thinking delta received (delta = the reasoning text chunk)
-	OnToolStart  func(name, reason string, input []byte)          // tool invocation about to execute; reason is thinking text, input is raw JSON args
-	OnToolEmit   func(name, toolUseID string, input []byte)       // tool start broadcast (name + ID + raw JSON args for streaming)
-	OnToolResult func(name, toolUseID, result string, isErr bool) // tool result broadcast
+	OnTextDelta func(text string)  // text delta streamed from LLM
+	OnThinking  func(delta string) // reasoning/thinking delta received (delta = the reasoning text chunk)
+	// OnThinkingBreak fires when a turn is committed, marking the seam the run's
+	// assembled thinking text will carry as a blank line (appendRunSection). A
+	// live consumer that concatenates the raw deltas needs it to end up with the
+	// same shape as AgentResult.Thinking; without it the two texts differ by
+	// exactly those separators, and anything matching one against the other
+	// (the SSE reasoning translator) falls off its fast path on every
+	// multi-turn run.
+	OnThinkingBreak func()
+	OnToolStart     func(name, reason string, input []byte)          // tool invocation about to execute; reason is thinking text, input is raw JSON args
+	OnToolEmit      func(name, toolUseID string, input []byte)       // tool start broadcast (name + ID + raw JSON args for streaming)
+	OnToolResult    func(name, toolUseID, result string, isErr bool) // tool result broadcast
 	// OnToolProgress fires periodically while a single tool call is still
 	// executing (e.g., long-running `exec` or network fetch). Intended to
 	// refresh surface liveness indicators (client typing "...") so the
@@ -28,6 +36,7 @@ type StreamHooks struct {
 type HookCompositor struct {
 	textDelta    []func(string)
 	thinking     []func(string)
+	thinkingBrk  []func()
 	toolStart    []func(string, string, []byte)
 	toolEmit     []func(string, string, []byte)
 	toolResult   []func(string, string, string, bool)
@@ -41,6 +50,9 @@ func (c *HookCompositor) OnTextDelta(fn func(string)) { c.textDelta = append(c.t
 
 // OnThinking appends a streamed reasoning observer.
 func (c *HookCompositor) OnThinking(fn func(string)) { c.thinking = append(c.thinking, fn) }
+
+// OnThinkingBreak appends a turn-seam observer for the reasoning stream.
+func (c *HookCompositor) OnThinkingBreak(fn func()) { c.thinkingBrk = append(c.thinkingBrk, fn) }
 
 // OnToolStart appends a tool-start observer.
 func (c *HookCompositor) OnToolStart(fn func(string, string, []byte)) {
@@ -86,6 +98,13 @@ func (c *HookCompositor) Build() StreamHooks {
 		h.OnThinking = func(delta string) {
 			for _, fn := range fns {
 				fn(delta)
+			}
+		}
+	}
+	if fns := c.thinkingBrk; len(fns) > 0 {
+		h.OnThinkingBreak = func() {
+			for _, fn := range fns {
+				fn()
 			}
 		}
 	}

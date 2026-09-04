@@ -50,3 +50,52 @@ func TestEmitThinkingCarriesFullReasoning(t *testing.T) {
 		t.Fatalf("emitted reasoningFull = %q, want the accumulated reasoning", got)
 	}
 }
+
+// TestMarkThinkingBreakMatchesTheAssembledShape locks the live reasoning text to
+// the shape of AgentResult.Thinking: the executor puts a blank line between two
+// turns' thinking (appendRunSection), so the stream must too. Without it the two
+// texts differ by exactly those separators, and the SSE translator that matches
+// one against the other loses its fast path on every multi-turn run.
+func TestMarkThinkingBreakMatchesTheAssembledShape(t *testing.T) {
+	sb := NewBroadcaster(nil, "s1", "r1")
+	sb.appendThinking("first turn thought.")
+	sb.MarkThinkingBreak()
+	sb.appendThinking("second turn thought.")
+	if got, want := sb.fullReasoning(), "first turn thought.\n\nsecond turn thought."; got != want {
+		t.Fatalf("fullReasoning() = %q, want %q", got, want)
+	}
+}
+
+func TestMarkThinkingBreakLeavesNoTrailingSeam(t *testing.T) {
+	// The last turn of a run is followed by no further reasoning, and the
+	// assembled text has no trailing blank line either.
+	sb := NewBroadcaster(nil, "s1", "r1")
+	sb.appendThinking("only thought.")
+	sb.MarkThinkingBreak()
+	if got := sb.fullReasoning(); got != "only thought." {
+		t.Fatalf("fullReasoning() = %q, want no trailing seam", got)
+	}
+
+	// A seam before anything streamed is not a seam at all.
+	empty := NewBroadcaster(nil, "s1", "r1")
+	empty.MarkThinkingBreak()
+	empty.appendThinking("first thought.")
+	if got := empty.fullReasoning(); got != "first thought." {
+		t.Fatalf("fullReasoning() = %q, want no leading seam", got)
+	}
+}
+
+func TestMarkThinkingBreakLeavesTheChipTailAlone(t *testing.T) {
+	// The chip tail is a rolling 512-rune preview; a blank line there would only
+	// eat context out of a line the operator reads at a glance.
+	sb := NewBroadcaster(nil, "s1", "r1")
+	sb.appendThinking("first turn thought.")
+	sb.MarkThinkingBreak()
+	sb.appendThinking("second turn thought.")
+	sb.thinkingMu.Lock()
+	tail := string(sb.thinkingTail)
+	sb.thinkingMu.Unlock()
+	if tail != "first turn thought.second turn thought." {
+		t.Fatalf("thinkingTail = %q, want the seam kept out of the chip", tail)
+	}
+}

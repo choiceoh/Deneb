@@ -397,8 +397,11 @@ func (s *Server) configureSessionChatCallbacks(chatCfg *chat.HandlerConfig) {
 	// model reasons in English even on Korean turns (measured 2026-07-26: 82% of
 	// stored reasoning blocks are English-dominant). Left nil when DeepL is not
 	// configured, which disables the feature instead of failing once per turn.
+	// The block variant here, not the single-shot one: this surface renders a
+	// finished block in one pass, so an oversized run would come back wholly
+	// untranslated. The SSE stream cuts its own pieces as the text settles.
 	if toolbind.ThinkingTranslatorEnabled() {
-		chatCfg.TranslateThinking = toolbind.TranslateThinking
+		chatCfg.TranslateThinking = toolbind.TranslateThinkingBlock
 	}
 	chatCfg.RecordActivity = s.recordChatActivity
 }

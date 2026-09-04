@@ -166,3 +166,65 @@ func TestTranslateThinkingBoundsItsOwnDeadline(t *testing.T) {
 		t.Fatal("expected success")
 	}
 }
+
+func TestTranslateThinkingBlockSplitsPastTheSizeCap(t *testing.T) {
+	// TranslateThinking is all-or-nothing: one block over the cap comes back
+	// untranslated, which is how a long agentic turn's reasoning ended up
+	// entirely in English. Splitting first degrades it to "mostly Korean".
+	var seen []string
+	swapTranslator(t, func(_ context.Context, segments []string, _ string) ([]string, error) {
+		out := make([]string, len(segments))
+		for i, s := range segments {
+			seen = append(seen, s)
+			out[i] = "번역:" + s
+		}
+		return out, nil
+	})
+
+	block := strings.Repeat("A settled sentence about the code.\n", 900) // ~30KB
+	got, ok := TranslateThinkingBlock(context.Background(), block)
+	if !ok {
+		t.Fatal("an oversized block came back untranslated — the cap refused the whole thing")
+	}
+	if strings.Contains(got, "\n번역:") == false {
+		t.Fatalf("translation missing from the result: %q…", got[:60])
+	}
+	if len(seen) == 0 {
+		t.Fatal("the translator was never reached")
+	}
+	// Every line of the source survives exactly once, in order.
+	if plain := strings.ReplaceAll(got, "번역:", ""); plain != block {
+		t.Fatalf("split lost or reordered source text (%d bytes vs %d)", len(plain), len(block))
+	}
+}
+
+func TestTranslateThinkingBlockPassesAShortBlockStraightThrough(t *testing.T) {
+	calls := 0
+	swapTranslator(t, func(_ context.Context, segments []string, _ string) ([]string, error) {
+		calls++
+		out := make([]string, len(segments))
+		for i, s := range segments {
+			out[i] = "번역:" + s
+		}
+		return out, nil
+	})
+	got, ok := TranslateThinkingBlock(context.Background(), "one short reasoning line")
+	if !ok || got != "번역:one short reasoning line" {
+		t.Fatalf("short block = %q, ok=%v", got, ok)
+	}
+	if calls != 1 {
+		t.Fatalf("translator batches = %d, want 1 for a block that fits", calls)
+	}
+}
+
+func TestTranslateThinkingBlockKeepsRefusedPieces(t *testing.T) {
+	// Nothing translatable anywhere: the caller must be told so, rather than
+	// handed a copy of its own input as if it were a translation.
+	swapTranslator(t, func(context.Context, []string, string) ([]string, error) {
+		return nil, errors.New("deepl down")
+	})
+	block := strings.Repeat("A settled sentence about the code.\n", 900)
+	if got, ok := TranslateThinkingBlock(context.Background(), block); ok {
+		t.Fatalf("ok=true with every piece refused (got %d bytes)", len(got))
+	}
+}

@@ -64,6 +64,9 @@ func wireStreamHooks(
 		// Reasoning liveness for streaming transports (throttled inside the
 		// broadcaster — OnThinking fires once per reasoning delta).
 		hc.OnThinking(broadcaster.EmitThinking)
+		// Turn seams, so the live reasoning text has the same paragraph shape as
+		// the run's assembled AgentResult.Thinking.
+		hc.OnThinkingBreak(broadcaster.MarkThinkingBreak)
 		hc.OnToolEmit(func(name, toolUseID string, input []byte) {
 			// The detail hint (query/command/file name) turns the client's
 			// waiting chip from "메일 확인 중" into "메일 확인 중: 아르고".
