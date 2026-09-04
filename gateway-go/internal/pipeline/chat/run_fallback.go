@@ -13,6 +13,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -31,11 +32,16 @@ import (
 // engages the model fallback chain the same way a hard error does.
 var errModelStalled = errors.New("model produced no output before timeout (stream stall)")
 
-// stallFallbackBudget bounds the fallback attempt when a stall has already
-// consumed the per-turn deadline. A stall surfaces as a timeout result only
-// after the parent ctx is spent, so the fallback needs a fresh budget — but a
-// bounded one, so a wedged turn can't run unbounded. Single-user: a slightly
-// late answer from a healthy model beats silence.
+// errRunBudgetExhausted marks a live agent that completed tool rounds but hit
+// its wall-time budget before producing a final answer. The completed message
+// journal is safe to hand to a no-tools fallback for a bounded wrap-up; unlike
+// a whole-turn retry, that does not repeat already committed tool effects.
+var errRunBudgetExhausted = errors.New("run budget exhausted after tool work")
+
+// stallFallbackBudget bounds timeout recovery after the original run already
+// consumed its deadline. The fallback needs fresh time, but a wedged turn must
+// not run unbounded. Single-user: a slightly late answer from a healthy model
+// beats silence.
 const stallFallbackBudget = 90 * time.Second
 
 // errModelCircuitOpen marks a turn whose initial model was skipped because its
@@ -76,11 +82,10 @@ func healthyFallbackExists(reg *modelrole.Registry, role modelrole.Role, failedM
 //     leaves Turns >= 2, the same pin isEmptyFinalResult uses): the model was
 //     alive and productive, its budget just ran out. Automation turns narrate
 //     nothing (all output goes to tool inputs), so "no visible text" alone
-//     cannot mean "stalled". Re-running such a run on a fallback model repeats
-//     the committed tools' side effects and feeds the circuit breaker a fault
-//     the model didn't commit (live 2026-07-17: a mailpoll run filed wiki
-//     pages on k3[1m] for 6 rounds, hit the 360s stage-2 budget with zero
-//     prose, was misread as a stall, and glm re-ran the whole analysis).
+//     cannot mean "stalled". runInitialAttempt handles that shape separately
+//     by resuming a no-tools fallback from the completed message checkpoint;
+//     it must not feed the model circuit breaker a fault the model didn't
+//     commit.
 func isStalledResult(r *agent.AgentResult) bool {
 	return r != nil && r.StopReason == "timeout" && r.Turns <= 1 &&
 		strings.TrimSpace(r.AllText) == ""
@@ -159,6 +164,11 @@ type fallbackTurn struct {
 	// fallback's error — preserving the pre-fallback "stall = empty reply"
 	// behavior instead of surfacing a downstream error.
 	stalledResult *agent.AgentResult
+	// budgetExhaustedResult and resumeMessages preserve a timed-out run's
+	// completed tool work. A fallback starts from this checkpoint with tools
+	// disabled, so it can write the missing answer without replaying mutations.
+	budgetExhaustedResult *agent.AgentResult
+	resumeMessages        []llm.Message
 	// lastCompactInputHash detects idempotent compaction — if the prior
 	// attempt's input slice hashes to the same value, another compact.Compact
 	// call will produce the same output and we'd retry the same failure in a
@@ -277,10 +287,20 @@ func (t *fallbackTurn) runInitialAttempt(ctx context.Context) {
 			"model", t.cfg.Model, "stopReason", t.agentResult.StopReason)
 	case t.runErr == nil && t.agentResult != nil && t.agentResult.StopReason == "timeout" &&
 		t.agentResult.Turns > 1 && strings.TrimSpace(t.agentResult.AllText) == "":
-		// Not a stall: the model worked through tool rounds and ran out of
-		// budget. No fallback — a re-run would repeat committed side effects.
-		t.logger.Warn("run budget exhausted mid-work; not engaging fallback",
+		// Not a stall: the model completed tool rounds but ran out of wall time.
+		// Resume from the finalized message journal instead of re-running from
+		// the original input. The fallback disables tools, so even runs that
+		// committed mutations can safely get a final summary.
+		if len(t.agentResult.FinalMessages) == 0 {
+			t.logger.Warn("run budget exhausted mid-work; checkpoint unavailable",
+				"model", t.cfg.Model, "turns", t.agentResult.Turns)
+			break
+		}
+		t.logger.Warn("run budget exhausted mid-work; resuming no-tools fallback from checkpoint",
 			"model", t.cfg.Model, "turns", t.agentResult.Turns)
+		t.runErr = errRunBudgetExhausted
+		t.budgetExhaustedResult = t.agentResult
+		t.resumeMessages = t.agentResult.FinalMessages
 	}
 	t.synthStall(true)
 }
@@ -527,13 +547,11 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 	if t.runErr == nil || t.deps.registry == nil {
 		return
 	}
-	// Same side-effect guard as retryTransient: a fallback re-runs the full turn
-	// on another model from the original messages, which would re-execute any
-	// already-committed side-effecting tool. Skip the chain when one ran so a
-	// mutation is never duplicated; read-only turns (and pre-tool stalls, whose
-	// result carries no tools) still fall back. The turn then fails via
-	// finalizeFailure with the original error.
-	if resultRanSideEffectingTool(t.agentResult) {
+	// Same side-effect guard as retryTransient: an ordinary fallback re-runs the
+	// full turn from the original messages. The budget-recovery path is exempt:
+	// it resumes the finalized checkpoint with tools disabled, so no committed
+	// mutation can run again.
+	if len(t.resumeMessages) == 0 && resultRanSideEffectingTool(t.agentResult) {
 		t.logger.Warn("model failed after a side-effecting tool ran; skipping fallback chain to avoid duplicating it",
 			"model", t.cfg.Model, "error", t.runErr)
 		return
@@ -546,7 +564,16 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 	// silence instead of an answer from a healthy model. A user abort yields
 	// StopReason "aborted" (not "timeout"), so it never reaches this stall branch.
 	fbCtx, fbCancel := ctx, context.CancelFunc(nil)
-	if ctx.Err() != nil {
+	if errors.Is(t.runErr, errRunBudgetExhausted) {
+		// The original run consumed its hard budget. Grant only enough fresh
+		// time for the checkpointed no-tools wrap-up, while preserving a live
+		// parent's cancellation when one still exists.
+		fallbackParent := ctx
+		if ctx.Err() != nil {
+			fallbackParent = context.WithoutCancel(ctx)
+		}
+		fbCtx, fbCancel = context.WithTimeout(fallbackParent, stallFallbackBudget)
+	} else if ctx.Err() != nil {
 		if !errors.Is(t.runErr, errModelStalled) {
 			return // parent canceled for another reason — respect it
 		}
@@ -560,7 +587,9 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 	// model's health. Context overflow does not (input-size problem, not a
 	// model fault) and neither does the synthetic circuit-open sentinel (the
 	// model was never tried).
-	if !isContextOverflow(t.runErr) && !errors.Is(t.runErr, errModelCircuitOpen) {
+	if !isContextOverflow(t.runErr) &&
+		!errors.Is(t.runErr, errModelCircuitOpen) &&
+		!errors.Is(t.runErr, errRunBudgetExhausted) {
 		t.deps.registry.RecordModelFailure(t.cfg.Model)
 	}
 	chain := t.deps.registry.FallbackChain(t.initialRole)
@@ -603,6 +632,13 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 		}
 		agentCfg := t.cfg
 		agentCfg.Model = fbCfg.Model
+		attemptMessages := t.messages
+		if len(t.resumeMessages) > 0 {
+			attemptMessages = t.resumeMessages
+			agentCfg.Tools = nil
+			agentCfg.DynamicToolsProvider = nil
+			agentCfg.ToolChoice = json.RawMessage(`"none"`)
+		}
 		// cfg's cache_control policy (system markers + trailing-marker hook)
 		// was applied for the ORIGINAL provider in run_exec.go; a fallback can
 		// cross to a provider with the opposite policy — marker-rejecting
@@ -635,11 +671,12 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 		// config with the model swapped, so applyModelTuning never saw the
 		// fallback model.
 		fillDualModeDefaultThinking(&agentCfg, t.deps, fbCfg.ProviderID, fbCfg.Model)
-		t.agentResult, t.runErr = agent.RunAgent(fbCtx, agentCfg, t.messages, fbClient, t.deps.tools, t.hooks, t.logger, t.runLog)
+		t.agentResult, t.runErr = agent.RunAgent(fbCtx, agentCfg, attemptMessages, fbClient, t.deps.tools, t.hooks, t.logger, t.runLog)
 		// A stalled fallback (empty timeout) is also a failure — advance to
 		// the next role instead of returning its empty result.
 		t.synthStall(false)
 		if t.runErr == nil {
+			mergeCheckpointRecovery(t.budgetExhaustedResult, t.agentResult)
 			t.actualModel = fbCfg.Model
 			t.fellBack = true
 			return
@@ -655,6 +692,38 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 	}
 }
 
+// mergeCheckpointRecovery keeps the completed first attempt attributable to
+// the logical run after a fallback writes its final answer. FinalMessages on
+// recovered already contains the checkpoint because it was the fallback's
+// input, so only run-level counters and activity evidence need merging.
+func mergeCheckpointRecovery(checkpoint, recovered *agent.AgentResult) {
+	if checkpoint == nil || recovered == nil {
+		return
+	}
+	recovered.Usage.InputTokens += checkpoint.Usage.InputTokens
+	recovered.Usage.OutputTokens += checkpoint.Usage.OutputTokens
+	recovered.Usage.CacheCreationInputTokens += checkpoint.Usage.CacheCreationInputTokens
+	recovered.Usage.CacheReadInputTokens += checkpoint.Usage.CacheReadInputTokens
+	recovered.Turns += checkpoint.Turns
+	recovered.TurnsPersisted += checkpoint.TurnsPersisted
+	recovered.LLMMs += checkpoint.LLMMs
+	recovered.ToolMs += checkpoint.ToolMs
+	recovered.TotalTextChars += checkpoint.TotalTextChars
+	recovered.TotalToolCalls += checkpoint.TotalToolCalls
+	recovered.MaxTokensRecoveries += checkpoint.MaxTokensRecoveries
+	recovered.BudgetExhaustedInjected = recovered.BudgetExhaustedInjected || checkpoint.BudgetExhaustedInjected
+	recovered.ToolActivities = append(append([]agent.ToolActivity(nil), checkpoint.ToolActivities...), recovered.ToolActivities...)
+	recovered.InterruptedToolNames = append(append([]string(nil), checkpoint.InterruptedToolNames...), recovered.InterruptedToolNames...)
+	if len(checkpoint.ToolCounts) > 0 {
+		if recovered.ToolCounts == nil {
+			recovered.ToolCounts = make(map[string]int, len(checkpoint.ToolCounts))
+		}
+		for name, count := range checkpoint.ToolCounts {
+			recovered.ToolCounts[name] += count
+		}
+	}
+}
+
 // finalizeFailure terminates an iteration whose recovery ladder ended with
 // runErr still set.
 func (t *fallbackTurn) finalizeFailure() (*agent.AgentResult, string, bool, error) {
@@ -665,6 +734,9 @@ func (t *fallbackTurn) finalizeFailure() (*agent.AgentResult, string, bool, erro
 	// the fallback chain.
 	if t.stalledResult != nil && !t.fellBack {
 		return t.stalledResult, t.actualModel, false, nil
+	}
+	if t.budgetExhaustedResult != nil && !t.fellBack {
+		return t.budgetExhaustedResult, t.actualModel, false, nil
 	}
 	// Surface unrecoverable context overflow so operators/UI see it. Without
 	// this the only signal was a Warn log in the retry loop and the final
