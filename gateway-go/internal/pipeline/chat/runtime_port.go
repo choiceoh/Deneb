@@ -66,7 +66,14 @@ func (h *Handler) RunSync(ctx context.Context, req chatport.SyncRequest) (*chatp
 	if err != nil {
 		return nil, err
 	}
-	return syncResultToPort(result), nil
+	port := syncResultToPort(result)
+	// The native client renders whatever reasoning the done frame carries, so
+	// this is where a session's ShowThinkingInChat has to bite for the surface
+	// the operator actually uses.
+	if port != nil && !sessionShowsThinking(h.sessions, req.SessionKey) {
+		port.Thinking = ""
+	}
+	return port, nil
 }
 
 // RunSyncStream is RunSync with direct text-delta delivery.

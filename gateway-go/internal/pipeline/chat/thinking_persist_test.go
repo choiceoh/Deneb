@@ -6,6 +6,10 @@ import (
 	"testing"
 )
 
+// humanSession is a native conversation key — the only kind that earns a
+// display copy (autonomous transcripts are not reopened by a person).
+const humanSession = "client:main"
+
 const signedThinkingBlocks = `[{"type":"thinking","thinking":"reasoning in english","signature":"sig-abc"},` +
 	`{"type":"text","text":"답"}]`
 
@@ -26,7 +30,7 @@ func TestAttachThinkingDisplayKeepsTheBlockIntact(t *testing.T) {
 		return "영어로 사고함", true
 	}}
 
-	blocks := decodeBlocksForTest(t, attachThinkingDisplay(deps, json.RawMessage(signedThinkingBlocks), nil))
+	blocks := decodeBlocksForTest(t, attachThinkingDisplay(deps, humanSession, json.RawMessage(signedThinkingBlocks), nil))
 	if len(blocks) != 2 {
 		t.Fatalf("block count = %d, want 2", len(blocks))
 	}
@@ -74,7 +78,7 @@ func TestAttachThinkingDisplayFailsOpen(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := attachThinkingDisplay(tc.deps, json.RawMessage(tc.raw), nil)
+			got := attachThinkingDisplay(tc.deps, humanSession, json.RawMessage(tc.raw), nil)
 			if string(got) != tc.raw {
 				t.Fatalf("content was altered on a path that must pass through:\n got %s\nwant %s", got, tc.raw)
 			}
@@ -88,7 +92,7 @@ func TestAttachThinkingDisplayMergesIntoExistingMetadata(t *testing.T) {
 	const withMeta = `[{"type":"thinking","thinking":"english","metadata":{"activatedTools":["graphify"]}}]`
 	deps := runDeps{translateThinking: func(context.Context, string) (string, bool) { return "한국어", true }}
 
-	blocks := decodeBlocksForTest(t, attachThinkingDisplay(deps, json.RawMessage(withMeta), nil))
+	blocks := decodeBlocksForTest(t, attachThinkingDisplay(deps, humanSession, json.RawMessage(withMeta), nil))
 	meta, _ := blocks[0]["metadata"].(map[string]any)
 	if meta[thinkingDisplayKey] != "한국어" {
 		t.Fatalf("display copy missing: %v", meta)
@@ -108,11 +112,46 @@ func TestAttachThinkingDisplayHonoursItsDeadline(t *testing.T) {
 		}
 		return "", false
 	}}
-	got := attachThinkingDisplay(deps, json.RawMessage(signedThinkingBlocks), nil)
+	got := attachThinkingDisplay(deps, humanSession, json.RawMessage(signedThinkingBlocks), nil)
 	if !deadlineSeen {
 		t.Fatal("translator was called without a deadline")
 	}
 	if string(got) != signedThinkingBlocks {
 		t.Fatal("a refused translation must leave the persisted content alone")
+	}
+}
+
+func TestAttachThinkingDisplaySkipsWhatNobodyReopens(t *testing.T) {
+	calls := 0
+	deps := runDeps{translateThinking: func(context.Context, string) (string, bool) {
+		calls++
+		return "한국어", true
+	}}
+	// Autonomous transcripts keep reasoning for the agent's own continuity; a
+	// person never reopens them, so translating theirs is pure spend.
+	for _, key := range []string{"cron:email-analysis:123", "system:boot", "hook:x"} {
+		if got := attachThinkingDisplay(deps, key, json.RawMessage(signedThinkingBlocks), nil); string(got) != signedThinkingBlocks {
+			t.Fatalf("%s got a display copy", key)
+		}
+	}
+	if calls != 0 {
+		t.Fatalf("translator called %d times for transcripts nobody reopens", calls)
+	}
+	// The native conversation still gets one.
+	if got := attachThinkingDisplay(deps, humanSession, json.RawMessage(signedThinkingBlocks), nil); string(got) == signedThinkingBlocks {
+		t.Fatal("a native conversation was skipped")
+	}
+}
+
+func TestAttachThinkingDisplayReadsTheTextFallback(t *testing.T) {
+	// Some providers put a thinking block's text under "text"; the reader falls
+	// back to it, so a row written from one must still carry its copy.
+	const textCarried = `[{"type":"thinking","text":"reasoning in english"}]`
+	deps := runDeps{translateThinking: func(context.Context, string) (string, bool) { return "한국어", true }}
+
+	blocks := decodeBlocksForTest(t, attachThinkingDisplay(deps, humanSession, json.RawMessage(textCarried), nil))
+	meta, _ := blocks[0]["metadata"].(map[string]any)
+	if meta[thinkingDisplayKey] != "한국어" {
+		t.Fatalf("no display copy on a text-carried thinking block: %v", blocks[0])
 	}
 }

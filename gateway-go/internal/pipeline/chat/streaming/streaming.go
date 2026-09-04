@@ -82,6 +82,12 @@ type Broadcaster struct {
 	// that throttled EmitThinking frames condense into a chip-sized preview.
 	thinkingMu   sync.Mutex
 	thinkingTail []rune
+	// reasoningHidden suppresses the reasoningFull payload for a session that
+	// asked not to see reasoning (ShowThinkingInChat). The chip keeps working —
+	// it is a liveness indicator, not the thinking text — so only the expandable
+	// block goes quiet, and nothing is spent translating text nobody will read.
+	// Set once before the run streams, like summarize.
+	reasoningHidden bool
 	// thinkingBreakPending records that the executor closed a turn: the run's
 	// assembled thinking text puts a blank line at that seam, so fullThinking
 	// must too or the two texts differ by exactly those separators. Flushed by
@@ -182,8 +188,10 @@ func (sb *Broadcaster) EmitThinking(delta string) {
 	}
 	// Full reasoning-so-far for the client's live expandable block (the chip uses
 	// only `preview`). Sent every throttle window; the client replaces its block.
-	if full := sb.fullReasoning(); full != "" {
-		payload["reasoningFull"] = full
+	if !sb.reasoningHidden {
+		if full := sb.fullReasoning(); full != "" {
+			payload["reasoningFull"] = full
+		}
 	}
 	n := sb.emit(EventThinking, payload)
 
@@ -357,6 +365,13 @@ func (sb *Broadcaster) recentToolsContext() string {
 // reasoning tail and a hint of recently-run tools.
 func (sb *Broadcaster) SetThinkingSummarizer(fn func(reasoningTail, recentTools string) (string, bool)) {
 	sb.summarize = fn
+}
+
+// SetReasoningVisible controls whether throttled thinking frames carry the full
+// reasoning-so-far. Set it before the run streams; false leaves the chip intact
+// and the expandable block empty.
+func (sb *Broadcaster) SetReasoningVisible(visible bool) {
+	sb.reasoningHidden = !visible
 }
 
 // cleanThinkingPreview renders a raw reasoning tail into a chip line:

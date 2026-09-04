@@ -133,6 +133,7 @@ func executeAgentRunWithDelta(
 	})
 	broadcaster := streaming.NewBroadcaster(deltaRaw, params.SessionKey, params.ClientRunID)
 	broadcaster.SetThinkingSummarizer(newThinkingSummarizer(ctx))
+	broadcaster.SetReasoningVisible(showThinkingInChat(deps, params.SessionKey))
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
 	return executeAgentRun(ctx, params, deps, broadcaster, nil, logger, runLog)
 }

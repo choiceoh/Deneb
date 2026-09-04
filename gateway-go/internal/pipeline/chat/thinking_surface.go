@@ -3,6 +3,8 @@ package chat
 import (
 	"context"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 // translateThinkingForDisplay renders foreign-language reasoning into Korean for
@@ -29,13 +31,25 @@ func translateThinkingForDisplay(deps runDeps, thinking string) string {
 }
 
 // showThinkingInChat reports whether the agent should surface extended-thinking
-// text alongside the reply for this session. ON by default; flipped per
-// session via `/think show off`.
+// text alongside the reply for this session. ON by default; flipped through the
+// session's ShowThinkingInChat field (sessions.patch). The `/think` slash
+// command that used to set it was retired with the other conversational
+// commands — nothing on the native surface sets it today.
 func showThinkingInChat(deps runDeps, sessionKey string) bool {
-	if deps.sessions == nil {
+	return sessionShowsThinking(deps.sessions, sessionKey)
+}
+
+// sessionShowsThinking answers the same question for callers that hold the
+// manager rather than a run's deps. It exists because the setting has to reach
+// every surface that renders reasoning — for a long time it gated only the 🧠
+// blockquote, whose delivery path has no production wiring at all
+// (ChannelCallbacks.SetReplyFunc has no caller outside tests), so turning
+// thinking off changed nothing the operator could see.
+func sessionShowsThinking(sessions *session.Manager, sessionKey string) bool {
+	if sessions == nil {
 		return true
 	}
-	sess := deps.sessions.Get(sessionKey)
+	sess := sessions.Get(sessionKey)
 	if sess == nil || sess.ShowThinkingInChat == nil {
 		return true
 	}

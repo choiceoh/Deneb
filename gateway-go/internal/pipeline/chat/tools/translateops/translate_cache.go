@@ -80,15 +80,29 @@ func writeTranslateCacheField(h hash.Hash, field []byte) {
 	h.Write(field)
 }
 
+// translateCached looks in the hot set first, then in the durable layer behind
+// it. A disk hit is promoted into the LRU so a run that keeps touching the same
+// lines pays the file read once.
 func translateCached(target, text string) (string, bool) {
-	return translateTextCache.Get(translateCacheKey(target, text))
+	key := translateCacheKey(target, text)
+	if hit, ok := translateTextCache.Get(key); ok {
+		return hit, true
+	}
+	hit, ok := translateDisk.get(key)
+	if !ok {
+		return "", false
+	}
+	translateTextCache.Put(key, hit)
+	return hit, true
 }
 
 func rememberTranslated(target, text, translated string) {
 	if text == "" || translated == "" {
 		return
 	}
-	translateTextCache.Put(translateCacheKey(target, text), translated)
+	key := translateCacheKey(target, text)
+	translateTextCache.Put(key, translated)
+	translateDisk.put(key, translated)
 }
 
 func translateMissFlightKey(target string, texts []string) string {
@@ -101,8 +115,4 @@ func translateMissFlightKey(target string, texts []string) string {
 		writeTranslateCacheField(h, []byte(text))
 	}
 	return hex.EncodeToString(h.Sum(nil))
-}
-
-func resetTranslateTextCache() {
-	translateTextCache.Clear()
 }

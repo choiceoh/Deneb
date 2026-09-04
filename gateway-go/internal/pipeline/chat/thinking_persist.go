@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // thinkingDisplayKey is where a persisted thinking block carries its Korean
@@ -33,8 +35,14 @@ const thinkingDisplayTimeout = time.Second
 //
 // Fail-open in every direction — unparseable content, a refusal, a timeout — the
 // message is persisted exactly as it arrived.
-func attachThinkingDisplay(deps runDeps, raw json.RawMessage, logger *slog.Logger) json.RawMessage {
+func attachThinkingDisplay(deps runDeps, sessionKey string, raw json.RawMessage, logger *slog.Logger) json.RawMessage {
 	if deps.translateThinking == nil || len(raw) == 0 {
+		return raw
+	}
+	// Only conversations a person reopens are worth a display copy. Autonomous
+	// runs (cron, goals, dreaming) persist reasoning nobody reads — measured at
+	// 8% of a day's thinking text — and translating it is pure spend.
+	if !isHumanReadSession(sessionKey) || !showThinkingInChat(deps, sessionKey) {
 		return raw
 	}
 	var blocks []map[string]any
@@ -50,7 +58,13 @@ func attachThinkingDisplay(deps runDeps, raw json.RawMessage, logger *slog.Logge
 		if t, _ := b["type"].(string); t != "thinking" {
 			continue
 		}
+		// A thinking block usually carries its text under "thinking", but some
+		// providers put it in "text" — the reader falls back to both, so the
+		// writer has to as well or those rows silently keep their English.
 		text, _ := b["thinking"].(string)
+		if strings.TrimSpace(text) == "" {
+			text, _ = b["text"].(string)
+		}
 		if strings.TrimSpace(text) == "" {
 			continue
 		}
@@ -77,4 +91,11 @@ func attachThinkingDisplay(deps runDeps, raw json.RawMessage, logger *slog.Logge
 		return raw
 	}
 	return out
+}
+
+// isHumanReadSession reports whether a session's transcript is one a person
+// reopens in the client. Native conversations are "client:…"; cron, goal,
+// heartbeat and system runs keep transcripts for the agent's own continuity.
+func isHumanReadSession(sessionKey string) bool {
+	return strings.HasPrefix(sessionKey, chatport.NativeClientChannel+":")
 }

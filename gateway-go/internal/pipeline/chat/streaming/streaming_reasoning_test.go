@@ -99,3 +99,38 @@ func TestMarkThinkingBreakLeavesTheChipTailAlone(t *testing.T) {
 		t.Fatalf("thinkingTail = %q, want the seam kept out of the chip", tail)
 	}
 }
+
+func TestSetReasoningVisibleSilencesTheBlockNotTheChip(t *testing.T) {
+	// `/think show off` must reach the expandable block, and only it: the chip
+	// is a liveness indicator ("깊이 생각 중"), not the thinking text.
+	var mu sync.Mutex
+	var frames []map[string]any
+	sink := func(event string, data []byte) int {
+		if event != EventThinking {
+			return 1
+		}
+		var m struct {
+			Payload map[string]any `json:"payload"`
+		}
+		_ = json.Unmarshal(data, &m)
+		mu.Lock()
+		frames = append(frames, m.Payload)
+		mu.Unlock()
+		return 1
+	}
+
+	sb := NewBroadcaster(sink, "s1", "r1")
+	sb.SetReasoningVisible(false)
+	sb.EmitThinking("발신자 주소부터 확인해야 한다. ")
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(frames) == 0 {
+		t.Fatal("no thinking frame emitted — the chip must keep working")
+	}
+	for i, p := range frames {
+		if _, has := p["reasoningFull"]; has {
+			t.Fatalf("frame %d carried reasoningFull for a session with thinking off", i)
+		}
+	}
+}
