@@ -170,6 +170,119 @@ func TestRunAgentWithFallback_PreOutputIdleFallsBackWithoutSameModelRetry(t *tes
 	}
 }
 
+// A run that exhausts its wall-time budget after committing a tool must not
+// replay that mutation from the original user message. It can still recover a
+// final answer by handing the completed message journal to a no-tools fallback.
+func TestRunAgentWithFallback_MidWorkTimeoutResumesNoToolsFallbackFromCheckpoint(t *testing.T) {
+	var (
+		mu            sync.Mutex
+		mainRequests  int
+		fallbackCalls int
+		toolCalls     int
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Model      string            `json:"model"`
+			Messages   []json.RawMessage `json:"messages"`
+			Tools      []json.RawMessage `json:"tools"`
+			ToolChoice json.RawMessage   `json:"tool_choice"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		mu.Lock()
+		if req.Model == "m-main" {
+			mainRequests++
+			requestNumber := mainRequests
+			mu.Unlock()
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			if requestNumber == 1 {
+				fmt.Fprint(w, sseToolResponse("tool-1", "exec", `{}`))
+				return
+			}
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			<-r.Context().Done()
+			return
+		}
+		fallbackCalls++
+		mu.Unlock()
+
+		if len(req.Tools) != 0 {
+			t.Errorf("fallback tools = %d, want 0", len(req.Tools))
+		}
+		if string(req.ToolChoice) != `"none"` {
+			t.Errorf("fallback tool_choice = %s, want none", req.ToolChoice)
+		}
+		checkpointFound := false
+		for _, message := range req.Messages {
+			checkpointFound = checkpointFound || bytes.Contains(message, []byte("committed-once"))
+		}
+		if !checkpointFound {
+			t.Error("fallback messages do not contain the completed tool checkpoint")
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, sseResponse("checkpoint recovered", "end_turn"))
+	}))
+	defer server.Close()
+
+	tools := NewToolRegistry()
+	tools.Register("exec", func(_ context.Context, _ json.RawMessage) (string, error) {
+		mu.Lock()
+		toolCalls++
+		mu.Unlock()
+		return "committed-once", nil
+	})
+	reg := modelrole.NewRegistryWithOptions(discardLogger(), modelrole.RegistryOptions{
+		MainModel:     "test/m-main",
+		FallbackModel: "test/m-fb",
+		Providers: map[string]modelrole.ProviderResolved{
+			"test": {BaseURL: server.URL, APIKey: "k"},
+		},
+	})
+	cfg := agent.AgentConfig{
+		Model:     "m-main",
+		MaxTurns:  4,
+		Timeout:   5 * time.Second,
+		MaxTokens: 128,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Millisecond)
+	defer cancel()
+
+	result, actualModel, fellBack, err := runAgentWithFallback(
+		ctx, cfg, []llm.Message{llm.NewTextMessage("user", "do it once")},
+		llm.NewClient(server.URL, "test-key"),
+		runDeps{registry: reg, tools: tools, logger: discardLogger()},
+		"test", modelrole.RoleMain, nil, agent.StreamHooks{}, discardLogger(),
+		agentlog.NewRunLogger(nil, "test-session", "test-run"),
+	)
+	if err != nil {
+		t.Fatalf("err = %v, want checkpoint fallback success", err)
+	}
+	if result == nil || result.Text != "checkpoint recovered" {
+		t.Fatalf("result = %+v, want checkpoint recovery reply", result)
+	}
+	if actualModel != "m-fb" || !fellBack {
+		t.Fatalf("actualModel=%q fellBack=%v, want m-fb true", actualModel, fellBack)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if mainRequests != 2 || fallbackCalls != 1 {
+		t.Errorf("requests main=%d fallback=%d, want 2 and 1", mainRequests, fallbackCalls)
+	}
+	if toolCalls != 1 {
+		t.Errorf("tool calls = %d, want 1 (fallback must not replay the mutation)", toolCalls)
+	}
+	if result.TotalToolCalls != 1 || result.ToolCounts["exec"] != 1 {
+		t.Errorf("merged tool accounting = total %d counts %v, want original exec call", result.TotalToolCalls, result.ToolCounts)
+	}
+}
+
 // A context-overflow error whose protected head+tail zones already exceed the
 // budget must short-circuit to compression_stuck WITHOUT retrying the provider
 // (compaction cannot help by construction), and must surface the
