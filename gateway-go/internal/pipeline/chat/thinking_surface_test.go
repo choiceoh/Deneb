@@ -2,8 +2,13 @@ package chat
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 func TestTranslateThinkingForDisplayTranslatesEnglish(t *testing.T) {
@@ -57,5 +62,38 @@ func TestFormatRunReplyTextTranslatesTheBlockquote(t *testing.T) {
 	}
 	if !strings.Contains(got, "첨부 경로를 확인한다") {
 		t.Fatalf("translated text missing from the blockquote: %q", got)
+	}
+}
+
+func TestDeliverDirectiveReplyTextSkipsFormattingWithNoChannelPush(t *testing.T) {
+	// A native streaming turn already delivered its reply over SSE, so the 🧠
+	// blockquote this path would build is discarded. Formatting it anyway spends
+	// a whole-block translation — a network round trip on the turn's completion
+	// path — for text nobody reads.
+	calls := 0
+	deps := runDeps{translateThinking: func(context.Context, string) (string, bool) {
+		calls++
+		return "번역됨", true
+	}}
+	params := RunParams{
+		SessionKey: "client:t",
+		Delivery:   &chatport.DeliveryContext{Channel: chatport.NativeClientChannel},
+	}
+	result := &agent.AgentResult{Text: "답", Thinking: "english reasoning about the code"}
+	directives := chatport.ReplyDirectives{Text: "답"}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	cancel := deliverDirectiveReplyText(params, deps, result, directives, true, logger)
+	cancel()
+	if calls != 0 {
+		t.Fatalf("translator called %d times for a reply that is never pushed", calls)
+	}
+
+	// The same run WITHOUT an SSE delivery still needs its reply formatted —
+	// that is a real (undelivered) reply, not a discarded one.
+	cancel = deliverDirectiveReplyText(params, deps, result, directives, false, logger)
+	cancel()
+	if calls != 1 {
+		t.Fatalf("translator called %d times, want 1 when the reply still needs a channel push", calls)
 	}
 }

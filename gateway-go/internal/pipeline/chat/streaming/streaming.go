@@ -82,6 +82,13 @@ type Broadcaster struct {
 	// that throttled EmitThinking frames condense into a chip-sized preview.
 	thinkingMu   sync.Mutex
 	thinkingTail []rune
+	// thinkingBreakPending records that the executor closed a turn: the run's
+	// assembled thinking text puts a blank line at that seam, so fullThinking
+	// must too or the two texts differ by exactly those separators. Flushed by
+	// the next delta rather than written immediately, so a run that ends with no
+	// further reasoning does not grow a trailing blank line the final text lacks.
+	// Guarded by thinkingMu.
+	thinkingBreakPending bool
 	// fullThinking accumulates the entire reasoning stream (bounded by
 	// fullReasoningMaxRunes) so a throttled EmitThinking frame can carry the full
 	// reasoning-so-far as `reasoningFull`, letting the client grow a LIVE
@@ -221,6 +228,17 @@ func (sb *Broadcaster) EmitThinking(delta string) {
 
 // appendThinking adds a reasoning chunk to the rolling tail, trimming the
 // front so the buffer never exceeds thinkingTailRunes.
+// MarkThinkingBreak records the seam between two turns' reasoning. It is safe to
+// call when nothing has streamed yet and when no further reasoning follows: the
+// break only materializes if another delta arrives.
+func (sb *Broadcaster) MarkThinkingBreak() {
+	sb.thinkingMu.Lock()
+	defer sb.thinkingMu.Unlock()
+	if len(sb.fullThinking) > 0 {
+		sb.thinkingBreakPending = true
+	}
+}
+
 func (sb *Broadcaster) appendThinking(delta string) {
 	if delta == "" {
 		return
@@ -229,6 +247,12 @@ func (sb *Broadcaster) appendThinking(delta string) {
 	sb.thinkingRunesTotal.Add(int64(len(dr))) // monotonic; drives the summary advance gate
 	sb.thinkingMu.Lock()
 	defer sb.thinkingMu.Unlock()
+	if sb.thinkingBreakPending {
+		// Only the full stream carries the seam; the chip tail is a rolling
+		// preview where a blank line would just eat two runes of context.
+		sb.fullThinking = append(sb.fullThinking, '\n', '\n')
+		sb.thinkingBreakPending = false
+	}
 	sb.thinkingTail = append(sb.thinkingTail, dr...)
 	if over := len(sb.thinkingTail) - thinkingTailRunes; over > 0 {
 		sb.thinkingTail = sb.thinkingTail[over:]

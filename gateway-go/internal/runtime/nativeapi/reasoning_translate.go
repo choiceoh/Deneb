@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 const (
@@ -172,10 +173,7 @@ func (t *liveReasoningTranslator) finish(final string) string {
 		if time.Now().After(deadline) {
 			return joinRenderedChunk(base, rest)
 		}
-		chunk := rest
-		if len(chunk) > liveReasoningChunkBytes {
-			chunk = rest[:boundedReasoningCut(rest)]
-		}
+		chunk := rest[:textutil.CutAtBoundary(rest, liveReasoningChunkBytes)]
 		rest = rest[len(chunk):]
 		out, ok := t.translate(t.ctx, chunk)
 		if !ok {
@@ -308,62 +306,16 @@ func settledReasoningChunk(pending string) string {
 	// end — would otherwise show nothing at all until the done frame, which is
 	// exactly the delay this path exists to remove. Committed text is never sent
 	// again, so a finer cut costs no extra characters.
-	if j := lastSentenceEnd(pending[cut:]); j > 0 {
+	if j := textutil.LastSentenceEnd(pending[cut:]); j > 0 {
 		cut += j
 	}
 	if cut == 0 {
 		return ""
 	}
 	if cut > liveReasoningChunkBytes {
-		cut = boundedReasoningCut(pending)
+		cut = textutil.CutAtBoundary(pending, liveReasoningChunkBytes)
 	}
 	return pending[:cut]
-}
-
-// boundedReasoningCut picks the largest cut at or under the per-call byte budget,
-// preferring a line break, then a sentence end, then any space. It always
-// returns a positive rune-aligned length, so a backlog cannot stall forever on
-// text that offers no boundary at all.
-func boundedReasoningCut(pending string) int {
-	window := pending[:liveReasoningChunkBytes]
-	if i := strings.LastIndexByte(window, '\n'); i >= 0 {
-		return i + 1
-	}
-	if j := lastSentenceEnd(window); j > 0 {
-		return j
-	}
-	if i := strings.LastIndexByte(window, ' '); i >= 0 {
-		return i + 1
-	}
-	cut := liveReasoningChunkBytes
-	for cut > 0 && !utf8.RuneStart(pending[cut]) {
-		cut--
-	}
-	if cut == 0 {
-		return liveReasoningChunkBytes
-	}
-	return cut
-}
-
-// lastSentenceEnd returns the offset just past the last sentence terminator in
-// s — a Latin terminator followed by whitespace, or a CJK one anywhere — and 0
-// when the text holds no sentence end.
-func lastSentenceEnd(s string) int {
-	end := 0
-	prevTerm := false
-	for i, r := range s {
-		switch r {
-		case '。', '！', '？', '…':
-			end = i + utf8.RuneLen(r)
-			prevTerm = false
-			continue
-		}
-		if prevTerm && (r == ' ' || r == '\n' || r == '\t') {
-			end = i + utf8.RuneLen(r)
-		}
-		prevTerm = r == '.' || r == '!' || r == '?'
-	}
-	return end
 }
 
 // joinRenderedChunk appends a translated chunk to what is already rendered,

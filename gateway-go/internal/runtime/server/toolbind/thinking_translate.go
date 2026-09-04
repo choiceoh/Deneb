@@ -27,6 +27,10 @@ const (
 	// Generous next to the 1.3s median measured on real blocks; this is a
 	// deadline for giving up, not a target.
 	thinkingTimeout = 15 * time.Second
+	// One piece of a split block. Comfortably under thinkingMaxBytes so a piece
+	// is never refused for size, and small enough that one piece is one quick
+	// request rather than a bisected batch storm.
+	thinkingBlockPieceBytes = 4000
 )
 
 // ThinkingTranslatorEnabled reports whether a thinking translator can work at
@@ -40,6 +44,47 @@ func ThinkingTranslatorEnabled() bool {
 // hangulRatio delegates to the shared implementation so this file and
 // opstranslate cannot drift on what "already Korean" means.
 func hangulRatio(s string) float64 { return textutil.HangulRatio(s) }
+
+// TranslateThinkingBlock renders a whole finished reasoning block into Korean,
+// in pieces small enough that the size cap can refuse at most one of them.
+//
+// TranslateThinking is all-or-nothing: one block over thinkingMaxBytes comes
+// back untranslated, and a long agentic turn is exactly the one whose reasoning
+// a reader wants in Korean. Splitting first means a long block degrades to
+// "mostly Korean" instead of "entirely English". Pieces are cut at line, then
+// sentence, then word boundaries so no unit of meaning is severed, and each
+// piece keeps its own text on refusal — already-Korean stretches pass straight
+// through.
+//
+// Use it where a finished block is rendered in one shot (the 🧠 blockquote on
+// channel delivery). The SSE stream does its own cutting as the text settles.
+func TranslateThinkingBlock(ctx context.Context, text string) (string, bool) {
+	if strings.TrimSpace(text) == "" {
+		return "", false
+	}
+	if len(text) <= thinkingBlockPieceBytes {
+		return TranslateThinking(ctx, text)
+	}
+
+	var out strings.Builder
+	out.Grow(len(text))
+	changed := false
+	for rest := text; rest != ""; {
+		piece := rest[:textutil.CutAtBoundary(rest, thinkingBlockPieceBytes)]
+		rest = rest[len(piece):]
+		if translated, ok := TranslateThinking(ctx, piece); ok {
+			out.WriteString(translated)
+			changed = true
+			continue
+		}
+		// Already Korean, or a refusal: this piece keeps the model's own text.
+		out.WriteString(piece)
+	}
+	if !changed {
+		return "", false
+	}
+	return out.String(), true
+}
 
 // TranslateThinking renders a block of extended-thinking text into Korean.
 //
