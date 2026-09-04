@@ -18,7 +18,9 @@
 //	  event: thinking  data: {"preview":"..."?}                     (throttled liveness +
 //	                          chip-sized tail of the live reasoning text)
 //	  event: reasoning data: {"reasoning":"..."}                    (throttled full
-//	                          reasoning-so-far → client's live expandable block)
+//	                          reasoning-so-far → client's live expandable block;
+//	                          rendered into Korean as it streams when a thinking
+//	                          translator is configured)
 //	  event: done      data: {"text":...,"model":...,"fellBack":...,"reasoning":...}  (success terminal)
 //	  event: error     data: {"error":"..."}                        (failure terminal)
 //
@@ -333,6 +335,16 @@ func writeChatStreamSSE(
 		}
 	}()
 
+	// Live reasoning translation. Nil when no translator is configured, which
+	// leaves the pre-DeepL behaviour intact: the block streams in whatever
+	// language the model reasoned in.
+	var live *liveReasoningTranslator
+	if translateThinking != nil {
+		live = newLiveReasoningTranslator(ctx, translateThinking, func(text string) {
+			writeEvent("reasoning", map[string]string{"reasoning": text})
+		}, logger)
+	}
+
 	result, runErr := run(ctx, chatStreamSinks{
 		Delta: func(delta string) {
 			if delta == "" {
@@ -375,9 +387,19 @@ func writeChatStreamSSE(
 			}
 			// Full reasoning-so-far: the client replaces its live expandable block
 			// with this on each throttled frame (the chip still uses `thinking`).
+			// With a translator wired the block is grown from Korean instead —
+			// live, not only once the turn settles.
+			if live != nil {
+				live.observe(full)
+				return
+			}
 			writeEvent("reasoning", map[string]string{"reasoning": full})
 		},
 	})
+
+	// Close the live translator before the terminal frame: like the keepalive
+	// join below, this is what guarantees nothing writes once this returns.
+	live.stop()
 
 	// Stop and join the keepalive before the terminal frame so no comment can
 	// interleave after "done"/"error" and nothing writes once this returns.
@@ -393,12 +415,17 @@ func writeChatStreamSSE(
 	case result == nil:
 		writeEvent("error", map[string]string{"error": "empty result"})
 	default:
-		// The client overwrites its expandable reasoning block with this frame,
-		// so translating here is what turns the live English stream into Korean
-		// once the turn settles. Fail-open: the original ships on any refusal.
+		// The client overwrites its expandable reasoning block with this frame, so
+		// this is where the reasoning settles. Prefer extending what the live path
+		// already rendered — translating the block again would re-segment it and
+		// visibly reword text the reader has been watching — and fall back to
+		// translating the whole thing when the live text cannot stand in for it.
+		// Fail-open either way: the original ships on any refusal.
 		reasoning := result.Reasoning
 		if translateThinking != nil && strings.TrimSpace(reasoning) != "" {
-			if translated, ok := translateThinking(ctx, reasoning); ok && strings.TrimSpace(translated) != "" {
+			if settled, ok := live.finish(reasoning); ok && strings.TrimSpace(settled) != "" {
+				reasoning = settled
+			} else if translated, ok := translateThinking(ctx, reasoning); ok && strings.TrimSpace(translated) != "" {
 				reasoning = translated
 			}
 		}
