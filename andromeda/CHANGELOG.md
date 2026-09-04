@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.125](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.124...andromeda-v0.0.125) (2026-09-04)
+
+
+### ✨ Features
+
+* **translate:** Propus 라이프사이클 판정도 딥엘 경로에 태운다 ([#5018](https://github.com/choiceoh/Deneb/issues/5018)) ([071bc1c](https://github.com/choiceoh/Deneb/commit/071bc1cd847decafc0cab297bde62e426dd87566))
+* **translate:** 자가개선 코딩 큐를 딥엘 경로에 태운다 — 운영자가 읽는 화면만 ([#5017](https://github.com/choiceoh/Deneb/issues/5017)) ([902bcda](https://github.com/choiceoh/Deneb/commit/902bcdac8ff7c0367b5dc36dd4687c09af2ac0f5))
+
 ## [0.0.124](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.123...andromeda-v0.0.124) (2026-09-02)
 
 

@@ -1,5 +1,42 @@
 # Changelog
 
+## [5.13.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.12.1...deneb-v5.13.0) (2026-09-04)
+
+
+### ✨ Features
+
+* **browser-android:** 광고 차단 누수 스윕 — 차단율 28%→50%, 구글 측정 엔드포인트는 경로로 ([#5008](https://github.com/choiceoh/Deneb/issues/5008)) ([1e4faf4](https://github.com/choiceoh/Deneb/commit/1e4faf4cda1798fbf69dca03434f3c4f215c8de9))
+* **browser:** browse 경로에 광고·추적 차단 — donga 기준 6.3초→2.5초, 요청 359→169 ([#5007](https://github.com/choiceoh/Deneb/issues/5007)) ([5c7b12b](https://github.com/choiceoh/Deneb/commit/5c7b12bd7a1a6d6ab207ee3d96d82b548b477b83))
+* **chat:** 복원된 대화의 추론도 한국어로 — 저장 시점에 표시용 사본을 붙인다 ([#5029](https://github.com/choiceoh/Deneb/issues/5029)) ([26c6d90](https://github.com/choiceoh/Deneb/commit/26c6d900430093af4674d8eda926f69f46403e75))
+* **chat:** 추론을 흘러나오는 대로 딥엘에 태운다 — 정착할 때가 아니라 ([#5025](https://github.com/choiceoh/Deneb/issues/5025)) ([9b1a6fe](https://github.com/choiceoh/Deneb/commit/9b1a6fe32251f6844a83569884e8d66e4ff4e896))
+* **recall:** 회상 계측에 방향 축과 안정성 축을 더한다 — 역방향 실패의 성격과 반복 변동을 처음으로 가른다 ([#5016](https://github.com/choiceoh/Deneb/issues/5016)) ([61d11dc](https://github.com/choiceoh/Deneb/commit/61d11dcefe7f534f55510a376aac670d02d1ed13))
+* **skills:** 성공했지만 절차가 안 돈 스킬 런을 세어 낡은 스킬에 신호를 만든다 ([#5015](https://github.com/choiceoh/Deneb/issues/5015)) ([1d50cd1](https://github.com/choiceoh/Deneb/commit/1d50cd102fff024adc54ac6a3cba953fd0c4cd1d))
+* **translate:** Propus 라이프사이클 판정도 딥엘 경로에 태운다 ([#5018](https://github.com/choiceoh/Deneb/issues/5018)) ([071bc1c](https://github.com/choiceoh/Deneb/commit/071bc1cd847decafc0cab297bde62e426dd87566))
+* **translate:** 자가개선 코딩 큐를 딥엘 경로에 태운다 — 운영자가 읽는 화면만 ([#5017](https://github.com/choiceoh/Deneb/issues/5017)) ([902bcda](https://github.com/choiceoh/Deneb/commit/902bcdac8ff7c0367b5dc36dd4687c09af2ac0f5))
+
+
+### 🐛 Bug Fixes
+
+* **agent:** 소프트 마감에서 최종 응답 예산을 보존한다 ([#5022](https://github.com/choiceoh/Deneb/issues/5022)) ([d166b68](https://github.com/choiceoh/Deneb/commit/d166b68e558cef7855a614f0dd100ffd8f2ca66d))
+* **browser:** 정착 계약 수리 — 명시 wait_ms 는 바닥, 셀렉터는 매칭까지 대기, 프로브는 실제 코드 검사 ([#5004](https://github.com/choiceoh/Deneb/issues/5004)) ([92bde33](https://github.com/choiceoh/Deneb/commit/92bde3384b3f53f02593708be9dc4b60646bde50))
+* **chat:** done 프레임이 라이브 추론을 영어로 되돌리던 자리 ([#5027](https://github.com/choiceoh/Deneb/issues/5027)) ([467cd18](https://github.com/choiceoh/Deneb/commit/467cd18741a5114db0c01101d0d16c27461f2ebd))
+* **chat:** 런 예산 소진을 체크포인트 폴백으로 복구 ([#5031](https://github.com/choiceoh/Deneb/issues/5031)) ([f5df42b](https://github.com/choiceoh/Deneb/commit/f5df42bf18c6eaaaedbf30569798e61fec3abf39))
+* **client-android:** 첨부 피커의 MIME 필터를 걷어낸다 — 녹음이 회색으로 죽던 자리 ([#5026](https://github.com/choiceoh/Deneb/issues/5026)) ([d457f9d](https://github.com/choiceoh/Deneb/commit/d457f9d0ecba20c7e4bfb645c086c7b9d1c97bb4))
+* **nativeapi:** keep panic recovery at goroutine boundary ([#5032](https://github.com/choiceoh/Deneb/issues/5032)) ([f79ca98](https://github.com/choiceoh/Deneb/commit/f79ca9881ca490ceccd849630599ce242dad106b))
+* **translate:** 번역 실패가 원문을 기기에 영구 캐시하던 경로를 끊는다 ([#5013](https://github.com/choiceoh/Deneb/issues/5013)) ([ba701f7](https://github.com/choiceoh/Deneb/commit/ba701f7304eb561cd0d23a801247c16377b681f9))
+* **translate:** 번역기가 거부할 때 범위를 쪼개 79번 다시 묻지 않는다 ([#5014](https://github.com/choiceoh/Deneb/issues/5014)) ([846544d](https://github.com/choiceoh/Deneb/commit/846544d745ce45f168c7a8e6af566248539b3f58))
+* **translate:** 클라이언트 배치 예산을 서버 한 웨이브에 맞추고 그 결합을 테스트로 묶는다 ([#5011](https://github.com/choiceoh/Deneb/issues/5011)) ([133578c](https://github.com/choiceoh/Deneb/commit/133578cdc73780bf43f874c81bce2afb69573853))
+* **wiki:** 원격 API 합성의 thinking을 끈다 ([#5023](https://github.com/choiceoh/Deneb/issues/5023)) ([31015d4](https://github.com/choiceoh/Deneb/commit/31015d4f50a6726a57bd8b04a69d2a9b31713a2a))
+
+
+### ⚡ Performance
+
+* **browser-android:** 읽는 중인 페이지의 UI 스레드에서 번역·세션 저장 작업을 걷어낸다 ([#5012](https://github.com/choiceoh/Deneb/issues/5012)) ([b9bf8c9](https://github.com/choiceoh/Deneb/commit/b9bf8c9a00a883f9faf8a6886c11b4cfa363f049))
+* **chat:** 버려지는 추론 번역을 없애고, 라이브 스트림에 턴 이음매를 넣는다 ([#5028](https://github.com/choiceoh/Deneb/issues/5028)) ([056ddd4](https://github.com/choiceoh/Deneb/commit/056ddd4399f37a7dc24e8b4c7833e39e4c4e6f38))
+* **chat:** 번역 캐시를 디스크로 내리고, 지출을 처음으로 계측한다 ([#5030](https://github.com/choiceoh/Deneb/issues/5030)) ([4ec4dd2](https://github.com/choiceoh/Deneb/commit/4ec4dd2fc37be84284a2442f327cebd00b25f58a))
+* **translate:** DeepL 배치를 왕복 수 기준으로 재조정 — 페이지 번역 44% 단축 ([#5009](https://github.com/choiceoh/Deneb/issues/5009)) ([74e925e](https://github.com/choiceoh/Deneb/commit/74e925ea33f5ede6819136e8cf1b513b2973f80e))
+* **translate:** 배치 동시성 3→6 + DeepL 429 재시도 — 페이지 번역 꼬리 36% 단축 ([#5010](https://github.com/choiceoh/Deneb/issues/5010)) ([b32bf3f](https://github.com/choiceoh/Deneb/commit/b32bf3f131ee9f508143e8a0c513ce7e7f7583e0))
+
 ## [5.12.1](https://github.com/choiceoh/Deneb/compare/deneb-v5.12.0...deneb-v5.12.1) (2026-09-02)
 
 
