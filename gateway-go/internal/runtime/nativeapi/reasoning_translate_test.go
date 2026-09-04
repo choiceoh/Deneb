@@ -213,6 +213,55 @@ func TestLiveReasoningTranslatorPicksUpTextArrivingAsAPassEnds(t *testing.T) {
 	}
 }
 
+func TestLiveReasoningTranslatorReleasesWorkerWhilePanicUnwinds(t *testing.T) {
+	tests := []struct {
+		name      string
+		translate func(context.Context, string) (string, bool)
+		emit      func(string)
+	}{
+		{
+			name:      "translator panic while unlocked",
+			translate: func(context.Context, string) (string, bool) { panic("translator") },
+			emit:      func(string) {},
+		},
+		{
+			name:      "emitter panic while locked",
+			translate: func(_ context.Context, text string) (string, bool) { return text, true },
+			emit:      func(string) { panic("emitter") },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			live := newLiveReasoningTranslator(context.Background(), tt.translate, tt.emit, nil)
+			live.pending = "settled. "
+			live.inFlight = true
+
+			panicValue := make(chan any, 1)
+			go func() {
+				defer func() { panicValue <- recover() }()
+				live.drain()
+			}()
+
+			select {
+			case recovered := <-panicValue:
+				if recovered == nil {
+					t.Fatal("panic did not reach the goroutine boundary")
+				}
+			case <-time.After(time.Second):
+				t.Fatal("panic cleanup deadlocked")
+			}
+
+			live.mu.Lock()
+			inFlight := live.inFlight
+			live.mu.Unlock()
+			if inFlight {
+				t.Fatal("worker remained in flight after panic unwind")
+			}
+		})
+	}
+}
+
 func TestLiveReasoningFinishExtendsAcrossTheExecutorSeparator(t *testing.T) {
 	// The bug this shape exists for: the executor joins each turn's thinking
 	// blocks with a blank line, so the final text is never a byte-exact
