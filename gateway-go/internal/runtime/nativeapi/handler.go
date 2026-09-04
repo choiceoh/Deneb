@@ -60,10 +60,10 @@ type Config struct {
 	ChatHandler     chatport.SyncStreamRunner
 	ShutdownContext context.Context
 	Logger          *slog.Logger
-	// TranslateThinking renders the turn's reasoning into Korean for the done
-	// frame the native client renders as its expandable reasoning block. The
-	// live `reasoning` deltas stay in the model's own language — the block
-	// settles to Korean when the turn completes. Optional; nil disables.
+	// TranslateThinking renders the turn's reasoning into Korean for the block
+	// the native client shows. It runs on the live stream as text settles and
+	// again on the done frame for the tail, so the block reads Korean while the
+	// turn is still running. Optional; nil disables.
 	TranslateThinking func(ctx context.Context, text string) (string, bool)
 }
 

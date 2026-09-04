@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
@@ -307,24 +309,57 @@ func TestHandleMiniappChatStreamMarksAuthenticatedDirectUserInput(t *testing.T) 
 	}
 }
 
-func TestChatStreamDoneFrameCarriesTranslatedReasoning(t *testing.T) {
-	// The native client overwrites its expandable reasoning block with the done
-	// frame, so this is the surface where English reasoning actually becomes
-	// Korean. The live `reasoning` deltas stay in the model's own language.
-	run := func(_ context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
-		sinks.Reasoning("thinking in english")
-		return &chatStreamResult{Text: "답", Model: "k3", Reasoning: "thinking in english"}, nil
-	}
-	rec := httptest.NewRecorder()
-	writeChatStreamSSE(context.Background(), context.Background(), rec, "client:test", run, nil,
-		func(_ context.Context, text string) (string, bool) {
-			if text != "thinking in english" {
-				t.Fatalf("translator got %q", text)
-			}
-			return "영어로 사고함", true
-		})
+// reasoningFrameRecorder signals the first time a `reasoning` frame is written,
+// so a test can hold the run open until the asynchronous live translation has
+// actually reached the wire instead of racing it.
+type reasoningFrameRecorder struct {
+	*httptest.ResponseRecorder
+	once sync.Once
+	seen chan struct{}
+}
 
-	var doneReasoning, liveReasoning string
+func newReasoningFrameRecorder() *reasoningFrameRecorder {
+	return &reasoningFrameRecorder{ResponseRecorder: httptest.NewRecorder(), seen: make(chan struct{})}
+}
+
+func (r *reasoningFrameRecorder) note(b []byte) {
+	if bytes.Contains(b, []byte("event: reasoning")) {
+		r.once.Do(func() { close(r.seen) })
+	}
+}
+
+func (r *reasoningFrameRecorder) Write(b []byte) (int, error) {
+	n, err := r.ResponseRecorder.Write(b)
+	r.note(b)
+	return n, err
+}
+
+func (r *reasoningFrameRecorder) WriteString(s string) (int, error) {
+	n, err := r.ResponseRecorder.WriteString(s)
+	r.note([]byte(s))
+	return n, err
+}
+
+func TestChatStreamTranslatesReasoningWhileItStreams(t *testing.T) {
+	// The expandable block must read Korean while the turn is still running, not
+	// only once the done frame overwrites it — the model's own language never
+	// reaches the client.
+	const source = "thinking in english.\n"
+	rec := newReasoningFrameRecorder()
+	run := func(_ context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
+		sinks.Reasoning(source)
+		select {
+		case <-rec.seen:
+		case <-time.After(2 * time.Second):
+			t.Error("no live reasoning frame while the turn was running")
+		}
+		return &chatStreamResult{Text: "답", Model: "k3", Reasoning: source}, nil
+	}
+	writeChatStreamSSE(context.Background(), context.Background(), rec, "client:test", run, nil,
+		func(_ context.Context, text string) (string, bool) { return "[ko]" + text, true })
+
+	var doneReasoning string
+	live := 0
 	for _, ev := range parseSSEEvents(t, rec.Body.String()) {
 		var payload struct {
 			Reasoning string `json:"reasoning"`
@@ -336,14 +371,20 @@ func TestChatStreamDoneFrameCarriesTranslatedReasoning(t *testing.T) {
 		case "done":
 			doneReasoning = payload.Reasoning
 		case "reasoning":
-			liveReasoning = payload.Reasoning
+			live++
+			if payload.Reasoning == source {
+				t.Fatalf("live frame %d shipped the untranslated source", live)
+			}
+			if payload.Reasoning != "[ko]"+source {
+				t.Fatalf("live frame %d = %q, want the translation", live, payload.Reasoning)
+			}
 		}
 	}
-	if doneReasoning != "영어로 사고함" {
-		t.Fatalf("done frame reasoning = %q, want the translation", doneReasoning)
+	if live == 0 {
+		t.Fatal("no live reasoning frame reached the wire")
 	}
-	if liveReasoning != "thinking in english" {
-		t.Fatalf("live reasoning was rewritten (%q) — the stream must stay untouched", liveReasoning)
+	if doneReasoning != "[ko]"+source {
+		t.Fatalf("done frame reasoning = %q, want the translation", doneReasoning)
 	}
 }
 

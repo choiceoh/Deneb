@@ -45,9 +45,10 @@ func hangulRatio(s string) float64 { return textutil.HangulRatio(s) }
 //
 // This is the single owner of the policy — which blocks are worth translating,
 // how long to wait, how big is too big — because the same reasoning reaches the
-// operator through two unrelated surfaces (the native client's expandable block
-// via the SSE done frame, and the 🧠 markdown blockquote on channel delivery).
-// Two copies of the rules would drift.
+// operator through unrelated surfaces (the native client's expandable block,
+// which the SSE stream feeds chunk by chunk as the reasoning settles and then
+// closes out on the done frame, and the 🧠 markdown blockquote on channel
+// delivery). Copies of the rules would drift.
 //
 // Translation is line-by-line rather than one blob because the blockquote
 // renderer turns every newline into a quote marker: preserving the line

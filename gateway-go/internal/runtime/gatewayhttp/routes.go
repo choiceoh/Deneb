@@ -45,8 +45,9 @@ type Config struct {
 	Logger                      *slog.Logger
 	AttachmentFactory           func() (MailAttachmentClient, error)
 	GroupwareAttachmentDownload groupwareapi.AttachmentDownload
-	// TranslateThinking renders a finished turn's reasoning into Korean for the
-	// SSE done frame. Optional; nil leaves it in the model's own language.
+	// TranslateThinking renders a turn's reasoning into Korean for the SSE
+	// stream — the live block as it settles, then the done frame. Optional; nil
+	// leaves it in the model's own language.
 	TranslateThinking func(ctx context.Context, text string) (string, bool)
 	Fleet             *sparkfleet.Client
 	Version           string
