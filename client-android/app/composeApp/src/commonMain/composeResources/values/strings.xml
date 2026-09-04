@@ -108,8 +108,8 @@
     <string name="snackbar_conversation_deleted">Conversation deleted</string>
     <string name="scroll_to_bottom_content_description">Scroll to bottom</string>
     <string name="conversation_untitled">Untitled</string>
-    <string name="error_unsupported_file_type">This file type is not supported. You can attach images, text files, and PDFs.</string>
-    <string name="error_file_too_large">This file is too large to attach.</string>
+    <string name="error_unsupported_file_type">This file type can't be attached. You can send images, recordings, documents (PDF, Office, HWP), and text files.</string>
+    <string name="error_file_too_large">This file is too large to attach (documents and recordings up to 25MB).</string>
     <string name="error_conversation_delete_failed">Could not delete the conversation. Check the gateway connection.</string>
     <string name="error_conversation_rename_failed">Could not rename the conversation. Check the gateway connection.</string>
     <string name="error_image_too_large">Image is too large. Try a smaller image.</string>
