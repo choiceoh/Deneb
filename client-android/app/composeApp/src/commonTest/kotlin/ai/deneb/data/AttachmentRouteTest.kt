@@ -79,6 +79,20 @@ class AttachmentRouteTest {
     }
 
     @Test
+    fun stagingIsTheOnlyTypeGateSoItCoversEveryOfferedFamily() {
+        // The attach picker no longer passes an extension filter (QuestionInput):
+        // FileKit would turn one into a SAF MIME allowlist, and a recording whose
+        // provider declares application/octet-stream or audio/x-m4a then showed up
+        // greyed out and untappable. With the picker open to every file, THIS guard is
+        // the only type gate left — so it must accept every family the gateway's batch
+        // capture can extract (image OCR / audio ASR / document conversion), not just
+        // the ones that happened to survive the MIME mapping.
+        for (ext in imageExtensions + audioExtensions + documentExtensions) {
+            assertTrue(isStageableExtension(ext, supportedFileExtensions), ".$ext must stage")
+        }
+    }
+
+    @Test
     fun stagingAcceptsSupportedDocsAndImagesButRejectsUnknownOrEmpty() {
         for (ext in listOf("docx", "pdf", "png", "txt", "hwp", "PDF")) {
             assertTrue(isStageableExtension(ext, supportedFileExtensions + "pdf"), ext)

@@ -4,7 +4,6 @@ import ai.deneb.Platform
 import ai.deneb.currentPlatform
 import ai.deneb.data.MAX_BATCH_FILES
 import ai.deneb.data.ServiceEntry
-import ai.deneb.data.audioExtensions
 import ai.deneb.data.formatFileSize
 import ai.deneb.data.imageExtensions
 import ai.deneb.ui.components.animatedGradientBorder
@@ -176,17 +175,22 @@ fun QuestionInput(
         // One attach picker, no "what to insert" menu: it stages the picked files as
         // chips (image / audio / document alike). On submit they go to the gateway as
         // one batch capture (Android) or ride the message (desktop/iOS).
-        val pickerExtensions = remember(supportedFileExtensions, captures) {
-            if (captures != null) {
-                (supportedFileExtensions + imageExtensions + audioExtensions).distinct()
-            } else {
-                supportedFileExtensions
-            }
-        }
-        val allowFileAttachment = pickerExtensions.isNotEmpty()
+        //
+        // DELIBERATELY unfiltered (no `extensions =`). FileKit turns an extension list
+        // into a SAF MIME allowlist — one MimeTypeMap.getMimeTypeFromExtension() per
+        // extension — and SAF matches that against the MIME the *provider* declares for
+        // each file. So a perfectly good meeting recording shows up GREYED OUT and
+        // untappable whenever its provider reports something outside our list
+        // (application/octet-stream for a file copied off a PC or saved out of a
+        // messenger, audio/x-m4a on some devices) — with no explanation anywhere. An
+        // un-tappable file is the worst failure we can hand the user, so the picker
+        // offers everything and we judge the pick ourselves: ChatViewModel.addFile
+        // rejects an unsupported extension with a snackbar naming what IS attachable.
+        // Fail loudly over failing invisibly.
+        val allowFileAttachment = supportedFileExtensions.isNotEmpty()
         val filePickerLauncher = if (allowFileAttachment) {
             rememberFilePickerLauncher(
-                type = FileKitType.File(extensions = pickerExtensions),
+                type = FileKitType.File(),
                 // Several files at once, capped to the gateway's batch limit.
                 mode = FileKitMode.Multiple(maxItems = MAX_BATCH_FILES),
             ) { picked ->
