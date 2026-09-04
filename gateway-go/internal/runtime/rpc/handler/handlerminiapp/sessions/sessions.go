@@ -292,6 +292,16 @@ func decodeThinkingContent(raw json.RawMessage) string {
 		if t, _ := b["type"].(string); t != "thinking" {
 			continue
 		}
+		// The Korean display copy the run persisted alongside the block wins:
+		// the raw reasoning is whatever language the model wrote in, and a
+		// reopened conversation should read the way it read live. Absent for
+		// pre-2026-09 rows and for turns whose translation was refused.
+		if meta, ok := b["metadata"].(map[string]any); ok {
+			if display, ok := meta["ko"].(string); ok && strings.TrimSpace(display) != "" {
+				parts = append(parts, display)
+				continue
+			}
+		}
 		if txt, ok := b["thinking"].(string); ok && txt != "" {
 			parts = append(parts, txt)
 		} else if txt, ok := b["text"].(string); ok && txt != "" {

@@ -159,3 +159,31 @@ func TestSessionsSearchMatchesLabelAndTranscript(t *testing.T) {
 		t.Fatalf("label hits = %+v", got.Hits)
 	}
 }
+
+func TestDecodeThinkingContentPrefersThePersistedDisplayCopy(t *testing.T) {
+	// A restored conversation must read the way it read live. The run stores the
+	// Korean alongside the block; the raw reasoning is whatever language the
+	// model happened to write in.
+	raw := json.RawMessage(`[{"type":"thinking","thinking":"reasoning in english",` +
+		`"metadata":{"ko":"영어로 사고함"}},{"type":"text","text":"답"}]`)
+	if got := decodeThinkingContent(raw); got != "영어로 사고함" {
+		t.Fatalf("decodeThinkingContent = %q, want the display copy", got)
+	}
+}
+
+func TestDecodeThinkingContentFallsBackToTheRawBlock(t *testing.T) {
+	// Rows written before the display copy existed, and turns whose translation
+	// was refused, still have to show their reasoning.
+	cases := map[string]string{
+		"no metadata at all":  `[{"type":"thinking","thinking":"reasoning in english"}]`,
+		"metadata without ko": `[{"type":"thinking","thinking":"reasoning in english","metadata":{"activatedTools":["x"]}}]`,
+		"blank display copy":  `[{"type":"thinking","thinking":"reasoning in english","metadata":{"ko":"   "}}]`,
+	}
+	for name, raw := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := decodeThinkingContent(json.RawMessage(raw)); got != "reasoning in english" {
+				t.Fatalf("decodeThinkingContent = %q, want the raw reasoning", got)
+			}
+		})
+	}
+}
