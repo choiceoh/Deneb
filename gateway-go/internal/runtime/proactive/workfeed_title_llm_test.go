@@ -31,6 +31,44 @@ func TestCleanLLMCardTitleRejectsGenericOrShortTitles(t *testing.T) {
 	}
 }
 
+// The eleven leaked titles found in the live feed on 2026-09-06 (60 cards
+// listed): the tiny titler thinking out loud after the label, or echoing its
+// own instructions. A recoverable noun phrase in front of the tell is kept;
+// everything else is rejected so the heuristic title applies.
+func TestCleanLLMCardTitleSalvagesOrRejectsInlineReasoningLeaks(t *testing.T) {
+	cases := map[string]string{
+		`지앤비 EPC LOI 날인 요청 건? Need concise. Maybe "지앤비 EPC LOI 3건 날인 요청" count?`:  "지앤비 EPC LOI 날인 요청 건",
+		`"안동 임하댐 수상 트레이·모듈 포지션 공유" maybe too long? Count: 안동(2) 임하댐(3) 수상(2) 트레이`: "안동 임하댐 수상 트레이·모듈 포지션 공유",
+		`"당진 솔라빌리지 하도급 해지 방침" 정도가 적절할 것 같다. 20자 이내인지 확인: "당진 솔라빌리지 하도급 해지 방침"은 약`: "당진 솔라빌리지 하도급 해지 방침",
+		"핵심 명사구, 한글 20자 이내, 군더더기 단어 없이.":                                          "",
+		"핵심 명사구, 20자 이내, no filler.":                                     "",
+		`Korean within 20 characters, no filler words like "메일 분석" etc.`: "",
+		"Korean, within": "",
+		"must be Korean within 20 characters, noun phrase, no filler words like": "",
+		`Korean, within 20 characters, noun phrase, no filler words like "메일 분석`: "",
+		"... /":                 "",
+		strings.Repeat("가", 41): "", // twice the contract length = narration
+		// Legit titles pass untouched, including punctuation and English brand names.
+		"SunKean 케이블 2차 선적 최종서류 도착 — 확인 회신 필요": "SunKean 케이블 2차 선적 최종서류 도착 — 확인 회신 필요",
+		"Xpanner X1 패널리프트":       "Xpanner X1 패널리프트",
+		"파인드그린, 잔여 납부금 25.2억 통보": "파인드그린, 잔여 납부금 25.2억 통보",
+	}
+	for in, want := range cases {
+		if got := cleanLLMCardTitle(in); got != want {
+			t.Errorf("cleanLLMCardTitle(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestCleanLLMCardSummaryRejectsInstructionEcho(t *testing.T) {
+	if got := cleanLLMCardSummary("요약은 카드 미리보기용으로 2문장(약 80자) 이내. 제목을 반복하지 말고"); got != "" {
+		t.Errorf("instruction echo must be rejected, got %q", got)
+	}
+	if got := cleanLLMCardSummary("고려전선 케이블 18드럼이 차주 입고로 밀렸다. 현장 일정 재조정 필요."); got == "" {
+		t.Error("a real summary must survive")
+	}
+}
+
 // TestRelay_CardTitlerLLMWinsOrFallbackHeuristic verifies the lightweight-LLM
 // titler names mail-report cards, is skipped for non-mail proactive cards,
 // and falls back to the deterministic heuristic when the model returns "".

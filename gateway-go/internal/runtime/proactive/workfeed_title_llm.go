@@ -3,6 +3,7 @@ package proactive
 import (
 	"context"
 	"strings"
+	"unicode"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive/cardtitle"
 )
@@ -62,10 +63,64 @@ func cleanLLMCardTitle(raw string) string {
 	line = stripMarkdownLine(line)
 	line = strings.Trim(line, " \t\"'`“”‘’「」『』")
 	line = strings.TrimSpace(line)
+	// The labeled line itself can carry the model thinking out loud AFTER the
+	// label ("제목: 지앤비 EPC LOI 날인 요청 건? Need concise. Maybe …") or
+	// echoing its own instructions ("핵심 명사구, 한글 20자 이내, …") — eleven
+	// of sixty live cards on 2026-09-06 had such titles. Keep the noun phrase in
+	// front of the first tell when there is one; otherwise reject so the
+	// heuristic title applies.
+	line = salvageCardTitle(line)
 	if len([]rune(line)) < 3 || isGenericMailReportTitle(line) || isReasoningLeakTitle(line) {
 		return ""
 	}
 	return line
+}
+
+// reasoningTitleMarkers betray a titler thinking out loud or echoing its own
+// instructions anywhere in the title line. Matched case-insensitively. The
+// English ones are the tiny model's scratchpad vocabulary, the Korean ones are
+// fragments of the titler prompt itself.
+var reasoningTitleMarkers = []string{
+	"need concise", "need answer", "we need", "let me ", "i need", "i think", "maybe ", "count:", "count?",
+	"too long", "within ", "characters", "noun phrase", "filler", "korean", "concise", "must be",
+	"자 이내", "글자 이내", "명사구", "군더더기", "정도가 적절", "이내인지", "확인:", "적절할 것",
+}
+
+// salvageCardTitle cuts a title line at the first sign of commentary — a stray
+// quote that closes the intended title ("…포지션 공유" maybe too long?) or a
+// reasoning marker — and returns the head when it still reads as a title.
+// Returns the line unchanged when it is clean, and "" when nothing usable is
+// left in front of the tell.
+func salvageCardTitle(line string) string {
+	cut := len(line)
+	if i := strings.Index(line, "\""); i > 0 && strings.TrimSpace(line[i+1:]) != "" {
+		cut = i
+	}
+	lower := strings.ToLower(line)
+	for _, m := range reasoningTitleMarkers {
+		if i := strings.Index(lower, m); i >= 0 && i < cut {
+			cut = i
+		}
+	}
+	if cut == len(line) {
+		return line
+	}
+	head := strings.TrimRight(strings.TrimSpace(line[:cut]), " ?.,:;—-\"'“”‘’")
+	head = strings.TrimSpace(head)
+	if len([]rune(head)) < 3 || !hasLetterOrDigit(head) {
+		return ""
+	}
+	return head
+}
+
+// hasLetterOrDigit rejects punctuation-only "titles" such as "... /".
+func hasLetterOrDigit(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return true
+		}
+	}
+	return false
 }
 
 // isReasoningLeakTitle reports titles that are the model's own instructions or
@@ -73,8 +128,19 @@ func cleanLLMCardTitle(raw string) string {
 // "We need answer in Korean…" / "我们根据要求…" / "<think>" as the title when
 // the unlabeled first line of the titler output was accepted.
 func isReasoningLeakTitle(t string) bool {
-	if strings.HasPrefix(t, "<") {
+	if strings.HasPrefix(t, "<") || !hasLetterOrDigit(t) {
 		return true
+	}
+	// A card title is a ≤20-char noun phrase by contract; a line twice that long
+	// is narration or a scratchpad, whatever it says.
+	if len([]rune(t)) > workFeedTitleMaxRunes {
+		return true
+	}
+	lower := strings.ToLower(t)
+	for _, m := range reasoningTitleMarkers {
+		if strings.Contains(lower, m) {
+			return true
+		}
 	}
 	for _, prefix := range reasoningTitlePrefixes {
 		if hasPrefixFold(t, prefix) {
@@ -112,10 +178,22 @@ func cleanLLMCardSummary(raw string) string {
 	s := strings.Join(parts, " ")
 	s = strings.Trim(s, " \t\"'`“”‘’「」『』")
 	s = strings.TrimSpace(s)
-	if len([]rune(s)) < 4 || strings.HasPrefix(s, "<") {
+	if len([]rune(s)) < 4 || strings.HasPrefix(s, "<") || isInstructionEchoSummary(s) {
 		return ""
 	}
 	return clipRunes(s, workFeedSummaryMaxRunes)
+}
+
+// isInstructionEchoSummary catches a summary that is the titler prompt talking
+// about itself ("요약은 카드 미리보기용으로 2문장…") rather than the report.
+func isInstructionEchoSummary(s string) bool {
+	lower := strings.ToLower(s)
+	for _, m := range []string{"noun phrase", "filler", "characters", "군더더기", "명사구", "미리보기용", "자 이내", "글자 이내"} {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseLLMTitleSummary(raw string) (title, summary string) {
