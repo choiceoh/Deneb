@@ -5,6 +5,11 @@ import ai.deneb.deneb.generated.SkillLifecycleEvent
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.JetBrainsMonoFamily
+import ai.deneb.ui.components.DenebButton
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebOutlinedButton
+import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -22,14 +27,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -171,12 +171,12 @@ fun DenebSkillScreen(
     }
 
     if (confirmDelete) {
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { if (!actionBusy) confirmDelete = false },
             title = { Text("스킬 삭제") },
             text = { Text("$skillName 스킬 디렉터리를 삭제합니다. 되돌릴 수 없습니다.") },
             confirmButton = {
-                TextButton(
+                DenebTextButton(
                     enabled = !actionBusy,
                     onClick = {
                         haptics.reject()
@@ -196,7 +196,7 @@ fun DenebSkillScreen(
                 ) { Text("삭제", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(enabled = !actionBusy, onClick = { confirmDelete = false }) { Text("취소") }
+                DenebTextButton(enabled = !actionBusy, onClick = { confirmDelete = false }) { Text("취소") }
             },
         )
     }
@@ -259,16 +259,16 @@ internal fun SkillDetailContent(
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (editMode) {
-                Button(enabled = !actionBusy && draftBody.isNotBlank(), onClick = onSave) {
+                DenebButton(enabled = !actionBusy && draftBody.isNotBlank(), onClick = onSave) {
                     Text(if (actionBusy) "저장 중…" else "저장")
                 }
-                OutlinedButton(enabled = !actionBusy, onClick = onCancelEdit) { Text("취소") }
+                DenebOutlinedButton(enabled = !actionBusy, onClick = onCancelEdit) { Text("취소") }
             } else {
                 if (skill.editable) {
-                    OutlinedButton(enabled = !actionBusy && canEdit, onClick = onStartEdit) { Text("수정") }
+                    DenebOutlinedButton(enabled = !actionBusy && canEdit, onClick = onStartEdit) { Text("수정") }
                 }
                 if (skill.deletable) {
-                    OutlinedButton(enabled = !actionBusy, onClick = onRequestDelete) {
+                    DenebOutlinedButton(enabled = !actionBusy, onClick = onRequestDelete) {
                         Text("삭제", color = MaterialTheme.colorScheme.error)
                     }
                 }
@@ -339,7 +339,7 @@ internal fun SkillDetailContent(
     if (docOpen) {
         Spacer(Modifier.height(8.dp))
         if (editMode) {
-            OutlinedTextField(
+            DenebTextField(
                 value = draftBody,
                 onValueChange = onDraftChange,
                 enabled = !actionBusy,

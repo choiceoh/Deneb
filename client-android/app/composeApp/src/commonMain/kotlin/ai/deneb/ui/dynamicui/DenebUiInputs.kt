@@ -2,9 +2,14 @@
 
 package ai.deneb.ui.dynamicui
 
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebButton
 import ai.deneb.ui.components.DenebChip
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebOutlinedButton
+import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
+import ai.deneb.ui.components.DenebTonalButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBreathing
 import ai.deneb.ui.denebGroupSurface
@@ -34,8 +39,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
@@ -45,18 +48,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
@@ -187,7 +186,7 @@ internal fun RenderButton(
             disabledContainerColor = MaterialTheme.colorScheme.primary,
             disabledContentColor = MaterialTheme.colorScheme.onPrimary,
         )
-        Button(
+        DenebButton(
             onClick = {},
             enabled = false,
             colors = pressedColors,
@@ -196,10 +195,10 @@ internal fun RenderButton(
         return
     }
     when (node.variant) {
-        ButtonVariant.OUTLINED -> OutlinedButton(onClick = onClick, enabled = enabled, modifier = buttonModifier) { labelContent() }
-        ButtonVariant.TEXT -> TextButton(onClick = onClick, enabled = enabled, modifier = buttonModifier) { labelContent() }
-        ButtonVariant.TONAL -> FilledTonalButton(onClick = onClick, enabled = enabled, modifier = buttonModifier) { labelContent() }
-        ButtonVariant.FILLED, null -> Button(onClick = onClick, enabled = enabled, modifier = buttonModifier) { labelContent() }
+        ButtonVariant.OUTLINED -> DenebOutlinedButton(onClick = onClick, enabled = enabled, modifier = buttonModifier) { labelContent() }
+        ButtonVariant.TEXT -> DenebTextButton(onClick = onClick, enabled = enabled, modifier = buttonModifier) { labelContent() }
+        ButtonVariant.TONAL -> DenebTonalButton(onClick = onClick, enabled = enabled, modifier = buttonModifier) { labelContent() }
+        ButtonVariant.FILLED, null -> DenebButton(onClick = onClick, enabled = enabled, modifier = buttonModifier) { labelContent() }
     }
 }
 
@@ -219,7 +218,7 @@ internal fun RenderTextInput(
 ) {
     val validation = LocalUiFormValidation.current
     val isError = validation?.errors?.get(node.id) == true
-    DenebOutlinedTextField(
+    DenebTextField(
         value = formState[node.id] ?: "",
         onValueChange = {
             formState[node.id] = it
@@ -278,7 +277,7 @@ internal fun RenderDateInput(
         DatePickerDialog(
             onDismissRequest = { showPicker = false },
             confirmButton = {
-                TextButton(onClick = {
+                DenebTextButton(onClick = {
                     haptics.confirm()
                     state.selectedDateMillis?.let {
                         formState[node.id] = utcMillisToIsoDate(it)
@@ -287,7 +286,7 @@ internal fun RenderDateInput(
                     showPicker = false
                 }) { Text("확인") }
             },
-            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("취소") } },
+            dismissButton = { DenebTextButton(onClick = { showPicker = false }) { Text("취소") } },
         ) { DatePicker(state = state) }
     }
 }
@@ -320,10 +319,10 @@ internal fun RenderTimeInput(
             initialMinute = initial.minute,
             is24Hour = true,
         )
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { showPicker = false },
             confirmButton = {
-                TextButton(onClick = {
+                DenebTextButton(onClick = {
                     haptics.confirm()
                     formState[node.id] =
                         "${state.hour.toString().padStart(2, '0')}:${state.minute.toString().padStart(2, '0')}"
@@ -331,7 +330,7 @@ internal fun RenderTimeInput(
                     showPicker = false
                 }) { Text("확인") }
             },
-            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("취소") } },
+            dismissButton = { DenebTextButton(onClick = { showPicker = false }) { Text("취소") } },
             text = { TimePicker(state = state) },
         )
     }
@@ -352,7 +351,7 @@ private fun PickerField(
     onOpen: () -> Unit,
 ) {
     Box(Modifier.fillMaxWidth()) {
-        DenebOutlinedTextField(
+        DenebTextField(
             value = value,
             onValueChange = {},
             readOnly = true,
@@ -448,7 +447,7 @@ internal fun RenderSelect(
         expanded = expanded,
         onExpandedChange = { if (isInteractive) expanded = it },
     ) {
-        OutlinedTextField(
+        DenebTextField(
             value = selected,
             onValueChange = {},
             readOnly = true,
@@ -462,7 +461,6 @@ internal fun RenderSelect(
             } else {
                 null
             },
-            shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).handCursor(),
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {

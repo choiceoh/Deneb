@@ -9,6 +9,9 @@ import ai.deneb.openUrl
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
+import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
+import ai.deneb.ui.components.DenebTonalButton
 import ai.deneb.ui.components.LinkifiedText
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
@@ -45,14 +48,11 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -207,13 +207,13 @@ fun DenebMailDetailScreen(
         Spacer(Modifier.height(16.dp))
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilledTonalButton(
+            DenebTonalButton(
                 onClick = {
                     haptics.reject()
                     // Guarded: without it a double tap sent the RPC twice and could
                     // navigate up twice — the screen stays composed through the pop
                     // transition, so the second tap is easy to land.
-                    if (trashing) return@FilledTonalButton
+                    if (trashing) return@DenebTonalButton
                     trashing = true
                     scope.launch {
                         val ok = client.trashMail(mail.id)
@@ -224,7 +224,7 @@ fun DenebMailDetailScreen(
                 enabled = !trashing,
                 modifier = Modifier.weight(1f),
             ) { Text("휴지통") }
-            FilledTonalButton(
+            DenebTonalButton(
                 onClick = {
                     haptics.tap()
                     runAnalysis(force = false)
@@ -306,7 +306,7 @@ fun DenebMailDetailScreen(
                         // the whole header a safe expand target (no accidental reruns).
                         if (analysisExpanded) {
                             Spacer(Modifier.width(8.dp))
-                            TextButton(onClick = {
+                            DenebTextButton(onClick = {
                                 haptics.tap()
                                 runAnalysis(force = true)
                             }, enabled = !analyzing) { Text("다시") }
@@ -382,7 +382,7 @@ fun DenebMailDetailScreen(
                     style = DenebType.meta,
                     color = denebHint(),
                 )
-                TextButton(
+                DenebTextButton(
                     onClick = {
                         haptics.tap()
                         scope.launch {
@@ -520,7 +520,7 @@ fun DenebMailDetailScreen(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
+                    DenebTextField(
                         value = askText,
                         onValueChange = { askText = it },
                         placeholder = { Text("질문 입력…") },
@@ -528,7 +528,7 @@ fun DenebMailDetailScreen(
                         enabled = !asking,
                     )
                     Spacer(Modifier.width(8.dp))
-                    TextButton(
+                    DenebTextButton(
                         onClick = {
                             val q = askText.trim()
                             if (q.isNotEmpty() && !asking) {

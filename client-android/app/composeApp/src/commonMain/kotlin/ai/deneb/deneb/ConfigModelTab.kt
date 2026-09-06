@@ -2,6 +2,10 @@ package ai.deneb.deneb
 
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebButton
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -35,16 +39,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RichTooltip
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
@@ -443,7 +443,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
+            DenebTextField(
                 value = addBaseUrl,
                 onValueChange = {
                     addBaseUrl = it
@@ -457,7 +457,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
+            DenebTextField(
                 value = addModel,
                 onValueChange = {
                     addModel = it
@@ -475,7 +475,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                 Text(it, style = DenebType.hint, color = MaterialTheme.colorScheme.error)
             }
             Spacer(Modifier.height(12.dp))
-            Button(
+            DenebButton(
                 onClick = {
                     haptics.confirm()
                     scope.launch {
@@ -500,14 +500,14 @@ internal fun ModelTab(client: DenebGatewayClient) {
     }
 
     pendingDelete?.let { target ->
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("모델 삭제") },
             text = {
                 Text("'${target.display}' 모델을 목록에서 삭제할까요? 이 모델에 연결된 역할은 기본값으로 되돌아갑니다.")
             },
             confirmButton = {
-                TextButton(onClick = {
+                DenebTextButton(onClick = {
                     haptics.reject()
                     val id = target.id
                     pendingDelete = null
@@ -515,7 +515,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                 }) { Text("삭제", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("취소") }
+                DenebTextButton(onClick = { pendingDelete = null }) { Text("취소") }
             },
         )
     }

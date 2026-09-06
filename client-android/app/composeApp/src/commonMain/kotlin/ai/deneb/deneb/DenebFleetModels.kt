@@ -1,6 +1,8 @@
 package ai.deneb.deneb
 
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
@@ -17,13 +19,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -158,7 +158,7 @@ internal fun FleetModelsPage(client: DenebGatewayClient, nodes: List<FleetNode>,
                     trailing = {
                         when {
                             searching -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                            query.isNotBlank() -> TextButton(onClick = { query = "" }) { Text("✕") }
+                            query.isNotBlank() -> DenebTextButton(onClick = { query = "" }) { Text("✕") }
                         }
                     },
                 )
@@ -258,7 +258,7 @@ private fun FleetDownloadDialog(
         mutableStateOf(nodes.firstOrNull { it.role == "storage" }?.name ?: nodes.firstOrNull()?.name.orEmpty())
     }
     LaunchedEffect(model.id) { info = client.fleetHFInfo(model.id) }
-    AlertDialog(
+    DenebDialog(
         onDismissRequest = onDismiss,
         title = { Text("모델 다운로드") },
         text = {
@@ -310,7 +310,7 @@ private fun FleetDownloadDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            DenebTextButton(
                 enabled = target.isNotBlank(),
                 onClick = {
                     haptics.confirm()
@@ -324,6 +324,6 @@ private fun FleetDownloadDialog(
                 },
             ) { Text("⬇ 다운로드") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        dismissButton = { DenebTextButton(onClick = onDismiss) { Text("취소") } },
     )
 }

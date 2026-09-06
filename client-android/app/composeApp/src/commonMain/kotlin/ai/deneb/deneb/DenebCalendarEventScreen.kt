@@ -3,6 +3,9 @@ package ai.deneb.deneb
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebOutlinedButton
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebSharedBounds
@@ -16,11 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -102,12 +102,12 @@ fun DenebCalendarEventScreen(
     }
 
     if (showDelete) {
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { if (!deleting) showDelete = false },
             title = { Text("일정 삭제") },
             text = { Text("이 일정을 삭제할까요? 되돌릴 수 없습니다.") },
             confirmButton = {
-                TextButton(
+                DenebTextButton(
                     enabled = !deleting,
                     onClick = {
                         haptics.reject()
@@ -123,7 +123,7 @@ fun DenebCalendarEventScreen(
                 ) { Text("삭제") }
             },
             dismissButton = {
-                TextButton(enabled = !deleting, onClick = { showDelete = false }) { Text("취소") }
+                DenebTextButton(enabled = !deleting, onClick = { showDelete = false }) { Text("취소") }
             },
         )
     }
@@ -185,11 +185,11 @@ internal fun CalendarEventContent(
     if (!ev.allDay) {
         Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = {
+            DenebOutlinedButton(onClick = {
                 haptics.tap()
                 onAskInChat("이 일정 미팅 준비 도와줘 — '${ev.title}' (id=${ev.id})")
             }) { Text("미팅 준비") }
-            OutlinedButton(onClick = {
+            DenebOutlinedButton(onClick = {
                 haptics.tap()
                 onAskInChat("이 일정 회의록 정리해줘 — '${ev.title}' (id=${ev.id})")
             }) { Text("회의록 정리") }
@@ -199,11 +199,11 @@ internal fun CalendarEventContent(
     if (isLocal) {
         Spacer(Modifier.height(if (ev.allDay) 20.dp else 8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = {
+            DenebOutlinedButton(onClick = {
                 haptics.tap()
                 onEdit()
             }) { Text("편집") }
-            OutlinedButton(onClick = {
+            DenebOutlinedButton(onClick = {
                 haptics.reject()
                 onDelete()
             }) { Text("삭제") }

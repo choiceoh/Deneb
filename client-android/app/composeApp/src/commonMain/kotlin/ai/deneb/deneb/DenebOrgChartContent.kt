@@ -2,9 +2,10 @@ package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.MemberOut
 import ai.deneb.deneb.generated.OrgNodeOut
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
+import ai.deneb.ui.components.DenebOutlinedButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
@@ -40,7 +41,6 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -157,7 +157,7 @@ internal fun OrgChartContent(
         // Add another root node — edit mode only (a clean view has no add affordances).
         if (editMode) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp)) {
-                OutlinedButton(onClick = onAddRoot) {
+                DenebOutlinedButton(onClick = onAddRoot) {
                     Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("최상위 조직 추가")
@@ -393,7 +393,7 @@ private fun OrgSearchBar(
     hitCount: Int,
 ) {
     Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)) {
-        DenebOutlinedTextField(
+        DenebTextField(
             value = query,
             onValueChange = onQueryChange,
             placeholder = { Text("이름으로 사람 찾기") },

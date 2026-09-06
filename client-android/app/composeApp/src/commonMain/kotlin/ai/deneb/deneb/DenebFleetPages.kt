@@ -2,6 +2,8 @@ package ai.deneb.deneb
 
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.JetBrainsMonoFamily
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import androidx.compose.foundation.background
@@ -20,13 +22,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -86,12 +86,12 @@ internal fun FleetJobsPage(client: DenebGatewayClient, jobs: List<FleetJob>, loa
         }
     }
     cancelTarget?.let { job ->
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { cancelTarget = null },
             title = { Text("작업 취소") },
             text = { Text("\"${job.title}\" 작업을 취소할까요?\n전송류 작업은 재시도하면 끊긴 지점부터 이어받습니다.") },
             confirmButton = {
-                TextButton(onClick = {
+                DenebTextButton(onClick = {
                     // Killing a running job is the negative commit, not a dismiss.
                     haptics.reject()
                     cancelTarget = null
@@ -101,7 +101,7 @@ internal fun FleetJobsPage(client: DenebGatewayClient, jobs: List<FleetJob>, loa
                     }
                 }) { Text("취소 실행", color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { cancelTarget = null }) { Text("닫기") } },
+            dismissButton = { DenebTextButton(onClick = { cancelTarget = null }) { Text("닫기") } },
         )
     }
 }
@@ -187,7 +187,7 @@ private fun FleetJobRow(job: FleetJob, expanded: Boolean, onToggle: () -> Unit, 
             }
             Text(job.title, style = DenebType.rowTitle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             if (job.state == "running") {
-                TextButton(onClick = onCancel) { Text("취소", color = MaterialTheme.colorScheme.error) }
+                DenebTextButton(onClick = onCancel) { Text("취소", color = MaterialTheme.colorScheme.error) }
             }
         }
         if (expanded && job.log.isNotBlank()) {

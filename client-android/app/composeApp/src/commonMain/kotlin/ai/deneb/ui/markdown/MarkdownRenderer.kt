@@ -1,8 +1,8 @@
 package ai.deneb.ui.markdown
 
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.LocalShowFullScreenImageModel
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBreathing
@@ -399,7 +399,7 @@ private fun ChoiceChipsBlock(
             }
         }
         if (isInteractive && customOpen) {
-            DenebOutlinedTextField(
+            DenebTextField(
                 value = customText,
                 onValueChange = { customText = it },
                 singleLine = true,

@@ -3,6 +3,8 @@ package ai.deneb.deneb
 import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
@@ -20,11 +22,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -203,7 +203,7 @@ fun DenebSearchScreen(
 
     pendingFileOpen?.let { hit ->
         val displayName = hit.name.ifBlank { hit.path }
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { pendingFileOpen = null },
             title = { Text("큰 파일 다운로드") },
             text = {
@@ -214,7 +214,7 @@ fun DenebSearchScreen(
                 )
             },
             confirmButton = {
-                TextButton(
+                DenebTextButton(
                     onClick = {
                         haptics.confirm()
                         pendingFileOpen = null
@@ -223,7 +223,7 @@ fun DenebSearchScreen(
                 ) { Text("다운로드") }
             },
             dismissButton = {
-                TextButton(onClick = { pendingFileOpen = null }) { Text("취소") }
+                DenebTextButton(onClick = { pendingFileOpen = null }) { Text("취소") }
             },
         )
     }
@@ -263,10 +263,10 @@ internal fun SearchContent(
             onSearch = onSearch,
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onOpenCategories) {
+            DenebTextButton(onClick = onOpenCategories) {
                 Text("카테고리", style = DenebType.hint)
             }
-            TextButton(onClick = { onOpenWiki("") }) {
+            DenebTextButton(onClick = { onOpenWiki("") }) {
                 Text("새 위키", style = DenebType.hint)
             }
         }

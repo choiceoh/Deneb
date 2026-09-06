@@ -5,6 +5,8 @@ import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.OnLiveTabActivation
 import ai.deneb.ui.components.DenebChip
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
@@ -34,7 +36,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,7 +44,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -279,7 +279,7 @@ fun DenebMailScreen(
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { clearSelection() }) { Text("취소") }
+                DenebTextButton(onClick = { clearSelection() }) { Text("취소") }
             }
         }
 
@@ -369,7 +369,7 @@ fun DenebMailScreen(
                                         color = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.weight(1f),
                                     )
-                                    TextButton(onClick = {
+                                    DenebTextButton(onClick = {
                                         scope.launch {
                                             loadOk = null
                                             loadOk = client.refreshMail(activeQuery)
@@ -451,7 +451,7 @@ fun DenebMailScreen(
                                     if (loadingMore) {
                                         CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                                     } else {
-                                        TextButton(onClick = {
+                                        DenebTextButton(onClick = {
                                             scope.launch {
                                                 loadingMore = true
                                                 client.loadMoreMail()
@@ -482,9 +482,9 @@ fun DenebMailScreen(
                         }
                     }
                     Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { bulk { client.markMailRead(it) } }, enabled = !busy) { Text("읽음") }
-                    TextButton(onClick = { bulk { client.archiveMail(it) } }, enabled = !busy) { Text("보관") }
-                    TextButton(onClick = { bulk { client.trashMail(it) } }, enabled = !busy) { Text("휴지통") }
+                    DenebTextButton(onClick = { bulk { client.markMailRead(it) } }, enabled = !busy) { Text("읽음") }
+                    DenebTextButton(onClick = { bulk { client.archiveMail(it) } }, enabled = !busy) { Text("보관") }
+                    DenebTextButton(onClick = { bulk { client.trashMail(it) } }, enabled = !busy) { Text("휴지통") }
                 }
             }
         }
@@ -725,9 +725,9 @@ private fun MailRowDot(color: Color?, size: Dp = MailDotSlot, contentDescription
  */
 @Composable
 private fun MailLegendDialog(onDismiss: () -> Unit) {
-    AlertDialog(
+    DenebDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
+        confirmButton = { DenebTextButton(onClick = onDismiss) { Text("닫기") } },
         title = { Text("표시 안내", style = DenebType.subject) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

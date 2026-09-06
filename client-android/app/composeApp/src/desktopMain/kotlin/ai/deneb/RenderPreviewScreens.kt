@@ -47,6 +47,14 @@ import ai.deneb.ui.chat.WorkFeedItem
 import ai.deneb.ui.chat.composables.EmptyState
 import ai.deneb.ui.chat.composables.WorkFeedAnswerBlock
 import ai.deneb.ui.chat.composables.WorkFeedPanel
+import ai.deneb.ui.components.DenebButton
+import ai.deneb.ui.components.DenebDialogCard
+import ai.deneb.ui.components.DenebOutlinedButton
+import ai.deneb.ui.components.DenebSegment
+import ai.deneb.ui.components.DenebSegmentedRow
+import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
+import ai.deneb.ui.components.DenebTonalButton
 import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.SectionedScrubList
 import ai.deneb.ui.denebHairline
@@ -509,6 +517,64 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
     "session_drawer" to { scheme -> sessionDrawerBody(scheme) },
     "session_drawer_search" to { scheme -> sessionDrawerBody(scheme, searchOpen = true) },
     "session_drawer_actions" to { scheme -> sessionDrawerBody(scheme, revealedId = "client:main:nda") },
+    // The control vocabulary in one frame: the four button roles, a segmented
+    // control, the skinned text field (resting / error), and a dialog's face.
+    // Dialogs cannot be drawn by the headless renderer (they open a window), so
+    // DenebDialogCard is what the golden captures.
+    "controls" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.width(412.dp).padding(bottom = 24.dp)) {
+                    DenebSectionLabel("버튼", Modifier.padding(start = 24.dp, top = 16.dp))
+                    Row(
+                        Modifier.padding(horizontal = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        DenebButton(onClick = {}) { Text("저장") }
+                        DenebTonalButton(onClick = {}) { Text("추가") }
+                        DenebOutlinedButton(onClick = {}) { Text("복구") }
+                        DenebTextButton(onClick = {}) { Text("취소") }
+                    }
+                    DenebSectionLabel("세그먼티드", Modifier.padding(start = 24.dp))
+                    DenebSegmentedRow(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+                        listOf("매일", "매주", "주기", "한 번").forEachIndexed { i, label ->
+                            DenebSegment(selected = i == 1, onClick = {}, index = i, count = 4) { Text(label) }
+                        }
+                    }
+                    DenebSectionLabel("필드", Modifier.padding(start = 24.dp))
+                    Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        DenebTextField(
+                            value = "https://api.example.com/v1",
+                            onValueChange = {},
+                            label = { Text("Base URL") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        DenebTextField(
+                            value = "",
+                            onValueChange = {},
+                            label = { Text("모델 이름") },
+                            placeholder = { Text("glm-5.3-flash") },
+                            isError = true,
+                            supportingText = { Text("이름을 입력하세요") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    DenebSectionLabel("다이얼로그", Modifier.padding(start = 24.dp))
+                    Box(Modifier.padding(horizontal = 24.dp)) {
+                        DenebDialogCard(
+                            title = { Text("모델 제거") },
+                            text = { Text("웜홀 설정에서 “glm-5.3-flash-local-low” 을 지웁니다. 이 이름을 가리키던 fallback도 함께 정리됩니다.") },
+                            confirmButton = { DenebTextButton(onClick = {}) { Text("제거", color = MaterialTheme.colorScheme.error) } },
+                            dismissButton = { DenebTextButton(onClick = {}) { Text("취소") } },
+                        )
+                    }
+                }
+            }
+        }
+    },
     "states" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {

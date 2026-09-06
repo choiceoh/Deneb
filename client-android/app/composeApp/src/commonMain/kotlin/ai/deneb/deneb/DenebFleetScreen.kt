@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.background
@@ -22,7 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -102,7 +102,7 @@ fun DenebFleetScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("플릿", style = DenebType.viewTitle, modifier = Modifier.weight(1f))
-                TextButton(onClick = onBack) { Text("닫기") }
+                DenebTextButton(onClick = onBack) { Text("닫기") }
             }
             // Pill tab bar — same look as the settings hub so the two screens
             // read as siblings.

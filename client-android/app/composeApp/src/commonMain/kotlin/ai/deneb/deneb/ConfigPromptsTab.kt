@@ -8,6 +8,9 @@ import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.JetBrainsMonoFamily
+import ai.deneb.ui.components.DenebButton
+import ai.deneb.ui.components.DenebOutlinedButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.icons.outlined.Article
@@ -29,13 +32,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -295,7 +295,7 @@ private fun PromptDetailPane(
             onSave = { save() },
             // Prompts get a "reset to default" action; the topic doc has no default.
             trailingActions = {
-                OutlinedButton(
+                DenebOutlinedButton(
                     onClick = { reset() },
                     enabled = current.editable && current.overridden && !saving,
                 ) {
@@ -489,7 +489,7 @@ internal fun PromptStyleEditor(
             )
         }
 
-        OutlinedTextField(
+        DenebTextField(
             value = draft,
             onValueChange = onDraft,
             readOnly = readOnly || saving,
@@ -518,7 +518,7 @@ internal fun PromptStyleEditor(
                 overflow = TextOverflow.Ellipsis,
             )
             trailingActions()
-            Button(
+            DenebButton(
                 onClick = onSave,
                 enabled = canSave && !saving,
             ) {

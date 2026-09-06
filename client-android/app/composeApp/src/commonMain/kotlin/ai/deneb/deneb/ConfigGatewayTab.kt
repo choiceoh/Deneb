@@ -13,6 +13,10 @@ import ai.deneb.tools.ContactsPermissionController
 import ai.deneb.tools.LocationPermissionController
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebButton
+import ai.deneb.ui.components.DenebOutlinedButton
+import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.settings.SettingsCard
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,12 +28,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -72,7 +72,7 @@ internal fun GatewayTab(
     ) {
         DenebSectionLabel("게이트웨이 연결")
         SettingsCard {
-            OutlinedTextField(
+            DenebTextField(
                 value = url,
                 onValueChange = { url = it },
                 label = { Text("게이트웨이 주소") },
@@ -81,7 +81,7 @@ internal fun GatewayTab(
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
+            DenebTextField(
                 value = token,
                 onValueChange = { token = it },
                 label = { Text("클라이언트 토큰") },
@@ -90,7 +90,7 @@ internal fun GatewayTab(
                 // over the shoulder; a 보기/숨기기 toggle reveals it for pasting.
                 visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
-                    TextButton(onClick = { tokenVisible = !tokenVisible }) {
+                    DenebTextButton(onClick = { tokenVisible = !tokenVisible }) {
                         Text(
                             if (tokenVisible) "숨기기" else "보기",
                             style = DenebType.hint,
@@ -106,7 +106,7 @@ internal fun GatewayTab(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(16.dp))
-            Button(
+            DenebButton(
                 onClick = {
                     val newUrl = url.trim()
                     val newToken = token.trim()
@@ -214,7 +214,7 @@ private fun GatewayStatusCard(
             }
         }
         Spacer(Modifier.height(12.dp))
-        OutlinedButton(
+        DenebOutlinedButton(
             onClick = onRefresh,
             enabled = enabled && !checking,
             modifier = Modifier.fillMaxWidth(),
@@ -246,9 +246,9 @@ private fun ContactsSyncCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
-        Button(
+        DenebButton(
             onClick = {
-                val c = denebClient ?: return@Button
+                val c = denebClient ?: return@DenebButton
                 scope.launch {
                     syncing = true
                     syncMsg = null
@@ -334,7 +334,7 @@ private fun LocationSensingCard(permission: LocationPermissionController, appSet
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
-        Button(
+        DenebButton(
             onClick = {
                 scope.launch {
                     working = true
@@ -362,10 +362,10 @@ private fun LocationSensingCard(permission: LocationPermissionController, appSet
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            OutlinedButton(onClick = { pin("home", "집") }, enabled = !working, modifier = Modifier.weight(1f)) {
+            DenebOutlinedButton(onClick = { pin("home", "집") }, enabled = !working, modifier = Modifier.weight(1f)) {
                 Text("현재 위치를 집으로")
             }
-            OutlinedButton(onClick = { pin("work", "직장") }, enabled = !working, modifier = Modifier.weight(1f)) {
+            DenebOutlinedButton(onClick = { pin("work", "직장") }, enabled = !working, modifier = Modifier.weight(1f)) {
                 Text("현재 위치를 직장으로")
             }
         }

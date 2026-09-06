@@ -2,6 +2,7 @@ package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.OrgNodeOut
 import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,7 +12,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -123,7 +123,7 @@ fun DenebOrgChartScreen(
             // 편집/완료 flips edit mode. The chart defaults to a clean read-only view so
             // casually opening it never lands in an editable state.
             if (loadOk == true) {
-                TextButton(onClick = { editMode = !editMode }) {
+                DenebTextButton(onClick = { editMode = !editMode }) {
                     Text(if (editMode) "완료" else "편집")
                 }
             }
@@ -131,7 +131,7 @@ fun DenebOrgChartScreen(
             // label going quiet. Kept in the scaffold header so it is reachable on both
             // phone and desktop without a floating button.
             if (dirty || saving) {
-                TextButton(onClick = { if (!saving) save() }, enabled = !saving) {
+                DenebTextButton(onClick = { if (!saving) save() }, enabled = !saving) {
                     Text(if (saving) "저장 중…" else "저장")
                 }
             }

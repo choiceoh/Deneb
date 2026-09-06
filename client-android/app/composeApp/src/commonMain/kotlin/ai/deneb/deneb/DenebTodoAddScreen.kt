@@ -3,6 +3,11 @@ package ai.deneb.deneb
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebButton
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebOutlinedButton
+import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,17 +18,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
@@ -191,12 +191,12 @@ fun DenebTodoAddScreen(
     }
 
     if (confirmDelete) {
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { if (!deleting) confirmDelete = false },
             title = { Text("할 일 삭제") },
             text = { Text("이 할 일을 삭제할까요? 되돌릴 수 없습니다.") },
             confirmButton = {
-                TextButton(
+                DenebTextButton(
                     enabled = !deleting,
                     onClick = {
                         haptics.reject()
@@ -208,7 +208,7 @@ fun DenebTodoAddScreen(
                 }
             },
             dismissButton = {
-                TextButton(enabled = !deleting, onClick = { confirmDelete = false }) { Text("취소") }
+                DenebTextButton(enabled = !deleting, onClick = { confirmDelete = false }) { Text("취소") }
             },
         )
     }
@@ -218,27 +218,27 @@ fun DenebTodoAddScreen(
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
-                TextButton(onClick = {
+                DenebTextButton(onClick = {
                     haptics.confirm()
                     state.selectedDateMillis?.let { dueDate = todoUtcMillisToDate(it) }
                     showDatePicker = false
                 }) { Text("확인") }
             },
-            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("취소") } },
+            dismissButton = { DenebTextButton(onClick = { showDatePicker = false }) { Text("취소") } },
         ) { DatePicker(state = state) }
     }
     if (showTimePicker) {
         val state = rememberTimePickerState(initialHour = dueTime.hour, initialMinute = dueTime.minute, is24Hour = true)
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { showTimePicker = false },
             confirmButton = {
-                TextButton(onClick = {
+                DenebTextButton(onClick = {
                     haptics.confirm()
                     dueTime = LocalTime(state.hour, state.minute)
                     showTimePicker = false
                 }) { Text("확인") }
             },
-            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("취소") } },
+            dismissButton = { DenebTextButton(onClick = { showTimePicker = false }) { Text("취소") } },
             text = { TimePicker(state = state) },
         )
     }
@@ -270,7 +270,7 @@ internal fun TodoAddContent(
 ) {
     val haptics = rememberHaptics()
     Spacer(Modifier.height(8.dp))
-    OutlinedTextField(
+    DenebTextField(
         value = title,
         onValueChange = onTitle,
         label = { Text("제목") },
@@ -279,10 +279,10 @@ internal fun TodoAddContent(
     )
 
     DenebSectionLabel("메모")
-    OutlinedTextField(
+    DenebTextField(
         value = note,
         onValueChange = onNote,
-        label = { Text("메모 (선택)") },
+        placeholder = { Text("선택 사항") },
         minLines = 2,
         modifier = Modifier.fillMaxWidth(),
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Default),
@@ -306,17 +306,17 @@ internal fun TodoAddContent(
         }
         Spacer(Modifier.height(8.dp))
         if (allDay) {
-            OutlinedButton(onClick = {
+            DenebOutlinedButton(onClick = {
                 haptics.tap()
                 onPickDate()
             }, modifier = Modifier.fillMaxWidth()) { Text(dueDateLabel) }
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = {
+                DenebOutlinedButton(onClick = {
                     haptics.tap()
                     onPickDate()
                 }, modifier = Modifier.weight(1f)) { Text(dueDateLabel) }
-                OutlinedButton(onClick = {
+                DenebOutlinedButton(onClick = {
                     haptics.tap()
                     onPickTime()
                 }, modifier = Modifier.weight(1f)) { Text(dueTimeLabel) }
@@ -330,7 +330,7 @@ internal fun TodoAddContent(
     }
 
     Spacer(Modifier.height(20.dp))
-    Button(onClick = {
+    DenebButton(onClick = {
         haptics.confirm()
         onSave()
     }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
@@ -338,7 +338,7 @@ internal fun TodoAddContent(
     }
     if (onDelete != null) {
         Spacer(Modifier.height(8.dp))
-        TextButton(
+        DenebTextButton(
             onClick = {
                 // Destructive commit → the reject buzz, not a long-press rumble.
                 haptics.reject()

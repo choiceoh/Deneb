@@ -15,6 +15,7 @@ import ai.deneb.ui.chat.hasUnansweredUserTurn
 import ai.deneb.ui.chat.lastRenderedAssistant
 import ai.deneb.ui.chat.needsEmptyReplyRecovery
 import ai.deneb.ui.chat.newMessagesDividerIndex
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.VerticalScrollbarForList
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebContentWidthModifier
@@ -53,7 +54,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -786,7 +786,7 @@ internal fun ChatMessageList(
                                     style = DenebType.body,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                TextButton(onClick = uiState.actions.regenerate) {
+                                DenebTextButton(onClick = uiState.actions.regenerate) {
                                     Text("다시 생성")
                                 }
                             }

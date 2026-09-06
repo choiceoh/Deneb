@@ -72,7 +72,7 @@ HAPTIC_RULES = (
 # exists for. A one-button dialog is an acknowledgement (닫기/확인) and stays silent
 # under the dismiss convention, so it is not checked; neither is an empty
 # confirmButton = {} (a picker list that commits from its rows).
-DIALOG_ANCHORS = ("AlertDialog(", "DatePickerDialog(")
+DIALOG_ANCHORS = ("AlertDialog(", "DenebDialog(", "DatePickerDialog(")
 DIALOG_WANTED = re.compile(r"[Hh]aptics?\.(confirm|reject)\(")
 
 # Primitives that own a haptic on behalf of every caller. No call-site rule can see
@@ -201,7 +201,16 @@ def rule_dialog_decision_haptic() -> list[str]:
             at = 0
             while (at := text.find(anchor, at)) >= 0:
                 call = _balanced(text, at + len(anchor) - 1, "(", ")")
+                start = at
                 at += len(anchor)
+                # The primitive's own declaration names both slots as parameters,
+                # and a comment that mentions the anchor is prose — neither is a
+                # dialog anyone decided in.
+                if text[max(0, start - 4):start].endswith("fun "):
+                    continue
+                line_start = text.rfind("\n", 0, start) + 1
+                if text[line_start:start].lstrip().startswith(("*", "//")):
+                    continue
                 if "confirmButton" not in call or "dismissButton" not in call:
                     continue
                 body = _balanced(call, call.find("confirmButton"), "{", "}")

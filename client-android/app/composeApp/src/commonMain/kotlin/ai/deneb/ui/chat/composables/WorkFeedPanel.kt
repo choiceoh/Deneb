@@ -5,7 +5,11 @@ import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.WorkFeedAction
 import ai.deneb.ui.chat.WorkFeedItem
+import ai.deneb.ui.components.DenebButton
 import ai.deneb.ui.components.DenebChip
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -49,15 +53,11 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MailOutline
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -231,12 +231,12 @@ internal fun WorkFeedRow(
     val haptics = rememberHaptics()
     var confirmTrash by remember { mutableStateOf(false) }
     if (confirmTrash) {
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { confirmTrash = false },
             title = { Text("삭제할까요?") },
             text = { Text("이 카드를 영구히 삭제합니다. 되돌릴 수 없습니다.\n보관만 하려면 '보관'을 사용하세요.") },
             confirmButton = {
-                TextButton(
+                DenebTextButton(
                     onClick = {
                         haptics.reject()
                         confirmTrash = false
@@ -244,7 +244,7 @@ internal fun WorkFeedRow(
                     },
                 ) { Text("삭제") }
             },
-            dismissButton = { TextButton(onClick = { confirmTrash = false }) { Text("취소") } },
+            dismissButton = { DenebTextButton(onClick = { confirmTrash = false }) { Text("취소") } },
         )
     }
     val titleStyle = if (item.status == "unread") DenebType.rowTitleStrong else DenebType.rowTitle
@@ -353,7 +353,7 @@ internal fun WorkFeedApprovalDialog(
     val haptics = rememberHaptics()
     val isReject = action.id == "approval:reject"
     var rejectionComment by remember(item.id, action.id) { mutableStateOf("") }
-    AlertDialog(
+    DenebDialog(
         onDismissRequest = onDismiss,
         title = { Text("${action.label}할까요?", style = DenebType.subject) },
         text = {
@@ -368,7 +368,7 @@ internal fun WorkFeedApprovalDialog(
                 )
                 if (isReject) {
                     Spacer(Modifier.height(16.dp))
-                    OutlinedTextField(
+                    DenebTextField(
                         value = rejectionComment,
                         onValueChange = { rejectionComment = limitApprovalComment(it) },
                         label = { Text("반려 사유 (선택)", style = DenebType.meta) },
@@ -389,7 +389,7 @@ internal fun WorkFeedApprovalDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            DenebTextButton(
                 onClick = {
                     val comment = rejectionComment.trim().takeIf { isReject && it.isNotEmpty() }
                     onDismiss()
@@ -399,7 +399,7 @@ internal fun WorkFeedApprovalDialog(
             ) { Text(action.label, style = DenebType.button) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            DenebTextButton(onClick = onDismiss) {
                 Text("취소", style = DenebType.button)
             }
         },
@@ -453,7 +453,7 @@ internal fun WorkFeedAnswerBlock(
             // free-text question (no fixed options): a reply field routed to the session.
             var text by remember(item.id) { mutableStateOf("") }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
+                DenebTextField(
                     value = text,
                     onValueChange = { text = it },
                     placeholder = { Text("답장…", style = DenebType.hint) },
@@ -511,7 +511,7 @@ internal fun WorkFeedActionChips(
     val haptics = rememberHaptics()
     var pendingRevert by remember(item.id) { mutableStateOf<WorkFeedAction?>(null) }
     pendingRevert?.let { action ->
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { pendingRevert = null },
             title = { Text(action.label, style = DenebType.subject) },
             text = {
@@ -521,7 +521,7 @@ internal fun WorkFeedActionChips(
                 )
             },
             confirmButton = {
-                TextButton(
+                DenebTextButton(
                     onClick = {
                         haptics.confirm()
                         pendingRevert = null
@@ -530,7 +530,7 @@ internal fun WorkFeedActionChips(
                 ) { Text("되돌리기", style = DenebType.button) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingRevert = null }) { Text("취소", style = DenebType.button) }
+                DenebTextButton(onClick = { pendingRevert = null }) { Text("취소", style = DenebType.button) }
             },
         )
     }
@@ -650,7 +650,7 @@ internal fun WorkFeedFeedbackSheetContent(
                 color = denebHint(),
             )
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(
+            DenebTextField(
                 value = text,
                 onValueChange = { text = it },
                 placeholder = { Text("예: 이 거래처 담당자는 김 부장이 아니라 이서연 차장입니다") },
@@ -659,9 +659,9 @@ internal fun WorkFeedFeedbackSheetContent(
             )
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onClose) { Text("취소") }
+                DenebTextButton(onClick = onClose) { Text("취소") }
                 Spacer(Modifier.width(8.dp))
-                Button(
+                DenebButton(
                     onClick = {
                         onSubmit(text.trim())
                         sent = true

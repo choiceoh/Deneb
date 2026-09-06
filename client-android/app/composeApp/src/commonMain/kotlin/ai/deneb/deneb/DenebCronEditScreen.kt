@@ -5,7 +5,11 @@ package ai.deneb.deneb
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebButton
 import ai.deneb.ui.components.DenebChip
+import ai.deneb.ui.components.DenebSegment
+import ai.deneb.ui.components.DenebSegmentedRow
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -22,17 +26,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -207,13 +206,13 @@ fun DenebCronEditScreen(
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
-                TextButton(onClick = {
+                DenebTextButton(onClick = {
                     haptics.confirm()
                     state.selectedDateMillis?.let { draft = draft.copy(onceDate = utcMillisToLocalDate(it)) }
                     showDatePicker = false
                 }) { Text("확인") }
             },
-            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("취소") } },
+            dismissButton = { DenebTextButton(onClick = { showDatePicker = false }) { Text("취소") } },
         ) { DatePicker(state = state) }
     }
 }
@@ -279,7 +278,7 @@ internal fun CronEditContent(
     }
 
     Spacer(Modifier.height(28.dp))
-    Button(onClick = {
+    DenebButton(onClick = {
         haptics.confirm()
         onSave()
     }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
@@ -307,15 +306,16 @@ private fun ScheduleEditor(
         SchedMode.INTERVAL to "주기",
         SchedMode.ONCE to "한 번",
     )
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+    DenebSegmentedRow(Modifier.fillMaxWidth()) {
         segments.forEachIndexed { i, (m, label) ->
-            SegmentedButton(
+            DenebSegment(
                 selected = draft.mode == m,
                 onClick = {
                     haptics.tap()
                     onDraft(draft.copy(mode = m))
                 },
-                shape = SegmentedButtonDefaults.itemShape(i, segments.size),
+                index = i,
+                count = segments.size,
             ) { Text(label) }
         }
     }
@@ -362,7 +362,7 @@ private fun ScheduleEditor(
 
     Spacer(Modifier.height(10.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        TextButton(onClick = {
+        DenebTextButton(onClick = {
             haptics.tap()
             onDraft(draft.copy(mode = if (draft.mode == SchedMode.ADVANCED) SchedMode.DAILY else SchedMode.ADVANCED))
         }) {
@@ -431,12 +431,13 @@ private fun IntervalField(draft: ScheduleDraft, onDraft: (ScheduleDraft) -> Unit
         }
         Spacer(Modifier.width(16.dp))
         val units = listOf(IntervalUnit.MIN to "분", IntervalUnit.HOUR to "시간")
-        SingleChoiceSegmentedButtonRow {
+        DenebSegmentedRow {
             units.forEachIndexed { i, (u, label) ->
-                SegmentedButton(
+                DenebSegment(
                     selected = draft.intervalUnit == u,
                     onClick = { onDraft(draft.copy(intervalUnit = u)) },
-                    shape = SegmentedButtonDefaults.itemShape(i, units.size),
+                    index = i,
+                    count = units.size,
                 ) { Text(label) }
             }
         }

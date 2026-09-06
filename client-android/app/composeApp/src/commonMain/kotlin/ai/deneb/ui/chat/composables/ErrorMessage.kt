@@ -2,6 +2,7 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.network.UiError
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.layout.Column
@@ -13,7 +14,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,7 +57,7 @@ internal fun ErrorMessage(
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(10.dp))
-            TextButton(
+            DenebTextButton(
                 modifier = Modifier.handCursor(),
                 onClick = {
                     haptics.tap()

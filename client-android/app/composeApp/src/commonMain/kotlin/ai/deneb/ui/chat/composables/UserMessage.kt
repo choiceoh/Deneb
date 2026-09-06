@@ -3,6 +3,9 @@ package ai.deneb.ui.chat.composables
 import ai.deneb.data.Attachment
 import ai.deneb.shareTextToApps
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.LocalShowFullScreenImage
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
@@ -31,13 +34,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -212,9 +212,9 @@ internal fun UserMessage(
 // bubble's long-press and offered no discoverable affordance).
 @Composable
 internal fun SelectTextDialog(text: String, onDismiss: () -> Unit) {
-    AlertDialog(
+    DenebDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
+        confirmButton = { DenebTextButton(onClick = onDismiss) { Text("닫기") } },
         text = {
             SelectionContainer {
                 Text(
@@ -233,10 +233,10 @@ internal fun SelectTextDialog(text: String, onDismiss: () -> Unit) {
 internal fun EditResendDialog(initial: String, onSend: (String) -> Unit, onDismiss: () -> Unit) {
     var draft by remember(initial) { mutableStateOf(initial) }
     val haptics = rememberHaptics()
-    AlertDialog(
+    DenebDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(
+            DenebTextButton(
                 enabled = draft.trim().isNotEmpty(),
                 onClick = {
                     haptics.confirm()
@@ -244,9 +244,9 @@ internal fun EditResendDialog(initial: String, onSend: (String) -> Unit, onDismi
                 },
             ) { Text("보내기") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        dismissButton = { DenebTextButton(onClick = onDismiss) { Text("취소") } },
         text = {
-            OutlinedTextField(
+            DenebTextField(
                 value = draft,
                 onValueChange = { draft = it },
                 modifier = Modifier.fillMaxWidth(),

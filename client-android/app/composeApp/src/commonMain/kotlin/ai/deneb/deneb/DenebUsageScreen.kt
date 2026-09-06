@@ -5,6 +5,8 @@ import ai.deneb.deneb.generated.UsageStatsResult
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebSegment
+import ai.deneb.ui.components.DenebSegmentedRow
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -22,9 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -134,15 +133,16 @@ fun DenebUsageScreen(
 @Composable
 private fun UsageWindowRow(days: Int, onDaysChange: (Int) -> Unit) {
     val options = listOf(1 to "1일", 7 to "7일")
-    SingleChoiceSegmentedButtonRow(
+    DenebSegmentedRow(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
     ) {
         options.forEachIndexed { i, (d, label) ->
-            SegmentedButton(
+            DenebSegment(
                 selected = days == d,
                 onClick = { onDaysChange(d) },
-                shape = SegmentedButtonDefaults.itemShape(i, options.size),
-            ) { Text(label, style = DenebType.rowSubtitle) }
+                index = i,
+                count = options.size,
+            ) { Text(label) }
         }
     }
 }
