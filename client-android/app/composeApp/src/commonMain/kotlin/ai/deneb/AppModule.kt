@@ -96,5 +96,5 @@ val appModule = module {
     }
     single<DaemonController> { createDaemonController() }
     single<SandboxController> { createSandboxController() }
-    viewModel { ChatViewModel(get<DataRepository>(), get<TaskScheduler>()) }
+    viewModel { ChatViewModel(get<DataRepository>(), get<TaskScheduler>(), seenStore = get<AppSettings>()) }
 }

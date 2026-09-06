@@ -124,6 +124,9 @@ data class ChatUiState(
     // The gateway holds conversations this drawer has not pulled in yet.
     val hasMoreConversations: Boolean = false,
     val currentConversationId: String? = null,
+    // Previous open of the current conversation (epoch ms); the list draws a
+    // `신규` divider above the first message newer than this. 0 = no divider.
+    val newSinceMs: Long = 0,
     val hasUnreadHeartbeat: Boolean = false,
     val hasUnreadWorkReport: Boolean = false,
     val workFeed: ImmutableList<WorkFeedItem> = persistentListOf(),
@@ -254,3 +257,16 @@ data class ToolCallInfo(
     val arguments: String,
     val thoughtSignature: String? = null,
 )
+
+/**
+ * Index of the first message newer than [newSinceMs], or -1 when no divider
+ * belongs in the list: nothing is newer, the store has no previous visit
+ * (0), or EVERY message is new (a divider on top of a brand-new conversation
+ * says nothing). Live streaming rows carry timestamp 0 and are never the
+ * anchor themselves — they always sit below it.
+ */
+fun newMessagesDividerIndex(history: List<History>, newSinceMs: Long): Int {
+    if (newSinceMs <= 0) return -1
+    val idx = history.indexOfFirst { it.timestampMs > 0 && it.timestampMs > newSinceMs }
+    return if (idx <= 0) -1 else idx
+}

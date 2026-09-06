@@ -1,6 +1,7 @@
 package ai.deneb.ui.chat
 
 import ai.deneb.data.Conversation
+import ai.deneb.data.ConversationSeenStore
 import ai.deneb.data.DataRepository
 import ai.deneb.data.SynchronousLock
 import ai.deneb.data.TaskScheduler
@@ -58,7 +59,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.ExperimentalTime
 
 // During streaming chatHistory emits once per token (tens per second). Sampling it to this
 // cadence caps the combine's per-token cost — a whole-history list copy plus a
@@ -132,6 +135,8 @@ class ChatViewModel(
     private val dataRepository: DataRepository,
     private val taskScheduler: TaskScheduler,
     private val backgroundDispatcher: CoroutineContext = getBackgroundDispatcher(),
+    // Optional so the many test constructions stay untouched; null = no divider.
+    private val seenStore: ConversationSeenStore? = null,
 ) : ViewModel() {
 
     private val actions = ChatActions(
@@ -235,7 +240,10 @@ class ChatViewModel(
         }
 
         viewModelScope.launch {
-            dataRepository.currentConversationId.collect { updateAvailableServices() }
+            dataRepository.currentConversationId.collect { id ->
+                updateAvailableServices()
+                markConversationOpened(id)
+            }
         }
         viewModelScope.launch {
             dataRepository.fallbackStatus.collect { status ->
@@ -966,6 +974,19 @@ class ChatViewModel(
                 it.copy(lastAnswerVariants = persistentListOf(), lastAnswerVariantIndex = 0)
             }
         }
+    }
+
+    // Every way into a conversation (cold-start restore, drawer, deep link) lands
+    // in the currentConversationId flow, so this is the one place the visit clock
+    // is read and advanced. Read-then-write: the divider marks the visit that
+    // ended, not the one starting now.
+    @OptIn(ExperimentalTime::class)
+    private fun markConversationOpened(id: String?) {
+        val store = seenStore ?: return
+        if (id.isNullOrBlank()) return
+        val since = store.conversationLastSeenMs(id)
+        store.markConversationSeen(id, Clock.System.now().toEpochMilliseconds())
+        _state.update { it.copy(newSinceMs = since) }
     }
 
     private fun loadConversation(id: String) {

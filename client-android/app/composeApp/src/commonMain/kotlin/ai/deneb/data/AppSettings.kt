@@ -39,8 +39,46 @@ private data class TranscriptManifestState(
 
 private fun nextTranscriptRevision(current: Long): Long = if (current == Long.MAX_VALUE) 1 else current + 1
 
-class AppSettings(internal val settings: Settings) {
+/**
+ * Per-conversation "last opened" clock, kept on the device: the chat list draws
+ * a `신규` divider above the first message newer than the previous visit.
+ * Read-then-write on open, so the divider reflects the visit that just ended,
+ * not the one in progress.
+ */
+interface ConversationSeenStore {
+    /** Epoch millis of the previous open of [conversationId]; 0 when never opened here. */
+    fun conversationLastSeenMs(conversationId: String): Long
+    fun markConversationSeen(conversationId: String, nowMs: Long)
+}
+
+class AppSettings(internal val settings: Settings) : ConversationSeenStore {
     private val transcriptCacheLock = SynchronousLock()
+
+    // Conversation last-seen clocks — "id=ms;id=ms" ordered by last write, capped
+    // so a long-lived install cannot grow the blob without bound (oldest dropped).
+    override fun conversationLastSeenMs(conversationId: String): Long = readConversationSeen()[conversationId] ?: 0L
+
+    override fun markConversationSeen(conversationId: String, nowMs: Long) {
+        if (conversationId.isBlank()) return
+        val next = LinkedHashMap(readConversationSeen()).apply {
+            remove(conversationId)
+            put(conversationId, nowMs)
+        }
+        val bounded = if (next.size > MAX_CONVERSATION_SEEN) next.entries.toList().takeLast(MAX_CONVERSATION_SEEN) else next.entries.toList()
+        settings.putString(KEY_CONVERSATION_SEEN, bounded.joinToString(";") { "${it.key}=${it.value}" })
+    }
+
+    private fun readConversationSeen(): LinkedHashMap<String, Long> {
+        val raw = settings.getStringOrNull(KEY_CONVERSATION_SEEN) ?: return LinkedHashMap()
+        val out = LinkedHashMap<String, Long>()
+        for (entry in raw.split(";")) {
+            val eq = entry.lastIndexOf('=')
+            if (eq <= 0) continue
+            val ms = entry.substring(eq + 1).toLongOrNull() ?: continue
+            out[entry.substring(0, eq)] = ms
+        }
+        return out
+    }
 
     // App open tracking
     fun trackAppOpen(): Int {
@@ -765,6 +803,8 @@ class AppSettings(internal val settings: Settings) {
 
     companion object {
         const val KEY_APP_OPENS = "app_opens"
+        const val KEY_CONVERSATION_SEEN = "conversation_seen_v1"
+        const val MAX_CONVERSATION_SEEN = 200
 
         const val KEY_FEED_SEEN_IDS = "feed_seen_ids"
         const val KEY_HIDDEN_MORE_TILES = "hidden_more_tiles"
