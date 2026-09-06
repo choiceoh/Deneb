@@ -386,3 +386,77 @@ func TestThinkingRoute_ModeOnKeepsThinking(t *testing.T) {
 		t.Errorf("body must be forwarded untouched, got %s", out)
 	}
 }
+
+func glmVLLMKwarg(t *testing.T, body []byte) (kwarg string, top string) {
+	t.Helper()
+	var fields struct {
+		Kwargs struct {
+			ReasoningEffort string `json:"reasoning_effort"`
+		} `json:"chat_template_kwargs"`
+		ReasoningEffort string `json:"reasoning_effort"`
+	}
+	if err := json.Unmarshal(body, &fields); err != nil {
+		t.Fatalf("body is not JSON: %v (%s)", err, body)
+	}
+	return fields.Kwargs.ReasoningEffort, fields.ReasoningEffort
+}
+
+func TestGLMVLLMRouteAlwaysWritesALevel(t *testing.T) {
+	// The template resolves an absent or unrecognized reasoning_effort to MAX,
+	// so "send nothing" is not a neutral default — it is the deepest setting.
+	// Every path through this route has to name a level.
+	entry := modelEntry{Name: "glm-local", Reasoning: reasoningStyleGLMVLLM}
+	body := []byte(`{"model":"glm-5.3-flash","messages":[{"role":"user","content":"안녕"}]}`)
+
+	out, _, _ := reasoningRoute(body, entry)
+	kwarg, top := glmVLLMKwarg(t, out)
+	if kwarg == "" {
+		t.Fatalf("no reasoning_effort in chat_template_kwargs — the template would run at max: %s", out)
+	}
+	if kwarg != top {
+		t.Errorf("kwarg %q and top-level %q disagree", kwarg, top)
+	}
+}
+
+func TestGLMVLLMStaticModesPinTheirLevel(t *testing.T) {
+	body := []byte(`{"model":"glm-5.3-flash","messages":[{"role":"user","content":"복잡한 분석을 해줘"}]}`)
+
+	on, _, off := reasoningRoute(body, modelEntry{Reasoning: reasoningStyleGLMVLLM, ThinkingMode: thinkingModeOn})
+	if kwarg, _ := glmVLLMKwarg(t, on); kwarg != glmEffortHigh {
+		t.Errorf("mode-on effort = %q, want high", kwarg)
+	} else if off {
+		t.Error("mode-on reported thinking off")
+	}
+
+	// There is no OFF on this backend: "nothink" means the template's floor.
+	low, _, offLow := reasoningRoute(body, modelEntry{Reasoning: reasoningStyleGLMVLLM, ThinkingMode: thinkingModeOff})
+	if kwarg, _ := glmVLLMKwarg(t, low); kwarg != glmEffortLow {
+		t.Errorf("mode-off effort = %q, want the floor (low)", kwarg)
+	}
+	if !offLow {
+		t.Error("mode-off did not report thinking routed off")
+	}
+}
+
+func TestGLMVLLMDropsTheCloudDialectField(t *testing.T) {
+	// A body shaped for z.ai (or arriving through failover from it) carries
+	// thinking:{...}, which this endpoint does not know.
+	body := []byte(`{"model":"glm-5.3-flash","thinking":{"type":"disabled"},"messages":[]}`)
+	out, _, _ := reasoningRoute(body, modelEntry{Reasoning: reasoningStyleGLMVLLM, ThinkingMode: thinkingModeOff})
+	if strings.Contains(string(out), `"thinking"`) {
+		t.Errorf("cloud-only field survived: %s", out)
+	}
+	if kwarg, _ := glmVLLMKwarg(t, out); kwarg != glmEffortLow {
+		t.Errorf("effort = %q, want low", kwarg)
+	}
+}
+
+func TestGLMVLLMTreatsMaxAsHigh(t *testing.T) {
+	// max is what the template falls back to when it understands nothing;
+	// honoring a caller's "max" as max would pin the deepest level by accident.
+	body := []byte(`{"model":"glm-5.3-flash","reasoning_effort":"max","messages":[]}`)
+	out, _, _ := reasoningRoute(body, modelEntry{Reasoning: reasoningStyleGLMVLLM})
+	if kwarg, _ := glmVLLMKwarg(t, out); kwarg != glmEffortHigh {
+		t.Errorf("explicit max mapped to %q, want high", kwarg)
+	}
+}
