@@ -50,3 +50,13 @@ suspend fun DenebGatewayClient.setWormholeKey(model: String, key: String): Wormh
     fun num(k: String) = (r[k] as? JsonPrimitive)?.intOrNull ?: 0
     return WormholeKeyResult(ok = flag("ok"), valid = flag("valid"), status = num("status"))
 }
+
+/** Remove a configured model from the wormhole config. Written to the file and
+ *  hot-reloaded by wormhole, like a feature toggle; the gateway also drops the
+ *  name from `auto` and clears any `fallback` that pointed at it. Returns false
+ *  when the model is not in the config file — a SparkFleet-discovered model
+ *  shows in the list but is not written there, so it cannot be removed. */
+suspend fun DenebGatewayClient.removeWormholeModel(model: String): Boolean = callRpc<JsonObject>(
+    "miniapp.wormhole.remove_model",
+    buildJsonObject { put("model", model) },
+) != null
