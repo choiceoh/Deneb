@@ -14,6 +14,7 @@ import ai.deneb.ui.chat.History
 import ai.deneb.ui.chat.hasUnansweredUserTurn
 import ai.deneb.ui.chat.lastRenderedAssistant
 import ai.deneb.ui.chat.needsEmptyReplyRecovery
+import ai.deneb.ui.chat.newMessagesDividerIndex
 import ai.deneb.ui.components.VerticalScrollbarForList
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebContentWidthModifier
@@ -33,6 +34,7 @@ import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -46,6 +48,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
@@ -62,6 +65,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Alignment.Companion.BottomCenter
 import androidx.compose.ui.Alignment.Companion.CenterEnd
 import androidx.compose.ui.Alignment.Companion.CenterHorizontally
@@ -549,6 +553,12 @@ internal fun ChatMessageList(
                 }
             }
 
+            // `신규` divider: above the first message newer than the previous visit
+            // (ChatUiState.newSinceMs). Resolved here, in composable scope — LazyListScope
+            // cannot call remember — and matched by id inside the keyed items() lambda.
+            val dividerBeforeId = remember(uiState.history, uiState.newSinceMs) {
+                uiState.history.getOrNull(newMessagesDividerIndex(uiState.history, uiState.newSinceMs))?.id
+            }
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 LazyColumn(
                     // Soft fade at the top/bottom edges so a message dissolves into
@@ -570,6 +580,7 @@ internal fun ChatMessageList(
                     ),
                 ) {
                     items(uiState.history, key = { it.id }, contentType = { it.role }) { history ->
+                        if (history.id == dividerBeforeId) NewMessagesDivider()
                         // Readable measure on a wide desktop window: cap every row at the
                         // shared content width (no-op on phone, where this fills the width).
                         // The list itself stays full width so the mouse wheel works from the
@@ -962,4 +973,23 @@ internal fun responseActionRows(history: List<History>): Pair<Set<String>, Map<S
     }
     closeResponse()
     return rowIds to textById
+}
+
+/** Hairline · `신규` · hairline — the last-visit boundary, in the accent, quiet. */
+@Composable
+private fun NewMessagesDivider() {
+    val accent = MaterialTheme.colorScheme.primary
+    Row(
+        modifier = denebContentWidthModifier().padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        HorizontalDivider(modifier = Modifier.weight(1f), color = accent.copy(alpha = 0.45f))
+        Text(
+            text = "신규",
+            style = DenebType.sectionLabel,
+            color = accent,
+            modifier = Modifier.padding(horizontal = 10.dp),
+        )
+        HorizontalDivider(modifier = Modifier.weight(1f), color = accent.copy(alpha = 0.45f))
+    }
 }
