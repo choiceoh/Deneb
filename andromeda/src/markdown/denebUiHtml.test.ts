@@ -181,6 +181,14 @@ describe("parseDenebUi (labeled HTML)", () => {
     expect(card.children[0]).toMatchObject({ type: "text", value: "제목 텍스트" });
   });
 
+  it("parses <card dismissible> and leaves plain cards without the field", () => {
+    expect(parseDenebUi(`<card dismissible><text>넘길 수 있는 질문</text></card>`)).toMatchObject({
+      type: "card",
+      dismissible: true,
+    });
+    expect(parseDenebUi(`<card><text>보통 카드</text></card>`).dismissible).toBeUndefined();
+  });
+
   it("parses chips layout=list with letters and per-chip descriptions", () => {
     // The Grok-style choice card. layout is cosmetic: an invented value keeps the chip flow.
     const list = parseDenebUi(

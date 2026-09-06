@@ -41,6 +41,21 @@ describe("DenebUi rendering + callback round-trip", () => {
     expect(onSubmit).toHaveBeenCalledWith("Responded with: name: 홍길동");
   });
 
+  it("folds a dismissible card away and brings it back on 다시 보기", async () => {
+    const spec = {
+      type: "card",
+      dismissible: true,
+      children: [{ type: "text", value: "넘길 수 있는 질문" }],
+    };
+    render(<DenebUi spec={spec} onSubmit={vi.fn()} />);
+    expect(screen.getByText("넘길 수 있는 질문")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "카드 넘기기" }));
+    expect(screen.queryByText("넘길 수 있는 질문")).toBeNull();
+    expect(screen.getByText("넘긴 카드")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "다시 보기" }));
+    expect(screen.getByText("넘길 수 있는 질문")).toBeTruthy();
+  });
+
   it("renders a chips list layout as lettered rows and keeps submit disabled until a required pick", async () => {
     const onSubmit = vi.fn();
     const spec = {

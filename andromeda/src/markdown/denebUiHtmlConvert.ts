@@ -58,6 +58,8 @@ export function convert(el: OpenElem): Node | Structural | null {
       set("longPressAction", longPressFromAttrs(a));
       return { ...node, type: "row", children: el.children };
     case "card":
+      // dismissible: a close affordance folds the card away without answering it.
+      set("dismissible", bool("dismissible"));
       return { ...node, type: "card", children: el.children };
     case "box":
       set("contentAlignment", a.align);

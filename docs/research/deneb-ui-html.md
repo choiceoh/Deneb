@@ -84,7 +84,7 @@
 |---|---|---|---|
 | `column` (`col`) | column | id | 자식 노드 |
 | `row` | row | id | 자식 노드 |
-| `card` | card | id | 자식 노드 |
+| `card` | card | id, `dismissible`(닫기 X — 답하지 않고 접어두기, 세션 로컬) | 자식 노드 |
 | `box` | box | id, `align`→contentAlignment | 자식 노드 |
 | `hr` (`divider`) | divider | id | void |
 | `text` | text | id, `style`(headline·title·body·caption), `bold`, `italic`, `color` | 내부 텍스트 = value |
@@ -155,4 +155,4 @@ badge `red`→error / alert `warn`→warning / chart `column`→bar /
 인접 인라인 런 공백 보존(`**A** **B**`) / `<ul>` 비순서·`<ol>`/`ordered` 속성만 순서 /
 `<thead>/<tbody>` unwrap 시 행 보존 / 본문 꼬리에 붙은 클로저(HTML 한정, 뒤 프로즈 분리) /
 원라이너 펜스(````프로즈.```deneb-ui<text>…</text>``` 끝````) / legacy JSON은 단독 라인 클로저 유지 /
-발명 태그 별칭(title→title·label→caption·kv→"키 — 값"·spacer→divider) / chips `layout=list`+`lettered`+chip `description`(+발명 layout 값은 기본 유지).
+발명 태그 별칭(title→title·label→caption·kv→"키 — 값"·spacer→divider) / chips `layout=list`+`lettered`+chip `description`(+발명 layout 값은 기본 유지) / `<card dismissible>`(+보통 카드엔 필드 없음).

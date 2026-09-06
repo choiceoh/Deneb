@@ -407,6 +407,7 @@ private fun parseRowNode(obj: JsonObject): RowNode = RowNode(
 private fun parseCardNode(obj: JsonObject): CardNode = CardNode(
     id = obj.readId(),
     children = obj.readNodeList("children"),
+    dismissible = obj.readNullableBoolean("dismissible"),
 )
 
 private fun parseBoxNode(obj: JsonObject): BoxNode = BoxNode(

@@ -16,6 +16,10 @@ func convertLayoutElem(el *openElem, node map[string]any) (any, bool) {
 	case "card":
 		node["type"] = "card"
 		putNodeID(node, a)
+		// dismissible: the renderer shows a close affordance and the user can fold
+		// the card away ("넘김") without answering it — a decision card the user
+		// wants out of the way for now, not a decision made.
+		putBool(node, "dismissible", a, "dismissible")
 		node["children"] = el.children
 	case "box":
 		node["type"] = "box"

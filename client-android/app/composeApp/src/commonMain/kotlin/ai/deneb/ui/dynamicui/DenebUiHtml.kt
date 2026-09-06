@@ -515,7 +515,7 @@ object DenebUiHtml {
 
             "row" -> RowNode(id = id, children = kids(), longPressAction = longPressFromAttrs(a))
 
-            "card" -> CardNode(id = id, children = kids())
+            "card" -> CardNode(id = id, children = kids(), dismissible = attrBool(a, "dismissible"))
 
             "box" -> BoxNode(id = id, children = kids(), contentAlignment = a["align"])
 

@@ -446,3 +446,18 @@ func TestChipsListLayoutCarriesLettersAndDescriptions(t *testing.T) {
 		t.Errorf("invented layout must be dropped, got %v", loose["layout"])
 	}
 }
+
+// <card dismissible> carries a close affordance; a plain card carries nothing.
+func TestCardDismissibleAttribute(t *testing.T) {
+	n := mustParseHTML(t, `<card dismissible><text>넘길 수 있는 질문</text></card>`)
+	if n["dismissible"] != true {
+		t.Fatalf("dismissible = %v, want true", n["dismissible"])
+	}
+	if issues := validateNode(n, ""); len(issues) != 0 {
+		t.Errorf("dismissible card reported issues: %v", issues)
+	}
+	plain := mustParseHTML(t, `<card><text>보통 카드</text></card>`)
+	if _, has := plain["dismissible"]; has {
+		t.Errorf("plain card must not carry a dismissible field: %v", plain)
+	}
+}

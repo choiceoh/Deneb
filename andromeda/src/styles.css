@@ -5478,6 +5478,46 @@ button.mail-attachment {
   background: var(--accent);
   color: #fff;
 }
+/* deneb-ui <card dismissible>: close glyph top-right; folded state is one hint line. */
+.dui-card-dismissible {
+  position: relative;
+  padding-right: 34px;
+}
+.dui-card-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted-2);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.dui-card-x:hover {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.dui-card-dismissed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+}
+.dui-card-dismissed-label {
+  font-size: 12px;
+  color: var(--muted-2);
+}
+.dui-card-undismiss {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
 /* deneb-ui chips layout="list": the choice card. Rows sit in ONE grouped surface
    (faint wash, rounded, inset hairline separators — the native DenebGroup idiom);
    with `lettered` the A/B/C badge is the control and fills with the accent when
