@@ -40,6 +40,10 @@ const (
 // mailBackfillTask drains messages the poll window missed.
 type mailBackfillTask struct{ s *Server }
 
+type archivedMailAnalyzer interface {
+	AnalyzeArchived(context.Context, []*gmail.MessageDetail) ([]string, error)
+}
+
 func (t mailBackfillTask) Name() string            { return "mail-backfill" }
 func (t mailBackfillTask) Interval() time.Duration { return mailBackfillInterval }
 
@@ -50,7 +54,7 @@ func (t mailBackfillTask) Run(ctx context.Context) error { return t.s.runMailBac
 // dev/live-test instance must never spend LLM budget re-analyzing the operator's
 // mail or write pages into the production wiki.
 func (s *Server) registerMailBackfillTask(homeDir string) {
-	if s.autonomousSvc == nil || s.gmailPollSvc == nil || s.mailStore == nil {
+	if s.autonomousSvc == nil || s.mailBackfillAnalyzer == nil || s.mailStore == nil {
 		return
 	}
 	if _, ok := s.productionStateDir(homeDir); !ok {
@@ -90,7 +94,7 @@ func (s *Server) runMailBackfill(ctx context.Context) error {
 		return nil
 	}
 
-	done, err := s.gmailPollSvc.AnalyzeArchived(ctx, msgs)
+	done, err := s.mailBackfillAnalyzer.AnalyzeArchived(ctx, msgs)
 	if err != nil {
 		s.logger.Warn("mail backfill: 분석 실패", "count", len(msgs), "error", err)
 		return err
