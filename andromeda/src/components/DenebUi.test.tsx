@@ -41,6 +41,40 @@ describe("DenebUi rendering + callback round-trip", () => {
     expect(onSubmit).toHaveBeenCalledWith("Responded with: name: 홍길동");
   });
 
+  it("renders a chips list layout as lettered rows and keeps submit disabled until a required pick", async () => {
+    const onSubmit = vi.fn();
+    const spec = {
+      type: "column",
+      children: [
+        {
+          type: "chip_group",
+          id: "tools",
+          selection: "multi",
+          layout: "list",
+          lettered: true,
+          required: true,
+          chips: [
+            { label: "GitHub", value: "github", description: "레포, 이슈, PR, Actions" },
+            { label: "Dropbox", value: "dropbox" },
+          ],
+        },
+        { type: "button", label: "제출", action: { type: "callback", event: "connect", collectFrom: ["tools"] } },
+      ],
+    };
+    render(<DenebUi spec={spec} onSubmit={onSubmit} />);
+
+    // Rows, not chips: A/B badges and the description line are on screen.
+    expect(screen.getByText("A")).toBeTruthy();
+    expect(screen.getByText("레포, 이슈, PR, Actions")).toBeTruthy();
+    const submit = screen.getByRole("button", { name: "제출" });
+    expect((submit as HTMLButtonElement).disabled).toBe(true); // nothing picked yet → greyed, not "press and get flagged"
+
+    await userEvent.click(screen.getByRole("checkbox", { name: /Dropbox/ }));
+    expect((submit as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(submit);
+    expect(onSubmit).toHaveBeenCalledWith("Responded with: tools: dropbox");
+  });
+
   it("sends 'Pressed: <event>' for a callback with no data", async () => {
     const onSubmit = vi.fn();
     render(
@@ -53,7 +87,9 @@ describe("DenebUi rendering + callback round-trip", () => {
     expect(onSubmit).toHaveBeenCalledWith("Pressed: ok");
   });
 
-  it("blocks a callback while a required collected input is empty — and says so", async () => {
+  it("keeps a collecting callback disabled while a required input is empty, enabled once filled", async () => {
+    // 2026-09-06 contract flip: the button is greyed BEFORE the press instead of
+    // refusing on press and flagging the field afterwards (Grok reference).
     const onSubmit = vi.fn();
     const spec = {
       type: "column",
@@ -63,14 +99,13 @@ describe("DenebUi rendering + callback round-trip", () => {
       ],
     };
     render(<DenebUi spec={spec} onSubmit={onSubmit} />);
-    await userEvent.click(screen.getByRole("button", { name: "전송" }));
-    expect(onSubmit).not.toHaveBeenCalled(); // required input empty → gated
-    // The blocked submit flags the field (the old silent return read as a dead button).
-    expect(screen.getByText("필수 입력입니다")).toBeInTheDocument();
-    // Editing the field clears its flag; the submit then goes through.
+    const submit = screen.getByRole("button", { name: "전송" }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true); // required input empty → not done yet
+    await userEvent.click(submit);
+    expect(onSubmit).not.toHaveBeenCalled();
     await userEvent.type(screen.getByRole("textbox"), "42");
-    expect(screen.queryByText("필수 입력입니다")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "전송" }));
+    expect(submit.disabled).toBe(false);
+    await userEvent.click(submit);
     expect(onSubmit).toHaveBeenCalledWith("Responded with: q: 42");
   });
 

@@ -3,9 +3,14 @@
 package ai.deneb.ui.dynamicui
 
 import ai.deneb.ui.DenebOutlinedTextField
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBreathing
+import ai.deneb.ui.denebGroupSurface
+import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebPressable
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.icons.filled.AccessTime
 import ai.deneb.ui.icons.filled.ContentCopy
@@ -19,12 +24,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -64,9 +72,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -107,8 +121,16 @@ internal fun RenderButton(
         action.event == frozen.pressedEvent && collectFormData(action, formState) == frozen.values
     }
     val showPulse = (clicked && !isInteractive) || (isPressedSnapshot && frozen.isPending)
-    val enabled = isInteractive && (node.enabled != false)
     val validation = LocalUiFormValidation.current
+    // Submit gating (2026-09-06, Grok reference): a callback button whose `collect`
+    // list still has a blank required input is DISABLED, not merely refused on
+    // press — the greyed button says "you are not done yet" before the user tries.
+    // The flag-on-press path below stays as the net for required inputs outside
+    // the collect list.
+    val awaitingRequired = (node.action as? CallbackAction)?.let { action ->
+        validation?.missingFrom(action.collectFrom.orEmpty(), formState)
+    }.orEmpty()
+    val enabled = isInteractive && (node.enabled != false) && awaitingRequired.isEmpty()
     val haptics = rememberHaptics()
     val onClick: () -> Unit = {
         haptics.tap()
@@ -678,6 +700,10 @@ internal fun RenderChipGroup(
     isInteractive: Boolean,
     formState: SnapshotStateMap<String, String>,
 ) {
+    if (node.layout == "list") {
+        RenderChoiceList(node, isInteractive, formState)
+        return
+    }
     val isDisplayOnly = node.selection == "none"
     val isMulti = node.selection == "multi"
     val validation = LocalUiFormValidation.current
@@ -727,6 +753,159 @@ internal fun RenderChipGroup(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * `layout="list"` chip group — the choice card. The rows sit in one grouped inset
+ * surface (the DenebGroup idiom: faint wash, rounded corners, inset hairlines), so
+ * they read as one question, not four loose lines. With `lettered` the A/B/C badge
+ * IS the control — it fills with the accent when picked — because a checkbox next
+ * to a badge draws the same state twice (the first cut did, and looked cluttered);
+ * without letters the Material control leads. A trailing check confirms the pick.
+ * Selection shares the chip group's CSV form value, so collect/required need
+ * nothing new.
+ */
+@Composable
+private fun RenderChoiceList(
+    node: ChipGroupNode,
+    isInteractive: Boolean,
+    formState: SnapshotStateMap<String, String>,
+) {
+    val isMulti = node.selection == "multi"
+    val isDisplayOnly = node.selection == "none"
+    val validation = LocalUiFormValidation.current
+    val isError = validation?.errors?.get(node.id) == true
+    Column(Modifier.fillMaxWidth()) {
+        if (isError) {
+            Text(
+                text = "필수 선택입니다",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+        }
+        Column(Modifier.fillMaxWidth().denebGroupSurface()) {
+            node.chips.forEachIndexed { index, chip ->
+                val value = chip.value.ifEmpty { chip.label }
+                key(value) {
+                    val selected = (formState[node.id] ?: "").split(",").contains(value)
+                    ChoiceRow(
+                        label = chip.label,
+                        description = chip.description,
+                        letter = if (node.lettered == true) choiceLetter(index) else null,
+                        selected = selected,
+                        isMulti = isMulti,
+                        enabled = isInteractive && !isDisplayOnly,
+                        showControl = !isDisplayOnly,
+                        divider = index < node.chips.lastIndex,
+                        onToggle = {
+                            val current = (formState[node.id] ?: "").split(",").filter { it.isNotEmpty() }.toSet()
+                            val next = when {
+                                isMulti -> if (selected) current - value else current + value
+                                selected -> emptySet()
+                                else -> setOf(value)
+                            }
+                            formState[node.id] = next.joinToString(",")
+                            if (next.isNotEmpty()) validation?.errors?.remove(node.id)
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A, B, … Z, then 27, 28… — a list that long has bigger problems than lettering. */
+internal fun choiceLetter(index: Int): String = if (index in 0..25) ('A' + index).toString() else (index + 1).toString()
+
+@Composable
+private fun ChoiceRow(
+    label: String,
+    description: String?,
+    letter: String?,
+    selected: Boolean,
+    isMulti: Boolean,
+    enabled: Boolean,
+    showControl: Boolean,
+    divider: Boolean,
+    onToggle: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val hairline = denebHairline()
+    // Hairline starts under the text, not the control — the DenebListRow inset.
+    val insetPx = with(LocalDensity.current) { (if (letter != null) 58.dp else 52.dp).toPx() }
+    val stateText = if (selected) "선택됨" else "선택 안 됨"
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .denebPressable(
+                onClick = onToggle,
+                enabled = enabled,
+                role = if (isMulti) Role.Checkbox else Role.RadioButton,
+                haptic = false,
+            )
+            .semantics { stateDescription = stateText }
+            .handCursor()
+            .drawBehind {
+                if (divider) {
+                    val stroke = 1.dp.toPx()
+                    val y = size.height - stroke / 2f
+                    drawLine(hairline, Offset(insetPx, y), Offset(size.width, y), strokeWidth = stroke)
+                }
+            }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        when {
+            letter != null -> {
+                // The badge is the control: accent-filled when picked.
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(
+                            if (selected) scheme.primary else scheme.onBackground.copy(alpha = 0.08f),
+                            RoundedCornerShape(8.dp),
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = letter,
+                        style = DenebType.rowTitleStrong,
+                        color = if (selected) scheme.onPrimary else scheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+            }
+
+            showControl -> {
+                if (isMulti) {
+                    Checkbox(checked = selected, onCheckedChange = null, enabled = enabled)
+                } else {
+                    RadioButton(selected = selected, onClick = null, enabled = enabled)
+                }
+                Spacer(Modifier.width(8.dp))
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = DenebType.rowTitleStrong,
+                color = if (selected) scheme.primary else scheme.onBackground,
+            )
+            if (description != null) {
+                Text(text = description, style = DenebType.rowSubtitle, color = denebHint())
+            }
+        }
+        if (selected) {
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = scheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }

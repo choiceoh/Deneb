@@ -13,7 +13,7 @@ import {
 
 export type Structural =
   | { kind: "option"; text: string; selected: boolean }
-  | { kind: "chip"; label: string; value: string }
+  | { kind: "chip"; label: string; value: string; description?: string }
   | { kind: "tab"; label: string; children: Node[] }
   | { kind: "tr"; cells: { text: string; header: boolean }[] }
   | { kind: "cell"; text: string; header: boolean }
@@ -274,6 +274,11 @@ export function convert(el: OpenElem): Node | Structural | null {
     case "chips":
     case "chip-group":
       set("required", bool("required"));
+      // layout="list": vertical choice rows (control · letter badge · label ·
+      // description). Cosmetic, so an invented value keeps the chip flow instead
+      // of being what invalidates the card.
+      if ((a.layout ?? "").trim().toLowerCase() === "list") set("layout", "list");
+      set("lettered", bool("lettered"));
       return {
         ...node,
         type: "chip_group",
@@ -281,10 +286,16 @@ export function convert(el: OpenElem): Node | Structural | null {
         selection: a.selection || "single",
         chips: el.structs
           .filter((s): s is Extract<Structural, { kind: "chip" }> => s.kind === "chip")
-          .map((c) => ({ label: c.label, value: c.value })),
+          .map((c) =>
+            c.description
+              ? { label: c.label, value: c.value, description: c.description }
+              : { label: c.label, value: c.value },
+          ),
       };
-    case "chip":
-      return { kind: "chip", label: inner, value: a.value || inner };
+    case "chip": {
+      const description = (a.description ?? "").trim();
+      return { kind: "chip", label: inner, value: a.value || inner, ...(description ? { description } : {}) };
+    }
     case "br":
       return null;
     default:

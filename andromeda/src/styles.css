@@ -5478,6 +5478,89 @@ button.mail-attachment {
   background: var(--accent);
   color: #fff;
 }
+/* deneb-ui chips layout="list": the choice card. Rows sit in ONE grouped surface
+   (faint wash, rounded, inset hairline separators — the native DenebGroup idiom);
+   with `lettered` the A/B/C badge is the control and fills with the accent when
+   picked (no second control beside it); a trailing check confirms the pick. */
+.dui-choice-list {
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  overflow: hidden;
+}
+.dui-choice-list.invalid {
+  outline: 1px solid var(--due);
+  outline-offset: 2px;
+}
+.dui-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 14px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  position: relative;
+}
+.dui-choice + .dui-choice::before {
+  content: "";
+  position: absolute;
+  left: 58px;
+  right: 0;
+  top: 0;
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+.dui-choice:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 4%, transparent);
+}
+.dui-choice:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.dui-choice-letter {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  color: var(--muted);
+}
+.dui-choice.on .dui-choice-letter {
+  background: var(--accent);
+  color: #fff;
+}
+.dui-choice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.dui-choice-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+.dui-choice.on .dui-choice-label {
+  color: var(--accent);
+}
+.dui-choice-desc {
+  font-size: 12px;
+  color: var(--muted-2);
+}
+.dui-choice-check {
+  flex: none;
+  color: var(--accent);
+  font-size: 14px;
+}
 .dui-pending {
   padding: 8px 0;
   font-size: 12px;

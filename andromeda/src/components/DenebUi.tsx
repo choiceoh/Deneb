@@ -314,6 +314,8 @@ export function DenebUi({
   // Required-flag presentation shared by every input case.
   const fieldClass = (id: string) => "dui-field" + (invalid.has(id) ? " invalid" : "");
   const reqHint = (id: string) => (invalid.has(id) ? <span className="dui-req">필수 입력입니다</span> : null);
+  // A, B, … Z, then 27, 28… — a list that long has bigger problems than lettering.
+  const choiceLetter = (i: number) => (i < 26 ? String.fromCharCode(65 + i) : String(i + 1));
 
   function render(n: Node, key: string): ReactNode {
     if (!n || typeof n !== "object") return null;
@@ -847,11 +849,20 @@ export function DenebUi({
       case "button": {
         const variant = String(n.variant || "filled");
         const accent = variant === "filled" || variant === "tonal";
+        // Submit gating (2026-09-06): a callback button whose collect list still
+        // has a blank required input is DISABLED, not merely refused on press —
+        // the greyed button says "not done yet" before the user tries. The
+        // press-time flag in dispatch() stays for inputs outside collectFrom.
+        const collectFrom: string[] =
+          n.action?.type === "callback" && Array.isArray(n.action.collectFrom) ? n.action.collectFrom : [];
+        const awaitingRequired = collectFrom.some((cid) => required.has(cid) && coerce(form[cid]) === "");
         return (
           <button
             key={key}
             className={"btn" + (accent ? " btn-accent" : "")}
-            disabled={busy || n.enabled === false || (!interactive && n.action?.type === "callback")}
+            disabled={
+              busy || n.enabled === false || awaitingRequired || (!interactive && n.action?.type === "callback")
+            }
             onClick={() => dispatch(n.action)}
           >
             {String(n.label || "")}
@@ -988,6 +999,47 @@ export function DenebUi({
             setField(id, cur === val ? "" : val);
           }
         };
+        if (n.layout === "list") {
+          // The Grok-style choice card: full-width rows with a selection role,
+          // optional A/B/C badge, label and one-line description. Same form
+          // value as the chip flow, so collect/required need nothing new.
+          const lettered = n.lettered === true;
+          return (
+            <div
+              key={key}
+              className={"dui-choice-list" + (invalid.has(id) ? " invalid" : "")}
+              role={multi ? "group" : "radiogroup"}
+            >
+              {chips.map((c, i) => {
+                const val = String(c?.value ?? c?.label ?? "");
+                const on = isOn(val);
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    className={"dui-choice" + (on ? " on" : "")}
+                    role={multi ? "checkbox" : "radio"}
+                    aria-checked={on}
+                    disabled={busy || !interactive || n.selection === "none"}
+                    onClick={() => toggle(val)}
+                  >
+                    {lettered ? <span className="dui-choice-letter">{choiceLetter(i)}</span> : null}
+                    <span className="dui-choice-body">
+                      <span className="dui-choice-label">{String(c?.label ?? val)}</span>
+                      {c?.description ? <span className="dui-choice-desc">{String(c.description)}</span> : null}
+                    </span>
+                    {on ? (
+                      <span className="dui-choice-check" aria-hidden="true">
+                        ✓
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+              {reqHint(id)}
+            </div>
+          );
+        }
         return (
           <div key={key} className={"dui-chips" + (invalid.has(id) ? " invalid" : "")}>
             {chips.map((c, i) => {

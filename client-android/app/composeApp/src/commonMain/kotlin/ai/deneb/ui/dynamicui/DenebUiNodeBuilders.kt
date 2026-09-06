@@ -293,7 +293,7 @@ internal fun JsonObject.readChipList(key: String): ImmutableList<ChipItem> {
             is JsonObject -> {
                 val label = item.readString("label")
                 val value = item.readString("value", default = label)
-                ChipItem(label = label, value = value)
+                ChipItem(label = label, value = value, description = item.readString("description").takeIf { it.isNotEmpty() })
             }
 
             else -> null
@@ -557,6 +557,8 @@ private fun parseChipGroupNode(obj: JsonObject): ChipGroupNode {
         chips = obj.readChipList("chips"),
         selection = selection,
         required = obj.readNullableBoolean("required"),
+        layout = if (obj.readString("layout") == "list") "list" else "chips",
+        lettered = obj.readNullableBoolean("lettered"),
     )
 }
 

@@ -265,6 +265,28 @@ class DenebUiHtmlTest {
     }
 
     @Test
+    fun `chips list layout carries letters and descriptions`() {
+        // The Grok-style choice card: vertical rows with A/B/C badges and a one-line
+        // description per option. layout is cosmetic — an invented value keeps the flow.
+        val list = assertIs<ChipGroupNode>(
+            parseUi(
+                """<chips id="tools" layout="list" lettered selection="multi"><chip value="github" description="레포, 이슈, PR, Actions">GitHub</chip><chip value="drive">Google Drive</chip></chips>""",
+            ),
+        )
+        assertEquals("list", list.layout)
+        assertEquals(true, list.lettered)
+        assertEquals("레포, 이슈, PR, Actions", list.chips[0].description)
+        assertEquals(null, list.chips[1].description)
+        assertEquals("A", choiceLetter(0))
+        assertEquals("Z", choiceLetter(25))
+        assertEquals("27", choiceLetter(26))
+
+        val loose = assertIs<ChipGroupNode>(parseUi("""<chips id="x" layout="grid"><chip>a</chip></chips>"""))
+        assertEquals("chips", loose.layout)
+        assertEquals(null, loose.lettered)
+    }
+
+    @Test
     fun `chart points and chips parse from children`() {
         val chart = assertIs<ChartNode>(
             parseUi("""<chart type="line" label="주간"><point label="월" value="1"/><point label="화" value="2.5"/></chart>"""),

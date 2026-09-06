@@ -181,6 +181,20 @@ describe("parseDenebUi (labeled HTML)", () => {
     expect(card.children[0]).toMatchObject({ type: "text", value: "제목 텍스트" });
   });
 
+  it("parses chips layout=list with letters and per-chip descriptions", () => {
+    // The Grok-style choice card. layout is cosmetic: an invented value keeps the chip flow.
+    const list = parseDenebUi(
+      `<chips id="tools" layout="list" lettered selection="multi"><chip value="github" description="레포, 이슈, PR, Actions">GitHub</chip><chip value="drive">Google Drive</chip></chips>`,
+    );
+    expect(list).toMatchObject({ type: "chip_group", layout: "list", lettered: true, selection: "multi" });
+    expect(list.chips).toEqual([
+      { label: "GitHub", value: "github", description: "레포, 이슈, PR, Actions" },
+      { label: "Google Drive", value: "drive" },
+    ]);
+    const loose = parseDenebUi(`<chips id="x" layout="grid"><chip>a</chip></chips>`);
+    expect(loose.layout).toBeUndefined();
+  });
+
   it("parses chart points and chips from children", () => {
     const chart = parseDenebUi(
       `<chart type="line"><point label="월" value="1"/><point label="화" value="2.5"/></chart>`,

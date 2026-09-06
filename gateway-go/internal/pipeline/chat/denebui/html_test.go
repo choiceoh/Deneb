@@ -420,3 +420,29 @@ func TestParseHTML_LongPressAction(t *testing.T) {
 		t.Errorf("longpress card must validate clean: err=%v issues=%v", err, issues)
 	}
 }
+
+// The Grok-style choice card: a vertical list with A/B/C badges and a one-line
+// description per option. The layout attribute is cosmetic, so an invented
+// value falls back to the chip flow instead of invalidating the card.
+func TestChipsListLayoutCarriesLettersAndDescriptions(t *testing.T) {
+	n := mustParseHTML(t, `<chips id="tools" layout="list" lettered selection="multi"><chip value="github" description="레포, 이슈, PR, Actions">GitHub</chip><chip value="drive">Google Drive</chip></chips>`)
+	if n["layout"] != "list" || n["lettered"] != true || n["selection"] != "multi" {
+		t.Fatalf("group attrs = layout %v lettered %v selection %v", n["layout"], n["lettered"], n["selection"])
+	}
+	cs := n["chips"].([]any)
+	first := cs[0].(map[string]any)
+	if first["label"] != "GitHub" || first["value"] != "github" || first["description"] != "레포, 이슈, PR, Actions" {
+		t.Errorf("first chip = %v", first)
+	}
+	if _, has := cs[1].(map[string]any)["description"]; has {
+		t.Errorf("a chip without description must not carry an empty one: %v", cs[1])
+	}
+	if issues := validateNode(n, ""); len(issues) != 0 {
+		t.Errorf("valid list layout reported issues: %v", issues)
+	}
+
+	loose := mustParseHTML(t, `<chips id="x" layout="grid"><chip>a</chip></chips>`)
+	if _, has := loose["layout"]; has {
+		t.Errorf("invented layout must be dropped, got %v", loose["layout"])
+	}
+}
