@@ -2,7 +2,6 @@ package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.SkillDetailResponse
 import ai.deneb.deneb.generated.SkillLifecycleEvent
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.JetBrainsMonoFamily
@@ -10,6 +9,7 @@ import ai.deneb.ui.components.DenebButton
 import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebOutlinedButton
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -339,7 +339,7 @@ internal fun SkillDetailContent(
     if (docOpen) {
         Spacer(Modifier.height(8.dp))
         if (editMode) {
-            DenebOutlinedTextField(
+            DenebTextField(
                 value = draftBody,
                 onValueChange = onDraftChange,
                 enabled = !actionBusy,

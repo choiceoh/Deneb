@@ -2,11 +2,11 @@ package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.MemberOut
 import ai.deneb.deneb.generated.OrgNodeOut
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.DenebOutlinedButton
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.DenebTonalButton
 import ai.deneb.ui.denebHint
 import androidx.compose.foundation.layout.Arrangement
@@ -72,7 +72,7 @@ internal fun OrgNodeEditor(
 
         // Name.
         OrgFieldLabel("이름")
-        DenebOutlinedTextField(
+        DenebTextField(
             value = node.name,
             onValueChange = { onChange(node.copy(name = it)) },
             placeholder = { Text("예: 기획조정실 1팀") },
@@ -118,7 +118,7 @@ internal fun OrgNodeEditor(
         // comma-separated lists so the operator never sees a raw key or array syntax.
         if (node.lane.isNotBlank()) {
             OrgFieldLabel("분류 키워드 (쉼표로 구분)")
-            DenebOutlinedTextField(
+            DenebTextField(
                 value = node.keywords.joinToString(", "),
                 onValueChange = { onChange(node.copy(keywords = splitCsv(it))) },
                 placeholder = { Text("예: 태양광, 모듈, 인버터") },
@@ -127,7 +127,7 @@ internal fun OrgNodeEditor(
             )
             Spacer(Modifier.height(12.dp))
             OrgFieldLabel("분류 거래처 (쉼표로 구분)")
-            DenebOutlinedTextField(
+            DenebTextField(
                 value = node.companies.joinToString(", "),
                 onValueChange = { onChange(node.copy(companies = splitCsv(it))) },
                 placeholder = { Text("예: 트리나솔라, 한화") },
@@ -187,7 +187,7 @@ private fun OrgMemberEditor(
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            DenebOutlinedTextField(
+            DenebTextField(
                 value = member.name,
                 onValueChange = { onChange(member.copy(name = it)) },
                 placeholder = { Text("이름") },
@@ -263,7 +263,7 @@ internal fun OrgEnumDropdown(
         expanded = expanded,
         onExpandedChange = { expanded = it },
     ) {
-        DenebOutlinedTextField(
+        DenebTextField(
             value = value,
             onValueChange = {},
             readOnly = true,

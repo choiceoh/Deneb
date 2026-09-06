@@ -1,7 +1,6 @@
 package ai.deneb.deneb
 
 import ai.deneb.PlatformBackHandler
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.JetBrainsMonoFamily
@@ -9,6 +8,7 @@ import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebSegment
 import ai.deneb.ui.components.DenebSegmentedRow
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -258,7 +258,7 @@ internal fun FilesNameDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            DenebOutlinedTextField(
+            DenebTextField(
                 value = value,
                 onValueChange = { value = it },
                 label = { Text(label) },

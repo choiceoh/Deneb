@@ -39,7 +39,6 @@ import ai.deneb.deneb.generated.SkillDetailResponse
 import ai.deneb.deneb.koreanDayOfWeek
 import ai.deneb.deneb.layoutMonthBars
 import ai.deneb.deneb.timedSingleDayDots
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
@@ -54,6 +53,7 @@ import ai.deneb.ui.components.DenebOutlinedButton
 import ai.deneb.ui.components.DenebSegment
 import ai.deneb.ui.components.DenebSegmentedRow
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.DenebTonalButton
 import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.SectionedScrubList
@@ -544,14 +544,14 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
                     }
                     DenebSectionLabel("필드", Modifier.padding(start = 24.dp))
                     Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        DenebOutlinedTextField(
+                        DenebTextField(
                             value = "https://api.example.com/v1",
                             onValueChange = {},
                             label = { Text("Base URL") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        DenebOutlinedTextField(
+                        DenebTextField(
                             value = "",
                             onValueChange = {},
                             label = { Text("모델 이름") },

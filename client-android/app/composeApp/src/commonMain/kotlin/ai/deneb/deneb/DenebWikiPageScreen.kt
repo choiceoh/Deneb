@@ -1,11 +1,11 @@
 package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.NotebookSummaryOut
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebButton
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -116,7 +116,7 @@ fun DenebWikiPageScreen(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(8.dp))
-                DenebOutlinedTextField(
+                DenebTextField(
                     value = draftTitle,
                     onValueChange = { draftTitle = it },
                     label = { Text("제목") },
@@ -124,7 +124,7 @@ fun DenebWikiPageScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
-                DenebOutlinedTextField(
+                DenebTextField(
                     value = draftCategory,
                     onValueChange = { draftCategory = it },
                     label = { Text("카테고리 (예: people, projects)") },
@@ -193,14 +193,14 @@ fun DenebWikiPageScreen(
 
             if (editing) {
                 if (!creating) {
-                    DenebOutlinedTextField(draftTitle, { draftTitle = it }, label = { Text("제목") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    DenebTextField(draftTitle, { draftTitle = it }, label = { Text("제목") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
-                    DenebOutlinedTextField(draftSummary, { draftSummary = it }, label = { Text("요약") }, modifier = Modifier.fillMaxWidth())
+                    DenebTextField(draftSummary, { draftSummary = it }, label = { Text("요약") }, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
-                    DenebOutlinedTextField(draftTags, { draftTags = it }, label = { Text("태그 (쉼표로 구분)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    DenebTextField(draftTags, { draftTags = it }, label = { Text("태그 (쉼표로 구분)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
                 }
-                DenebOutlinedTextField(
+                DenebTextField(
                     value = draftBody,
                     onValueChange = { draftBody = it },
                     label = { Text("본문 (마크다운)") },

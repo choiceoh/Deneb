@@ -1,6 +1,5 @@
 package ai.deneb.deneb
 
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
@@ -8,6 +7,7 @@ import ai.deneb.ui.components.DenebButton
 import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebOutlinedButton
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -319,7 +319,7 @@ internal fun CalendarAddContent(
 ) {
     val haptics = rememberHaptics()
     Spacer(Modifier.height(8.dp))
-    DenebOutlinedTextField(
+    DenebTextField(
         value = title,
         onValueChange = onTitle,
         label = { Text("제목") },
@@ -377,19 +377,19 @@ internal fun CalendarAddContent(
     }
 
     DenebSectionLabel("장소")
-    DenebOutlinedTextField(
+    DenebTextField(
         value = location,
         onValueChange = onLocation,
-        label = { Text("장소 (선택)") },
+        placeholder = { Text("선택 사항") },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
 
     DenebSectionLabel("설명")
-    DenebOutlinedTextField(
+    DenebTextField(
         value = description,
         onValueChange = onDescription,
-        label = { Text("설명 (선택)") },
+        placeholder = { Text("선택 사항") },
         minLines = 3,
         modifier = Modifier.fillMaxWidth(),
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Default),

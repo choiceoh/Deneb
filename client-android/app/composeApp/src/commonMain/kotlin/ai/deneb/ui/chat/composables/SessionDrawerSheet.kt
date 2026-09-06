@@ -2,12 +2,12 @@
 
 package ai.deneb.ui.chat.composables
 
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.ChatActions
 import ai.deneb.ui.chat.ConversationSummary
 import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
@@ -619,7 +619,7 @@ private fun RenameConversationDialog(
         },
         dismissButton = { DenebTextButton(onClick = onDismiss) { Text("취소") } },
         text = {
-            DenebOutlinedTextField(
+            DenebTextField(
                 value = draft,
                 onValueChange = { next ->
                     draft = if (next.length <= RENAME_LABEL_MAX) next else next.take(RENAME_LABEL_MAX)

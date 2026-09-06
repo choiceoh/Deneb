@@ -3,10 +3,10 @@ package ai.deneb.deneb
 import ai.deneb.PlatformBackHandler
 import ai.deneb.data.AppSettings
 import ai.deneb.openUrl
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBrowserAccent
 import ai.deneb.ui.denebHairline
@@ -370,7 +370,7 @@ fun DenebBrowserScreen(
                 Column {
                     Text(dialog.message)
                     if (dialog.kind == BrowserJsDialog.Kind.PROMPT) {
-                        DenebOutlinedTextField(
+                        DenebTextField(
                             value = promptValue,
                             onValueChange = { promptValue = it },
                             singleLine = true,
@@ -1241,7 +1241,7 @@ private fun EditBrowserBookmarkDialog(
         dismissButton = { DenebTextButton(onClick = onDismiss) { Text("취소") } },
         text = {
             Column {
-                DenebOutlinedTextField(
+                DenebTextField(
                     value = title,
                     onValueChange = { next ->
                         title = if (next.length <= BOOKMARK_TITLE_EDIT_MAX) next else next.take(BOOKMARK_TITLE_EDIT_MAX)
@@ -1250,7 +1250,7 @@ private fun EditBrowserBookmarkDialog(
                     singleLine = true,
                     label = { Text("이름") },
                 )
-                DenebOutlinedTextField(
+                DenebTextField(
                     value = url,
                     onValueChange = { url = it },
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),

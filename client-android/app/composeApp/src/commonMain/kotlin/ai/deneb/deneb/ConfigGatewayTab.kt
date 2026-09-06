@@ -11,12 +11,12 @@ import ai.deneb.sensing.parseLocationToGeofence
 import ai.deneb.sensing.readCurrentLocation
 import ai.deneb.tools.ContactsPermissionController
 import ai.deneb.tools.LocationPermissionController
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebButton
 import ai.deneb.ui.components.DenebOutlinedButton
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.settings.SettingsCard
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -72,7 +72,7 @@ internal fun GatewayTab(
     ) {
         DenebSectionLabel("게이트웨이 연결")
         SettingsCard {
-            DenebOutlinedTextField(
+            DenebTextField(
                 value = url,
                 onValueChange = { url = it },
                 label = { Text("게이트웨이 주소") },
@@ -81,7 +81,7 @@ internal fun GatewayTab(
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(12.dp))
-            DenebOutlinedTextField(
+            DenebTextField(
                 value = token,
                 onValueChange = { token = it },
                 label = { Text("클라이언트 토큰") },

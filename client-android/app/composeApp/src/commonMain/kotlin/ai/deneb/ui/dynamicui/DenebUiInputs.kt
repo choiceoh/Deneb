@@ -2,13 +2,13 @@
 
 package ai.deneb.ui.dynamicui
 
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebButton
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebOutlinedButton
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.DenebTonalButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBreathing
@@ -218,7 +218,7 @@ internal fun RenderTextInput(
 ) {
     val validation = LocalUiFormValidation.current
     val isError = validation?.errors?.get(node.id) == true
-    DenebOutlinedTextField(
+    DenebTextField(
         value = formState[node.id] ?: "",
         onValueChange = {
             formState[node.id] = it
@@ -351,7 +351,7 @@ private fun PickerField(
     onOpen: () -> Unit,
 ) {
     Box(Modifier.fillMaxWidth()) {
-        DenebOutlinedTextField(
+        DenebTextField(
             value = value,
             onValueChange = {},
             readOnly = true,
@@ -447,7 +447,7 @@ internal fun RenderSelect(
         expanded = expanded,
         onExpandedChange = { if (isInteractive) expanded = it },
     ) {
-        DenebOutlinedTextField(
+        DenebTextField(
             value = selected,
             onValueChange = {},
             readOnly = true,
@@ -461,7 +461,6 @@ internal fun RenderSelect(
             } else {
                 null
             },
-            shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).handCursor(),
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {

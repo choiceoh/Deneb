@@ -6,11 +6,11 @@ import ai.deneb.deneb.generated.PromptRow
 import ai.deneb.deneb.generated.TopicDocOut
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.JetBrainsMonoFamily
 import ai.deneb.ui.components.DenebButton
 import ai.deneb.ui.components.DenebOutlinedButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.icons.outlined.Article
@@ -489,7 +489,7 @@ internal fun PromptStyleEditor(
             )
         }
 
-        DenebOutlinedTextField(
+        DenebTextField(
             value = draft,
             onValueChange = onDraft,
             readOnly = readOnly || saving,

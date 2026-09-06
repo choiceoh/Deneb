@@ -1,11 +1,11 @@
 package ai.deneb.deneb
 
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebButton
 import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -443,7 +443,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
-            DenebOutlinedTextField(
+            DenebTextField(
                 value = addBaseUrl,
                 onValueChange = {
                     addBaseUrl = it
@@ -457,7 +457,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(12.dp))
-            DenebOutlinedTextField(
+            DenebTextField(
                 value = addModel,
                 onValueChange = {
                     addModel = it

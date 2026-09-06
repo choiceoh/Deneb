@@ -2,10 +2,10 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.data.Attachment
 import ai.deneb.shareTextToApps
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.LocalShowFullScreenImage
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
@@ -246,7 +246,7 @@ internal fun EditResendDialog(initial: String, onSend: (String) -> Unit, onDismi
         },
         dismissButton = { DenebTextButton(onClick = onDismiss) { Text("취소") } },
         text = {
-            DenebOutlinedTextField(
+            DenebTextField(
                 value = draft,
                 onValueChange = { draft = it },
                 modifier = Modifier.fillMaxWidth(),

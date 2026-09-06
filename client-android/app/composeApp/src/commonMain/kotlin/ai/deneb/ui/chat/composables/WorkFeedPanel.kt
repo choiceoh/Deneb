@@ -1,7 +1,6 @@
 package ai.deneb.ui.chat.composables
 
 import ai.deneb.deneb.DenebEmpty
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.WorkFeedAction
@@ -10,6 +9,7 @@ import ai.deneb.ui.components.DenebButton
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -368,7 +368,7 @@ internal fun WorkFeedApprovalDialog(
                 )
                 if (isReject) {
                     Spacer(Modifier.height(16.dp))
-                    DenebOutlinedTextField(
+                    DenebTextField(
                         value = rejectionComment,
                         onValueChange = { rejectionComment = limitApprovalComment(it) },
                         label = { Text("반려 사유 (선택)", style = DenebType.meta) },
@@ -453,7 +453,7 @@ internal fun WorkFeedAnswerBlock(
             // free-text question (no fixed options): a reply field routed to the session.
             var text by remember(item.id) { mutableStateOf("") }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                DenebOutlinedTextField(
+                DenebTextField(
                     value = text,
                     onValueChange = { text = it },
                     placeholder = { Text("답장…", style = DenebType.hint) },
@@ -650,7 +650,7 @@ internal fun WorkFeedFeedbackSheetContent(
                 color = denebHint(),
             )
             Spacer(Modifier.height(10.dp))
-            DenebOutlinedTextField(
+            DenebTextField(
                 value = text,
                 onValueChange = { text = it },
                 placeholder = { Text("예: 이 거래처 담당자는 김 부장이 아니라 이서연 차장입니다") },

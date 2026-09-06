@@ -2,10 +2,10 @@ package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.MemberOut
 import ai.deneb.deneb.generated.OrgNodeOut
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.DenebOutlinedButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
@@ -393,7 +393,7 @@ private fun OrgSearchBar(
     hitCount: Int,
 ) {
     Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)) {
-        DenebOutlinedTextField(
+        DenebTextField(
             value = query,
             onValueChange = onQueryChange,
             placeholder = { Text("이름으로 사람 찾기") },

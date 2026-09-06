@@ -6,11 +6,11 @@ import ai.deneb.decodeToImageBitmap
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.network.httpTeardownTolerantHandler
 import ai.deneb.openUrl
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.DenebTonalButton
 import ai.deneb.ui.components.LinkifiedText
 import ai.deneb.ui.components.rememberHaptics
@@ -520,7 +520,7 @@ fun DenebMailDetailScreen(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    DenebOutlinedTextField(
+                    DenebTextField(
                         value = askText,
                         onValueChange = { askText = it },
                         placeholder = { Text("질문 입력…") },

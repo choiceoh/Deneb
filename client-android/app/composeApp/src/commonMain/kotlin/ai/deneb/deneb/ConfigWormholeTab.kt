@@ -4,12 +4,12 @@ import ai.deneb.deneb.generated.WormholeModelOut
 import ai.deneb.deneb.generated.WormholeStatusOut
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebOutlinedButton
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -367,7 +367,7 @@ private fun WormholeRotateDialog(
             Column {
                 Text("새 API 키를 붙여넣으면 재시작 없이 적용됩니다.", style = DenebType.body, color = denebHint())
                 Spacer(Modifier.height(12.dp))
-                DenebOutlinedTextField(
+                DenebTextField(
                     value = key,
                     onValueChange = { key = it },
                     singleLine = true,

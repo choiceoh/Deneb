@@ -23,7 +23,7 @@ globs: ["client-android/app/composeApp/src/**/*.kt"]
 | Deneb 타이포 스킨 (정체성·구조) | Material (기능·상태·a11y) |
 |---|---|
 | 모든 텍스트 → `DenebType.*` (`viewTitle`/`subject`/`rowTitle`/`rowTitleStrong`/`rowSubtitle`/`snippet`/`meta`/`sectionLabel`/`body`/`button`/`hint`) | 버튼 **기반**: `Button`/`OutlinedButton`/`TextButton` — 호출부는 항상 래퍼 `DenebButton`/`DenebTonalButton`/`DenebOutlinedButton`/`DenebTextButton`(`ui/components/DenebButtons.kt`) |
-| 화면 프레임 → `DenebScreenScaffold(title, onBack, tabBar?)` (flat AMOLED, `←`, 제목) | 폼 **기반**: `Switch`·`Checkbox`·`Slider` 직접 / `SegmentedButton`→`DenebSegmentedRow`+`DenebSegment` / `OutlinedTextField`→`DenebOutlinedTextField` (검색·필터 입력은 `DenebUnderlineSearchField`) / 칩→`DenebChip` |
+| 화면 프레임 → `DenebScreenScaffold(title, onBack, tabBar?)` (flat AMOLED, `←`, 제목) | 폼 **기반**: `Switch`·`Checkbox`·`Slider` 직접 / `SegmentedButton`→`DenebSegmentedRow`+`DenebSegment` / `OutlinedTextField`→`DenebTextField` (박스 없이 라벨·값·hairline 밑줄; 검색·필터 입력은 `DenebUnderlineSearchField`) / 칩→`DenebChip` |
 | 리스트 행 → `DenebRow { … }` (행 아래 하airline, 노카드, 여백, 전체 탭) | 오버레이 **기반**: `BasicAlertDialog`→`DenebDialog`(호출부 API는 `AlertDialog`와 동일) · `ModalBottomSheet`·`Snackbar`·`ModalNavigationDrawer` |
 | 섹션 헤더 → `DenebSectionLabel("…")` (트랙트 캡스) | 비동기: `PullToRefreshBox`·`CircularProgressIndicator` |
 | 구분선 → `denebHairline()` · 힌트색 → `denebHint()` | 시맨틱: `selectable`/`toggleable`/`Role`, `contentDescription` |

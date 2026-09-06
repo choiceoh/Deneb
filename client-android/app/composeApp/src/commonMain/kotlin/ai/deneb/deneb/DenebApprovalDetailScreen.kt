@@ -2,12 +2,12 @@ package ai.deneb.deneb
 
 import ai.deneb.network.httpTeardownTolerantHandler
 import ai.deneb.openUrl
-import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTextField
 import ai.deneb.ui.components.DenebTonalButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
@@ -466,7 +466,7 @@ private fun ApprovalAskBox(
         }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            DenebOutlinedTextField(
+            DenebTextField(
                 value = question,
                 onValueChange = { question = it },
                 placeholder = { Text(if (asking) "근거를 확인하는 중…" else "예: 첨부 견적과 본문 금액이 같아?") },
