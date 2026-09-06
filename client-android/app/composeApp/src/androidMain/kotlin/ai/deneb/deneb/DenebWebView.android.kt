@@ -43,6 +43,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -149,7 +150,7 @@ actual fun DenebWebView(
                     popupLayerView,
                     FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
                 )
-                holder.web = web
+                holder.attach(web)
                 holder.popups = BrowserPopupLayer(
                     state = state,
                     context = ctx,
@@ -540,34 +541,34 @@ actual fun DenebWebView(
         }
     }
 
-    LaunchedEffect(state.url, state.loadTick) {
-        val target = browserWebViewCommandUrl(
-            requestedUrl = state.url,
-            currentUrl = state.currentUrl,
-            rendererRecoveryUrl = state.rendererRecoveryUrl,
-            rendererRecoveryPending = state.rendererRecoveryPending,
-        )
-        // A repeat load of the same address must still reach loadUrl, so the
-        // lastCommandUrl guard is skipped when load() asked for it explicitly. The
-        // guard still stops the initial composition from re-loading the page the
-        // WebView already restored.
-        val explicit = holder.commands.consumeLoad(state)
-        if (target.isNotBlank() && (explicit || holder.lastCommandUrl != target)) {
-            holder.popups?.destroyAll()
-            holder.finishDetachedRestore()
-            // A deliberate navigation retires the saved session — restoring the
-            // old back/forward list after the user navigated away would be a lie.
-            BrowserTabStateDisk.remove(context, state.tabId)
-            holder.lastCommandUrl = target
-            holder.web?.let { web ->
-                // Right after (re)entering the browser the restored session is
-                // often still loading, and its pending restore navigation can
-                // supersede a loadUrl issued meanwhile — the first bookmark or
-                // history tap looked dead. Stop it first; a no-op when idle.
-                web.stopLoading()
-                web.loadUrl(target)
-            }
-        }
+    // webEpoch is a key so an attach re-runs this: a tap that arrived while there
+    // was no platform view is still waiting, unconsumed, to be delivered.
+    LaunchedEffect(state.url, state.loadTick, holder.webEpoch) {
+        val web = holder.web
+        val target = browserLoadCommand(
+            state = state,
+            cursor = holder.commands,
+            hasView = web != null,
+            target = browserWebViewCommandUrl(
+                requestedUrl = state.url,
+                currentUrl = state.currentUrl,
+                rendererRecoveryUrl = state.rendererRecoveryUrl,
+                rendererRecoveryPending = state.rendererRecoveryPending,
+            ),
+            lastCommandUrl = holder.lastCommandUrl,
+        ) ?: return@LaunchedEffect
+        holder.popups?.destroyAll()
+        holder.finishDetachedRestore()
+        // A deliberate navigation retires the saved session — restoring the
+        // old back/forward list after the user navigated away would be a lie.
+        BrowserTabStateDisk.remove(context, state.tabId)
+        holder.lastCommandUrl = target
+        // Right after (re)entering the browser the restored session is often
+        // still loading, and its pending restore navigation can supersede a
+        // loadUrl issued meanwhile — the first bookmark or history tap looked
+        // dead. Stop it first; a no-op when idle.
+        web?.stopLoading()
+        web?.loadUrl(target)
     }
     LaunchedEffect(state.goBackTick) {
         if (holder.commands.consumeGoBack(state)) {
@@ -620,7 +621,10 @@ actual fun DenebWebView(
             }
         }
     }
-    LaunchedEffect(state.retryTick) {
+    LaunchedEffect(state.retryTick, holder.webEpoch) {
+        // Same discipline as the load effect: with no view and no popup there is
+        // nothing to retry into, and consuming here would spend the tap.
+        if (holder.web == null && holder.popups?.top == null) return@LaunchedEffect
         if (!holder.commands.consumeRetry(state)) return@LaunchedEffect
         val popups = holder.popups
         if (popups?.top != null) {
@@ -650,6 +654,20 @@ actual fun DenebWebView(
 private class WebViewHolder(state: DenebWebViewState) {
     @Volatile
     var web: WebView? = null
+
+    /**
+     * Bumped whenever a platform view is attached. Compose state, so a command
+     * effect can key on it and re-run the moment there is somewhere to deliver
+     * to — the windows with no view (before the factory runs, after a release,
+     * after a renderer crash) are exactly when a tap used to vanish.
+     */
+    var webEpoch by mutableStateOf(0)
+        private set
+
+    fun attach(view: WebView) {
+        web = view
+        webEpoch++
+    }
     var popups: BrowserPopupLayer? = null
     var lastCommandUrl: String = ""
 
