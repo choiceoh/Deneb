@@ -258,7 +258,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				if err != nil {
 					return nil, err
 				}
-				return handlermail.PipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, toolbind.ExtractAttachmentText, func(domain string) []string {
+				return handlermail.PipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, chat.WithImageVision(toolbind.ExtractAttachmentText), func(domain string) []string {
 					return s.cpProjects.Lookup(s.wikiStore, domain)
 				})
 			},

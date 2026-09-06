@@ -82,7 +82,10 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		CounterpartyProjectsFn: func(domain string) []string {
 			return s.cpProjects.Lookup(s.wikiStore, domain)
 		},
-		AttachmentExtractFn: toolbind.ExtractAttachmentText,
+		// Images ride the vision chain first (chat.WithImageVision) — a photographed
+		// 견적서 or a stamped drawing is understood, not flattened to OCR glyphs;
+		// small images and vision failures fall through to the extractor's OCR.
+		AttachmentExtractFn: chat.WithImageVision(toolbind.ExtractAttachmentText),
 		PromptOverride:      s.promptOverride,
 		ThinkingKwarg:       s.mailStage2ThinkingKwarg(),
 		SenderTrustFn:       s.mailSenderTrustDecision,
@@ -298,7 +301,10 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		CounterpartyProjectsFn: func(domain string) []string {
 			return s.cpProjects.Lookup(s.wikiStore, domain)
 		},
-		AttachmentExtractFn: toolbind.ExtractAttachmentText,
+		// Images ride the vision chain first (chat.WithImageVision) — a photographed
+		// 견적서 or a stamped drawing is understood, not flattened to OCR glyphs;
+		// small images and vision failures fall through to the extractor's OCR.
+		AttachmentExtractFn: chat.WithImageVision(toolbind.ExtractAttachmentText),
 		PromptOverride:      s.promptOverride,
 		OnAnalyzed:          s.makeMailAnalysisSink(),
 		OnDelivered:         s.makeMailFeedDeliverySink(),

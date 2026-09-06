@@ -52,3 +52,78 @@ func describeCapturedImage(ctx context.Context, img []byte, mime string, ocr fun
 	}
 	return ""
 }
+
+// visionAttachmentMinBytes is the floor for spending a vision call on an ATTACHED
+// image (the mail / chat attachment path, not the capture path — a user who
+// attaches something in chat meant it, so it always gets vision).
+//
+// Mail arrives unattended and in bulk: every company logo, banner and stamped
+// signature glyph in a footer would otherwise cost a frontier vision call per
+// message. Those are small; a photographed or scanned business document is not
+// (a phone photo of a 견적서 runs hundreds of KB to a few MB). The mail gate
+// already drops anything under 2KB as a tracker pixel — this floor is the same
+// idea one tier up, and images below it still get read, just by local OCR.
+const visionAttachmentMinBytes = 40 << 10
+
+// AttachmentExtractor is the format-neutral extraction signature shared by the
+// mail-analysis and chat attachment paths (mailanalysis.PipelineDeps.AttachmentExtractFn).
+type AttachmentExtractor func(ctx context.Context, data []byte, filename, mimeType string) string
+
+// WithImageVision upgrades an attachment extractor so that an attached IMAGE is
+// understood by the vision chain first, instead of being flattened to OCR glyphs.
+//
+// Why: the capture path (miniapp.capture.*) has described images with the vision
+// model since #4100, but everything that arrives through an *extractor* — mail
+// attachments, andromeda/OpenAI-compatible chat attachments — went straight to
+// PaddleOCR. So the same photographed 견적서 read one way in chat and another way
+// in mail, and a photo whose meaning is not glyphs (a site photo, a stamped
+// drawing, handwriting) came back nearly empty from the mail path.
+//
+// Non-images, small images, and any image the vision tiers cannot read fall
+// through to the wrapped extractor, which already OCRs images — so this can only
+// add understanding, never remove it. No OCR fallback is passed to the describer
+// for exactly that reason: the wrapped extractor is the fallback, and running OCR
+// in both places would read the same image twice.
+func WithImageVision(extract AttachmentExtractor) AttachmentExtractor {
+	return withImageVision(extract, pilot.DescribeImage)
+}
+
+// withImageVision is WithImageVision with the vision tier injected, so the
+// routing can be tested without a live model (same seam as describeCapturedImage).
+func withImageVision(extract AttachmentExtractor, describe visionDescriber) AttachmentExtractor {
+	if extract == nil {
+		return nil
+	}
+	return func(ctx context.Context, data []byte, filename, mimeType string) string {
+		if worthVisionAttachment(data, filename, mimeType) {
+			if desc := describeCapturedImage(ctx, data, mimeType, nil, describe); desc != "" {
+				// Logged because this path is otherwise invisible: the mail analysis
+				// just gets better text. One line per image attachment (rare) makes
+				// "did vision actually read it, or did it fall through to OCR?"
+				// answerable from the journal.
+				slog.Info("attachment image described by vision", "file", filename, "bytes", len(data), "chars", len([]rune(desc)))
+				return desc
+			}
+		}
+		return extract(ctx, data, filename, mimeType)
+	}
+}
+
+// worthVisionAttachment reports whether an attachment is an image big enough to
+// be worth a vision call. MIME is authoritative when present; a filename
+// extension covers the senders that ship images as octet-stream.
+func worthVisionAttachment(data []byte, filename, mimeType string) bool {
+	if len(data) < visionAttachmentMinBytes {
+		return false
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(mimeType)), "image/") {
+		return true
+	}
+	lower := strings.ToLower(filename)
+	for _, ext := range []string{".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".heic", ".heif"} {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
+}
