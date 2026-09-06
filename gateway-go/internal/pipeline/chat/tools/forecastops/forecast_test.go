@@ -153,16 +153,16 @@ func TestForecastWarnsWhenContextIsTooShortForSeasonality(t *testing.T) {
 }
 
 func TestForecastReportsSidecarFailureWithoutBreakingTheTurn(t *testing.T) {
-	c := &stubClient{err: errSidecarDown{}}
+	c := &stubClient{err: sidecarDownError{}}
 	out := run(t, c, `{"values":[1,2,3,4],"horizon":2}`)
 	if !strings.Contains(out, "예측 실패") || !strings.Contains(out, "connection refused") {
 		t.Fatalf("sidecar failure must surface calmly: %q", out)
 	}
 }
 
-type errSidecarDown struct{}
+type sidecarDownError struct{}
 
-func (errSidecarDown) Error() string { return "forecast: request failed: connection refused" }
+func (sidecarDownError) Error() string { return "forecast: request failed: connection refused" }
 
 func TestForecastElidesAVeryLongHorizon(t *testing.T) {
 	c := &stubClient{}

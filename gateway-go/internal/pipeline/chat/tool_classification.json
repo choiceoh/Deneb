@@ -10,7 +10,8 @@
       "grep": true,
       "fetch_tools": true,
       "read_spillover": true,
-      "code_search": true
+      "code_search": true,
+      "forecast": true
     }
   },
   "parallelSafeTools": {
@@ -23,7 +24,8 @@
       "grep": true,
       "read_spillover": true,
       "polaris": true,
-      "code_search": true
+      "code_search": true,
+      "forecast": true
     }
   },
   "toolCompressSkipSet": {

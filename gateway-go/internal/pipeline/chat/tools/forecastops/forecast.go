@@ -66,9 +66,9 @@ func ToolForecast(client Client) toolport.ToolFunc {
 			return "", fmt.Errorf("forecast 파라미터 해석 실패: %w", err)
 		}
 
-		series, err := collectSeries(p)
-		if err != nil {
-			return err.Error(), nil
+		series, refusal := collectSeries(p)
+		if refusal != "" {
+			return refusal, nil
 		}
 		horizon := p.Horizon
 		if horizon <= 0 {
@@ -77,9 +77,9 @@ func ToolForecast(client Client) toolport.ToolFunc {
 		if horizon > maxHorizon {
 			return fmt.Sprintf("horizon은 1..%d 입니다 (요청 %d). 더 먼 미래는 예측 신뢰도가 없습니다.", maxHorizon, horizon), nil
 		}
-		levels, err := parseQuantiles(p.Quantiles)
-		if err != nil {
-			return err.Error(), nil
+		levels, refusal := parseQuantiles(p.Quantiles)
+		if refusal != "" {
+			return refusal, nil
 		}
 
 		req := forecast.Request{Series: series, Horizon: horizon, Quantiles: levels}
@@ -87,11 +87,11 @@ func ToolForecast(client Client) toolport.ToolFunc {
 			if len(series) > 1 {
 				return "covariates(설명변수)는 단일 계열(values)에만 쓸 수 있습니다.", nil
 			}
-			if req.PastCovariates, err = covariates(p.PastCovariates, "past_covariates"); err != nil {
-				return err.Error(), nil
+			if req.PastCovariates, refusal = covariates(p.PastCovariates, "past_covariates"); refusal != "" {
+				return refusal, nil
 			}
-			if req.FutureCovariates, err = covariates(p.FutureCovariates, "future_covariates"); err != nil {
-				return err.Error(), nil
+			if req.FutureCovariates, refusal = covariates(p.FutureCovariates, "future_covariates"); refusal != "" {
+				return refusal, nil
 			}
 		}
 
@@ -103,10 +103,11 @@ func ToolForecast(client Client) toolport.ToolFunc {
 	}
 }
 
-// collectSeries accepts either values (one series) or series (a batch).
-func collectSeries(p params) ([]forecast.Series, error) {
+// collectSeries accepts either values (one series) or series (a batch). The
+// second return is a refusal for the agent, empty when the input is usable.
+func collectSeries(p params) ([]forecast.Series, string) {
 	if len(p.Values) > 0 && len(p.Series) > 0 {
-		return nil, fmt.Errorf("values와 series 중 하나만 주세요 (단일 계열=values, 여러 계열=series).")
+		return nil, "values와 series 중 하나만 주세요 (단일 계열=values, 여러 계열=series)."
 	}
 	var raw [][]any
 	switch {
@@ -116,33 +117,33 @@ func collectSeries(p params) ([]forecast.Series, error) {
 		for i, row := range p.Series {
 			nested, ok := row.([]any)
 			if !ok {
-				return nil, fmt.Errorf("series[%d]: 숫자 배열의 배열이어야 합니다. 계열이 하나면 values를 쓰세요.", i)
+				return nil, fmt.Sprintf("series[%d]: 숫자 배열의 배열이어야 합니다. 계열이 하나면 values를 쓰세요.", i)
 			}
 			raw = append(raw, nested)
 		}
 	default:
-		return nil, fmt.Errorf("values(숫자 배열)가 필요합니다. 과거 실측치를 시간순으로 주세요.")
+		return nil, "values(숫자 배열)가 필요합니다. 과거 실측치를 시간순으로 주세요."
 	}
 	if len(raw) > maxSeries {
-		return nil, fmt.Errorf("계열이 너무 많습니다 (최대 %d개, 요청 %d개).", maxSeries, len(raw))
+		return nil, fmt.Sprintf("계열이 너무 많습니다 (최대 %d개, 요청 %d개).", maxSeries, len(raw))
 	}
 	out := make([]forecast.Series, 0, len(raw))
 	for i, row := range raw {
-		vals, err := numbers(row, fmt.Sprintf("series[%d]", i))
-		if err != nil {
-			return nil, err
+		vals, refusal := numbers(row, fmt.Sprintf("series[%d]", i))
+		if refusal != "" {
+			return nil, refusal
 		}
 		if len(vals) < minPoints {
-			return nil, fmt.Errorf("계열 %d: 실측치가 %d개뿐입니다 (최소 %d개 필요).", i+1, len(vals), minPoints)
+			return nil, fmt.Sprintf("계열 %d: 실측치가 %d개뿐입니다 (최소 %d개 필요).", i+1, len(vals), minPoints)
 		}
 		out = append(out, vals)
 	}
-	return out, nil
+	return out, ""
 }
 
 // numbers coerces a JSON array to a series. null becomes NaN (a real gap the
 // model imputes); numeric strings are accepted because models quote numbers.
-func numbers(raw []any, field string) (forecast.Series, error) {
+func numbers(raw []any, field string) (forecast.Series, string) {
 	out := make(forecast.Series, 0, len(raw))
 	for i, v := range raw {
 		switch t := v.(type) {
@@ -153,50 +154,50 @@ func numbers(raw []any, field string) (forecast.Series, error) {
 		case json.Number:
 			f, err := t.Float64()
 			if err != nil {
-				return nil, fmt.Errorf("%s[%d]: 숫자가 아닙니다 (%v).", field, i, v)
+				return nil, fmt.Sprintf("%s[%d]: 숫자가 아닙니다 (%v).", field, i, v)
 			}
 			out = append(out, f)
 		case string:
 			s := strings.ReplaceAll(strings.TrimSpace(t), ",", "")
 			f, err := strconv.ParseFloat(s, 64)
 			if err != nil {
-				return nil, fmt.Errorf("%s[%d]: 숫자가 아닙니다 (%q).", field, i, t)
+				return nil, fmt.Sprintf("%s[%d]: 숫자가 아닙니다 (%q).", field, i, t)
 			}
 			out = append(out, f)
 		default:
-			return nil, fmt.Errorf("%s[%d]: 숫자가 아닙니다 (%v).", field, i, v)
+			return nil, fmt.Sprintf("%s[%d]: 숫자가 아닙니다 (%v).", field, i, v)
 		}
 	}
-	return out, nil
+	return out, ""
 }
 
-func covariates(in map[string][]any, field string) (map[string]forecast.Series, error) {
+func covariates(in map[string][]any, field string) (map[string]forecast.Series, string) {
 	if len(in) == 0 {
-		return nil, nil
+		return nil, ""
 	}
 	out := make(map[string]forecast.Series, len(in))
 	for name, raw := range in {
-		vals, err := numbers(raw, field+"."+name)
-		if err != nil {
-			return nil, err
+		vals, refusal := numbers(raw, field+"."+name)
+		if refusal != "" {
+			return nil, refusal
 		}
 		out[name] = vals
 	}
-	return out, nil
+	return out, ""
 }
 
-func parseQuantiles(raw []any) ([]float64, error) {
+func parseQuantiles(raw []any) ([]float64, string) {
 	if len(raw) == 0 {
-		return nil, nil // sidecar default: 0.1 / 0.5 / 0.9
+		return nil, "" // sidecar default: 0.1 / 0.5 / 0.9
 	}
-	vals, err := numbers(raw, "quantiles")
-	if err != nil {
-		return nil, err
+	vals, refusal := numbers(raw, "quantiles")
+	if refusal != "" {
+		return nil, refusal
 	}
 	for _, q := range vals {
 		if math.IsNaN(q) || q <= 0 || q >= 1 {
-			return nil, fmt.Errorf("quantiles는 0과 1 사이 값이어야 합니다 (예: [0.1, 0.5, 0.9]).")
+			return nil, "quantiles는 0과 1 사이 값이어야 합니다 (예: [0.1, 0.5, 0.9])."
 		}
 	}
-	return vals, nil
+	return vals, ""
 }
