@@ -251,6 +251,19 @@ func renderDealTotals(t wiki.DealTotals) string {
 	} else {
 		line += strings.Join(parts, " · ")
 	}
+	// The sum is over deals, not ledger rows — say so whenever they differ, so
+	// "왜 건수가 목록보다 적지"가 답을 갖는다.
+	if t.DuplicateRows > 0 {
+		line += fmt.Sprintf(" · 같은 거래 중복 %d행 병합", t.DuplicateRows)
+		if len(t.DuplicateGroups) > 0 {
+			samples := make([]string, 0, len(t.DuplicateGroups))
+			for _, g := range t.DuplicateGroups {
+				samples = append(samples, strings.TrimSpace(fmt.Sprintf("%s %s %s ×%d행",
+					g.Counterparty, g.DocType, g.AmountRaw, g.Rows)))
+			}
+			line += " (" + strings.Join(samples, ", ") + ")"
+		}
+	}
 	if t.UnparsedCount > 0 {
 		line += fmt.Sprintf(" · 미파싱 %d건", t.UnparsedCount)
 		if len(t.UnparsedSamples) > 0 {

@@ -189,8 +189,11 @@ func (s *Store) ledgerRelatedProjects(counterparty string) []string {
 // currency and only over parsed rows; unparsed rows are counted and sampled so
 // the model reports them instead of guessing their value.
 type DealTotals struct {
-	Count           int
-	SumByCurrency   map[string]float64 // parsed rows; key "" folded into "?"
+	Count           int                  // deals, i.e. rows AFTER same-deal collapse
+	RowCount        int                  // ledger rows examined
+	DuplicateRows   int                  // rows dropped as same-deal duplicates
+	DuplicateGroups []DealDuplicateGroup // largest first, up to dealDuplicateSamples
+	SumByCurrency   map[string]float64   // parsed rows; key "" folded into "?"
 	CountByCurrency map[string]int
 	UnparsedCount   int
 	UnparsedSamples []string // up to 3 raw amount strings
@@ -199,13 +202,30 @@ type DealTotals struct {
 	CapacityCount   int      // rows contributing to CapacityMWSum
 }
 
+// dealDuplicateSamples bounds the groups carried for reporting, the same way
+// UnparsedSamples is bounded.
+const dealDuplicateSamples = 3
+
 // SumDealRecords computes totals over recs. Pure function — no store access.
+//
+// Rows collapse to deals first (deal_dedup.go): the ledger holds one row per
+// filed document and one contract routinely arrives as several documents, so
+// summing rows double-counts it. Every caller wants the deal total, never the
+// document total, which is why the collapse lives here rather than behind an
+// opt-in — a wrong number should stop being produced everywhere at once.
 func SumDealRecords(recs []DealRecord) DealTotals {
+	deals, dups := CollapseDealDuplicates(recs)
 	t := DealTotals{
+		RowCount:        len(recs),
+		DuplicateRows:   len(recs) - len(deals),
 		SumByCurrency:   map[string]float64{},
 		CountByCurrency: map[string]int{},
 	}
-	for _, r := range recs {
+	if len(dups) > dealDuplicateSamples {
+		dups = dups[:dealDuplicateSamples]
+	}
+	t.DuplicateGroups = dups
+	for _, r := range deals {
 		t.Count++
 		if r.Terms != nil && r.Terms.CapacityMW > 0 {
 			t.CapacityMWSum += r.Terms.CapacityMW

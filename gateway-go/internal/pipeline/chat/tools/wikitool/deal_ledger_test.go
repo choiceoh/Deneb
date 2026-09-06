@@ -197,3 +197,48 @@ func TestToolDealLedgerMonthlyBucketsAreExact(t *testing.T) {
 		t.Errorf("unbounded query should show all 5 rows and no exclusion notice:\n%s", all)
 	}
 }
+
+// TestToolDealLedgerCountsOneContractOnce is the read-out half of the deal
+// collapse: the same contract filed from several mails must be listed as the
+// documents it is, but summed once — and the line has to SAY it merged, or the
+// gap between "원장 4건" and a one-deal total reads as a bug.
+func TestToolDealLedgerCountsOneContractOnce(t *testing.T) {
+	dir := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	now := time.Date(2026, 8, 25, 9, 0, 0, 0, time.UTC)
+	// One EPC contract, carried by four different mails — the production shape.
+	for _, ref := range []string{"mail:a", "mail:b", "mail:c", "mail:d"} {
+		in := wiki.DealPageInput{
+			Counterparty: "주식회사 해봄에너지",
+			DocType:      "계약서",
+			Amount:       "114,705,800,000원",
+			Date:         "2026-08-13",
+			SourceRef:    ref,
+		}
+		if _, _, err := store.UpsertDealPage(in, now); err != nil {
+			t.Fatalf("UpsertDealPage: %v", err)
+		}
+	}
+
+	out, err := ToolDealLedger(store)(context.Background(), json.RawMessage(`{"counterparty":"해봄"}`))
+	if err != nil {
+		t.Fatalf("deal_ledger: %v", err)
+	}
+	// Every document stays visible — the ledger is evidence.
+	if !strings.Contains(out, "거래 원장 4건") {
+		t.Errorf("document rows must still be listed:\n%s", out)
+	}
+	// But the money is counted once.
+	if !strings.Contains(out, "KRW 114,705,800,000 (1건)") {
+		t.Errorf("contract must be summed once:\n%s", out)
+	}
+	if !strings.Contains(out, "같은 거래 중복 3행 병합") {
+		t.Errorf("the merge must be stated, not silent:\n%s", out)
+	}
+	if !strings.Contains(out, "×4행") {
+		t.Errorf("the merged group must be named:\n%s", out)
+	}
+}
