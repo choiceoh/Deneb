@@ -295,7 +295,7 @@ func judgeSources(ctx context.Context, claim string, sources []SourceCheckSource
 		// no-think tiny role gets the same prompt before we give up.
 		reply, err = parseJudgeReply(sourceJudgeFallbackFn(ctx, sourceJudgeSystem, user, sourceCheckJudgeFallbackTokens))
 		if err != nil {
-			return "", "", fmt.Errorf("primary: %v; fallback: %w", perr, err)
+			return "", "", fmt.Errorf("primary: %w; fallback: %w", perr, err)
 		}
 		note = "판정: 1차 모델 응답 불량(" + perr.Error() + ") → tiny 롤 폴백으로 판정"
 	}
