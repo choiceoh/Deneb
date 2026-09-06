@@ -192,6 +192,25 @@ func TestSourceCheckEmptyPrimaryJudgeFallsBackToTinyRole(t *testing.T) {
 	if len(res.Notes) != 1 || !strings.Contains(res.Notes[0], "tiny 롤 폴백") {
 		t.Errorf("fallback must be noted: %v", res.Notes)
 	}
+	// A fallback judge is a weaker reader: 0.65 for one source, damped to 0.4875.
+	if res.Confidence >= 0.6 || res.Confidence <= 0.4 {
+		t.Errorf("fallback confidence = %v, want damped below 0.6", res.Confidence)
+	}
+}
+
+func TestLocateQuoteTolleratesCollapsedWhitespace(t *testing.T) {
+	body := "앞 문장.\n\n수도의 위치는 헌법사항이\n아니므로, '대한민국의 수도는 서울이다'라는   관습헌법은 존재하지 않는다.\n뒤 문장."
+	quote := "수도의 위치는 헌법사항이 아니므로, '대한민국의 수도는 서울이다'라는 관습헌법은 존재하지 않는다."
+	idx := locateQuote(body, quote)
+	if idx < 0 || !strings.HasPrefix(body[idx:], "수도의 위치는") {
+		t.Fatalf("whitespace-collapsed quote should still locate its real offset, got %d", idx)
+	}
+	if locateQuote(body, "완전히 다른 문장") != -1 {
+		t.Error("absent quote must be -1")
+	}
+	if locateQuote(body, "   ") != -1 {
+		t.Error("blank quote must be -1")
+	}
 }
 
 func TestSourceCheckDomainsFilterKeepsOnlyOfficialHosts(t *testing.T) {

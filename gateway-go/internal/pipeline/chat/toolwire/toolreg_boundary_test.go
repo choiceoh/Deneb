@@ -556,7 +556,7 @@ func TestRegistrationGroupsEnforceExactNamesWithoutCrossGroupDuplicates(t *testi
 		{name: "graph", run: func(r *mockRegistrar) { core.RegisterGraphTool(r, t.TempDir()) }, want: []string{"graphify"}},
 		{name: "phone", run: func(r *mockRegistrar) { ops.RegisterPhoneTools(r, nil) }, want: []string{"phone_read", "phone_write"}},
 		{name: "process", run: func(r *mockRegistrar) { RegisterProcessTools(r, &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()}) }, want: []string{"exec", "process"}},
-		{name: "web", run: func(r *mockRegistrar) { RegisterWebTools(r, nil) }, want: []string{"web", "browse"}},
+		{name: "web", run: func(r *mockRegistrar) { RegisterWebTools(r, nil) }, want: []string{"web", "browse", "source_check"}},
 		{name: "session", run: func(r *mockRegistrar) { RegisterSessionTools(r, &tooldeps.SessionDeps{}) }, want: []string{"sessions", "sessions_spawn"}},
 		{name: "chrono", run: func(r *mockRegistrar) { RegisterChronoTools(r) }, want: []string{"message", "heartbeat_update"}},
 		{name: "workflow", run: func(r *mockRegistrar) {

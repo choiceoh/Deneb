@@ -17,7 +17,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -231,6 +233,11 @@ func runSourceCheck(ctx context.Context, cache *FetchCache, localAI *LocalAIExtr
 		res.Notes = append(res.Notes, "판정 모델 실패 — 발췌만 반환: "+err.Error())
 	}
 	res.Verdict, res.Confidence = aggregateVerdict(res.Sources)
+	if note != "" && res.Confidence > 0 {
+		// A fallback judge is a weaker reader; its verdict must not carry the
+		// primary judge's confidence.
+		res.Confidence = math.Min(res.Confidence*0.75, 0.6)
+	}
 	res.Summary = defaultSummary(res)
 	if summary != "" {
 		res.Summary += " — " + summary
@@ -261,9 +268,11 @@ func allowedDomain(rawURL string, domains []string) bool {
 	return false
 }
 
-const sourceJudgeSystem = "너는 주장 검증기다. 주장과 번호가 붙은 출처 발췌를 받는다. 출처마다 그 발췌가 주장을 " +
-	"지지(supports)·반박(contradicts)·판단불가(unclear) 중 무엇인지 정하고, 근거가 되는 문장을 발췌에서 **글자 그대로** 옮긴다(quote). " +
-	"발췌에 없는 말을 지어내지 말고, 주장과 무관한 출처는 unclear로 둔다. 출력은 JSON 하나만: " +
+const sourceJudgeSystem = "너는 주장 검증기다. 주장은 **사실 명제**로 읽는다. 번호가 붙은 출처 발췌를 받아 출처마다 stance를 정한다: " +
+	"supports = 발췌가 그 사실을 긍정한다 · contradicts = 발췌가 그 사실이 틀렸다고 명시한다 · unclear = 그 외 전부. " +
+	"주장의 법적·규범적 지위를 논하거나(예: '관습헌법인가'), 표현을 비판하거나, 관련 주제만 다루는 출처는 사실을 반박하는 것이 아니다 — unclear로 둔다. " +
+	"quote는 발췌에서 근거 문장을 **한 글자도 바꾸지 않고**(공백·따옴표 포함) 그대로 복사한다; 제목만 있는 출처는 quote를 비운다. " +
+	"발췌에 없는 말을 지어내지 마라. 출력은 JSON 하나만: " +
 	`{"sources":[{"n":1,"stance":"supports|contradicts|unclear","quote":"…","reason":"한 문장"}],"summary":"한 줄 요약"}`
 
 type judgeReply struct {
@@ -312,7 +321,7 @@ func judgeSources(ctx context.Context, claim string, sources []SourceCheckSource
 		if s.Quote != "" {
 			// Verbatim means the quote is findable in what was actually read —
 			// the difference between a citation and a paraphrase.
-			if idx := strings.Index(s.body, s.Quote); idx >= 0 {
+			if idx := locateQuote(s.body, s.Quote); idx >= 0 {
 				s.Offset = idx
 				s.Verbatim = true
 			}
@@ -335,6 +344,31 @@ func parseJudgeReply(raw string, callErr error) (judgeReply, error) {
 		return reply, fmt.Errorf("판정 응답이 JSON이 아님: %w", err)
 	}
 	return reply, nil
+}
+
+// locateQuote finds quote in body and returns its byte offset, or -1. Judges
+// routinely collapse the whitespace of what they copy (a line break inside a
+// sentence becomes a space), so each whitespace run in the quote matches any
+// whitespace run in the body — the offset still points at the real text.
+func locateQuote(body, quote string) int {
+	parts := strings.Fields(quote)
+	if len(parts) == 0 {
+		return -1 // a blank "quote" would match the first whitespace run
+	}
+	if idx := strings.Index(body, quote); idx >= 0 {
+		return idx
+	}
+	for i, p := range parts {
+		parts[i] = regexp.QuoteMeta(p)
+	}
+	re, err := regexp.Compile(strings.Join(parts, `\s+`))
+	if err != nil {
+		return -1
+	}
+	if loc := re.FindStringIndex(body); loc != nil {
+		return loc[0]
+	}
+	return -1
 }
 
 func normalizeStance(s string) string {
