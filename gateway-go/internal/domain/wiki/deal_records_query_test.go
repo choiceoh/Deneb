@@ -64,10 +64,28 @@ func TestQueryDealRecordsReturnsFiltered(t *testing.T) {
 		t.Errorf("project filter = %+v", recs)
 	}
 
-	// Date range keeps free-text-dated rows (never silently dropped).
-	recs, _ = s.QueryDealRecords(DealRecordFilter{Counterparty: "대한전선", Since: "2026-06-01"})
-	if len(recs) != 1 || recs[0].Date != "지난주" {
-		t.Errorf("since filter = %+v", recs)
+	// Date range excludes rows with no resolvable date — "지난주" belongs to no
+	// month, and admitting it would put it in every bucket a 월별 추이 asks
+	// for. Not silently: the stats report what the bound set aside.
+	recs, stats, err := s.QueryDealRecordsWithStats(DealRecordFilter{Counterparty: "대한전선", Since: "2026-06-01"})
+	if err != nil {
+		t.Fatalf("QueryDealRecordsWithStats: %v", err)
+	}
+	if len(recs) != 0 {
+		t.Errorf("since filter = %+v, want no rows (05-10 is out of range, 지난주 is undated)", recs)
+	}
+	if stats.UndatedExcluded != 1 {
+		t.Errorf("UndatedExcluded = %d, want 1 (the 지난주 row, reported not dropped)", stats.UndatedExcluded)
+	}
+	// The undated row is still reachable — it is the date bound that hides it.
+	recs, stats, _ = s.QueryDealRecordsWithStats(DealRecordFilter{Counterparty: "대한전선"})
+	if len(recs) != 2 || stats.UndatedExcluded != 0 {
+		t.Errorf("unbounded 대한전선 = %d rows, excluded %d — want 2, 0", len(recs), stats.UndatedExcluded)
+	}
+	// The count describes only rows the query was otherwise about: a JA Solar
+	// range query must not report 대한전선's undated row.
+	if _, s2, _ := s.QueryDealRecordsWithStats(DealRecordFilter{Counterparty: "ja solar", Since: "2026-06-01"}); s2.UndatedExcluded != 0 {
+		t.Errorf("UndatedExcluded = %d for a JA Solar range query, want 0", s2.UndatedExcluded)
 	}
 
 	// DocType substring.
