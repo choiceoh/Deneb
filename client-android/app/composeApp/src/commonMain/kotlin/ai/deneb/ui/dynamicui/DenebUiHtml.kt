@@ -106,7 +106,7 @@ object DenebUiHtml {
 
     private sealed interface Structural {
         data class Option(val text: String, val selected: Boolean) : Structural
-        data class Chip(val label: String, val value: String) : Structural
+        data class Chip(val label: String, val value: String, val description: String? = null) : Structural
         data class Tab(val label: String, val children: List<DenebUiNode>) : Structural
         data class Row(val cells: List<Cell>) : Structural
         data class Cell(val text: String, val header: Boolean) : Structural
@@ -784,13 +784,21 @@ object DenebUiHtml {
             "chips", "chip-group" -> ChipGroupNode(
                 id = a["id"] ?: "",
                 chips = el.structs.filterIsInstance<Structural.Chip>()
-                    .map { ChipItem(label = it.label, value = it.value) }
+                    .map { ChipItem(label = it.label, value = it.value, description = it.description) }
                     .toImmutableList(),
                 selection = a["selection"]?.takeIf { it.isNotEmpty() } ?: "single",
                 required = attrBool(a, "required"),
+                // Cosmetic attribute: anything but "list" keeps the chip flow, so an
+                // invented value can never be what breaks a card.
+                layout = if (a["layout"]?.trim().equals("list", ignoreCase = true)) "list" else "chips",
+                lettered = attrBool(a, "lettered"),
             )
 
-            "chip" -> Structural.Chip(label = inner, value = a["value"]?.takeIf { it.isNotEmpty() } ?: inner)
+            "chip" -> Structural.Chip(
+                label = inner,
+                value = a["value"]?.takeIf { it.isNotEmpty() } ?: inner,
+                description = a["description"]?.trim()?.takeIf { it.isNotEmpty() },
+            )
 
             "br" -> null
 

@@ -71,10 +71,11 @@ internal val LocalFrozenSubmission = compositionLocalOf<FrozenSubmission?> { nul
 
 /**
  * Form-validation context for one rendered deneb-ui tree: which input ids are
- * required, and which currently show a "필수" error. Buttons consult it before
- * firing a callback (blank required inputs block the submit and get flagged);
- * inputs clear their own flag on edit. CompositionLocal so the many Render*
- * signatures stay untouched.
+ * required, and which currently show a "필수" error. A callback button whose
+ * `collect` list has a blank required input renders DISABLED (2026-09-06); the
+ * press-time flag remains for required inputs outside that list. Inputs clear
+ * their own flag on edit. CompositionLocal so the many Render* signatures stay
+ * untouched.
  */
 internal class UiFormValidation(
     val requiredIds: Set<String>,

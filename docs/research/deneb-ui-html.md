@@ -112,7 +112,7 @@
 | `select` | select | id 필수, `label`, `placeholder`, `required` | `<option [selected]>값</option>` — selected 속성 → selected |
 | `radio-group` (`radiogroup`) | radio_group | id 필수, `label`, `required` | `<option [selected]>` 동일 |
 | `slider` | slider | id 필수, `label`, `value`, `min`, `max`, `step` | void |
-| `chips` (`chip-group`) | chip_group | id 필수, `selection`(single*·multi·none), `required` | `<chip value="…">라벨</chip>` |
+| `chips` (`chip-group`) | chip_group | id 필수, `selection`(single*·multi·none), `required`, `layout`(chips*·list), `lettered` | `<chip value="…" description="…">라벨</chip>` — `layout="list"`면 세로 선택 행(컨트롤·레터 배지·라벨·설명), `lettered`면 A/B/C 배지. 발명된 layout 값은 기본 유지(카드 무효화 아님) |
 
 `*` = 기본값. 수치/불리언 속성은 관용 파싱(실패 시 무시→기본값).
 
@@ -155,4 +155,4 @@ badge `red`→error / alert `warn`→warning / chart `column`→bar /
 인접 인라인 런 공백 보존(`**A** **B**`) / `<ul>` 비순서·`<ol>`/`ordered` 속성만 순서 /
 `<thead>/<tbody>` unwrap 시 행 보존 / 본문 꼬리에 붙은 클로저(HTML 한정, 뒤 프로즈 분리) /
 원라이너 펜스(````프로즈.```deneb-ui<text>…</text>``` 끝````) / legacy JSON은 단독 라인 클로저 유지 /
-발명 태그 별칭(title→title·label→caption·kv→"키 — 값"·spacer→divider).
+발명 태그 별칭(title→title·label→caption·kv→"키 — 값"·spacer→divider) / chips `layout=list`+`lettered`+chip `description`(+발명 layout 값은 기본 유지).

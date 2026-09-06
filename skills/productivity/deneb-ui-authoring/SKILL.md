@@ -71,7 +71,11 @@ Use quick actions when they shorten a real next step:
 
 When the answer ends in a decision, present controls instead of asking only in
 prose. Put approval/alternative buttons in a row, make destructive labels
-explicit, or use 2-5 chips plus a confirm button. Button callbacks return as
+explicit, or use 2-5 chips plus a confirm button. For a question with 3+ options that each need a
+line of explanation ("which tools to connect", "which draft to send"), use the list layout:
+`<chips id="tools" layout="list" lettered selection="multi"><chip value="github" description="레포, 이슈, PR">GitHub</chip>…</chips>`
+— rows with A/B/C badges (the user can answer "B로") and a description under each label. A
+button that `collect`s a `required` group renders disabled until something is picked. Button callbacks return as
 `Pressed: 이벤트`; collected values return as `Responded with: id: 값`. Execute
 the chosen action when that next user message arrives.
 

@@ -6,6 +6,7 @@ import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBreathing
+import ai.deneb.ui.denebHint
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.icons.filled.AccessTime
 import ai.deneb.ui.icons.filled.ContentCopy
@@ -19,9 +20,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -107,8 +110,16 @@ internal fun RenderButton(
         action.event == frozen.pressedEvent && collectFormData(action, formState) == frozen.values
     }
     val showPulse = (clicked && !isInteractive) || (isPressedSnapshot && frozen.isPending)
-    val enabled = isInteractive && (node.enabled != false)
     val validation = LocalUiFormValidation.current
+    // Submit gating (2026-09-06, Grok reference): a callback button whose `collect`
+    // list still has a blank required input is DISABLED, not merely refused on
+    // press — the greyed button says "you are not done yet" before the user tries.
+    // The flag-on-press path below stays as the net for required inputs outside
+    // the collect list.
+    val awaitingRequired = (node.action as? CallbackAction)?.let { action ->
+        validation?.missingFrom(action.collectFrom.orEmpty(), formState)
+    }.orEmpty()
+    val enabled = isInteractive && (node.enabled != false) && awaitingRequired.isEmpty()
     val haptics = rememberHaptics()
     val onClick: () -> Unit = {
         haptics.tap()
@@ -678,6 +689,10 @@ internal fun RenderChipGroup(
     isInteractive: Boolean,
     formState: SnapshotStateMap<String, String>,
 ) {
+    if (node.layout == "list") {
+        RenderChoiceList(node, isInteractive, formState)
+        return
+    }
     val isDisplayOnly = node.selection == "none"
     val isMulti = node.selection == "multi"
     val validation = LocalUiFormValidation.current
@@ -728,5 +743,101 @@ internal fun RenderChipGroup(
                 }
             }
         }
+    }
+}
+
+/**
+ * `layout="list"` chip group — the Grok-style choice card. Every option is a
+ * full-width row: selection control (checkbox for multi, radio for single) ·
+ * optional letter badge (A, B, C… so a glance or a spoken "B로" maps to a row) ·
+ * label with a one-line description under it. Selection state shares the chip
+ * group's CSV form value, so `collect` and `required` need nothing new.
+ */
+@Composable
+private fun RenderChoiceList(
+    node: ChipGroupNode,
+    isInteractive: Boolean,
+    formState: SnapshotStateMap<String, String>,
+) {
+    val isMulti = node.selection == "multi"
+    val isDisplayOnly = node.selection == "none"
+    val validation = LocalUiFormValidation.current
+    val isError = validation?.errors?.get(node.id) == true
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (isError) {
+            Text(
+                text = "필수 선택입니다",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+        }
+        node.chips.forEachIndexed { index, chip ->
+            val value = chip.value.ifEmpty { chip.label }
+            key(value) {
+                val selected = (formState[node.id] ?: "").split(",").contains(value)
+                val canToggle = isInteractive && !isDisplayOnly
+                val onToggle: () -> Unit = {
+                    val current = (formState[node.id] ?: "").split(",").filter { it.isNotEmpty() }.toSet()
+                    val next = when {
+                        isMulti -> if (selected) current - value else current + value
+                        selected -> emptySet()
+                        else -> setOf(value)
+                    }
+                    formState[node.id] = next.joinToString(",")
+                    if (next.isNotEmpty()) validation?.errors?.remove(node.id)
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .handCursor()
+                        .then(if (canToggle) Modifier.clickable(onClick = onToggle) else Modifier)
+                        .padding(vertical = 8.dp),
+                ) {
+                    if (!isDisplayOnly) {
+                        if (isMulti) {
+                            Checkbox(checked = selected, onCheckedChange = null, enabled = isInteractive)
+                        } else {
+                            RadioButton(selected = selected, onClick = null, enabled = isInteractive)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    if (node.lettered == true) {
+                        ChoiceLetter(letter = choiceLetter(index), selected = selected)
+                        Spacer(Modifier.width(12.dp))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(text = chip.label, style = MaterialTheme.typography.bodyLarge)
+                        chip.description?.let {
+                            Text(text = it, style = MaterialTheme.typography.bodySmall, color = denebHint())
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A, B, … Z, then 27, 28… — a list that long has bigger problems than lettering. */
+internal fun choiceLetter(index: Int): String = if (index in 0..25) ('A' + index).toString() else (index + 1).toString()
+
+@Composable
+private fun ChoiceLetter(letter: String, selected: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .background(
+                if (selected) scheme.secondaryContainer else scheme.surfaceContainer,
+                RoundedCornerShape(6.dp),
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = letter,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (selected) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
+        )
     }
 }

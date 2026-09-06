@@ -244,6 +244,14 @@ data class ChipGroupNode(
     val selection: String = "single",
     /** Submit-blocking required flag — buttons refuse to fire while nothing is selected. */
     val required: Boolean? = null,
+    /**
+     * "chips" (default, a wrapping flow) or "list": full-width choice rows with a
+     * selection control, optional letter badge, label and description — the shape a
+     * "pick one or more of these" question wants (2026-09-06, Grok reference).
+     */
+    val layout: String = "chips",
+    /** `layout="list"` only: A, B, C… badges so a glance or a spoken "B로" maps to a row. */
+    val lettered: Boolean? = null,
 ) : DenebUiNode
 
 @Immutable
@@ -251,6 +259,8 @@ data class ChipGroupNode(
 data class ChipItem(
     val label: String = "",
     val value: String = "",
+    /** One-line description under the label in `layout="list"` ("레포, 이슈, PR"). */
+    val description: String? = null,
 )
 
 // --- Content nodes (additional) ---

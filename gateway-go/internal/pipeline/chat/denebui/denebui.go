@@ -73,6 +73,7 @@ var (
 	textStyles      = []string{"headline", "title", "body", "caption"}
 	keyboardTypes   = []string{"text", "number", "decimal", "email", "phone", "url"}
 	buttonVariants  = []string{"filled", "outlined", "text", "tonal"}
+	chipLayouts     = []string{"chips", "list"} // "list" = vertical choice rows with letter badge + description
 	alertSeverities = []string{"info", "success", "warning", "error"}
 	chartTypes      = []string{"bar", "line"}
 	actionTypes     = []string{"callback", "toggle", "open_url", "copy_to_clipboard"}
@@ -114,7 +115,7 @@ var nodeSpecs = map[string]nodeSpec{
 	"switch":      {requireID: true},
 	"slider":      {requireID: true},
 	"radio_group": {requireID: true},
-	"chip_group":  {requireID: true}, // chips are {label,value}, not nodes
+	"chip_group":  {requireID: true, enums: map[string][]string{"layout": chipLayouts}}, // chips are {label,value[,description]}, not nodes
 	// Feedback.
 	"progress":  {},
 	"alert":     {enums: map[string][]string{"severity": alertSeverities}},
