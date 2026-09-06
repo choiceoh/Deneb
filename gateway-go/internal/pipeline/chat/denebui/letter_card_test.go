@@ -25,7 +25,7 @@ const morningLetterCardHTML = `<column>
   </card>
   <card>
     <row><icon name="payments" size="16"/><text style="caption">환율 · 구리</text></row>
-    <row><stat value="{{market:usd_krw}}" label="USD/KRW"/><stat value="${{market:copper}} /t" label="LME 구리"/></row>
+    <row><stat value="{{market:usd_krw}}" label="USD/KRW"/><stat value="${{market:copper}}/톤" label="COMEX 구리"/></row>
   </card>
   <card>
     <row><icon name="calendar" size="16"/><text style="caption">오늘 일정</text></row>
