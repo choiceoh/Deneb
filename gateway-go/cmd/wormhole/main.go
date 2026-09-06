@@ -77,6 +77,13 @@ type modelEntry struct {
 	// Deneb gateway can't express these params itself (so wormhole is the only
 	// place the translation can happen — there's no double-routing to avoid).
 	// Currently one style:
+	//   "glm-vllm" — GLM-5.x served locally by vLLM. Writes reasoning_effort into
+	//   chat_template_kwargs, where that template reads it. It honors only
+	//   low|high and resolves EVERYTHING ELSE — including absence — to max, so
+	//   this style always writes a level: "off" means the floor ("low", the model
+	//   has no true off) and anything else means "high". Do not use the "glm"
+	//   style here: its off-switch is a z.ai-only field and it deletes
+	//   reasoning_effort, which lands the request on max.
 	//   "glm" — z.ai / GLM-5.x. Per-turn, like dsv4: an obviously-simple turn →
 	//   thinking:{"type":"disabled"} (off); otherwise reasoning_effort:"high"
 	//   (on). GLM honors only reasoning_effort high|max and resolves anything but

@@ -66,6 +66,9 @@ func (rt *router) applyThinking(entry modelEntry, body []byte, noEffort bool) []
 // Native cloud reasoning dialects (see modelEntry.Reasoning).
 const (
 	reasoningStyleGLM = "glm" // z.ai / GLM-5.x
+	// GLM-5.x served by vLLM. A separate style from "glm" because the two speak
+	// different languages for the same idea — see glmVLLMReasoningRoute.
+	reasoningStyleGLMVLLM = "glm-vllm"
 	// reasoningStyleDeepseek is the api.deepseek.com dialect. Both API entries
 	// have declared it since they were added, but nothing implemented it — the
 	// style fell through reasoningRoute's unknown-style branch, so the caller's
@@ -107,6 +110,8 @@ func (rt *router) applyReasoning(entry modelEntry, body []byte) []byte {
 func reasoningRoute(body []byte, entry modelEntry) (out []byte, reason string, thinkingOff bool) {
 	switch entry.Reasoning {
 	case reasoningStyleGLM:
+	case reasoningStyleGLMVLLM:
+		return glmVLLMReasoningRoute(body, entry.ThinkingMode)
 	case reasoningStyleDeepseek:
 		return deepseekReasoningRoute(body, entry.ThinkingMode)
 	default:
@@ -157,6 +162,65 @@ func reasoningRoute(body []byte, entry modelEntry) (out []byte, reason string, t
 	b := setBodyField(body, "thinking", map[string]string{"type": "enabled"})
 	b = setBodyField(b, "reasoning_effort", "high")
 	return b, d.Reason, false
+}
+
+// GLM's vLLM chat template honors exactly these two levels; everything else,
+// including absence, means MAX.
+const (
+	glmEffortLow  = "low"
+	glmEffortHigh = "high"
+)
+
+// glmVLLMReasoningRoute sets the effort for a GLM-5.x served by vLLM.
+//
+// The served chat template (read from the weights, glm-5.3-flash-nvfp4) is:
+//
+//	{%- set effective_reasoning_effort = reasoning_effort if reasoning_effort is
+//	  defined and reasoning_effort in ['low', 'high'] else 'max' -%}
+//
+// Two consequences drive this whole function. There is no OFF — the floor is
+// "low", so a "nothink" entry on this backend means the floor, not silence. And
+// sending nothing is NOT a neutral default: an absent or unrecognized value
+// resolves to MAX, the deepest setting the model has. So this route always
+// writes a level; leaving it out is the one thing that must not happen.
+//
+// The z.ai dialect cannot stand in. Its off-switch is thinking:{"type":
+// "disabled"} — a field this endpoint does not know — and it DELETES
+// reasoning_effort on the way, which lands the request on max: the exact
+// opposite of what the caller asked for.
+func glmVLLMReasoningRoute(body []byte, mode string) (out []byte, reason string, thinkingOff bool) {
+	// A cloud dialect's field means nothing to vLLM and risks a strict-schema
+	// rejection on the way through.
+	body = deleteBodyField(body, "thinking")
+	switch mode {
+	case thinkingModeOff:
+		return setGLMVLLMEffort(body, glmEffortLow), "mode-off", true
+	case thinkingModeOn:
+		return setGLMVLLMEffort(body, glmEffortHigh), "mode-on", false
+	}
+	if eff := strings.ToLower(strings.TrimSpace(getBodyStringField(body, "reasoning_effort"))); eff != "" {
+		switch eff {
+		case "high", "max":
+			// "max" is honored as high on purpose: max is what this template
+			// falls back to when it understands nothing, and pinning the deepest
+			// level by accident is the failure this route exists to prevent.
+			return setGLMVLLMEffort(body, glmEffortHigh), "explicit-" + eff, false
+		default:
+			return setGLMVLLMEffort(body, glmEffortLow), "explicit-" + eff, true
+		}
+	}
+	d := ares.Decide(ares.DefaultProfile(), effortRequest(body))
+	if d.ThinkingOff {
+		return setGLMVLLMEffort(body, glmEffortLow), d.Reason, true
+	}
+	return setGLMVLLMEffort(body, glmEffortHigh), d.Reason, false
+}
+
+// setGLMVLLMEffort writes the level where the template reads it, and mirrors it
+// on the top-level OpenAI field so a vLLM build that forwards that one into the
+// template cannot disagree with the kwarg.
+func setGLMVLLMEffort(body []byte, level string) []byte {
+	return setBodyField(injectKwarg(body, "reasoning_effort", level), "reasoning_effort", level)
 }
 
 // deepseekReasoningRoute rewrites the effort for api.deepseek.com.
@@ -251,7 +315,7 @@ func hardReason(reason string) bool {
 // injectKwarg sets chat_template_kwargs.<key> = val on the request body, merging
 // into any kwargs the client already sent and preserving every other field's raw
 // bytes. Returns the original body unchanged if it isn't a JSON object.
-func injectKwarg(body []byte, key string, val bool) []byte {
+func injectKwarg(body []byte, key string, val any) []byte {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(body, &fields); err != nil {
 		return body
