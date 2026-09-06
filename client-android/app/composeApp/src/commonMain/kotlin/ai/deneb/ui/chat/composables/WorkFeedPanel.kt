@@ -5,6 +5,7 @@ import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.WorkFeedAction
 import ai.deneb.ui.chat.WorkFeedItem
+import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -49,7 +50,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -434,7 +434,8 @@ internal fun WorkFeedAnswerBlock(
         if (item.actions.isNotEmpty()) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item.actions.forEach { action ->
-                    AssistChip(
+                    DenebChip(
+                        modifier = Modifier.handCursor(),
                         onClick = {
                             if (action.id.startsWith("approval:")) {
                                 pendingApproval = action
@@ -443,9 +444,9 @@ internal fun WorkFeedAnswerBlock(
                                 onAnswer(item, action.label, action.id, null)
                             }
                         },
-                        label = { Text(action.label, style = DenebType.button) },
-                        modifier = Modifier.handCursor(),
-                    )
+                    ) {
+                        Text(action.label, style = DenebType.button)
+                    }
                 }
             }
         } else {
@@ -540,7 +541,8 @@ internal fun WorkFeedActionChips(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         chips.forEach { action ->
-            AssistChip(
+            DenebChip(
+                modifier = Modifier.handCursor(),
                 onClick = {
                     if (action.id.startsWith("dream:revert")) {
                         pendingRevert = action
@@ -549,9 +551,9 @@ internal fun WorkFeedActionChips(
                         onRunAction(item.id, action.id)
                     }
                 },
-                label = { Text(action.label, style = DenebType.button) },
-                modifier = Modifier.handCursor(),
-            )
+            ) {
+                Text(action.label, style = DenebType.button)
+            }
         }
     }
 }

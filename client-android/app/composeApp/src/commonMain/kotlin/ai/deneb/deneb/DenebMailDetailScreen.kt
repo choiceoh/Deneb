@@ -8,6 +8,7 @@ import ai.deneb.network.httpTeardownTolerantHandler
 import ai.deneb.openUrl
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.LinkifiedText
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
@@ -43,7 +44,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -338,10 +338,9 @@ fun DenebMailDetailScreen(
                                     Spacer(Modifier.height(4.dp))
                                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         analysis!!.related.forEach { rp ->
-                                            AssistChip(
-                                                onClick = { onOpenWiki(rp.path) },
-                                                label = { Text(rp.title.ifBlank { rp.path }) },
-                                            )
+                                            DenebChip(onClick = { onOpenWiki(rp.path) }) {
+                                                Text(rp.title.ifBlank { rp.path })
+                                            }
                                         }
                                     }
                                 }
@@ -402,10 +401,9 @@ fun DenebMailDetailScreen(
             Spacer(Modifier.height(4.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 mail.attachments.forEach { att ->
-                    AssistChip(
-                        onClick = { openUrl(client.attachmentUrl(mail.id, att)) },
-                        label = { Text(att.filename + "  " + humanBytes(att.size.toLong())) },
-                    )
+                    DenebChip(onClick = { openUrl(client.attachmentUrl(mail.id, att)) }) {
+                        Text(att.filename + "  " + humanBytes(att.size.toLong()))
+                    }
                 }
             }
 
