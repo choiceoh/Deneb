@@ -416,6 +416,37 @@ func BrowseToolSchema() map[string]any {
 	}
 }
 
+func SourceCheckToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"claim": map[string]any{
+				"type":        "string",
+				"description": "검증할 주장 한 문장(사실 명제). 예: '탑솔라는 2024년에 KS 인증을 받았다'",
+			},
+			"domains": map[string]any{
+				"type":        "array",
+				"description": "선택: 이 도메인들만 출처로 인정(접미 일치, 예: 'go.kr', 'kats.go.kr'). 공식 출처만 원할 때",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"fetch": map[string]any{
+				"type":        "integer",
+				"description": "선택: 읽을 페이지 수 1~5(기본 3). 많을수록 느리고 비싸다",
+			},
+			"queries": map[string]any{
+				"type":        "array",
+				"description": "선택: 직접 지정한 검색어(최대 2개 추가). 생략하면 주장 자체로 검색한다",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+		},
+		"required": []string{"claim"},
+	}
+}
+
 func CronToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

@@ -39,4 +39,16 @@ func Register(registry toolport.ToolRegistrar, spill tooldeps.SpilloverStore) {
 		Fn:          browseops.ToolBrowse(),
 		Deferred:    true,
 	})
+	// Claim verification on top of the same search/fetch/excerpt parts: one call
+	// returns a fixed-rule verdict plus per-source stance and verbatim quotes.
+	registry.RegisterTool(toolport.ToolDef{
+		Name: "source_check",
+		Description: "주장 하나를 웹 출처로 검증해 판정 아티팩트로 돌려준다: verdict(supported·contradicted·unclear·missing-evidence) + 출처별 입장(supports/contradicts/unclear)과 원문 인용(오프셋·sha256). " +
+			"검색→랭크→최대 5페이지 읽기→발췌→판정을 한 번에 한다. '이게 사실이야?', '근거 있어?', 메일·위키의 수치·인증·날짜 주장 확인에 쓴다. " +
+			"판정 규칙은 고정 집계다 — 지지만 있으면 supported, 반박만 있으면 contradicted, 둘 다면 unclear, 아무 근거도 없으면 missing-evidence. " +
+			"인용의 verbatim=false는 의역이니 그대로 옮기지 말 것. 단순 검색·페이지 읽기는 web을 쓴다.",
+		InputSchema: schema.SourceCheckToolSchema(),
+		Fn:          web.ToolSourceCheck(webCache, localAI, spill),
+		Deferred:    true,
+	})
 }
