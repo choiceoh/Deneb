@@ -13,6 +13,7 @@ bounded 결과 envelope로 변환한다. media·document parser를 조합하지�
   `web_fetch_rank.go`의 `rankFetchCandidates`(answerBox·knowledgeGraph·스니펫
   겹침·다양성·denylist)로 고른 뒤 `fillUsableFetches`가 상위 2개를 병렬 wave로
   받고 부족분만 순차 보충하며, deny/fill 통계를 slog로 남긴다.
+- `source_check.go`의 `ToolSourceCheck`(deferred 도구 `source_check`)는 주장 하나를 검색→`rankFetchCandidates`→`fillUsableFetches`→`focusExcerpt`→(리랭커)→lightweight 롤 판정으로 돌려 **고정 규칙 verdict**(`aggregateVerdict`)와 출처별 입장·원문 인용(바디 내 오프셋·sha256)을 낸다. 판정 모델이 죽어도 발췌는 반환한다. 테스트 심(`sourceSearchFn`/`sourceFetchFn`/`sourceJudgeFn`)으로 결정적 검증. 2026-09-06 pi-web-access 검토의 유일한 이식.
 - `web_fetch_search.go`는 Serper→Brave→DuckDuckGo 순으로 검색한다. 키 부재뿐
   아니라 프로바이더 실패도 다음으로 폴백하며 `web search fallback` slog를 남긴다.
   Hangul 쿼리는 Serper `gl=kr`/`hl=ko`, Brave `country=KR`/`search_lang=ko`를
