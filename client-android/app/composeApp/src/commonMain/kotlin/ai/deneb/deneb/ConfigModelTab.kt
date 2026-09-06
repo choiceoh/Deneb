@@ -317,17 +317,36 @@ internal fun ModelTab(client: DenebGatewayClient) {
                 )
                 groupModels.forEachIndexed { mi, model ->
                     val isCurrent = model.id == currentForRole
+                    val canAssign = !isCurrent && !switching
+                    // Deleting stays available on the row that is currently assigned:
+                    // the confirm dialog says the role falls back to its default, and
+                    // the old always-visible button was enabled there too.
+                    val canDelete = model.deletable && !switching
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .denebPressable(
-                                enabled = !isCurrent && !switching,
+                                enabled = canAssign || canDelete,
                                 onClick = {
-                                    scope.launch {
-                                        switching = true
-                                        switchFailed = !client.setRoleModel(model.id, role.wire)
-                                        switching = false
+                                    if (canAssign) {
+                                        scope.launch {
+                                            switching = true
+                                            switchFailed = !client.setRoleModel(model.id, role.wire)
+                                            switching = false
+                                        }
                                     }
+                                },
+                                // Removal is a long press, not a button sitting in the
+                                // row's resting state: a destructive action does not
+                                // belong in the default view of a list you tap to
+                                // assign from.
+                                onLongClick = if (canDelete) {
+                                    {
+                                        haptics.longPress()
+                                        pendingDelete = model
+                                    }
+                                } else {
+                                    null
                                 },
                             )
                             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -398,18 +417,6 @@ internal fun ModelTab(client: DenebGatewayClient) {
                                     style = DenebType.meta,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                            }
-                        }
-                        // Custom + cloud-catalog models can be removed; local vLLM/LocalAI can't.
-                        if (model.deletable) {
-                            TextButton(
-                                onClick = {
-                                    haptics.reject()
-                                    pendingDelete = model
-                                },
-                                enabled = !switching,
-                            ) {
-                                Text("삭제", color = MaterialTheme.colorScheme.error)
                             }
                         }
                     }

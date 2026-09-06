@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -147,6 +148,23 @@ internal fun WormholeTab(client: DenebGatewayClient) {
                                 },
                             )
                         }
+                    }
+
+                    item {
+                        // The list is edited outside the app too (the config file is
+                        // hot-reloaded by wormhole), so a tab that only fetches on
+                        // entry shows a stale roster until the user happens to leave
+                        // and come back. The gateway tab already carries this button.
+                        OutlinedButton(
+                            onClick = {
+                                if (!busy) {
+                                    wormholeHaptics.tap()
+                                    scope.launch { load() }
+                                }
+                            },
+                            enabled = !busy && !loading,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        ) { Text(if (loading) "확인 중…" else "목록 새로고침") }
                     }
 
                     item { DenebSectionLabel("모델", Modifier.padding(horizontal = 16.dp)) }

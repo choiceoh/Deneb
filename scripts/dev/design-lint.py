@@ -169,10 +169,21 @@ def rule_no_duplicate_tap() -> list[str]:
             at += len("denebPressable(")
             if "haptic = false" in call:
                 continue
+            # Only the onClick lambda. The primitive taps for the CLICK and passes
+            # onLongClick straight through untouched, so a long press has to fire
+            # its own haptic at the call site — scanning the whole call would
+            # forbid the very thing the convention requires.
+            click = re.search(r"\bonClick\s*=", call)
+            if not click:
+                continue
+            brace = call.find("{", click.end())
+            if brace < 0:
+                continue
+            body = _balanced(call, brace, "{", "}")
             # ANY haptic inside the click, not just tap(): the primitive already
             # taps, so a site firing toggle()/confirm() there buzzes twice too —
             # those set haptic = false and own the richer type themselves.
-            if not re.search(r"[Hh]aptics?\.\w+\(", call):
+            if not re.search(r"[Hh]aptics?\.\w+\(", body):
                 continue
             line = text.count("\n", 0, at) + 1
             hits.append(f"{path.relative_to(REPO)}:{line}")
