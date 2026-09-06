@@ -37,5 +37,5 @@ The tool already collects weather, USD/KRW, copper, calendar, recent wiki projec
 ## Verification
 
 - Final output has one short Korean head line and exactly one `deneb-ui` fence.
-- The market card contains USD/KRW and LME copper only; no EUR or raw `{{...}}` tokens.
+- The market card contains USD/KRW and COMEX copper only; no EUR or raw `{{...}}` tokens.
 - No progress narration, confirmation suffix, `NO_REPLY`, or channel-status guess appears.

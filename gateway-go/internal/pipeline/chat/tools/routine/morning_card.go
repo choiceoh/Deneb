@@ -294,11 +294,11 @@ func writeMorningMarket(b *strings.Builder, exchange exchangeData, copper copper
 		if value == "" {
 			value = formatGroupedInt(copper.PricePerTon)
 		}
-		value += " /t"
+		value = "$" + value + "/톤"
 		if copper.Date != "" && copper.Date != now.Format("2006-01-02") {
 			value += " (" + copper.Date + ")"
 		}
-		fmt.Fprintf(b, "<stat value=\"%s\" label=\"LME 구리\"/>", morningAttr(value))
+		fmt.Fprintf(b, "<stat value=\"%s\" label=\"COMEX 구리\"/>", morningAttr(value))
 		written++
 	}
 	if written == 0 {

@@ -135,7 +135,7 @@ func TestComposeMorningLetterCardIsDeliveryReadyAndSchemaValid(t *testing.T) {
 
 	for _, want := range []string{
 		`<stat value="1,389" label="USD/KRW"/>`,
-		`<stat value="9,876 /t (2026-07-17)" label="LME 구리"/>`,
+		`<stat value="$9,876/톤 (2026-07-17)" label="COMEX 구리"/>`,
 		`<badge color="error">기한 초과</badge>`,
 		`<badge color="warning">D-2</badge>`,
 		"🟠 방치 결재 1건",
