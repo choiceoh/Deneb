@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 )
 
@@ -79,7 +80,7 @@ func TestCapMergedModelsExemptsDeclaredTruncatesDiscovered(t *testing.T) {
 	// Declared models beyond the display cap all survive; the cap only
 	// trims discovered extras appended after them.
 	declared := many("d-", maxModelsPerProvider+2)
-	got := capMergedModels(declared, many("x-", 3))
+	got := capMergedModels(declared, many("x-", 3), nil)
 	if len(got) != len(declared) {
 		t.Fatalf("declared exempt: got %d models, want all %d declared", len(got), len(declared))
 	}
@@ -90,7 +91,7 @@ func TestCapMergedModelsExemptsDeclaredTruncatesDiscovered(t *testing.T) {
 	}
 
 	// Few declared: discovered extras fill up to the cap, no further.
-	got = capMergedModels([]string{"d-1", "d-2"}, many("x-", maxModelsPerProvider+5))
+	got = capMergedModels([]string{"d-1", "d-2"}, many("x-", maxModelsPerProvider+5), nil)
 	if len(got) != maxModelsPerProvider {
 		t.Fatalf("discovered capped: got %d models, want %d", len(got), maxModelsPerProvider)
 	}
@@ -203,5 +204,61 @@ func TestModelIDForProviderEntryPreservesNestedModelNames(t *testing.T) {
 
 	if got := modelIDForProviderEntry(entry); got != "anthropic/claude-sonnet-4.6" {
 		t.Fatalf("modelIDForProviderEntry() = %q, want nested model id", got)
+	}
+}
+
+func modelIDs(prefix string, n int) []string {
+	out := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		out = append(out, prefix+strconv.Itoa(i))
+	}
+	return out
+}
+
+func hasModelID(xs []string, want string) bool {
+	for _, x := range xs {
+		if x == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestCapMergedModelsNeverTrimsARoleAssignedModel(t *testing.T) {
+	// The cap trims by position, so a live discovered model gets pushed out by
+	// unrelated entries ahead of it. When that model is the one a role points
+	// at, the picker hides the very thing it reports as in use — and the picker
+	// is the operator's only route to change that role.
+	declared := modelIDs("d-", maxModelsPerProvider)
+	discovered := append([]string{"role-model"}, modelIDs("x-", 5)...)
+
+	got := capMergedModels(declared, discovered, []string{"role-model"})
+	if !hasModelID(got, "role-model") {
+		t.Fatalf("the role-assigned model was trimmed: %v", got)
+	}
+	for _, d := range declared {
+		if !hasModelID(got, d) {
+			t.Fatalf("a declared model was dropped to make room: %q missing from %v", d, got)
+		}
+	}
+	// The exemption widens the window by exactly the pinned model; ordinary
+	// discovered extras stay trimmed.
+	if hasModelID(got, "x-0") {
+		t.Fatalf("the exemption let unpinned extras through: %v", got)
+	}
+}
+
+func TestPinnedProviderModelsReadsOnlyItsOwnProvider(t *testing.T) {
+	roles := []modelEntry{
+		{provider: "wormhole", fullID: "wormhole/glm-5.3-flash-nothink"},
+		{provider: "kimi", fullID: "kimi/k3"},
+		{provider: "wormhole", fullID: ""}, // a role with no model configured
+	}
+	got := pinnedProviderModels(roles, "wormhole")
+	if len(got) != 1 || got[0] != "glm-5.3-flash-nothink" {
+		t.Fatalf("pinned = %v, want just the wormhole model's bare id", got)
+	}
+	if len(pinnedProviderModels(roles, "openrouter")) != 0 {
+		t.Error("a provider with no role assignment pinned something")
 	}
 }

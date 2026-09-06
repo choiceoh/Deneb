@@ -20,7 +20,11 @@ func (s *Controller) miniappModelSnapshot(ctx context.Context) miniappModelSnaps
 	discovered := s.discoverMiniappLocalModels(ctx, providers)
 	probes := s.miniappModelHealthProbes(ctx, providers, discovered)
 	for i := range providers {
-		providers[i].models = capMergedModels(providers[i].models, discovered[providers[i].name])
+		providers[i].models = capMergedModels(
+			providers[i].models,
+			discovered[providers[i].name],
+			pinnedProviderModels(roles, providers[i].name),
+		)
 	}
 	sections := assembleMiniappModelSections(roles, providers)
 	var roleVerdicts map[string]string
@@ -38,7 +42,11 @@ func (s *Controller) miniappModelSections(ctx context.Context) []modelSection {
 	providers := appendBuiltinProviders(loadConfiguredProviders())
 	discovered := s.discoverMiniappLocalModels(ctx, providers)
 	for i := range providers {
-		providers[i].models = capMergedModels(providers[i].models, discovered[providers[i].name])
+		providers[i].models = capMergedModels(
+			providers[i].models,
+			discovered[providers[i].name],
+			pinnedProviderModels(roles, providers[i].name),
+		)
 	}
 	return assembleMiniappModelSections(roles, providers)
 }

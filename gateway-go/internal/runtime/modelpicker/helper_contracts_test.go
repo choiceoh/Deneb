@@ -627,7 +627,7 @@ func TestCapMergedModelsDisplayBoundary(t *testing.T) {
 			t.Parallel()
 			configured := makeModels("cfg", tc.configured)
 			discovered := makeModels("found", tc.discovered)
-			got := capMergedModels(configured, discovered)
+			got := capMergedModels(configured, discovered, nil)
 			if len(got) != tc.want {
 				t.Fatalf("len = %d, want %d: %#v", len(got), tc.want, got)
 			}
