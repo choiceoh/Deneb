@@ -1028,6 +1028,11 @@ export function DenebUi({
                       <span className="dui-choice-label">{String(c?.label ?? val)}</span>
                       {c?.description ? <span className="dui-choice-desc">{String(c.description)}</span> : null}
                     </span>
+                    {on ? (
+                      <span className="dui-choice-check" aria-hidden="true">
+                        ✓
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}

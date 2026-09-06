@@ -112,7 +112,7 @@
 | `select` | select | id 필수, `label`, `placeholder`, `required` | `<option [selected]>값</option>` — selected 속성 → selected |
 | `radio-group` (`radiogroup`) | radio_group | id 필수, `label`, `required` | `<option [selected]>` 동일 |
 | `slider` | slider | id 필수, `label`, `value`, `min`, `max`, `step` | void |
-| `chips` (`chip-group`) | chip_group | id 필수, `selection`(single*·multi·none), `required`, `layout`(chips*·list), `lettered` | `<chip value="…" description="…">라벨</chip>` — `layout="list"`면 세로 선택 행(컨트롤·레터 배지·라벨·설명), `lettered`면 A/B/C 배지. 발명된 layout 값은 기본 유지(카드 무효화 아님) |
+| `chips` (`chip-group`) | chip_group | id 필수, `selection`(single*·multi·none), `required`, `layout`(chips*·list), `lettered` | `<chip value="…" description="…">라벨</chip>` — `layout="list"`면 그룹 서피스 안의 세로 선택 행(라벨·설명, 선택 시 체크), `lettered`면 A/B/C 배지가 곧 컨트롤(없으면 Material 체크박스/라디오). 발명된 layout 값은 기본 유지(카드 무효화 아님) |
 
 `*` = 기본값. 수치/불리언 속성은 관용 파싱(실패 시 무시→기본값).
 

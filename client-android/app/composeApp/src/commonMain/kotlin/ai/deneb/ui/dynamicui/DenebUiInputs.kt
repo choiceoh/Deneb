@@ -3,10 +3,14 @@
 package ai.deneb.ui.dynamicui
 
 import ai.deneb.ui.DenebOutlinedTextField
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBreathing
+import ai.deneb.ui.denebGroupSurface
+import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebPressable
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.icons.filled.AccessTime
 import ai.deneb.ui.icons.filled.ContentCopy
@@ -28,6 +32,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -67,9 +72,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -747,11 +758,14 @@ internal fun RenderChipGroup(
 }
 
 /**
- * `layout="list"` chip group — the Grok-style choice card. Every option is a
- * full-width row: selection control (checkbox for multi, radio for single) ·
- * optional letter badge (A, B, C… so a glance or a spoken "B로" maps to a row) ·
- * label with a one-line description under it. Selection state shares the chip
- * group's CSV form value, so `collect` and `required` need nothing new.
+ * `layout="list"` chip group — the choice card. The rows sit in one grouped inset
+ * surface (the DenebGroup idiom: faint wash, rounded corners, inset hairlines), so
+ * they read as one question, not four loose lines. With `lettered` the A/B/C badge
+ * IS the control — it fills with the accent when picked — because a checkbox next
+ * to a badge draws the same state twice (the first cut did, and looked cluttered);
+ * without letters the Material control leads. A trailing check confirms the pick.
+ * Selection shares the chip group's CSV form value, so collect/required need
+ * nothing new.
  */
 @Composable
 private fun RenderChoiceList(
@@ -763,56 +777,40 @@ private fun RenderChoiceList(
     val isDisplayOnly = node.selection == "none"
     val validation = LocalUiFormValidation.current
     val isError = validation?.errors?.get(node.id) == true
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(Modifier.fillMaxWidth()) {
         if (isError) {
             Text(
                 text = "필수 선택입니다",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(bottom = 4.dp),
+                modifier = Modifier.padding(bottom = 6.dp),
             )
         }
-        node.chips.forEachIndexed { index, chip ->
-            val value = chip.value.ifEmpty { chip.label }
-            key(value) {
-                val selected = (formState[node.id] ?: "").split(",").contains(value)
-                val canToggle = isInteractive && !isDisplayOnly
-                val onToggle: () -> Unit = {
-                    val current = (formState[node.id] ?: "").split(",").filter { it.isNotEmpty() }.toSet()
-                    val next = when {
-                        isMulti -> if (selected) current - value else current + value
-                        selected -> emptySet()
-                        else -> setOf(value)
-                    }
-                    formState[node.id] = next.joinToString(",")
-                    if (next.isNotEmpty()) validation?.errors?.remove(node.id)
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .handCursor()
-                        .then(if (canToggle) Modifier.clickable(onClick = onToggle) else Modifier)
-                        .padding(vertical = 8.dp),
-                ) {
-                    if (!isDisplayOnly) {
-                        if (isMulti) {
-                            Checkbox(checked = selected, onCheckedChange = null, enabled = isInteractive)
-                        } else {
-                            RadioButton(selected = selected, onClick = null, enabled = isInteractive)
-                        }
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    if (node.lettered == true) {
-                        ChoiceLetter(letter = choiceLetter(index), selected = selected)
-                        Spacer(Modifier.width(12.dp))
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text(text = chip.label, style = MaterialTheme.typography.bodyLarge)
-                        chip.description?.let {
-                            Text(text = it, style = MaterialTheme.typography.bodySmall, color = denebHint())
-                        }
-                    }
+        Column(Modifier.fillMaxWidth().denebGroupSurface()) {
+            node.chips.forEachIndexed { index, chip ->
+                val value = chip.value.ifEmpty { chip.label }
+                key(value) {
+                    val selected = (formState[node.id] ?: "").split(",").contains(value)
+                    ChoiceRow(
+                        label = chip.label,
+                        description = chip.description,
+                        letter = if (node.lettered == true) choiceLetter(index) else null,
+                        selected = selected,
+                        isMulti = isMulti,
+                        enabled = isInteractive && !isDisplayOnly,
+                        showControl = !isDisplayOnly,
+                        divider = index < node.chips.lastIndex,
+                        onToggle = {
+                            val current = (formState[node.id] ?: "").split(",").filter { it.isNotEmpty() }.toSet()
+                            val next = when {
+                                isMulti -> if (selected) current - value else current + value
+                                selected -> emptySet()
+                                else -> setOf(value)
+                            }
+                            formState[node.id] = next.joinToString(",")
+                            if (next.isNotEmpty()) validation?.errors?.remove(node.id)
+                        },
+                    )
                 }
             }
         }
@@ -823,21 +821,91 @@ private fun RenderChoiceList(
 internal fun choiceLetter(index: Int): String = if (index in 0..25) ('A' + index).toString() else (index + 1).toString()
 
 @Composable
-private fun ChoiceLetter(letter: String, selected: Boolean) {
+private fun ChoiceRow(
+    label: String,
+    description: String?,
+    letter: String?,
+    selected: Boolean,
+    isMulti: Boolean,
+    enabled: Boolean,
+    showControl: Boolean,
+    divider: Boolean,
+    onToggle: () -> Unit,
+) {
     val scheme = MaterialTheme.colorScheme
-    Box(
+    val hairline = denebHairline()
+    // Hairline starts under the text, not the control — the DenebListRow inset.
+    val insetPx = with(LocalDensity.current) { (if (letter != null) 58.dp else 52.dp).toPx() }
+    val stateText = if (selected) "선택됨" else "선택 안 됨"
+    Row(
         modifier = Modifier
-            .size(28.dp)
-            .background(
-                if (selected) scheme.secondaryContainer else scheme.surfaceContainer,
-                RoundedCornerShape(6.dp),
-            ),
-        contentAlignment = Alignment.Center,
+            .fillMaxWidth()
+            .denebPressable(
+                onClick = onToggle,
+                enabled = enabled,
+                role = if (isMulti) Role.Checkbox else Role.RadioButton,
+                haptic = false,
+            )
+            .semantics { stateDescription = stateText }
+            .handCursor()
+            .drawBehind {
+                if (divider) {
+                    val stroke = 1.dp.toPx()
+                    val y = size.height - stroke / 2f
+                    drawLine(hairline, Offset(insetPx, y), Offset(size.width, y), strokeWidth = stroke)
+                }
+            }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = letter,
-            style = MaterialTheme.typography.labelMedium,
-            color = if (selected) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
-        )
+        when {
+            letter != null -> {
+                // The badge is the control: accent-filled when picked.
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(
+                            if (selected) scheme.primary else scheme.onBackground.copy(alpha = 0.08f),
+                            RoundedCornerShape(8.dp),
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = letter,
+                        style = DenebType.rowTitleStrong,
+                        color = if (selected) scheme.onPrimary else scheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+            }
+
+            showControl -> {
+                if (isMulti) {
+                    Checkbox(checked = selected, onCheckedChange = null, enabled = enabled)
+                } else {
+                    RadioButton(selected = selected, onClick = null, enabled = enabled)
+                }
+                Spacer(Modifier.width(8.dp))
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = DenebType.rowTitleStrong,
+                color = if (selected) scheme.primary else scheme.onBackground,
+            )
+            if (description != null) {
+                Text(text = description, style = DenebType.rowSubtitle, color = denebHint())
+            }
+        }
+        if (selected) {
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = scheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
     }
 }
