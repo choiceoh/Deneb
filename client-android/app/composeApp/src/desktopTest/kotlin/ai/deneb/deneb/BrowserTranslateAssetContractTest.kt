@@ -104,7 +104,10 @@ class BrowserTranslateAssetContractTest {
         ).readText()
         assertContains(webViewSource, "holder.translateBridge?.cancelForNavigation()")
         assertContains(webViewSource, "holder.translateBridge?.resumeForDocument()")
-        assertContains(webViewSource, "val target = browserWebViewCommandUrl(")
+        // The load effect still derives its target through the recovery-aware
+        // helper; it now passes it as an argument to browserLoadCommand, which
+        // decides whether the command can be delivered at all.
+        assertContains(webViewSource, "target = browserWebViewCommandUrl(")
         assertFalse(webViewSource.contains("DETACHED_RESTORE_GUARD_MS"))
     }
 

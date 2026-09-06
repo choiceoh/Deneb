@@ -26,6 +26,38 @@ internal fun browserTranslationStatusText(progress: BrowserTranslationProgress):
     else -> "번역 준비 중 · ${progress.total}개"
 }
 
+/**
+ * Decides what a load command should do this pass, and consumes the command only
+ * when it can actually be delivered.
+ *
+ * The order matters more than it looks. The platform view is created by the
+ * AndroidView factory, torn down on release, and dropped on a renderer crash, so
+ * there are real windows where a tap arrives with nowhere to put it. Consuming
+ * first — as this did — retired the command AND stamped lastCommandUrl, which
+ * disarmed the guard that would otherwise have caught it on the next pass: the
+ * bookmark sheet closed, the page never changed, and nothing retried. Leaving it
+ * unconsumed is what lets the attach that follows deliver it.
+ *
+ * Returns the URL to load, or null to do nothing this pass.
+ */
+internal fun browserLoadCommand(
+    state: DenebWebViewState,
+    cursor: BrowserCommandCursor,
+    hasView: Boolean,
+    target: String,
+    lastCommandUrl: String,
+): String? {
+    if (!hasView) return null
+    // A repeat load of the same address must still reach loadUrl, so the
+    // lastCommandUrl guard is skipped when load() asked for it explicitly. The
+    // guard still stops the initial composition from re-loading the page the
+    // WebView already restored.
+    val explicit = cursor.consumeLoad(state)
+    if (target.isBlank()) return null
+    if (!explicit && lastCommandUrl == target) return null
+    return target
+}
+
 internal class BrowserCommandCursor(state: DenebWebViewState) {
     private var diagnostics = state.diagnosticsTick
     private var goBack = state.goBackTick
