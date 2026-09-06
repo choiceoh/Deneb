@@ -5,6 +5,7 @@ package ai.deneb.deneb
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -25,7 +26,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
@@ -391,7 +391,8 @@ private fun WeekdayChips(draft: ScheduleDraft, onDraft: (ScheduleDraft) -> Unit)
     Spacer(Modifier.height(8.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         labels.forEachIndexed { day, label ->
-            FilterChip(
+            DenebChip(
+                modifier = Modifier.weight(1f),
                 selected = day in draft.weekdays,
                 onClick = {
                     // A multi-select chip flips its own state — the toggle type, not a tap.
@@ -399,9 +400,9 @@ private fun WeekdayChips(draft: ScheduleDraft, onDraft: (ScheduleDraft) -> Unit)
                     val next = draft.weekdays.toMutableSet().apply { if (!add(day)) remove(day) }
                     onDraft(draft.copy(weekdays = next))
                 },
-                label = { Text(label) },
-                modifier = Modifier.weight(1f),
-            )
+            ) {
+                Text(label)
+            }
         }
     }
 }

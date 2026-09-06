@@ -4,6 +4,7 @@ import ai.deneb.network.httpTeardownTolerantHandler
 import ai.deneb.openUrl
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
 import ai.deneb.ui.denebHairline
@@ -34,7 +35,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -291,7 +291,7 @@ fun DenebApprovalDetailScreen(
                             // download route — mail attachment chip parity.
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 attachmentRows.forEach { row ->
-                                    AssistChip(
+                                    DenebChip(
                                         onClick = {
                                             haptics.tap()
                                             openUrl(
@@ -302,12 +302,11 @@ fun DenebApprovalDetailScreen(
                                                 ),
                                             )
                                         },
-                                        label = {
-                                            Text(
-                                                if (row.meta.isBlank()) row.name else "${row.name}  ${row.meta}",
-                                            )
-                                        },
-                                    )
+                                    ) {
+                                        Text(
+                                            if (row.meta.isBlank()) row.name else "${row.name}  ${row.meta}",
+                                        )
+                                    }
                                 }
                             }
                         }
