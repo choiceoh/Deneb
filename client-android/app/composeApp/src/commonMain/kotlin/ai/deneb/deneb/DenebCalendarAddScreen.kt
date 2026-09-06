@@ -1,8 +1,13 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebButton
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebOutlinedButton
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,17 +18,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
@@ -227,7 +227,7 @@ fun DenebCalendarAddScreen(
         DatePickerDialog(
             onDismissRequest = { showStartDatePicker = false },
             confirmButton = {
-                TextButton(onClick = {
+                DenebTextButton(onClick = {
                     haptics.confirm()
                     state.selectedDateMillis?.let {
                         val picked = utcMillisToLocalDate(it)
@@ -241,7 +241,7 @@ fun DenebCalendarAddScreen(
                     showStartDatePicker = false
                 }) { Text("확인") }
             },
-            dismissButton = { TextButton(onClick = { showStartDatePicker = false }) { Text("취소") } },
+            dismissButton = { DenebTextButton(onClick = { showStartDatePicker = false }) { Text("취소") } },
         ) { DatePicker(state = state) }
     }
     if (showEndDatePicker) {
@@ -249,7 +249,7 @@ fun DenebCalendarAddScreen(
         DatePickerDialog(
             onDismissRequest = { showEndDatePicker = false },
             confirmButton = {
-                TextButton(onClick = {
+                DenebTextButton(onClick = {
                     haptics.confirm()
                     state.selectedDateMillis?.let {
                         val picked = utcMillisToLocalDate(it)
@@ -259,7 +259,7 @@ fun DenebCalendarAddScreen(
                     showEndDatePicker = false
                 }) { Text("확인") }
             },
-            dismissButton = { TextButton(onClick = { showEndDatePicker = false }) { Text("취소") } },
+            dismissButton = { DenebTextButton(onClick = { showEndDatePicker = false }) { Text("취소") } },
         ) { DatePicker(state = state) }
     }
     if (showStartPicker) {
@@ -319,7 +319,7 @@ internal fun CalendarAddContent(
 ) {
     val haptics = rememberHaptics()
     Spacer(Modifier.height(8.dp))
-    OutlinedTextField(
+    DenebOutlinedTextField(
         value = title,
         onValueChange = onTitle,
         label = { Text("제목") },
@@ -347,17 +347,17 @@ internal fun CalendarAddContent(
     }
     Spacer(Modifier.height(8.dp))
     if (multiDay) {
-        OutlinedButton(onClick = {
+        DenebOutlinedButton(onClick = {
             haptics.tap()
             onPickStartDate()
         }, modifier = Modifier.fillMaxWidth()) { Text("시작 $startDateLabel") }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = {
+        DenebOutlinedButton(onClick = {
             haptics.tap()
             onPickEndDate()
         }, modifier = Modifier.fillMaxWidth()) { Text("종료 $endDateLabel") }
     } else {
-        OutlinedButton(onClick = {
+        DenebOutlinedButton(onClick = {
             haptics.tap()
             onPickStartDate()
         }, modifier = Modifier.fillMaxWidth()) { Text(startDateLabel) }
@@ -365,11 +365,11 @@ internal fun CalendarAddContent(
     if (!allDay) {
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = {
+            DenebOutlinedButton(onClick = {
                 haptics.tap()
                 onPickStart()
             }, modifier = Modifier.weight(1f)) { Text("시작 $startLabel") }
-            OutlinedButton(onClick = {
+            DenebOutlinedButton(onClick = {
                 haptics.tap()
                 onPickEnd()
             }, modifier = Modifier.weight(1f)) { Text("종료 $endLabel") }
@@ -377,7 +377,7 @@ internal fun CalendarAddContent(
     }
 
     DenebSectionLabel("장소")
-    OutlinedTextField(
+    DenebOutlinedTextField(
         value = location,
         onValueChange = onLocation,
         label = { Text("장소 (선택)") },
@@ -386,7 +386,7 @@ internal fun CalendarAddContent(
     )
 
     DenebSectionLabel("설명")
-    OutlinedTextField(
+    DenebOutlinedTextField(
         value = description,
         onValueChange = onDescription,
         label = { Text("설명 (선택)") },
@@ -401,7 +401,7 @@ internal fun CalendarAddContent(
     }
 
     Spacer(Modifier.height(20.dp))
-    Button(onClick = {
+    DenebButton(onClick = {
         haptics.confirm()
         onSave()
     }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
@@ -419,15 +419,15 @@ private fun TimePickerDialog(
 ) {
     val state = rememberTimePickerState(initialHour = initial.hour, initialMinute = initial.minute, is24Hour = true)
     val haptics = rememberHaptics()
-    AlertDialog(
+    DenebDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = {
+            DenebTextButton(onClick = {
                 haptics.confirm()
                 onConfirm(LocalTime(state.hour, state.minute))
             }) { Text("확인") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        dismissButton = { DenebTextButton(onClick = onDismiss) { Text("취소") } },
         text = { TimePicker(state = state) },
     )
 }

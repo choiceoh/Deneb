@@ -2,6 +2,7 @@
 
 package ai.deneb.ui.dynamicui
 
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.denebAdaptiveCardBorder
 import ai.deneb.ui.denebAdaptiveCardColors
 import ai.deneb.ui.denebExpandIn
@@ -41,7 +42,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -267,7 +267,7 @@ private fun DismissedCard(onRestore: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(text = "넘긴 카드", style = MaterialTheme.typography.bodySmall, color = denebHint(), modifier = Modifier.weight(1f))
-            TextButton(onClick = onRestore) { Text("다시 보기") }
+            DenebTextButton(onClick = onRestore) { Text("다시 보기") }
         }
     }
 }

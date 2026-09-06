@@ -5,6 +5,9 @@ import ai.deneb.deneb.generated.OrgNodeOut
 import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
+import ai.deneb.ui.components.DenebOutlinedButton
+import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTonalButton
 import ai.deneb.ui.denebHint
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,13 +29,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -154,7 +154,7 @@ internal fun OrgNodeEditor(
             )
             Spacer(Modifier.height(8.dp))
         }
-        OutlinedButton(
+        DenebOutlinedButton(
             onClick = { onChange(node.copy(members = node.members + MemberOut(name = ""))) },
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -168,12 +168,12 @@ internal fun OrgNodeEditor(
         // from the working tree (parent's onDelete); 저장 is the screen-level header
         // button — done just closes the sheet so the edits stay in the working tree.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onDelete) {
+            DenebTextButton(onClick = onDelete) {
                 Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("조직 삭제", color = MaterialTheme.colorScheme.error)
             }
-            FilledTonalButton(onClick = onDone) { Text("완료") }
+            DenebTonalButton(onClick = onDone) { Text("완료") }
         }
     }
 }

@@ -3,6 +3,7 @@ package ai.deneb.ui.chat.composables
 import ai.deneb.data.SmsDraft
 import ai.deneb.data.SmsDraftStatus
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebAdaptiveCardBorder
 import ai.deneb.ui.denebAdaptiveCardColors
@@ -24,7 +25,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
@@ -144,7 +144,7 @@ private fun PendingSmsBanner(
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        TextButton(onClick = {
+                        DenebTextButton(onClick = {
                             haptics.confirm()
                             onSend()
                         }) {

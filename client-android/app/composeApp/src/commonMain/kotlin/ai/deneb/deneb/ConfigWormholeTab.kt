@@ -4,8 +4,12 @@ import ai.deneb.deneb.generated.WormholeModelOut
 import ai.deneb.deneb.generated.WormholeStatusOut
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
+import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebOutlinedButton
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -26,13 +30,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -155,7 +155,7 @@ internal fun WormholeTab(client: DenebGatewayClient) {
                         // hot-reloaded by wormhole), so a tab that only fetches on
                         // entry shows a stale roster until the user happens to leave
                         // and come back. The gateway tab already carries this button.
-                        OutlinedButton(
+                        DenebOutlinedButton(
                             onClick = {
                                 if (!busy) {
                                     wormholeHaptics.tap()
@@ -360,14 +360,14 @@ private fun WormholeRotateDialog(
     var resultProblem by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
-    AlertDialog(
+    DenebDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text("키 회전 · $modelName", style = DenebType.subject) },
         text = {
             Column {
                 Text("새 API 키를 붙여넣으면 재시작 없이 적용됩니다.", style = DenebType.body, color = denebHint())
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
+                DenebOutlinedTextField(
                     value = key,
                     onValueChange = { key = it },
                     singleLine = true,
@@ -388,7 +388,7 @@ private fun WormholeRotateDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            DenebTextButton(
                 enabled = !busy && key.isNotBlank(),
                 onClick = {
                     haptics.confirm()
@@ -415,7 +415,7 @@ private fun WormholeRotateDialog(
                 },
             ) { Text(if (busy) "적용 중…" else "회전") }
         },
-        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("취소") } },
+        dismissButton = { DenebTextButton(enabled = !busy, onClick = onDismiss) { Text("취소") } },
     )
 }
 
@@ -441,7 +441,7 @@ private fun WormholeRemoveDialog(
     onConfirm: () -> Unit,
 ) {
     val haptics = rememberHaptics()
-    AlertDialog(
+    DenebDialog(
         onDismissRequest = onDismiss,
         title = { Text("모델 제거", style = DenebType.rowTitleStrong) },
         text = {
@@ -451,7 +451,7 @@ private fun WormholeRemoveDialog(
             )
         },
         confirmButton = {
-            TextButton(
+            DenebTextButton(
                 onClick = {
                     // Destructive decision → reject(), per the house rule that a
                     // dialog with a cancel button decides at its confirm button.
@@ -462,6 +462,6 @@ private fun WormholeRemoveDialog(
                 Text("제거", color = MaterialTheme.colorScheme.error)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        dismissButton = { DenebTextButton(onClick = onDismiss) { Text("취소") } },
     )
 }

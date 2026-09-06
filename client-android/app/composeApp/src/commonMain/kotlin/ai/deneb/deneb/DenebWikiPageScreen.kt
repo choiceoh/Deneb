@@ -1,8 +1,11 @@
 package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.NotebookSummaryOut
+import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebButton
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -16,12 +19,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -116,7 +116,7 @@ fun DenebWikiPageScreen(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
+                DenebOutlinedTextField(
                     value = draftTitle,
                     onValueChange = { draftTitle = it },
                     label = { Text("제목") },
@@ -124,7 +124,7 @@ fun DenebWikiPageScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
+                DenebOutlinedTextField(
                     value = draftCategory,
                     onValueChange = { draftCategory = it },
                     label = { Text("카테고리 (예: people, projects)") },
@@ -146,7 +146,7 @@ fun DenebWikiPageScreen(
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = {
+                    DenebTextButton(onClick = {
                         haptics.toggle(!editing)
                         if (!editing) {
                             draftTitle = pg.title
@@ -193,21 +193,21 @@ fun DenebWikiPageScreen(
 
             if (editing) {
                 if (!creating) {
-                    OutlinedTextField(draftTitle, { draftTitle = it }, label = { Text("제목") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    DenebOutlinedTextField(draftTitle, { draftTitle = it }, label = { Text("제목") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(draftSummary, { draftSummary = it }, label = { Text("요약") }, modifier = Modifier.fillMaxWidth())
+                    DenebOutlinedTextField(draftSummary, { draftSummary = it }, label = { Text("요약") }, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(draftTags, { draftTags = it }, label = { Text("태그 (쉼표로 구분)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    DenebOutlinedTextField(draftTags, { draftTags = it }, label = { Text("태그 (쉼표로 구분)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
                 }
-                OutlinedTextField(
+                DenebOutlinedTextField(
                     value = draftBody,
                     onValueChange = { draftBody = it },
                     label = { Text("본문 (마크다운)") },
                     modifier = Modifier.fillMaxWidth().height(360.dp),
                 )
                 Spacer(Modifier.height(12.dp))
-                Button(
+                DenebButton(
                     enabled = !saving && (!creating || draftTitle.isNotBlank()),
                     onClick = {
                         haptics.confirm()

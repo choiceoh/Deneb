@@ -4,6 +4,9 @@ import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTonalButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -24,16 +27,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -133,7 +133,7 @@ fun DenebTodoScreen(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
                 )
-                FilledTonalButton(
+                DenebTonalButton(
                     onClick = onAddTodo,
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 ) { Text("추가", maxLines = 1, softWrap = false) }
@@ -203,12 +203,12 @@ fun DenebTodoScreen(
     }
 
     confirmDelete?.let { todo ->
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { confirmDelete = null },
             title = { Text("할 일 삭제") },
             text = { Text("'${todo.title.ifBlank { "제목 없음" }}' 할 일을 삭제할까요? 되돌릴 수 없습니다.") },
             confirmButton = {
-                TextButton(onClick = {
+                DenebTextButton(onClick = {
                     haptics.reject()
                     confirmDelete = null
                     delete(todo)
@@ -217,18 +217,18 @@ fun DenebTodoScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDelete = null }) { Text("취소") }
+                DenebTextButton(onClick = { confirmDelete = null }) { Text("취소") }
             },
         )
     }
 
     actionError?.let { msg ->
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { actionError = null },
             title = { Text("작업 실패") },
             text = { Text(msg) },
             confirmButton = {
-                TextButton(onClick = { actionError = null }) { Text("확인") }
+                DenebTextButton(onClick = { actionError = null }) { Text("확인") }
             },
         )
     }

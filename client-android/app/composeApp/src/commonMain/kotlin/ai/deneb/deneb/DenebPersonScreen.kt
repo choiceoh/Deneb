@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
@@ -27,7 +28,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -247,7 +247,7 @@ fun DenebPersonScreen(
                     color = denebHint(),
                 )
                 if (detailsFailed) {
-                    TextButton(onClick = { scope.launch { load() } }) { Text("다시 시도") }
+                    DenebTextButton(onClick = { scope.launch { load() } }) { Text("다시 시도") }
                 }
             }
             Spacer(Modifier.height(24.dp))

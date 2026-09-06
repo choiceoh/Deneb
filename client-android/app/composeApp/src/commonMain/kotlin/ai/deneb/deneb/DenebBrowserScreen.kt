@@ -3,7 +3,10 @@ package ai.deneb.deneb
 import ai.deneb.PlatformBackHandler
 import ai.deneb.data.AppSettings
 import ai.deneb.openUrl
+import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBrowserAccent
 import ai.deneb.ui.denebHairline
@@ -52,7 +55,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
@@ -64,10 +66,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -346,11 +346,11 @@ fun DenebBrowserScreen(
         }
     }
     if (diagnosticsCopied) {
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { diagnosticsCopied = false },
             title = { Text("스크롤 진단") },
             text = { Text("결과를 클립보드에 복사했습니다. 데네브 대화에 붙여넣어 주세요.") },
-            confirmButton = { TextButton(onClick = { diagnosticsCopied = false }) { Text("확인") } },
+            confirmButton = { DenebTextButton(onClick = { diagnosticsCopied = false }) { Text("확인") } },
         )
     }
 
@@ -363,14 +363,14 @@ fun DenebBrowserScreen(
             dialog.answer(ok, value)
             state.jsDialog = null
         }
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { finish(false, null) },
             title = { Text(state.currentUrl.ifBlank { "페이지" }, style = MaterialTheme.typography.labelMedium) },
             text = {
                 Column {
                     Text(dialog.message)
                     if (dialog.kind == BrowserJsDialog.Kind.PROMPT) {
-                        OutlinedTextField(
+                        DenebOutlinedTextField(
                             value = promptValue,
                             onValueChange = { promptValue = it },
                             singleLine = true,
@@ -380,7 +380,7 @@ fun DenebBrowserScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
+                DenebTextButton(onClick = {
                     // confirm()/prompt() are the page asking a question — answering is
                     // the commit. alert() has no 취소 and its 확인 is an ack: silent.
                     if (dialog.kind != BrowserJsDialog.Kind.ALERT) haptics.confirm()
@@ -390,7 +390,7 @@ fun DenebBrowserScreen(
             dismissButton = if (dialog.kind == BrowserJsDialog.Kind.ALERT) {
                 null
             } else {
-                { TextButton(onClick = { finish(false, null) }) { Text("취소") } }
+                { DenebTextButton(onClick = { finish(false, null) }) { Text("취소") } }
             },
         )
     }
@@ -533,7 +533,7 @@ private fun BrowserPopupBar(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
         )
-        TextButton(onClick = onClose) { Text("닫기") }
+        DenebTextButton(onClick = onClose) { Text("닫기") }
     }
     HorizontalDivider(color = denebHairline())
 }
@@ -1226,11 +1226,11 @@ private fun EditBrowserBookmarkDialog(
     var title by remember(bookmark.url) { mutableStateOf(bookmark.title) }
     var url by remember(bookmark.url) { mutableStateOf(bookmark.url) }
     val haptics = rememberHaptics()
-    AlertDialog(
+    DenebDialog(
         onDismissRequest = onDismiss,
         title = { Text("북마크 수정", style = DenebType.rowTitle) },
         confirmButton = {
-            TextButton(
+            DenebTextButton(
                 enabled = canBookmarkUrl(url),
                 onClick = {
                     haptics.confirm()
@@ -1238,10 +1238,10 @@ private fun EditBrowserBookmarkDialog(
                 },
             ) { Text("저장") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        dismissButton = { DenebTextButton(onClick = onDismiss) { Text("취소") } },
         text = {
             Column {
-                OutlinedTextField(
+                DenebOutlinedTextField(
                     value = title,
                     onValueChange = { next ->
                         title = if (next.length <= BOOKMARK_TITLE_EDIT_MAX) next else next.take(BOOKMARK_TITLE_EDIT_MAX)
@@ -1250,7 +1250,7 @@ private fun EditBrowserBookmarkDialog(
                     singleLine = true,
                     label = { Text("이름") },
                 )
-                OutlinedTextField(
+                DenebOutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -1294,7 +1294,7 @@ private fun BrowserHistorySheet(
                     )
                 }
                 if (visits.isNotEmpty()) {
-                    TextButton(onClick = {
+                    DenebTextButton(onClick = {
                         haptics.reject()
                         confirmClear = true
                     }) {
@@ -1366,18 +1366,18 @@ private fun BrowserHistorySheet(
         }
     }
     if (confirmClear) {
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { confirmClear = false },
             title = { Text("방문 기록 삭제") },
             text = { Text("최근 방문 ${visits.size}개를 모두 삭제할까요?") },
             confirmButton = {
-                TextButton(onClick = {
+                DenebTextButton(onClick = {
                     haptics.reject()
                     confirmClear = false
                     onClearAll()
                 }) { Text("삭제") }
             },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("취소") } },
+            dismissButton = { DenebTextButton(onClick = { confirmClear = false }) { Text("취소") } },
         )
     }
 }

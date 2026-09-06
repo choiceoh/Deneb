@@ -2,6 +2,8 @@ package ai.deneb.deneb
 
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -18,12 +20,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -140,12 +140,12 @@ fun DenebCategoryPagesScreen(
     }
 
     if (confirmDelete) {
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { if (!busy) confirmDelete = false },
             title = { Text("페이지 삭제") },
             text = { Text("선택한 ${selected.size}개 페이지를 삭제할까요? 되돌릴 수 없습니다.") },
             confirmButton = {
-                TextButton(
+                DenebTextButton(
                     onClick = {
                         haptics.reject()
                         runDelete()
@@ -153,14 +153,14 @@ fun DenebCategoryPagesScreen(
                     enabled = !busy,
                 ) { Text("삭제") }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }, enabled = !busy) { Text("취소") } },
+            dismissButton = { DenebTextButton(onClick = { confirmDelete = false }, enabled = !busy) { Text("취소") } },
         )
     }
 
     if (showMovePicker) {
         // Material overlay, Deneb-idiom rows inside: tap a category to reclassify
         // the selected pages into it (filed under <category>/<basename>).
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { if (!busy) showMovePicker = false },
             title = { Text("${selected.size}개 페이지 이동") },
             text = {
@@ -190,7 +190,7 @@ fun DenebCategoryPagesScreen(
                 }
             },
             confirmButton = {},
-            dismissButton = { TextButton(onClick = { showMovePicker = false }, enabled = !busy) { Text("취소") } },
+            dismissButton = { DenebTextButton(onClick = { showMovePicker = false }, enabled = !busy) { Text("취소") } },
         )
     }
 
@@ -204,7 +204,7 @@ fun DenebCategoryPagesScreen(
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { clearSelection() }) { Text("취소") }
+                    DenebTextButton(onClick = { clearSelection() }) { Text("취소") }
                 }
             } else {
                 Text(
@@ -333,14 +333,14 @@ fun DenebCategoryPagesScreen(
                 ) {
                     Text("${selected.size}개 선택", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.weight(1f))
-                    TextButton(
+                    DenebTextButton(
                         onClick = { showMovePicker = true },
                         enabled = !busy && topCategories.isNotEmpty(),
                     ) {
                         Text("이동")
                     }
                     Spacer(Modifier.width(4.dp))
-                    TextButton(
+                    DenebTextButton(
                         onClick = { confirmDelete = true },
                         enabled = !busy,
                     ) {

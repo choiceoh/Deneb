@@ -2,9 +2,12 @@
 
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.ChatActions
 import ai.deneb.ui.chat.ConversationSummary
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
@@ -29,20 +32,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -372,7 +372,7 @@ fun DenebSessionDrawerSheet(
                         // first page was unreachable although its transcript is intact.
                         if (hasMoreConversations) {
                             item {
-                                TextButton(
+                                DenebTextButton(
                                     onClick = actions.loadMoreConversations,
                                     modifier = Modifier.padding(vertical = 8.dp),
                                 ) {
@@ -605,11 +605,11 @@ private fun RenameConversationDialog(
     var draft by remember(initial) { mutableStateOf(initial) }
     val trimmed = draft.trim()
     val haptics = rememberHaptics()
-    AlertDialog(
+    DenebDialog(
         onDismissRequest = onDismiss,
         title = { Text("이름 변경", style = DenebType.rowTitle) },
         confirmButton = {
-            TextButton(
+            DenebTextButton(
                 enabled = trimmed.isNotEmpty(),
                 onClick = {
                     haptics.confirm()
@@ -617,9 +617,9 @@ private fun RenameConversationDialog(
                 },
             ) { Text("저장") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        dismissButton = { DenebTextButton(onClick = onDismiss) { Text("취소") } },
         text = {
-            OutlinedTextField(
+            DenebOutlinedTextField(
                 value = draft,
                 onValueChange = { next ->
                     draft = if (next.length <= RENAME_LABEL_MAX) next else next.take(RENAME_LABEL_MAX)

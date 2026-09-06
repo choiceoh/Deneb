@@ -4,6 +4,7 @@ import ai.deneb.data.AppSettings
 import ai.deneb.defaultUiScale
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.settings.SettingsCard
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +19,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -80,7 +80,7 @@ internal fun AppearanceTab(appSettings: AppSettings) {
             Spacer(Modifier.height(8.dp))
             // Reset to the platform default (1.0 on phone, the HiDPI-derived value on
             // desktop Linux), not a hard-coded 100%.
-            TextButton(
+            DenebTextButton(
                 onClick = {
                     haptics.tap()
                     appSettings.setUiScale(defaultUiScale)

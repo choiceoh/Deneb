@@ -2,9 +2,13 @@ package ai.deneb.deneb
 
 import ai.deneb.network.httpTeardownTolerantHandler
 import ai.deneb.openUrl
+import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTonalButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
 import ai.deneb.ui.denebHairline
@@ -34,16 +38,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -325,7 +325,7 @@ fun DenebApprovalDetailScreen(
                             .padding(horizontal = 24.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        FilledTonalButton(
+                        DenebTonalButton(
                             onClick = {
                                 haptics.confirm()
                                 pendingAct = "approve"
@@ -333,7 +333,7 @@ fun DenebApprovalDetailScreen(
                             enabled = !acting,
                             modifier = Modifier.weight(1f),
                         ) { Text("승인") }
-                        FilledTonalButton(
+                        DenebTonalButton(
                             onClick = {
                                 haptics.reject()
                                 pendingAct = "reject"
@@ -349,7 +349,7 @@ fun DenebApprovalDetailScreen(
 
     pendingAct?.let { decision ->
         val label = if (decision == "approve") "승인" else "반려"
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { if (!acting) pendingAct = null },
             title = { Text("${label}할까요?") },
             text = {
@@ -369,7 +369,7 @@ fun DenebApprovalDetailScreen(
                 }
             },
             confirmButton = {
-                TextButton(
+                DenebTextButton(
                     enabled = !acting,
                     onClick = {
                         // The decision lands here, not on the button that opened the
@@ -391,7 +391,7 @@ fun DenebApprovalDetailScreen(
                 ) { Text(label) }
             },
             dismissButton = {
-                TextButton(enabled = !acting, onClick = { pendingAct = null }) {
+                DenebTextButton(enabled = !acting, onClick = { pendingAct = null }) {
                     Text("취소")
                 }
             },
@@ -466,7 +466,7 @@ private fun ApprovalAskBox(
         }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
+            DenebOutlinedTextField(
                 value = question,
                 onValueChange = { question = it },
                 placeholder = { Text(if (asking) "근거를 확인하는 중…" else "예: 첨부 견적과 본문 금액이 같아?") },
@@ -475,7 +475,7 @@ private fun ApprovalAskBox(
                 modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.size(8.dp))
-            TextButton(onClick = { ask() }, enabled = !asking && question.isNotBlank()) {
+            DenebTextButton(onClick = { ask() }, enabled = !asking && question.isNotBlank()) {
                 Text(if (asking) "…" else "질문")
             }
         }
@@ -565,7 +565,7 @@ private fun ApprovalAnalysisCard(
                     color = denebHint(),
                 )
                 Spacer(Modifier.size(8.dp))
-                TextButton(onClick = onRerun, enabled = !analyzing) { Text("다시 분석") }
+                DenebTextButton(onClick = onRerun, enabled = !analyzing) { Text("다시 분석") }
             }
         }
         Spacer(Modifier.height(8.dp))

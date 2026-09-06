@@ -22,9 +22,9 @@ globs: ["client-android/app/composeApp/src/**/*.kt"]
 
 | Deneb 타이포 스킨 (정체성·구조) | Material (기능·상태·a11y) |
 |---|---|
-| 모든 텍스트 → `DenebType.*` (`viewTitle`/`subject`/`rowTitle`/`rowTitleStrong`/`rowSubtitle`/`snippet`/`meta`/`sectionLabel`/`body`/`button`/`hint`) | 버튼: `Button`/`FilledTonalButton`/`OutlinedButton`/`TextButton` |
-| 화면 프레임 → `DenebScreenScaffold(title, onBack, tabBar?)` (flat AMOLED, `←`, 제목) | 폼: `Switch`·`Checkbox`·`SegmentedButton`·`OutlinedTextField`·`Slider` |
-| 리스트 행 → `DenebRow { … }` (행 아래 하airline, 노카드, 여백, 전체 탭) | 오버레이: `AlertDialog`·`ModalBottomSheet`·`Snackbar`·`ModalNavigationDrawer` |
+| 모든 텍스트 → `DenebType.*` (`viewTitle`/`subject`/`rowTitle`/`rowTitleStrong`/`rowSubtitle`/`snippet`/`meta`/`sectionLabel`/`body`/`button`/`hint`) | 버튼 **기반**: `Button`/`OutlinedButton`/`TextButton` — 호출부는 항상 래퍼 `DenebButton`/`DenebTonalButton`/`DenebOutlinedButton`/`DenebTextButton`(`ui/components/DenebButtons.kt`) |
+| 화면 프레임 → `DenebScreenScaffold(title, onBack, tabBar?)` (flat AMOLED, `←`, 제목) | 폼 **기반**: `Switch`·`Checkbox`·`Slider` 직접 / `SegmentedButton`→`DenebSegmentedRow`+`DenebSegment` / `OutlinedTextField`→`DenebOutlinedTextField` (검색·필터 입력은 `DenebUnderlineSearchField`) / 칩→`DenebChip` |
+| 리스트 행 → `DenebRow { … }` (행 아래 하airline, 노카드, 여백, 전체 탭) | 오버레이 **기반**: `BasicAlertDialog`→`DenebDialog`(호출부 API는 `AlertDialog`와 동일) · `ModalBottomSheet`·`Snackbar`·`ModalNavigationDrawer` |
 | 섹션 헤더 → `DenebSectionLabel("…")` (트랙트 캡스) | 비동기: `PullToRefreshBox`·`CircularProgressIndicator` |
 | 구분선 → `denebHairline()` · 힌트색 → `denebHint()` | 시맨틱: `selectable`/`toggleable`/`Role`, `contentDescription` |
 | — | 색 토큰: `MaterialTheme.colorScheme` **단일 소스** (다크모드·브랜드) |
@@ -45,7 +45,8 @@ globs: ["client-android/app/composeApp/src/**/*.kt"]
 idiom 문서엔 "no cards / no icons"라 써 있지만 **기능을 돕는 곳은 남긴다**:
 
 - **카드 ★재정의(2026-06, 디자인 리프레시)**: 설정류 리스트는 **그룹 인셋 카드**(`DenebGroup`+`DenebListRow`: 둥근 컨테이너+은은한 모노 wash+인셋 하airline+leading 아이콘/제목/부제/chevron, iOS·토스식)가 기본 idiom. 콘텐츠 리스트(메일·검색 등)는 bare `DenebRow`(단일 하airline) 유지. 즉 옛 평면 에디토리얼 "no cards"는 폐기되고 그룹 카드로 진화. 독립 콜아웃(AI 분석)은 `denebInsightContainer()` tint 박스.
-- **칩**: 첨부·관련항목 `AssistChip`은 상호작용·접근성 있는 Material 유지(외형만 정돈). `DenebChip`이 중간 지점.
+- **칩 ★개정(2026-09-06)**: 첨부·관련항목·답변·요일 선택 전부 `DenebChip`. 운영자 판정("구글 UI 따라간 곳이 촌스럽다")으로 `AssistChip`/`FilterChip` 직접 호출은 0건이 됐다 — 같은 앱에 Material 스타디움 필과 우리 8dp 라운드가 공존하던 것이 문제였다.
+- **컨트롤 래퍼 ★신설(2026-09-06)**: 버튼·세그먼티드·다이얼로그·필드는 Material을 **기반으로만** 쓰고 호출부는 `Deneb*` 래퍼를 부른다(위 표). 래퍼는 Material 파라미터를 그대로 받아 이름만 바꾸면 이식된다. 외형 규약: 모서리 10dp(칩 8·그룹 16·다이얼로그 20), 텍스트 `DenebType.button`, 세그먼티드 선택 칸의 ✓ 없음(fill이 상태), 필드 테두리=하airline·포커스=primary. `design-lint`의 결정 다이얼로그 규칙은 `DenebDialog(`도 앵커한다.
 - **아이콘**: 기능 아이콘(보내기·중지·Meet·상태 점)은 유지, **장식** 아이콘만 배제. ★**내비게이션 아이콘 허용**(2026-06-14): 폰 하단 탭바·데스크톱 레일·세션 진입점은 **아이콘+라벨**(Material icons, `Outlined`=비활성/`Filled`=활성 Apple식, M3 `NavigationBar` substrate로 인셋·리플·`Role.Tab` a11y·햅틱). 단 **리스트 행·콘텐츠 제목(메일·세션·위키)은 계속 아이콘리스**, 컬러 탭 없음(모노크롬), 활성=ink+절제된 인디케이터. 한 줄 규칙: 아이콘은 **내비게이션 + 그룹 리스트 행**에. (디자인 리프레시로 `DenebListRow`가 행 leading 아이콘을 가짐 — 콘텐츠 *제목*엔 여전히 안 붙임.)
 - **색 ★2액센트(2026-06, 디자인 리프레시)**: 모노크롬 AMOLED 베이스 + 절제된 2색. **쿨 `MaterialTheme.colorScheme.primary`(다크 0xFF7FA8D0)=상호작용·선택·CTA** (여태 ink로 억눌렀던 것을 비로소 사용), **웜 애프리콧 `denebInsight()`=AI 분석·인사이트** (쿨↔웜 보색; Deneb 분석↔비서 이중 페르소나의 색 매핑). 둘 다 작은 마크·소프트 fill(`denebInsightContainer()`)에만 — 화면 전체엔 안 칠함. 토큰 정의=`Theme.kt` 액센트 doctrine.
 

@@ -4,6 +4,8 @@ import ai.deneb.PlatformBackHandler
 import ai.deneb.openUrl
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.LocalShowFullScreenImageModel
 import ai.deneb.ui.components.rememberHaptics
@@ -22,7 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -30,7 +31,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -229,7 +229,7 @@ fun DenebFilesScreen(
             // New-folder + upload only while browsing — search results span folders,
             // so "current folder" (the create/upload target) is undefined then.
             if (activeQuery == null) {
-                TextButton(onClick = {
+                DenebTextButton(onClick = {
                     crudError = null
                     showNewFolder = true
                 }) {
@@ -240,7 +240,7 @@ fun DenebFilesScreen(
                 if (uploading) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else {
-                    TextButton(onClick = { uploadLauncher.launch() }) {
+                    DenebTextButton(onClick = { uploadLauncher.launch() }) {
                         Icon(Icons.Outlined.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("업로드")
@@ -261,7 +261,7 @@ fun DenebFilesScreen(
                 )
                 // Retry = re-pick the file: the failed bytes aren't retained, and the
                 // picker restores the exact upload context.
-                TextButton(onClick = { uploadLauncher.launch() }) { Text("다시 시도") }
+                DenebTextButton(onClick = { uploadLauncher.launch() }) { Text("다시 시도") }
             }
         }
         crudError?.let {
@@ -501,7 +501,7 @@ fun DenebFilesScreen(
 
     // --- Delete: confirm, then remove and re-list. ---
     deleteTarget?.let { target ->
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { if (!actionBusy) deleteTarget = null },
             title = { Text(if (target.isFolder) "폴더 삭제" else "파일 삭제") },
             text = {
@@ -514,7 +514,7 @@ fun DenebFilesScreen(
                 )
             },
             confirmButton = {
-                TextButton(
+                DenebTextButton(
                     enabled = !actionBusy,
                     onClick = {
                         haptics.reject()
@@ -529,7 +529,7 @@ fun DenebFilesScreen(
                 ) { Text("삭제", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(enabled = !actionBusy, onClick = { deleteTarget = null }) { Text("취소") }
+                DenebTextButton(enabled = !actionBusy, onClick = { deleteTarget = null }) { Text("취소") }
             },
         )
     }

@@ -1,6 +1,9 @@
 package ai.deneb.deneb
 
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebOutlinedButton
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.SkeletonList
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
@@ -10,12 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,7 +67,7 @@ fun DenebError(text: String, onRetry: (() -> Unit)? = null) {
         )
         if (onRetry != null) {
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onRetry) { Text("다시 시도") }
+            DenebOutlinedButton(onClick = onRetry) { Text("다시 시도") }
         }
     }
 }
@@ -118,7 +118,7 @@ fun DenebEmpty(
         }
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onAction) { Text(actionLabel) }
+            DenebOutlinedButton(onClick = onAction) { Text(actionLabel) }
         }
     }
 }
@@ -140,12 +140,12 @@ fun rememberDiscardGuard(dirty: Boolean, onLeave: () -> Unit): () -> Unit {
     // System/gesture back: intercept only while there are unsaved edits.
     ai.deneb.PlatformBackHandler(enabled = dirty) { confirming = true }
     if (confirming) {
-        AlertDialog(
+        DenebDialog(
             onDismissRequest = { confirming = false },
             title = { Text("편집 취소") },
             text = { Text("저장하지 않은 변경사항이 사라집니다.") },
             confirmButton = {
-                TextButton(onClick = {
+                DenebTextButton(onClick = {
                     // Throwing the edits away is the destructive commit; 계속 편집 is
                     // the silent dismiss.
                     haptics.reject()
@@ -154,7 +154,7 @@ fun rememberDiscardGuard(dirty: Boolean, onLeave: () -> Unit): () -> Unit {
                 }) { Text("나가기") }
             },
             dismissButton = {
-                TextButton(onClick = { confirming = false }) { Text("계속 편집") }
+                DenebTextButton(onClick = { confirming = false }) { Text("계속 편집") }
             },
         )
     }

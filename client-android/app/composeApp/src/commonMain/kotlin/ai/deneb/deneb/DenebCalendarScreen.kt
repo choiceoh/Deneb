@@ -4,6 +4,8 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.OnLiveTabActivation
+import ai.deneb.ui.components.DenebTextButton
+import ai.deneb.ui.components.DenebTonalButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -41,13 +43,11 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -348,7 +348,7 @@ fun DenebCalendarScreen(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { onAddTodo(selected) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                DenebTextButton(onClick = { onAddTodo(selected) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
                     Text("+ 할 일")
                 }
             }
@@ -611,7 +611,7 @@ internal fun CalendarEmptyDay(onAdd: () -> Unit) {
     ) {
         Text("이 날 일정이 없습니다.", style = DenebType.body, color = denebHint())
         Spacer(Modifier.height(8.dp))
-        TextButton(onClick = onAdd) { Text("이 날 일정 추가") }
+        DenebTextButton(onClick = onAdd) { Text("이 날 일정 추가") }
     }
 }
 
@@ -711,7 +711,7 @@ private fun CalendarProposalsPopup(
             Column(Modifier.padding(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("일정 제안", style = DenebType.subject, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.weight(1f))
-                    TextButton(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("닫기") }
+                    DenebTextButton(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("닫기") }
                 }
                 Spacer(Modifier.height(6.dp))
                 if (error != null) {
@@ -761,13 +761,13 @@ private fun CalendarProposalRow(
         }
         Spacer(Modifier.height(8.dp))
         Row {
-            FilledTonalButton(
+            DenebTonalButton(
                 onClick = onAccept,
                 enabled = !busy,
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
             ) { Text("수락") }
             Spacer(Modifier.width(8.dp))
-            TextButton(onClick = onReject, enabled = !busy, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("거절") }
+            DenebTextButton(onClick = onReject, enabled = !busy, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("거절") }
         }
     }
 }

@@ -3,6 +3,8 @@ package ai.deneb.deneb
 import ai.deneb.openUrl
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebButton
+import ai.deneb.ui.components.DenebOutlinedButton
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.settings.SettingsCard
 import androidx.compose.foundation.clickable
@@ -18,11 +20,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -81,7 +81,7 @@ internal fun VersionTab(denebClient: DenebGatewayClient?) {
                     )
                 }
                 Spacer(Modifier.height(8.dp))
-                Button(
+                DenebButton(
                     // OTA: download the APK in-app and launch the installer. Falls back to
                     // opening the URL in a browser if install can't proceed (no permission,
                     // non-Android platform).
@@ -99,9 +99,9 @@ internal fun VersionTab(denebClient: DenebGatewayClient?) {
                 )
             }
             Spacer(Modifier.height(12.dp))
-            OutlinedButton(
+            DenebOutlinedButton(
                 onClick = {
-                    val c = denebClient ?: return@OutlinedButton
+                    val c = denebClient ?: return@DenebOutlinedButton
                     scope.launch {
                         checking = true
                         update = c.checkUpdate()

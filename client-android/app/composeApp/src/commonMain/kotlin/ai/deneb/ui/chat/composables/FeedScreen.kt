@@ -11,6 +11,7 @@ import ai.deneb.ui.DenebSiblingSwipeHost
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.WorkFeedAction
 import ai.deneb.ui.chat.WorkFeedItem
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBannerEnter
 import ai.deneb.ui.denebBannerExit
@@ -41,7 +42,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -201,7 +201,7 @@ internal fun FeedScreen(
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { refreshScope.launch { loadSelectedDay() } }) { Text("다시 시도") }
+                    DenebTextButton(onClick = { refreshScope.launch { loadSelectedDay() } }) { Text("다시 시도") }
                 }
             }
 
@@ -502,7 +502,7 @@ private fun FeedRowWithBody(
                 .padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.End,
         ) {
-            TextButton(
+            DenebTextButton(
                 onClick = {
                     haptics.tap()
                     onOpenApprovalDetail(item.refId.trim(), item.title.trim())

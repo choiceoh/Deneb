@@ -76,13 +76,14 @@ import ai.deneb.ui.chat.composables.denebShowsBottomBar
 import ai.deneb.ui.chat.composables.isDenebLiveTab
 import ai.deneb.ui.chat.composables.navigateToDenebSection
 import ai.deneb.ui.chat.isLogCard
+import ai.deneb.ui.components.DenebSegment
+import ai.deneb.ui.components.DenebSegmentedRow
 import ai.deneb.ui.components.FullScreenImageHost
 import ai.deneb.ui.denebComposable
 import ai.deneb.ui.denebNavEnter
 import ai.deneb.ui.denebNavExit
 import ai.deneb.ui.denebNavPopEnter
 import ai.deneb.ui.denebNavPopExit
-import ai.deneb.ui.handCursor
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.background
@@ -99,9 +100,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -281,16 +279,16 @@ internal fun AppContent(
                 val navigationTabBar: @Composable () -> Unit = {
                     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
                     val count = 2
-                    SingleChoiceSegmentedButtonRow {
-                        SegmentedButton(
+                    DenebSegmentedRow {
+                        DenebSegment(
                             selected = isHome,
                             onClick = { openLiveTab(Home) },
-                            shape = SegmentedButtonDefaults.itemShape(index = if (isRtl) count - 1 else 0, count = count),
-                            modifier = Modifier.handCursor(),
+                            index = if (isRtl) count - 1 else 0,
+                            count = count,
                         ) {
                             Text(stringResource(Res.string.tab_chat))
                         }
-                        SegmentedButton(
+                        DenebSegment(
                             selected = !isHome,
                             onClick = {
                                 navController.navigate(DenebConfig) {
@@ -298,8 +296,8 @@ internal fun AppContent(
                                     launchSingleTop = true
                                 }
                             },
-                            shape = SegmentedButtonDefaults.itemShape(index = if (isRtl) 0 else count - 1, count = count),
-                            modifier = Modifier.handCursor(),
+                            index = if (isRtl) 0 else count - 1,
+                            count = count,
                         ) {
                             Text(stringResource(Res.string.tab_settings))
                         }

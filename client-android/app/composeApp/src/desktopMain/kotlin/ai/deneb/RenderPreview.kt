@@ -223,6 +223,7 @@ fun main() {
     renderScreen("session_drawer_search.png", "session_drawer_search", OledColorScheme, 720, 1440)
     renderScreen("session_drawer_actions.png", "session_drawer_actions", OledColorScheme, 720, 1440)
     renderScreen("states.png", "states", OledColorScheme, 824, 1500)
+    renderScreen("controls.png", "controls", OledColorScheme, 824, 1500)
     renderBrowser("browser.png", OledColorScheme)
     renderBrowserError("browser_error.png", OledColorScheme)
     renderBrowserStart("browser_start.png", OledColorScheme, empty = false)

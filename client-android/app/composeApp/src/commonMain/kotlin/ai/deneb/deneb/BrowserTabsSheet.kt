@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -31,7 +32,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,7 +81,7 @@ internal fun BrowserTabsSheet(
                         color = if (waitingForSlot) MaterialTheme.colorScheme.primary else denebHint(),
                     )
                 }
-                TextButton(
+                DenebTextButton(
                     enabled = store.tabs.size < BROWSER_TAB_LIMIT,
                     onClick = {
                         haptics.tap()

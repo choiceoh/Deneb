@@ -6,10 +6,12 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -23,6 +25,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -239,8 +242,31 @@ fun denebBrowserAccent(): Color = if (MaterialTheme.colorScheme.isDarkFlavor) Co
 @Composable
 fun denebInsightContainer(): Color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.10f)
 
+/**
+ * The field's palette, drawn from the same tokens as the rest of the chrome. This
+ * used to return Material's defaults verbatim — a seam left empty, which is why a
+ * Deneb field looked exactly like any other Android app's. Resting border is the
+ * hairline, focus goes cool-primary like the underline search field, labels sit
+ * in hint grey, and there is no container tint over the black.
+ */
 @Composable
-fun outlineTextFieldColors() = OutlinedTextFieldDefaults.colors()
+fun outlineTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
+    unfocusedBorderColor = denebHairline(),
+    disabledBorderColor = denebHairline().copy(alpha = 0.5f),
+    errorBorderColor = MaterialTheme.colorScheme.error,
+    focusedLabelColor = MaterialTheme.colorScheme.primary,
+    unfocusedLabelColor = denebHint(),
+    disabledLabelColor = denebHint().copy(alpha = 0.5f),
+    errorLabelColor = MaterialTheme.colorScheme.error,
+    focusedPlaceholderColor = denebHint(),
+    unfocusedPlaceholderColor = denebHint(),
+    cursorColor = MaterialTheme.colorScheme.primary,
+    focusedContainerColor = Color.Transparent,
+    unfocusedContainerColor = Color.Transparent,
+    disabledContainerColor = Color.Transparent,
+    errorContainerColor = Color.Transparent,
+)
 
 @Composable
 fun DenebOutlinedTextField(
@@ -251,6 +277,7 @@ fun DenebOutlinedTextField(
     readOnly: Boolean = false,
     label: @Composable (() -> Unit)? = null,
     placeholder: @Composable (() -> Unit)? = null,
+    leadingIcon: @Composable (() -> Unit)? = null,
     trailingIcon: @Composable (() -> Unit)? = null,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     singleLine: Boolean = false,
@@ -259,6 +286,9 @@ fun DenebOutlinedTextField(
     isError: Boolean = false,
     supportingText: @Composable (() -> Unit)? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    textStyle: TextStyle = LocalTextStyle.current,
+    shape: Shape = RoundedCornerShape(10.dp),
 ) {
     OutlinedTextField(
         value = value,
@@ -266,8 +296,10 @@ fun DenebOutlinedTextField(
         modifier = modifier,
         enabled = enabled,
         readOnly = readOnly,
+        textStyle = textStyle,
         label = label,
         placeholder = placeholder,
+        leadingIcon = leadingIcon,
         trailingIcon = trailingIcon,
         visualTransformation = visualTransformation,
         singleLine = singleLine,
@@ -276,7 +308,8 @@ fun DenebOutlinedTextField(
         isError = isError,
         supportingText = supportingText,
         keyboardOptions = keyboardOptions,
-        shape = RoundedCornerShape(12.dp),
+        keyboardActions = keyboardActions,
+        shape = shape,
         colors = outlineTextFieldColors(),
     )
 }

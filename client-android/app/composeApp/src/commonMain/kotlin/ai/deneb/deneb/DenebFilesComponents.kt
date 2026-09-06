@@ -1,9 +1,14 @@
 package ai.deneb.deneb
 
 import ai.deneb.PlatformBackHandler
+import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.JetBrainsMonoFamily
+import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebSegment
+import ai.deneb.ui.components.DenebSegmentedRow
+import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -31,17 +36,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -85,13 +84,13 @@ internal fun FilesSearchModeRow(
 ) {
     val haptics = rememberHaptics()
     val modes = FilesSearchMode.entries
-    SingleChoiceSegmentedButtonRow(
+    DenebSegmentedRow(
         modifier
             .fillMaxWidth()
             .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 6.dp),
     ) {
         modes.forEachIndexed { i, m ->
-            SegmentedButton(
+            DenebSegment(
                 selected = mode == m,
                 onClick = {
                     if (mode != m) {
@@ -99,8 +98,9 @@ internal fun FilesSearchModeRow(
                         onModeChange(m)
                     }
                 },
-                shape = SegmentedButtonDefaults.itemShape(i, modes.size),
-            ) { Text(m.label, style = DenebType.rowSubtitle) }
+                index = i,
+                count = modes.size,
+            ) { Text(m.label) }
         }
     }
 }
@@ -254,11 +254,11 @@ internal fun FilesNameDialog(
 ) {
     var value by remember { mutableStateOf(initial) }
     val haptics = rememberHaptics()
-    AlertDialog(
+    DenebDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            OutlinedTextField(
+            DenebOutlinedTextField(
                 value = value,
                 onValueChange = { value = it },
                 label = { Text(label) },
@@ -268,7 +268,7 @@ internal fun FilesNameDialog(
             )
         },
         confirmButton = {
-            TextButton(
+            DenebTextButton(
                 enabled = !busy && value.trim().isNotBlank(),
                 onClick = {
                     haptics.confirm()
@@ -277,7 +277,7 @@ internal fun FilesNameDialog(
             ) { Text(confirmLabel) }
         },
         dismissButton = {
-            TextButton(enabled = !busy, onClick = onDismiss) { Text("취소") }
+            DenebTextButton(enabled = !busy, onClick = onDismiss) { Text("취소") }
         },
     )
 }
