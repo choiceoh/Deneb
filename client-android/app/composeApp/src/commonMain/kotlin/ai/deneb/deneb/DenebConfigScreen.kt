@@ -209,7 +209,6 @@ private fun ConfigSectionList(
                         title = tab.label,
                         onClick = { onOpen(tab) },
                         icon = tab.icon,
-                        subtitle = tab.desc,
                         divider = i < tabs.lastIndex,
                         statusColor = status?.let {
                             if (it.failure) MaterialTheme.colorScheme.error else denebOnWarningContainer()
@@ -237,21 +236,27 @@ private fun NotConnectedTab() = EmptyTab("게이트웨이에 연결되지 않았
 
 /** The settings-hub sections, in display order. The screen renders [entries] as
  *  the section list and switches detail content by enum, so a reorder/rename
- *  happens in one place. [desc] is the one-line summary under each list row. */
-private enum class ConfigTab(val label: String, val desc: String, val icon: ImageVector) {
-    GATEWAY("게이트웨이", "연결, 상태, 연락처 동기화", Icons.Outlined.Dns),
-    APPEARANCE("화면", "테마, UI 배율", Icons.Outlined.Palette),
-    MODEL("모델", "역할별 모델 지정, 엔드포인트", Icons.Outlined.Memory),
-    SKILLS("스킬", "설치된 스킬, Propus", Icons.Outlined.Extension),
-    CRON("크론", "예약 작업", Icons.Outlined.Schedule),
-    OBSERVE("관찰", "상태 · 동작 · 로그", Icons.Outlined.Visibility),
-    WORMHOLE("Wormhole", "모델 라우터 상태, 기능 토글", Icons.Outlined.Hub),
+ *  happens in one place.
+ *
+ *  Rows carry no description line. It mostly restated the title ("크론 / 예약
+ *  작업", "더보기 표시 항목 / 더보기에 표시할 항목 선택") while being the sole source
+ *  of the wrapping and ragged row heights on this screen. Dropping it leaves the
+ *  STATUS as the only second line anywhere here, which is what makes a row worth
+ *  looking at — colour and a second line now mean the same thing. */
+private enum class ConfigTab(val label: String, val icon: ImageVector) {
+    GATEWAY("게이트웨이", Icons.Outlined.Dns),
+    APPEARANCE("화면", Icons.Outlined.Palette),
+    MODEL("모델", Icons.Outlined.Memory),
+    SKILLS("스킬", Icons.Outlined.Extension),
+    CRON("크론", Icons.Outlined.Schedule),
+    OBSERVE("관찰", Icons.Outlined.Visibility),
+    WORMHOLE("Wormhole", Icons.Outlined.Hub),
 
     // Appended at the end so existing saved detail ordinals (rotation / process
     // death) keep pointing at the same section across this change.
-    FLEET("플릿", "GPU 노드 상태, 모델 기동/중지, 작업 로그", Icons.Outlined.Storage),
-    VERSION("버전", "현재 빌드, 패치노트, 업데이트", Icons.Outlined.Info),
-    PROMPTS("프롬프트 코너", "자동 분석·도구 프롬프트, 토픽 배경 편집", Icons.Outlined.Article),
-    SELF_IMPROVEMENT_CODING("자가개선 코딩", "자가개선 후보, 하트비트 자동 처리", Icons.Outlined.Code),
-    APP_TILES("더보기 표시 항목", "더보기에 표시할 항목 선택 (미완성 기능 숨기기)", Icons.Outlined.Apps),
+    FLEET("플릿", Icons.Outlined.Storage),
+    VERSION("버전", Icons.Outlined.Info),
+    PROMPTS("프롬프트 코너", Icons.Outlined.Article),
+    SELF_IMPROVEMENT_CODING("자가개선 코딩", Icons.Outlined.Code),
+    APP_TILES("더보기 표시 항목", Icons.Outlined.Apps),
 }
