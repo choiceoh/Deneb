@@ -383,6 +383,8 @@ internal fun ModelTab(client: DenebGatewayClient) {
                                     line,
                                     style = DenebType.hint,
                                     color = denebHint(),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
                             // Tuner stat line (24h runs, p95, cache hit, fallback/stall,
@@ -583,14 +585,19 @@ private enum class ModelRole(val wire: String, val label: String, val desc: Stri
     SUBMAIN("submain", "자율", "하트비트·폰 이벤트 판정·워크플로 같은 자율 동작이 쓰는 모델. 대화 트래픽과 분리해 메인 구독을 아낀다. 미설정이면 메인 모델을 사용"),
 }
 
-/** "24h · 12회 · 입력 1.2M(캐시 0.9M) · 출력 45K" — the model row's rolling-24h
+/** "24h · 12회 · ↑1.2M ↓45K · 캐시 0.9M" — the model row's rolling-24h
  *  usage line from the gateway's run log, or null when the model didn't run
  *  (so unused rows carry no extra chrome). Cache reads are shown separately:
  *  a caching provider's savings should be visible at a glance. */
 internal fun usage24hLine(model: ModelOption): String? {
     if (model.runs24h <= 0) return null
-    val cache = if (model.cacheReadTokens24h > 0) "(캐시 ${formatTokenCount(model.cacheReadTokens24h)})" else ""
-    return "24h · ${model.runs24h}회 · 입력 ${formatTokenCount(model.inputTokens24h)}$cache · 출력 ${formatTokenCount(model.outputTokens24h)}"
+    // One line, always. At 412dp the labelled form wrapped and left "· 출력 363K"
+    // orphaned on a second line with the separator leading it, and rows with
+    // stats then stood a line taller than rows without — the list read ragged.
+    // The arrows carry what "입력/출력" spelled out, and the cache figure loses
+    // its parentheses — same four numbers, roughly two thirds the width.
+    val cache = if (model.cacheReadTokens24h > 0) " · 캐시 ${formatTokenCount(model.cacheReadTokens24h)}" else ""
+    return "24h · ${model.runs24h}회 · ↑${formatTokenCount(model.inputTokens24h)} ↓${formatTokenCount(model.outputTokens24h)}$cache"
 }
 
 /** Compact token count: 1_234_567 → "1.2M", 45_300 → "45K", 872 → "872". */

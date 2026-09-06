@@ -19,6 +19,8 @@ import ai.deneb.ui.dynamicui.DenebUiHtml
 import ai.deneb.ui.dynamicui.DenebUiNode
 import ai.deneb.ui.dynamicui.DenebUiRenderer
 import ai.deneb.ui.dynamicui.LocalDenebUiMotion
+import ai.deneb.ui.icons.outlined.Apps
+import ai.deneb.ui.icons.outlined.Article
 import ai.deneb.ui.icons.outlined.AutoAwesome
 import ai.deneb.ui.icons.outlined.Code
 import ai.deneb.ui.icons.outlined.Dns
@@ -27,6 +29,7 @@ import ai.deneb.ui.icons.outlined.Hub
 import ai.deneb.ui.icons.outlined.Memory
 import ai.deneb.ui.icons.outlined.Palette
 import ai.deneb.ui.icons.outlined.Schedule
+import ai.deneb.ui.icons.outlined.Storage
 import ai.deneb.ui.icons.outlined.Visibility
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.background
@@ -104,7 +107,10 @@ internal fun renderBottomBar(name: String, scheme: ColorScheme, route: String) {
 // Design-refresh pilot (2026-06): the grouped-inset card idiom + the two-accent
 // system — cool primary on the selected row, warm apricot on the AI-insight callout.
 internal fun renderDesignRefresh(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 1560, density = Density(2f)) {
+    // Tall enough for the whole list. At 1560 the routing card fell off the
+    // bottom — and that card holds the status+subtitle row this fixture exists
+    // to watch, so a golden that stopped above it watched nothing.
+    val scene = ImageComposeScene(width = 824, height = 2000, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.fillMaxSize().padding(top = 26.dp)) {
@@ -118,23 +124,34 @@ internal fun renderDesignRefresh(name: String, scheme: ColorScheme) {
                     // stay neutral and no row is `selected` — a settings row pushes a
                     // detail screen, so the list never holds a selection, and a preview
                     // that drew one showed a state the app cannot produce.
+                    // The subtitles below are the REAL ConfigTab.desc strings, not
+                    // shorter stand-ins. The fixture used to carry its own tidy
+                    // wording, so the golden passed while the live screen wrapped:
+                    // "키 문제 1건" + a long subtitle laid out as two Texts in a Row
+                    // rendered scrambled on the phone and nothing here noticed. A
+                    // fixture shorter than production tests the easy case only.
+                    // Title-only rows: the description line was dropped because it
+                    // restated the title and was the sole source of this screen's
+                    // wrapping. A second line now means exactly one thing — this row
+                    // has something to report — which is what the colour already said.
                     DenebGroup(label = "시스템") {
-                        DenebListRow("게이트웨이", {}, icon = Icons.Outlined.Dns, subtitle = "연결 · 버전 · 동기화")
-                        DenebListRow("화면", {}, icon = Icons.Outlined.Palette, subtitle = "테마 · UI 배율")
-                        DenebListRow("모델", {}, icon = Icons.Outlined.Memory, subtitle = "역할별 지정 · 엔드포인트", divider = false)
+                        DenebListRow("게이트웨이", {}, icon = Icons.Outlined.Dns)
+                        DenebListRow("화면", {}, icon = Icons.Outlined.Palette)
+                        DenebListRow("더보기 표시 항목", {}, icon = Icons.Outlined.Apps)
+                        DenebListRow("모델", {}, icon = Icons.Outlined.Memory, divider = false)
                     }
                     Spacer(Modifier.height(22.dp))
                     DenebGroup(label = "자동화 · 관찰") {
-                        DenebListRow("스킬", {}, icon = Icons.Outlined.Extension, subtitle = "설치 · Propus")
+                        DenebListRow("스킬", {}, icon = Icons.Outlined.Extension)
                         DenebListRow(
                             "자가개선 코딩",
                             {},
                             icon = Icons.Outlined.Code,
-                            subtitle = "후보 3건 대기",
-                            statusText = "배차 중",
+                            statusText = "배차 중 · 후보 3건",
                         )
-                        DenebListRow("크론", {}, icon = Icons.Outlined.Schedule, subtitle = "예약 작업")
-                        DenebListRow("관찰", {}, icon = Icons.Outlined.Visibility, subtitle = "동작 · 로그", divider = false)
+                        DenebListRow("크론", {}, icon = Icons.Outlined.Schedule)
+                        DenebListRow("프롬프트 코너", {}, icon = Icons.Outlined.Article)
+                        DenebListRow("관찰", {}, icon = Icons.Outlined.Visibility, divider = false)
                     }
                     Spacer(Modifier.height(22.dp))
                     DenebGroup(label = "라우팅 · 인프라") {
@@ -142,11 +159,10 @@ internal fun renderDesignRefresh(name: String, scheme: ColorScheme) {
                             "Wormhole",
                             {},
                             icon = Icons.Outlined.Hub,
-                            subtitle = "모델 라우터 상태",
-                            divider = false,
                             statusColor = denebOnWarningContainer(),
-                            statusText = "페일오버",
+                            statusText = "키 문제 1건",
                         )
+                        DenebListRow("플릿", {}, icon = Icons.Outlined.Storage, divider = false)
                     }
                     Spacer(Modifier.height(26.dp))
                     Row(

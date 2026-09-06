@@ -27,6 +27,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 
 // Design refresh (2026-06): the grouped-inset surface idiom that replaces the flat
@@ -134,21 +139,32 @@ fun DenebListRow(
                 style = DenebType.rowTitleStrong,
                 color = if (selected) accent else MaterialTheme.colorScheme.onBackground,
             )
-            when {
-                !statusText.isNullOrEmpty() -> Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = statusText,
-                        style = DenebType.rowSubtitle,
-                        color = statusColor ?: denebHint(),
-                    )
+            // One text layout, not two Texts in a Row. Two of them get no width
+            // constraint, so a long subtitle wrapped inside its own box while the
+            // status stayed one line and CenterVertically dropped it to the middle
+            // — the Wormhole row rendered its status BELOW the subtitle's first
+            // line, reading as scrambled. As one AnnotatedString the pair wraps and
+            // ellipsizes coherently, and maxLines keeps every row the same height.
+            val line = when {
+                !statusText.isNullOrEmpty() -> buildAnnotatedString {
+                    withStyle(SpanStyle(color = statusColor ?: denebHint())) { append(statusText) }
                     if (subtitle != null) {
-                        Text(text = "  ·  $subtitle", style = DenebType.rowSubtitle, color = denebHint())
+                        withStyle(SpanStyle(color = denebHint())) { append("  ·  $subtitle") }
                     }
                 }
 
-                subtitle != null -> Text(text = subtitle, style = DenebType.rowSubtitle, color = denebHint())
+                subtitle != null -> AnnotatedString(subtitle)
+
+                else -> null
+            }
+            if (line != null) {
+                Text(
+                    text = line,
+                    style = DenebType.rowSubtitle,
+                    color = denebHint(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
         if (statusColor != null) {
