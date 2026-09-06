@@ -219,12 +219,17 @@ for node in 10.10.10.1 10.10.10.2 10.10.10.3; do
     *) warn "프로브 결과 불명(수동 확인): $node 파워세이브" ;;
     esac
 done
-if iw dev wlP9s9 get power_save 2>/dev/null | grep -qi "power save: off"; then
-    pass "srv4 Wi-Fi 파워세이브 off"
-else
-    fail "srv4 Wi-Fi 파워세이브 ON — 게이트웨이 호스트의 업링크가 끊긴다" \
-        "release-and-deploy.md '플릿 노드' (wifi-powersave-off.conf)"
-fi
+# Local probe, same three-way protocol as the remote ones: an unreadable probe
+# (no iw, renamed interface, CI runner with no wireless) is a failed PROBE, not
+# a failed CLAIM — it must never resolve to PASS or FAIL. The first version of
+# this check had no such branch and turned every iw-less host into a red run.
+ps_srv4="$(iw dev wlP9s9 get power_save 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+case "$ps_srv4" in
+*"power save: off"*) pass "srv4 Wi-Fi 파워세이브 off" ;;
+*"power save: on"*) fail "srv4 Wi-Fi 파워세이브 ON — 게이트웨이 호스트의 업링크가 끊긴다" \
+    "release-and-deploy.md '플릿 노드' (wifi-powersave-off.conf)" ;;
+*) warn "프로브 결과 불명(수동 확인): srv4 파워세이브 — iw 미설치이거나 인터페이스명이 다름" ;;
+esac
 
 echo "== GPU 보조 사이드카 (sidecar-models.md 호스트 배치표) =="
 

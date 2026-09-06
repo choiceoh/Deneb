@@ -11,9 +11,9 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
 
 ## 플릿 노드 (검증 대상 주장)
 
-- 플릿은 **DGX Spark 4대**다: **srv4**(게이트웨이·배포·웜홀·메일) · **srv1 · srv2 · srv3**(GPU 보조 + 대형 모델 4노드 TP 서빙). 노드 간 통신은 **200G 패브릭 `10.10.10.{1,2,3,4}`**(제2 패브릭 `10.10.11.x`)이며, 크로스호스트 사이드카 주소도 tailnet이 아니라 이 패브릭을 쓴다 — 업링크가 무선이라서다.
-- **4대 전부 인터넷은 Wi-Fi 업링크**로 나간다(유선 NIC은 `NO-CARRIER`). 그래서 **모든 노드에서 Wi-Fi 파워세이브가 꺼져 있어야 한다** — `/etc/NetworkManager/conf.d/wifi-powersave-off.conf`(`wifi.powersave = 2`). 켜져 있으면 associated 상태에서 트래픽만 멎었다가 재연결되는 끊김이 하루 여러 번 난다(2026-09-06 실측: 켜져 있던 srv4는 14일 29회·srv3은 7일 18회 / 꺼져 있던 srv1·srv2는 46시간 연속 접속·0회). srv4에는 `deneb-net-watchdog.timer`가 그 끊김을 잡아 재연결하고, 끊김 원장은 `journalctl -t deneb-net-watchdog`이다(유닛·스크립트 모두 호스트 로컬, 레포 밖). <!-- docref:ignore -->
-- 이 두 주장(4노드 패브릭 도달성 · 파워세이브 off)은 아래 `topology-parity.sh`가 실측한다.
+- 플릿 = **DGX Spark 4대**: **srv4**(게이트웨이·배포·웜홀·메일) + **srv1·srv2·srv3**(GPU 보조 + 대형 모델 4노드 TP 서빙). 노드 간·크로스호스트 사이드카 주소는 **200G 패브릭 `10.10.10.{1,2,3,4}`** — 업링크가 무선이라 tailnet에 얹지 않는다.
+- **4대 모두 Wi-Fi 파워세이브 off**(`/etc/NetworkManager/conf.d/wifi-powersave-off.conf`, `wifi.powersave = 2`). 켜져 있으면 associated 상태로 트래픽만 멎는 끊김이 하루 여러 번 난다(2026-09-06 실측). srv4는 `deneb-net-watchdog`이 잡아 재연결하며 그 저널이 끊김 원장이다. <!-- docref:ignore -->
+- 위 두 주장은 아래 `topology-parity.sh`가 실측한다.
 
 ## 자동 배포 (srv4-로컬 — 기본 경로)
 
