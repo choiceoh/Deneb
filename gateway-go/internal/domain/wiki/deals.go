@@ -126,7 +126,9 @@ func (s *Store) UpsertDealPage(in DealPageInput, now time.Time) (relPath string,
 	// the prose page is the source of truth, so a ledger write failure must not
 	// fail the committed page write (the ledger is a rebuildable derived view).
 	if filed {
-		_ = s.appendDealRecord(dealRecordFrom(in, now))
+		rec := dealRecordFrom(in, now)
+		warnImplausibleDealDate(rec, now)
+		_ = s.appendDealRecord(rec)
 	}
 	return relPath, created, nil
 }

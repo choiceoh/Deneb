@@ -1,6 +1,9 @@
 package wiki
 
 import (
+	"bytes"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 )
@@ -216,5 +219,42 @@ func TestDealRecordFromNormalizesDates(t *testing.T) {
 	empty := dealRecordFrom(DealPageInput{Counterparty: "무일자"}, now)
 	if empty.Date != "2026-08-31" || empty.DateRaw != "" {
 		t.Fatalf("empty date: Date = %q, DateRaw = %q — want the filing day", empty.Date, empty.DateRaw)
+	}
+}
+
+// TestWarnImplausibleDealDateThreshold pins which gaps the filing-time guard
+// fires on, using the production distribution it was calibrated against: a
+// late-filed contract must stay quiet, a year slip must not.
+func TestWarnImplausibleDealDateThreshold(t *testing.T) {
+	now := anchorAt(t, "2026-09-06")
+	cases := []struct {
+		name string
+		date string
+		warn bool
+	}{
+		{"same day", "2026-09-06", false},
+		{"late-filed contract (105d, real)", "2026-05-24", false},
+		{"just inside the window", "2025-12-11", false}, // 269 days
+		{"just outside", "2025-12-09", true},            // 271 days
+		{"one-year slip (365d, observed)", "2025-09-06", true},
+		{"two-year slip (736d, observed)", "2024-09-01", true},
+		{"far future is equally suspect", "2028-01-01", true},
+		{"unresolved date never warns", "2026. 8.", false},
+		{"empty never warns", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			prev := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+			defer slog.SetDefault(prev)
+
+			warnImplausibleDealDate(DealRecord{Counterparty: "테스트", Date: tc.date}, now)
+
+			got := strings.Contains(buf.String(), "far from its filing time")
+			if got != tc.warn {
+				t.Fatalf("date %q: warned=%v, want %v (log: %s)", tc.date, got, tc.warn, buf.String())
+			}
+		})
 	}
 }
