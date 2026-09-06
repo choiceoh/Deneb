@@ -1,0 +1,23 @@
+# Deneb forecast sidecar — Chronos-2 /forecast on 8005 (see
+# scripts/deploy/forecast-server.py). Runs from ~/venvs/chronos: torch 2.12
+# cu130 + chronos-forecasting 2.3.1 + transformers 5.16. Weights (~0.5GB,
+# amazon/chronos-2, Apache-2.0) come from the shared HF cache.
+[Unit]
+Description=Deneb Forecast Sidecar (Chronos-2, port 8005)
+After=network.target
+
+[Service]
+Type=simple
+# This host's HF transfer backend needs the xet client disabled (same quirk the
+# other sidecar weight pulls hit).
+Environment=HF_HUB_DISABLE_XET=1
+ExecStart=%h/venvs/chronos/bin/python %h/deneb/scripts/deploy/forecast-server.py --port 8005
+# always, not on-failure: srv4's earlyoom runs --prefer python3, so this small
+# helper is among the first things reaped under memory pressure, and a SIGTERM
+# from outside would otherwise leave :8005 dead until someone noticed.
+# systemctl stop still stops it; only unexpected exits respawn.
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

@@ -55,6 +55,7 @@ globs: ["gateway-go/internal/pipeline/chat/tools/document/paddleocr.go", "gatewa
 | NuExtract3-FP8 | 구조화 추출 (스키마 기반) | (config-driven, 코드 하드코딩 없음) | — | `~/models/NuExtract3-FP8`. 현재 게이트웨이 코드에서 직접 참조 없음 |
 | **Nemotron-3-Embed-1B-NVFP4** | 임베딩 (위키/다이어리/메일/도구/작업피드 시맨틱 검색·compaction MMR) | `http://127.0.0.1:8002` (어댑터 `scripts/deploy/nemotron-embed-server.py` → eugr vLLM 컨테이너 :8003) | `ai/embedding/client.go`, `domain/embedindex/calibration.go` (게이트웨이 drop-in `DENEB_EMBEDDING_URL`) | 2026-07-18 BGE-M3 컷오버 (2048d, query:/passage: 비대칭). 코사인 스케일이 BGE보다 훨씬 낮음 — **시맨틱 플로어는 전부 모델별 재캘리브레이션 값** (wiki 0.44·diary 0.20·summary 0.25·mail 0.33·fetch-tools 0.30·RSI exemplar 0.32·workfeed 0.47). 알려지지 않은 실모델 지문은 dense-only 유입을 막고, 운영자 재측정 뒤 표면별 `DENEB_*_SEM_FLOOR`로 명시적으로 연다. 설치 `scripts/systemd/setup-nemotron-embed.sh`. 롤백 = drop-in 제거(BGE :8001 유닛 잔존, 캐시 지문 분리) |
 | **xprovence-reranker-bgem3-v2** (568M) | 위키·메일·도구 검색 크로스인코더 리랭크 | `http://127.0.0.1:8004` (`scripts/deploy/rerank-server.py`, user 유닛 `~/.config/systemd/user/deneb-rerank.service`) | `ai/rerank/client.go`, `domain/rankblend/blend.go`, 각 검색 표면 rerank 어댑터 (drop-in `DENEB_RERANK_URL`/`_MODEL`/`_FORCE`) | 2026-07-19 실배선 (#3992): 병합골드 P@1 83.7→87.1(+3.4pp)·p95 272ms. 검색 점수와 모델 raw score의 척도를 직접 섞지 않고 리랭커 순위만 정규화해 공통 블렌딩한다. GPU 요청은 비차단 단일-flight이며 바쁘거나 다운이면 기존 검색 순서를 유지하고 `/health` 통계로 busy·latency를 관찰한다. **nemotron-eval venv** 재사용(torch cu130 + transformers **4.51** — xprovence 원격코드가 transformers<5 필수 — + spacy `xx_sent_ud_sm`). fp16 ~1.2GB. Apache 폴백 `--model bge`(bge-reranker-v2-m3; xprovence는 CC BY-NC, 단일사용자 개인배치로 운영자 수용). 롤백 = 게이트웨이 drop-in `~/.deneb/rerank.conf` 삭제 + 재기동 |
+| **Chronos-2** (120M, Apache-2.0) | 시계열 예측 (`forecast` 도구 — 매출·재고·미수금 추이의 P10/중앙값/P90) | `http://127.0.0.1:8005` (`scripts/deploy/forecast-server.py`, user 유닛 `deneb-forecast.service`) | `ai/forecast/client.go`, `chat/tools/forecastops/` (게이트웨이 drop-in `DENEB_FORECAST_URL`) | 2026-09-06 도입. **srv4**. 제로샷 — 계열별 학습 없이 한 번의 forward pass. 결측(null) 자체 보간·다계열 배칭·covariate 지원. ↓ 상세 |
 | granite-embedding-311m / nomic-embed-text-v2-moe / BGE-M3 | 임베딩 (레거시/롤백) | BGE `:8001` | compaction 임베딩 폴백 경로 | `~/models/` 보관 |
 
 > **modelrole 기본값**: `gateway-go/internal/ai/modelrole/registry.go` — `DefaultVllmBaseURL = "http://127.0.0.1:8000/v1"`, `DefaultVllmModel = "gemma4"`. 역할(main/lightweight/fallback)별 실제 모델은 `~/.deneb/deneb.json` 의 provider/modelRole 설정이 결정한다. 코드는 이름을 하드코딩하지 않는다.
@@ -190,6 +191,82 @@ docker logs --tail 50 vibevoice-asr
 DENEB_ASR_LIVE=1 DENEB_ASR_AUDIO=/path/to.wav DENEB_ASR_URL=http://127.0.0.1:18013 \
   go test -run TestTranscribeAudio_Live ./internal/pipeline/chat/tools/
 ```
+
+---
+
+## Chronos-2 (시계열 예측 엔진) — 2026-09-06 도입
+
+### 무엇 / 왜
+
+- Amazon 의 120M 파라미터 시계열 파운데이션 모델 (Apache-2.0). **제로샷** — 계열마다 fit 하는
+  단계가 없고, 과거 숫자를 그대로 넣으면 한 번의 forward pass 로 미래 구간이 나온다. 상태를
+  들고 있지 않으므로 사이드카는 순수 함수처럼 동작한다.
+- Deneb 가 이걸 서빙하는 이유는 **에이전트가 이미 손에 쥔 숫자에 구간을 붙이기 위해서**다.
+  매출·재고·미수금·메일 건수 같은 계열은 groupware/solarflow/wiki 도구가 이미 뽑아 온다.
+  LLM 이 머릿속으로 못 하는 건 그 다음 — "다음 달이 얼마일 것 같은가"에 **P10/중앙값/P90**
+  을 붙이는 일이고, 그게 이 사이드카가 더하는 전부다.
+- Chronos-1 이 아니라 2 를 서빙하는 근거: **covariate 지원**(영업일수·계획 물량처럼 이미 아는
+  미래를 반영), **결측 네이티브 처리**(마감 안 된 달을 0 으로 메울 필요 없이 `null`),
+  **다변량/다계열 배칭**.
+
+### 서버 (상주)
+
+- 런처: `scripts/deploy/forecast-server.py` (레포 안), user 유닛 `deneb-forecast.service`,
+  설치 `scripts/systemd/setup-forecast.sh`. 포트 **8005**, 호스트 **srv4**(게이트웨이와 동일 노드 —
+  루프백이라 패브릭도 Wi-Fi 도 타지 않는다).
+- venv `~/venvs/chronos` (torch 2.12 cu130 + chronos-forecasting 2.3.1 + transformers 5.16).
+  가중치 `amazon/chronos-2` 456MB, 공용 HF 캐시.
+- **실측(2026-09-06, GLM-5.3 4노드 TP 서빙이 플릿 메모리를 쥔 상태)**: 상주 RSS **1.63GiB** ·
+  120점→14스텝 웜 **24–28ms** · **16계열 배치 51ms**. 배칭이 사실상 공짜라서 거래처별·품목별
+  스윕을 계열마다 따로 부를 이유가 없다 (도구 설명이 그렇게 유도한다).
+- 모델 천장(config.json): context **8192**점, 예측 `max_output_patches(64) × output_patch_size(16)`
+  = **1024**스텝. 사이드카 캡(32계열/4096점/256스텝)과 도구 캡(16계열/60스텝)은 그 아래이며,
+  응답 하나가 챗 턴에 들어갈 크기를 유지하려는 값이다.
+
+### API
+
+- `POST /forecast` (**OpenAI 비호환**): `{"series": [...] | [[...]], "horizon", "quantiles",
+  "past_covariates", "future_covariates"}` → `{"model", "horizon", "quantile_levels",
+  "series": [{"quantiles": [[step별 분위수]], "mean": [...]}], "elapsed_ms"}`.
+  `GET /health` → `{"status":"ok","model","device"}`.
+- 결측은 `null` 로 보낸다 — 0 으로 채우면 모델에게 "그 달 매출이 0 이었다"고 말하는 것이다.
+- covariate 는 **단일 계열 요청에만** 받는다 (배치 형식은 모든 계열이 같은 covariate 키를
+  가져야 하는데 그런 호출자가 아직 없다).
+
+### 코드 통합
+
+- `gateway-go/internal/ai/forecast/client.go` — 사이드카 클라이언트. `Series` 타입이 NaN 을
+  JSON `null` 로 마샬링해 결측을 그대로 전달한다. 400 응답의 검증 메시지는 **그대로 위로 올린다**
+  (에이전트가 자기 호출을 고칠 수 있는 유일한 단서).
+- `gateway-go/internal/pipeline/chat/tools/forecastops/` — `forecast` 도구. 업무 스토어를 직접
+  읽지 않는다: 계열은 호출자가 이미 뽑아 온 것이고, 이 패키지는 강제 변환(따옴표 숫자·null)과
+  가드, 그리고 한국어 읽을거리 조립만 한다.
+- **등록은 env 게이트**: `ToolForecastFromEnv()` 가 `DENEB_FORECAST_URL` 미설정 시 nil 을 돌려주고
+  `toolwire/core/register.go` 가 등록을 건너뛴다 — fleet/browser 와 같은 규칙(거절만 하는 표면을
+  에이전트에게 보이지 않는다). 사이드카가 없는 호스트에서 `forecast` 는 **존재하지 않는다**.
+- **deferred 도구**다. 예측은 의도적인 요청("다음 달 매출 얼마나 될까")이라 매 턴 wire 토큰을
+  낼 이유가 없다. 대신 `toolwire/deferred_discovery_test.go` 가 한국어 질의로 fetch_tools 가
+  이 도구를 실제로 찾아내는지 검사한다 — deferred 도구의 사망 원인 1위가 "설명이 트리거
+  어휘에서 멀어져 조용히 도달 불가"였기 때문(2026-08-29 감사).
+
+### 운영 명령
+
+```bash
+# 설치/재설치 (프로덕션 main 체크아웃에서)
+scripts/systemd/setup-forecast.sh
+# 상태
+systemctl --user status deneb-forecast
+curl -s http://127.0.0.1:8005/health     # {"status":"ok","model":"amazon/chronos-2",...}
+# 직접 호출
+curl -s -X POST http://127.0.0.1:8005/forecast -H 'Content-Type: application/json' \
+  -d '{"series":[10,12,11,14,13,16,15,18],"horizon":4}'
+# 로그
+journalctl --user -u deneb-forecast -n 50
+```
+
+**롤백**: 게이트웨이 drop-in(`~/.config/systemd/user/deneb-gateway.service.d/forecast.conf`) 삭제 +
+`systemctl --user daemon-reload` + 게이트웨이 재기동 → 도구가 사라진다. 사이드카는 남겨 둬도
+아무도 읽지 않는다.
 
 ---
 

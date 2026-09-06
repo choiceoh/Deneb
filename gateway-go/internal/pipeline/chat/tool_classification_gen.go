@@ -13,6 +13,7 @@ package chat
 var dryRunSafeTools = map[string]struct{}{
 	"code_search":    {},
 	"fetch_tools":    {},
+	"forecast":       {},
 	"grep":           {},
 	"read":           {},
 	"read_spillover": {},
@@ -33,6 +34,7 @@ var dryRunSafeTools = map[string]struct{}{
 // contacts left this list on 2026-08-29 together with the tool itself: it folded into `people`, which is NOT parallel-safe — its groupware leg enriches and can create 인물 wiki pages, so two same-turn calls could race the same page.
 var parallelSafeTools = map[string]struct{}{
 	"code_search":    {},
+	"forecast":       {},
 	"grep":           {},
 	"mail_archive":   {},
 	"polaris":        {},

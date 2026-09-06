@@ -239,6 +239,11 @@ devlib_start_gateway() {
   local sem_floor="${DENEB_WIKI_SEM_FLOOR:-0.44}"
   local sem_weight="${DENEB_WIKI_RRF_SEM_WEIGHT:-10}"
   local graph_weight="${DENEB_WIKI_RRF_GRAPH_WEIGHT:-3}"
+  # Same parity rule for the Chronos-2 forecast sidecar (setup-forecast.sh
+  # installs the matching production drop-in): this URL is what registers the
+  # `forecast` tool at all, so a dev gateway without it cannot live-test the
+  # tool and would report "no such tool" instead of a real failure.
+  local forecast_url="${DENEB_FORECAST_URL:-http://127.0.0.1:8005}"
 
   if [[ "$use_nohup" == "nohup" ]]; then
     DENEB_CONFIG_PATH="$config" \
@@ -249,6 +254,7 @@ devlib_start_gateway() {
     DENEB_WIKI_SEM_FLOOR="$sem_floor" \
     DENEB_WIKI_RRF_SEM_WEIGHT="$sem_weight" \
     DENEB_WIKI_RRF_GRAPH_WEIGHT="$graph_weight" \
+    DENEB_FORECAST_URL="$forecast_url" \
     nohup "$binary" --bind loopback --port "$port" > "$log" 2>&1 &
   else
     DENEB_CONFIG_PATH="$config" \
@@ -259,6 +265,7 @@ devlib_start_gateway() {
     DENEB_WIKI_SEM_FLOOR="$sem_floor" \
     DENEB_WIKI_RRF_SEM_WEIGHT="$sem_weight" \
     DENEB_WIKI_RRF_GRAPH_WEIGHT="$graph_weight" \
+    DENEB_FORECAST_URL="$forecast_url" \
     "$binary" --bind loopback --port "$port" > "$log" 2>&1 &
   fi
   DEVLIB_PID=$!

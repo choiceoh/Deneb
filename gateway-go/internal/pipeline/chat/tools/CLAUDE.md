@@ -27,6 +27,11 @@
   무엇도 import하지 않는다. 구 `contacts`/`org` 툴을 대체한다(2026-08-29).
 - `artifact/`는 chart/diagram/file/media 결과물, `document/`는 문서 추출,
   `schedule/`은 calendar/todo, `mailarchive/`는 archive 조회 구현이다.
+- `forecastops/`는 `forecast` — Chronos-2 사이드카(`internal/ai/forecast`)에
+  숫자 계열을 넘겨 P10/중앙값/P90 구간을 받는다. 이 패키지는 업무 스토어를
+  직접 읽지 않는다: 계열은 호출자가 이미 뽑아 온 것이고, 여기가 더하는 건
+  구간뿐이다. `ToolForecastFromEnv`가 `DENEB_FORECAST_URL` 미설정 시 nil을
+  돌려줘 등록 자체가 건너뛰어진다(거절만 하는 표면을 노출하지 않는다).
 - `groupwareops/`는 Amaranth10 전자결재·게시판·ERP 원장 조회와
   people wiki/org enrichment를 소유한다.
 - `skilltool/`과 `lifecycletool/`이 skill 조회·수명주기 구현을 소유하며

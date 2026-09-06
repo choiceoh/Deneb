@@ -4,6 +4,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/filesystem"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/forecastops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/surface"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/schema"
 )
@@ -179,6 +180,26 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 			Description: "시장 시세 스냅샷 — 원/달러 환율·코스피·WTI 유가·구리(LME) 현재가와 전일 대비 등락. '환율 지금 얼마'·'구리 시세 어때' 류 질문에 사용. 인자 없음, 10분 캐시.",
 			InputSchema: schema.MarketToolSchema(),
 			Fn:          surface.ToolMarket(surface.MarketSummaryFunc(deps.MarketSummary)),
+			Deferred:    true,
+		})
+	}
+
+	// Forecast: the Chronos-2 sidecar (scripts/deploy/forecast-server.py) turns a
+	// series the agent already pulled — ERP 매출, 재고, 미수금, 메일 건수 — into a
+	// horizon with calibrated P10/P50/P90. Deferred: forecasting is a deliberate
+	// ask ("다음 달 얼마나 될까"), not something every turn pays wire tokens for.
+	// nil = DENEB_FORECAST_URL unset, and the tool does not exist at all.
+	if fn := forecastops.ToolForecastFromEnv(); fn != nil {
+		registry.RegisterTool(toolport.ToolDef{
+			Name: "forecast",
+			Description: "시계열 수치 예측 — \"다음 달 매출 얼마나 될까\"·\"이 추세면 재고 언제 소진되나\"·\"내년 상반기 전망\". " +
+				"과거 실측치(values)를 시간순으로 주면 horizon 스텝 앞까지 P10/중앙값/P90 구간으로 돌려준다. " +
+				"스텝 간격은 입력 간격을 그대로 따르고(월별→개월), 결측은 null로 두면 모델이 메운다. " +
+				"거래처별·품목별처럼 계열이 여럿이면 series+labels로 한 번에 (계열마다 따로 부르지 말 것). " +
+				"영업일수·계획 물량처럼 이미 아는 미래가 있으면 future_covariates로 반영시킨다. " +
+				"숫자만 보는 통계 모델이라 확정된 계약·공시는 모른다 — 그건 네가 결과에 얹어 해석하라. 그림이 필요하면 chart로 이어 그린다.",
+			InputSchema: schema.ForecastToolSchema(),
+			Fn:          fn,
 			Deferred:    true,
 		})
 	}

@@ -2356,6 +2356,79 @@ func CodeSearchToolSchema() map[string]any {
 	}
 }
 
+func ForecastToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"future_covariates": map[string]any{
+				"type":        "object",
+				"description": "미래 구간에 대해 이미 아는 설명변수 {이름: 숫자배열}. 길이는 horizon과 같아야 한다. 확정된 영업일수·계획 물량처럼 '이미 아는 미래'를 반영시킬 때 쓴다.",
+				"additionalProperties": map[string]any{
+					"type": "array",
+					"items": map[string]any{
+						"type": "number",
+					},
+				},
+			},
+			"horizon": map[string]any{
+				"type":        "integer",
+				"description": "몇 스텝 앞까지 예측할지. 스텝 간격은 입력 데이터의 간격을 그대로 따른다 — 월별을 넣으면 개월, 일별을 넣으면 일. 기본 12.",
+				"default":     12,
+				"minimum":     1,
+				"maximum":     60,
+			},
+			"labels": map[string]any{
+				"type":        "array",
+				"description": "series 각 계열의 이름 (예: [\"동진전기\", \"한빛솔라\"]). 순서가 series와 같아야 한다.",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"past_covariates": map[string]any{
+				"type":        "object",
+				"description": "예측 대상과 함께 움직인 설명변수의 과거값 {이름: 숫자배열}. 길이는 values와 같아야 한다. 단일 계열(values)에만 쓸 수 있다. 예: 매출을 예측할 때 {\"영업일수\": [...]}.",
+				"additionalProperties": map[string]any{
+					"type": "array",
+					"items": map[string]any{
+						"type": "number",
+					},
+				},
+			},
+			"quantiles": map[string]any{
+				"type":        "array",
+				"description": "돌려받을 분위수. 기본 [0.1, 0.5, 0.9] = P10/중앙값/P90. 각각 0과 1 사이, 최대 9개. 보수적으로 잡아야 하면 [0.05, 0.5, 0.95].",
+				"items": map[string]any{
+					"type": "number",
+				},
+			},
+			"series": map[string]any{
+				"type":        "array",
+				"description": "여러 계열을 한 번에 (거래처별 매출, 품목별 재고 등). 숫자 배열의 배열, 최대 16개. 한 번의 호출로 전부 예측하므로 계열마다 따로 부르지 말 것. labels로 이름을 붙인다.",
+				"items": map[string]any{
+					"type": "array",
+					"items": map[string]any{
+						"type": "number",
+					},
+				},
+			},
+			"step_labels": map[string]any{
+				"type":        "array",
+				"description": "예측 스텝의 이름 (예: [\"10월\", \"11월\", \"12월\"]). 생략하면 +1, +2 …로 표시된다.",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"values": map[string]any{
+				"type":        "array",
+				"description": "과거 실측치를 시간 오름차순(오래된 값 먼저)으로. 최소 4개, 12개 이상이면 주/월 주기까지 잡는다. 값이 없는 구간은 0이 아니라 null로 둘 것 — 모델이 결측으로 알아서 처리한다. 여러 계열을 한 번에 예측하려면 series를 쓴다.",
+				"items": map[string]any{
+					"type": "number",
+				},
+			},
+		},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.json.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {
