@@ -53,6 +53,9 @@ warn() {
 
 http_code() { curl -s -o /dev/null -m 8 -w '%{http_code}' "$1" 2>/dev/null; }
 on_srv1() { ssh -o BatchMode=yes -o ConnectTimeout=8 srv1 "$1" 2>/dev/null; }
+# Fleet peers are addressed over the 200G fabric, not tailnet: the uplink is
+# Wi-Fi on every node, so a probe that rides it measures the wrong thing.
+on_node() { ssh -o BatchMode=yes -o ConnectTimeout=8 "$1" "$2" 2>/dev/null; }
 
 # check_http URL DESC DOC — claim: URL answers 200.
 check_http() {
@@ -193,22 +196,55 @@ check_srv1 'ss -ltn 2>/dev/null | grep -q ":18800 " && echo FOUND || echo NONE' 
     "srv1 :18800 리스너 존재 — wormhole 이중 기동(설정 드리프트 위험)" \
     "sidecar-models.md (srv1 구 인스턴스는 disable 됨)"
 
+echo "== 플릿 노드 (release-and-deploy.md '플릿 노드') =="
+
+# Four DGX Sparks, all reaching the internet over Wi-Fi. Two claims are checked:
+# the peer answers on the fabric, and its Wi-Fi power save is off. Power save ON
+# is a real FAIL — 2026-09-06 measured 29 uplink outages in 14 days on the one
+# node that had it, versus zero on the nodes that did not, and srv3/srv4 had both
+# silently missed the 2026-05-05 fleet fix because srv3 was not in any doc.
+# ★ The probe greps case-insensitively: iw prints "Power save: off" with a
+# capital P, and a case-sensitive grep reports every node as misconfigured.
+for node in 10.10.10.1 10.10.10.2 10.10.10.3; do
+    if [ "$(on_node "$node" 'echo OK')" != "OK" ]; then
+        warn "플릿 노드 $node 패브릭 ssh 프로브 불가 — 스킵 (노드 정지 또는 키 문제)"
+        continue
+    fi
+    pass "플릿 노드 $node 패브릭 도달"
+    got="$(on_node "$node" 'iw dev $(ls /sys/class/net | grep ^wl | head -1) get power_save 2>/dev/null | grep -qi "power save: off" && echo FOUND || echo NONE')"
+    case "$got" in
+    FOUND) pass "$node Wi-Fi 파워세이브 off" ;;
+    NONE) fail "$node Wi-Fi 파워세이브 ON — 하루 여러 번 링크가 멎는다" \
+        "release-and-deploy.md '플릿 노드' (wifi-powersave-off.conf)" ;;
+    *) warn "프로브 결과 불명(수동 확인): $node 파워세이브" ;;
+    esac
+done
+# Local probe, same three-way protocol as the remote ones: an unreadable probe
+# (no iw, renamed interface, CI runner with no wireless) is a failed PROBE, not
+# a failed CLAIM — it must never resolve to PASS or FAIL. The first version of
+# this check had no such branch and turned every iw-less host into a red run.
+ps_srv4="$(iw dev wlP9s9 get power_save 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+case "$ps_srv4" in
+*"power save: off"*) pass "srv4 Wi-Fi 파워세이브 off" ;;
+*"power save: on"*) fail "srv4 Wi-Fi 파워세이브 ON — 게이트웨이 호스트의 업링크가 끊긴다" \
+    "release-and-deploy.md '플릿 노드' (wifi-powersave-off.conf)" ;;
+*) warn "프로브 결과 불명(수동 확인): srv4 파워세이브 — iw 미설치이거나 인터페이스명이 다름" ;;
+esac
+
 echo "== GPU 보조 사이드카 (sidecar-models.md 호스트 배치표) =="
 
 # Sidecar outages degrade by design (tesseract fallback / clean error), so
 # these are WARN — real, but not doc drift.
-[ "$(http_code http://100.105.145.6:18011/health)" = "200" ] \
-    && pass "PaddleOCR-VL @srv1:18011" \
-    || warn "PaddleOCR-VL @srv1:18011 무응답 — OCR 은 tesseract 폴백으로 저하 동작 (sidecar-models.md)"
-[ "$(http_code http://100.105.145.6:18013/health)" = "200" ] \
-    && pass "VibeVoice-ASR @srv1:18013" \
-    || warn "VibeVoice-ASR @srv1:18013 무응답 — 오디오 전사가 명확한 에러로 실패 (sidecar-models.md)"
-[ "$(http_code http://100.125.220.117:8000/health)" = "200" ] \
-    && pass "dsv4 엔진 @srv2:8000" \
-    || warn "dsv4 엔진 @srv2:8000 무응답 — 로컬 역할·폴백 체인 영향 (sidecar-models.md·model-roles.md)"
-[ "$(http_code http://100.105.145.6:8000/health)" = "200" ] \
-    && pass "qwen3.6 엔진 @srv1:8000" \
-    || warn "qwen3.6 엔진 @srv1:8000 무응답 — dsv4 폴백·로컬 역할 영향 (sidecar-models.md·model-roles.md)"
+# 2026-09-06: OCR moved srv1 -> srv3 (fabric), and srv1's other sidecars were
+# stopped by the operator. Checks that probe an intentionally-stopped service
+# warn forever, which is how a warning list stops being read — so the retired
+# ones (VibeVoice @srv1:18013, qwen3.6 @srv1:8000) are gone rather than muted.
+[ "$(http_code http://10.10.10.3:18011/health)" = "200" ] \
+    && pass "PaddleOCR-VL @srv3:18011" \
+    || warn "PaddleOCR-VL @srv3:18011 무응답 — OCR 은 tesseract 폴백으로 저하 동작 (sidecar-models.md)"
+[ "$(http_code http://10.10.10.2:8000/health)" = "200" ] \
+    && pass "로컬 엔진 @srv2:8000" \
+    || warn "로컬 엔진 @srv2:8000 무응답 — 로컬 역할·폴백 체인 영향 (sidecar-models.md·model-roles.md)"
 
 echo "== 메일 엣지 (sidecar-models.md 호스트 배치표 — srv4 메일서버) =="
 

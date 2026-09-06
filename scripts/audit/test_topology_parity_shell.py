@@ -50,6 +50,8 @@ printf 'curl %s\n' "$*" >> "$FAKE_CALLS"
 case "$*" in
   *127.0.0.1:18789*) code="${GATEWAY_CODE:-200}" ;;
   *127.0.0.1:18800*) code="${WORMHOLE_CODE:-200}" ;;
+  *10.10.10.3:18011*) code="${OCR_CODE:-200}" ;;
+  *10.10.10.2:8000*) code="${DSV4_CODE:-200}" ;;
   *100.105.145.6:18011*) code="${OCR_CODE:-200}" ;;
   *100.105.145.6:18013*) code="${ASR_CODE:-200}" ;;
   *100.105.145.6:8000*) code="${QWEN_CODE:-200}" ;;
@@ -75,7 +77,10 @@ fi
         write_executable(self.bin / "ssh", r"""
 #!/usr/bin/env bash
 printf 'ssh %s\n' "$*" >> "$FAKE_CALLS"
-if [[ "$*" == *"srv1 echo OK"* ]]; then
+if [[ "$*" == *10.10.10.[123]* ]]; then
+  [[ "${FAKE_FLEET_REACHABLE:-1}" == 1 ]] || exit 255
+  if [[ "$*" == *power_save* ]]; then printf '%s\n' "${FAKE_PS_NODES:-FOUND}"; else printf 'OK\n'; fi
+elif [[ "$*" == *"srv1 echo OK"* ]]; then
   [[ "${FAKE_SRV1_REACHABLE:-1}" == 1 ]] && printf 'OK\n'
 elif [[ "$*" == *actions-runner-deneb* ]]; then
   printf '%s\n' "${OLD_RUNNER_PROBE-NONE}"
@@ -122,6 +127,12 @@ fi
 shift
 exec "$@"
 """)
+        write_executable(self.bin / "iw", r"""
+#!/usr/bin/env bash
+printf 'iw %s\n' "$*" >> "$FAKE_CALLS"
+[[ "${FAKE_IW_MISSING:-0}" == 1 ]] && exit 127
+printf 'Power save: %s\n' "${FAKE_PS_SRV4:-off}"
+""")
         write_executable(self.bin / "nc", r"""
 #!/usr/bin/env bash
 cat >/dev/null
@@ -154,6 +165,9 @@ printf 'Signer #1 certificate SHA-256 digest: %s\n' "${CERT_GOT:-AABBCC}"
             "LMTP_ACTIVE": "1",
             "RUNNER_ACTIVE": "1",
             "FAKE_SRV1_REACHABLE": "1",
+            "FAKE_FLEET_REACHABLE": "1",
+            "FAKE_PS_NODES": "FOUND",
+            "FAKE_PS_SRV4": "off",
             "OLD_RUNNER_PROBE": "NONE",
             "OLD_WORMHOLE_PROBE": "NONE",
             "FETCH_OK": "1",
@@ -312,10 +326,50 @@ printf 'Signer #1 certificate SHA-256 digest: %s\n' "${CERT_GOT:-AABBCC}"
             RULE_SIZE="25000",
         )
         self.assertEqual(proc.returncode, 1)
-        self.assertEqual(self.result(proc), (10, 10))
+        # 8, not 10: the two retired sidecar probes (VibeVoice @srv1:18013,
+        # qwen3.6 @srv1:8000) were removed rather than left to warn forever.
+        self.assertEqual(self.result(proc), (10, 8))
         self.assertIn("FAIL 항목은", proc.stderr)
         self.assertIn("maddy DATA 거부 인입=2 아카이브=1", proc.stdout)
         self.assertIn("rules.md 25000B > 20KB", proc.stdout)
+
+
+    def test_powersave_on_fails_on_every_node_with_the_doc_cited(self) -> None:
+        # The claim these guard is "every fleet node has Wi-Fi power save off".
+        # 2026-09-06: srv3 and srv4 had silently missed the fleet-wide fix and
+        # were the only nodes dropping their uplink several times a day.
+        self.setup_release_surface()
+        proc = self.invoke(FAKE_PS_NODES="NONE", FAKE_PS_SRV4="on")
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(self.result(proc), (4, 0))
+        self.assertIn("10.10.10.1 Wi-Fi 파워세이브 ON", proc.stdout)
+        self.assertIn("srv4 Wi-Fi 파워세이브 ON", proc.stdout)
+        self.assertIn("wifi-powersave-off.conf", proc.stdout)
+
+    def test_missing_iw_is_a_failed_probe_not_a_failed_claim(self) -> None:
+        # A host without iw (or with a renamed interface) must not go red — the
+        # probe failed, the claim was never measured.
+        self.setup_release_surface()
+        proc = self.invoke(FAKE_IW_MISSING="1")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(self.result(proc), (0, 1))
+        self.assertIn("프로브 결과 불명(수동 확인): srv4 파워세이브", proc.stdout)
+        self.assertNotIn("PASS  srv4 Wi-Fi 파워세이브 off", proc.stdout)
+
+    def test_unreachable_fleet_node_warns_and_skips_its_powersave_claim(self) -> None:
+        self.setup_release_surface()
+        proc = self.invoke(FAKE_FLEET_REACHABLE="0")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(self.result(proc), (0, 3))
+        self.assertEqual(proc.stdout.count("패브릭 ssh 프로브 불가 — 스킵"), 3)
+        self.assertNotIn("Wi-Fi 파워세이브 ON", proc.stdout)
+
+    def test_unknown_node_powersave_token_is_a_warning(self) -> None:
+        self.setup_release_surface()
+        proc = self.invoke(FAKE_PS_NODES="MAYBE")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(self.result(proc), (0, 3))
+        self.assertEqual(proc.stdout.count("프로브 결과 불명(수동 확인): 10.10.10."), 3)
 
 
 if __name__ == "__main__":
