@@ -45,7 +45,11 @@ const (
 	sourceCheckCandidates   = 20
 	sourceCheckPageChars    = 12000
 	sourceCheckExcerptChars = 1500
-	sourceCheckJudgeTokens  = 900
+	// Roomy on purpose: the lightweight role may be a cloud twin that ignores
+	// thinking-off shaping and spends the budget reasoning first (live run
+	// 2026-09-06: 900 tokens came back as truncated JSON).
+	sourceCheckJudgeTokens         = 2048
+	sourceCheckJudgeFallbackTokens = 1200
 )
 
 // SourceCheckInput is the tool's argument shape.
@@ -90,6 +94,12 @@ var (
 	sourceFetchFn  urlFetchDetailedFunc = webFetchURLDetailed
 	sourceJudgeFn                       = func(ctx context.Context, system, user string, maxTokens int) (string, error) {
 		return pilot.CallLocalLLM(ctx, system, user, maxTokens)
+	}
+	// The tiny role is a no-think model by configuration, so when the primary
+	// judge answers with reasoning instead of JSON (or nothing), this one
+	// answers the same prompt plainly.
+	sourceJudgeFallbackFn = func(ctx context.Context, system, user string, maxTokens int) (string, error) {
+		return pilot.CallTinyLLM(ctx, system, user, maxTokens)
 	}
 )
 
@@ -213,7 +223,10 @@ func runSourceCheck(ctx context.Context, cache *FetchCache, localAI *LocalAIExtr
 
 	// 5. Judge: one call over all excerpts. Stances come from the model; the
 	//    verdict does not (see aggregateVerdict).
-	summary, err := judgeSources(ctx, in.Claim, res.Sources)
+	summary, note, err := judgeSources(ctx, in.Claim, res.Sources)
+	if note != "" {
+		res.Notes = append(res.Notes, note)
+	}
 	if err != nil {
 		res.Notes = append(res.Notes, "판정 모델 실패 — 발췌만 반환: "+err.Error())
 	}
@@ -263,22 +276,28 @@ type judgeReply struct {
 	Summary string `json:"summary"`
 }
 
-func judgeSources(ctx context.Context, claim string, sources []SourceCheckSource) (string, error) {
+// judgeSources asks the judge for per-source stances. Returns the judge's
+// one-line summary, a note when the fallback judge had to answer, and an error
+// only when neither judge produced parseable JSON (stances then stay unclear).
+func judgeSources(ctx context.Context, claim string, sources []SourceCheckSource) (summary, note string, err error) {
 	if len(sources) == 0 {
-		return "", nil
+		return "", "", nil
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "주장: %s\n\n", claim)
 	for i, s := range sources {
 		fmt.Fprintf(&b, "[%d] %s\n%s\n\n", i+1, s.URL, s.excerpt)
 	}
-	raw, err := sourceJudgeFn(ctx, sourceJudgeSystem, b.String(), sourceCheckJudgeTokens)
-	if err != nil {
-		return "", err
-	}
-	var reply judgeReply
-	if err := json.Unmarshal([]byte(extractJSONObject(raw)), &reply); err != nil {
-		return "", fmt.Errorf("판정 응답이 JSON이 아님: %w", err)
+	user := b.String()
+	reply, perr := parseJudgeReply(sourceJudgeFn(ctx, sourceJudgeSystem, user, sourceCheckJudgeTokens))
+	if perr != nil {
+		// Primary judge reasoned itself out of budget or returned prose — the
+		// no-think tiny role gets the same prompt before we give up.
+		reply, err = parseJudgeReply(sourceJudgeFallbackFn(ctx, sourceJudgeSystem, user, sourceCheckJudgeFallbackTokens))
+		if err != nil {
+			return "", "", fmt.Errorf("primary: %v; fallback: %w", perr, err)
+		}
+		note = "판정: 1차 모델 응답 불량(" + perr.Error() + ") → tiny 롤 폴백으로 판정"
 	}
 	for _, js := range reply.Sources {
 		i := js.N - 1
@@ -299,7 +318,23 @@ func judgeSources(ctx context.Context, claim string, sources []SourceCheckSource
 			}
 		}
 	}
-	return strings.TrimSpace(reply.Summary), nil
+	return strings.TrimSpace(reply.Summary), note, nil
+}
+
+// parseJudgeReply turns a raw judge answer into the reply struct, treating a
+// blank answer and non-JSON alike as "no verdict from this judge".
+func parseJudgeReply(raw string, callErr error) (judgeReply, error) {
+	var reply judgeReply
+	if callErr != nil {
+		return reply, callErr
+	}
+	if strings.TrimSpace(raw) == "" {
+		return reply, fmt.Errorf("빈 응답")
+	}
+	if err := json.Unmarshal([]byte(extractJSONObject(raw)), &reply); err != nil {
+		return reply, fmt.Errorf("판정 응답이 JSON이 아님: %w", err)
+	}
+	return reply, nil
 }
 
 func normalizeStance(s string) string {

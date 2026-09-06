@@ -19,12 +19,16 @@ func sourceEnvelope(body string) string {
 // restores them after the test.
 func stubSourceCheck(t *testing.T, pages map[string]string, judge func(user string) (string, error)) {
 	t.Helper()
-	origSearch, origFetch, origJudge, origRerank := sourceSearchFn, sourceFetchFn, sourceJudgeFn, currentSearchReranker()
+	origSearch, origFetch, origJudge, origFallback, origRerank := sourceSearchFn, sourceFetchFn, sourceJudgeFn, sourceJudgeFallbackFn, currentSearchReranker()
 	t.Cleanup(func() {
-		sourceSearchFn, sourceFetchFn, sourceJudgeFn = origSearch, origFetch, origJudge
+		sourceSearchFn, sourceFetchFn, sourceJudgeFn, sourceJudgeFallbackFn = origSearch, origFetch, origJudge, origFallback
 		SetSearchReranker(origRerank)
 	})
 	SetSearchReranker(nil)
+	// Tests that want the fallback set it explicitly; by default it fails too.
+	sourceJudgeFallbackFn = func(context.Context, string, string, int) (string, error) {
+		return "", errors.New("fallback not wired")
+	}
 	sourceSearchFn = func(_ context.Context, q string, _ int) (string, []searchResult, string, string, error) {
 		var out []searchResult
 		for u := range pages {
@@ -169,6 +173,24 @@ func TestSourceCheckJudgeFailureKeepsTheEvidence(t *testing.T) {
 	}
 	if len(res.Notes) == 0 || !strings.Contains(res.Notes[0], "판정 모델 실패") {
 		t.Errorf("failure must be reported in notes: %v", res.Notes)
+	}
+}
+
+func TestSourceCheckEmptyPrimaryJudgeFallsBackToTinyRole(t *testing.T) {
+	// Live run 2026-09-06: the lightweight cloud twin spent its budget reasoning and
+	// returned truncated JSON. The no-think tiny role then answers the same prompt.
+	quote := "인증 취득 사실이 공고됐다."
+	pages := map[string]string{"https://a.example/p": longBody(quote)}
+	stubSourceCheck(t, pages, func(string) (string, error) { return "", nil }) // primary: blank
+	sourceJudgeFallbackFn = func(_ context.Context, _ string, user string, _ int) (string, error) {
+		return judgeByURL(user, map[string]string{"https://a.example/p": "supports"}, map[string]string{"https://a.example/p": quote})
+	}
+	res := runSourceCheck(context.Background(), NewFetchCache(), nil, nil, SourceCheckInput{Claim: "인증을 취득했다"})
+	if res.Verdict != VerdictSupported || !res.Sources[0].Verbatim {
+		t.Fatalf("fallback verdict not applied: %+v", res)
+	}
+	if len(res.Notes) != 1 || !strings.Contains(res.Notes[0], "tiny 롤 폴백") {
+		t.Errorf("fallback must be noted: %v", res.Notes)
 	}
 }
 
