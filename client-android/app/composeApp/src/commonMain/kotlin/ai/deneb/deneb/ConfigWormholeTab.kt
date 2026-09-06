@@ -12,7 +12,7 @@ import ai.deneb.ui.denebHint
 import ai.deneb.ui.icons.outlined.Bolt
 import ai.deneb.ui.icons.outlined.CloudOff
 import ai.deneb.ui.settings.SettingsCard
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -67,6 +67,7 @@ internal fun WormholeTab(client: DenebGatewayClient) {
     var failed by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var rotating by remember { mutableStateOf<WormholeModelOut?>(null) }
+    var removing by remember { mutableStateOf<WormholeModelOut?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun load() {
@@ -173,6 +174,19 @@ internal fun WormholeTab(client: DenebGatewayClient) {
                                         // Cloud models carry an upstream key → tappable to rotate it.
                                         // Local models have none.
                                         onClick = if (!m.local) ({ if (!busy) rotating = m }) else null,
+                                        // Long-press removes the entry. Offered only for models that
+                                        // live in the config file: a SparkFleet-discovered one is not
+                                        // written there and would be back on the next poll.
+                                        onLongClick = if (m.source != "fleet") {
+                                            {
+                                                if (!busy) {
+                                                    wormholeHaptics.longPress()
+                                                    removing = m
+                                                }
+                                            }
+                                        } else {
+                                            null
+                                        },
                                         divider = i < s.models.lastIndex,
                                     )
                                 }
@@ -200,6 +214,25 @@ internal fun WormholeTab(client: DenebGatewayClient) {
                     val r = client.setWormholeKey(m.name, key)
                     if (r?.valid == true) load() // refresh keyHealth — now "ok"
                     r
+                },
+            )
+        }
+        removing?.let { m ->
+            WormholeRemoveDialog(
+                modelName = m.name,
+                onDismiss = { removing = null },
+                onConfirm = {
+                    if (!busy) {
+                        scope.launch {
+                            busy = true
+                            client.removeWormholeModel(m.name)
+                            busy = false
+                            removing = null
+                            // Reload rather than trusting the call: the list must show
+                            // the config that was actually written.
+                            load()
+                        }
+                    }
                 },
             )
         }
@@ -234,6 +267,7 @@ private fun WormholeModelRow(
     meta: String,
     keyHealth: String,
     onClick: (() -> Unit)?,
+    onLongClick: (() -> Unit)?,
     divider: Boolean,
 ) {
     val hairline = denebHairline()
@@ -252,7 +286,19 @@ private fun WormholeModelRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(
+                // combinedClickable, not clickable: a row with no tap action still
+                // has to take a long press (a local model has no key to rotate but
+                // can still be removed).
+                if (onClick != null || onLongClick != null) {
+                    Modifier.combinedClickable(
+                        onClick = onClick ?: {},
+                        onLongClick = onLongClick,
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .drawBehind {
                 if (divider) {
                     val stroke = 1.dp.toPx()
@@ -365,4 +411,39 @@ private fun keyHealthKo(kh: String): String = when (kh) {
     "unreachable" -> "연결 불가"
     "unchecked" -> "확인 전"
     else -> kh
+}
+
+/** Long-press confirmation for removing a configured wormhole model. Naming the
+ *  model in the body (not just the title) is deliberate — this is reached by a
+ *  long press, which is easy to land on the wrong row. */
+@Composable
+private fun WormholeRemoveDialog(
+    modelName: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val haptics = rememberHaptics()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("모델 제거", style = DenebType.rowTitleStrong) },
+        text = {
+            Text(
+                "웜홀 설정에서 “$modelName” 을 지웁니다. 이 이름을 가리키던 fallback과 auto 후보도 함께 정리됩니다.",
+                style = DenebType.body,
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    // Destructive decision → reject(), per the house rule that a
+                    // dialog with a cancel button decides at its confirm button.
+                    haptics.reject()
+                    onConfirm()
+                },
+            ) {
+                Text("제거", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+    )
 }

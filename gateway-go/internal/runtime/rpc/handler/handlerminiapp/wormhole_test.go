@@ -259,3 +259,111 @@ func writeWHConfig(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
+
+func removeModelOK(t *testing.T, cfgPath, model string) bool {
+	t.Helper()
+	h := WormholeMethods(WormholeDeps{ConfigPath: cfgPath})["miniapp.wormhole.remove_model"]
+	return h(authedCtx(), reqWith(t, "miniapp.wormhole.remove_model", map[string]any{"model": model})).OK
+}
+
+func readWHConfig(t *testing.T, cfgPath string) map[string]any {
+	t.Helper()
+	b, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+func TestWormholeRemoveModel_DropsEntryAndPreservesTheRest(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := dir + "/config.json"
+	writeWHConfig(t, cfgPath, `{"token":"t","models":[
+		{"name":"keep","url":"https://x/v1","key":"sekret","unknownFuture":42},
+		{"name":"drop","url":"https://y/v1"}
+	]}`)
+
+	if !removeModelOK(t, cfgPath, "drop") {
+		t.Fatal("remove_model failed")
+	}
+
+	cfg := readWHConfig(t, cfgPath)
+	models, _ := cfg["models"].([]any)
+	if len(models) != 1 {
+		t.Fatalf("models = %v, want only the kept entry", cfg["models"])
+	}
+	kept, _ := models[0].(map[string]any)
+	if kept["name"] != "keep" {
+		t.Fatalf("wrong entry survived: %v", kept)
+	}
+	// The entry is rewritten as raw JSON precisely so secrets and fields this
+	// build does not model survive the edit.
+	if kept["key"] != "sekret" {
+		t.Error("upstream key was NOT preserved through remove_model")
+	}
+	if kept["unknownFuture"] != float64(42) {
+		t.Error("an unmodelled field was dropped on rewrite")
+	}
+	if cfg["token"] != "t" {
+		t.Error("a top-level field was dropped on rewrite")
+	}
+}
+
+func TestWormholeRemoveModel_CleansUpReferences(t *testing.T) {
+	// A route pointed at a model that no longer exists is worse than the model
+	// being there: auto would hand out a dead name, and a fallback would fail
+	// over into nothing.
+	dir := t.TempDir()
+	cfgPath := dir + "/config.json"
+	writeWHConfig(t, cfgPath, `{"auto":["drop","keep"],"models":[
+		{"name":"keep","url":"https://x/v1","fallback":"drop"},
+		{"name":"other","url":"https://z/v1","fallback":"keep"},
+		{"name":"drop","url":"https://y/v1"}
+	]}`)
+
+	if !removeModelOK(t, cfgPath, "drop") {
+		t.Fatal("remove_model failed")
+	}
+
+	cfg := readWHConfig(t, cfgPath)
+	auto, _ := cfg["auto"].([]any)
+	if len(auto) != 1 || auto[0] != "keep" {
+		t.Fatalf("auto = %v, want the removed name dropped", cfg["auto"])
+	}
+	models, _ := cfg["models"].([]any)
+	byName := map[string]map[string]any{}
+	for _, m := range models {
+		e, _ := m.(map[string]any)
+		byName[e["name"].(string)] = e
+	}
+	if _, has := byName["keep"]["fallback"]; has {
+		t.Error("a fallback pointing at the removed model was left behind")
+	}
+	if byName["other"]["fallback"] != "keep" {
+		t.Error("an unrelated fallback was disturbed")
+	}
+}
+
+func TestWormholeRemoveModel_RefusesWhatIsNotInTheFile(t *testing.T) {
+	// SparkFleet-discovered models appear in the list but not in the config, so
+	// "removing" one has to fail loudly instead of reporting a success that the
+	// next status poll undoes.
+	dir := t.TempDir()
+	cfgPath := dir + "/config.json"
+	writeWHConfig(t, cfgPath, `{"models":[{"name":"keep","url":"https://x/v1"}]}`)
+
+	if removeModelOK(t, cfgPath, "discovered-by-fleet") {
+		t.Fatal("remove_model reported success for a model it cannot remove")
+	}
+	if removeModelOK(t, cfgPath, "  ") {
+		t.Fatal("remove_model accepted a blank name")
+	}
+	cfg := readWHConfig(t, cfgPath)
+	if models, _ := cfg["models"].([]any); len(models) != 1 {
+		t.Fatalf("a refused removal changed the file: %v", cfg["models"])
+	}
+}

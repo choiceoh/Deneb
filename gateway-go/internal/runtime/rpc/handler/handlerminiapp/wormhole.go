@@ -94,9 +94,10 @@ func WormholeMethods(deps WormholeDeps) map[string]rpcutil.HandlerFunc {
 		}
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.wormhole.status":      wormholeStatus(deps),
-		"miniapp.wormhole.set_feature": wormholeSetFeature(deps),
-		"miniapp.wormhole.set_key":     wormholeSetKey(deps),
+		"miniapp.wormhole.status":       wormholeStatus(deps),
+		"miniapp.wormhole.set_feature":  wormholeSetFeature(deps),
+		"miniapp.wormhole.set_key":      wormholeSetKey(deps),
+		"miniapp.wormhole.remove_model": wormholeRemoveModel(deps),
 	}
 }
 
@@ -498,4 +499,117 @@ func modelIsLocal(override *bool, rawURL string) bool {
 		return false
 	}
 	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
+}
+
+// wormholeRemoveModel deletes one configured model entry. The native client
+// reaches it by long-pressing a row, so the guards matter more than usual:
+//
+//   - Only entries that live in the file can go. A SparkFleet-discovered model
+//     is not written there, so "removing" one would look like it worked and be
+//     back on the next status poll.
+//   - References are cleaned up with it: the name is dropped from `auto`, and a
+//     `fallback` pointing at it is cleared. Leaving either behind aims a route
+//     at a model that no longer exists.
+//
+// The file is edited as raw JSON, never round-tripped through whConfig: entries
+// carry an upstream `key` and fields this build has never heard of, and
+// re-encoding a typed view would silently drop them.
+func wormholeRemoveModel(deps WormholeDeps) rpcutil.HandlerFunc {
+	type params struct {
+		Model string `json:"model"`
+	}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		name := strings.TrimSpace(p.Model)
+		if name == "" {
+			return rpcerr.MissingParam("model").Response(req.ID)
+		}
+		raw, err := os.ReadFile(deps.ConfigPath)
+		if err != nil {
+			return rpcerr.WrapUnavailable("wormhole config read failed", err).Response(req.ID)
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			return rpcerr.WrapUnavailable("wormhole config parse failed", err).Response(req.ID)
+		}
+		var models []json.RawMessage
+		if err := json.Unmarshal(fields["models"], &models); err != nil {
+			return rpcerr.WrapUnavailable("wormhole models parse failed", err).Response(req.ID)
+		}
+
+		kept := make([]json.RawMessage, 0, len(models))
+		removed := false
+		clearedFallback := make([]string, 0, 2)
+		for _, entry := range models {
+			var head struct {
+				Name     string `json:"name"`
+				Fallback string `json:"fallback"`
+			}
+			_ = json.Unmarshal(entry, &head)
+			if head.Name == name {
+				removed = true
+				continue
+			}
+			if head.Fallback == name {
+				var obj map[string]json.RawMessage
+				if err := json.Unmarshal(entry, &obj); err == nil {
+					delete(obj, "fallback")
+					if reencoded, err := json.Marshal(obj); err == nil {
+						entry = reencoded
+						clearedFallback = append(clearedFallback, head.Name)
+					}
+				}
+			}
+			kept = append(kept, entry)
+		}
+		if !removed {
+			return rpcerr.InvalidRequest("no configured model named " + name +
+				" (a SparkFleet-discovered model is not in the config file)").Response(req.ID)
+		}
+
+		encodedModels, err := json.Marshal(kept)
+		if err != nil {
+			return rpcerr.WrapUnavailable("wormhole models encode failed", err).Response(req.ID)
+		}
+		fields["models"] = encodedModels
+
+		droppedFromAuto := false
+		if rawAuto, ok := fields["auto"]; ok {
+			var auto []string
+			if err := json.Unmarshal(rawAuto, &auto); err == nil {
+				keptAuto := make([]string, 0, len(auto))
+				for _, candidate := range auto {
+					if candidate == name {
+						droppedFromAuto = true
+						continue
+					}
+					keptAuto = append(keptAuto, candidate)
+				}
+				if droppedFromAuto {
+					if encodedAuto, err := json.Marshal(keptAuto); err == nil {
+						fields["auto"] = encodedAuto
+					}
+				}
+			}
+		}
+
+		out, err := json.MarshalIndent(fields, "", "  ")
+		if err != nil {
+			return rpcerr.WrapUnavailable("wormhole config encode failed", err).Response(req.ID)
+		}
+		// Atomic write, like set_feature: the watcher must never read a partial file.
+		tmp := deps.ConfigPath + ".tmp"
+		if err := os.WriteFile(tmp, append(out, '\n'), 0o600); err != nil {
+			return rpcerr.WrapUnavailable("wormhole config write failed", err).Response(req.ID)
+		}
+		if err := os.Rename(tmp, deps.ConfigPath); err != nil {
+			_ = os.Remove(tmp)
+			return rpcerr.WrapUnavailable("wormhole config swap failed", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"ok":              true,
+			"model":           name,
+			"droppedFromAuto": droppedFromAuto,
+			"clearedFallback": clearedFallback,
+		})
+	})
 }
