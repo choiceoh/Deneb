@@ -196,19 +196,45 @@ func mergeModels(configured, discovered []string) []string {
 }
 
 // capMergedModels merges configured + discovered ids and applies the picker
-// display cap while exempting every operator-declared (configured) model:
-// mergeModels keeps configured ids first, so raising the limit to the declared
-// count guarantees they all survive and the cap only trims discovered extras.
-func capMergedModels(configured, discovered []string) []string {
-	merged := mergeModels(configured, discovered)
+// display cap while exempting every operator-declared (configured) model and
+// every model a role currently points at: mergeModels keeps those ids first, so
+// raising the limit to their count guarantees they all survive and the cap only
+// trims discovered extras.
+//
+// The role exemption is not a nicety. The cap trims by POSITION, so a live
+// discovered model gets pushed out by unrelated entries ahead of it — which is
+// exactly how the model assigned to `tiny` vanished from the picker the moment
+// two other models were declared (2026-09-06). A picker that hides the model it
+// simultaneously reports a role as using is lying about the state it exists to
+// show, and the operator's only route to change that role is this list.
+func capMergedModels(configured, discovered, pinned []string) []string {
+	exempt := mergeModels(configured, pinned)
+	merged := mergeModels(exempt, discovered)
 	limit := maxModelsPerProvider
-	if len(configured) > limit {
-		limit = len(configured)
+	if len(exempt) > limit {
+		limit = len(exempt)
 	}
 	if len(merged) > limit {
 		merged = merged[:limit]
 	}
 	return merged
+}
+
+// pinnedProviderModels returns the bare model ids this provider serves to a
+// role right now — the ids capMergedModels must never trim.
+func pinnedProviderModels(roles []modelEntry, provider string) []string {
+	var pinned []string
+	for _, r := range roles {
+		if r.provider != provider {
+			continue
+		}
+		providerID, model := modelrole.ParseModelID(r.fullID)
+		if providerID != provider || model == "" {
+			continue
+		}
+		pinned = append(pinned, model)
+	}
+	return pinned
 }
 
 // providerEntries builds the model entries for one provider section.
