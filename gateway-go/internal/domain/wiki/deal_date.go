@@ -18,6 +18,8 @@
 package wiki
 
 import (
+	"log/slog"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -206,4 +208,51 @@ func atoi(s string) int {
 		return -1
 	}
 	return v
+}
+
+// dealDateImplausibleDays is how far a 문서 일자 may sit from its filing time
+// before the row is worth a second look. Measured against the production ledger
+// (145 rows, 2026-09-06): the median gap is 0 days and genuinely late-filed
+// contracts reach 105, while the three rows found carrying a wrong year sat at
+// 365, 736 and 762. 270 clears the real tail with margin and still catches a
+// one-year slip.
+const dealDateImplausibleDays = 270
+
+// warnImplausibleDealDate flags a filed document whose date is implausibly far
+// from its filing time — the signature of extraction reading the wrong year off
+// the source (observed: 2025 for 2026, 2024 for 2026). Nothing downstream can
+// notice on its own, because a wrong-but-valid ISO date sums and buckets exactly
+// as confidently as a right one; the 2025 slip had already caused a live
+// deadline to be auto-released as "345일 경과".
+//
+// It warns and never rejects: filing a genuinely old document happens, and which
+// one this is takes the source document, not a threshold.
+func warnImplausibleDealDate(rec DealRecord, now time.Time) {
+	if !isoDate(rec.Date) {
+		return // unresolved dates are already visible as raw text
+	}
+	// Both sides must be midnight in the same location: parsing the date as UTC
+	// and subtracting a local now shifts the boundary by the zone offset (KST
+	// turned a 271-day gap into 270 and silenced it). Round rather than
+	// truncate so a DST-shifted day is still a whole day.
+	d, err := time.ParseInLocation("2006-01-02", rec.Date, now.Location())
+	if err != nil {
+		return
+	}
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	days := int(math.Round(today.Sub(d).Hours() / 24))
+	if days < 0 {
+		days = -days
+	}
+	if days <= dealDateImplausibleDays {
+		return
+	}
+	slog.Warn("wiki: filed deal document date is far from its filing time; check the source year",
+		"counterparty", rec.Counterparty,
+		"docType", rec.DocType,
+		"date", rec.Date,
+		"dateRaw", rec.DateRaw,
+		"filedOn", now.Format("2006-01-02"),
+		"gapDays", days,
+		"sourceRef", rec.SourceRef)
 }
