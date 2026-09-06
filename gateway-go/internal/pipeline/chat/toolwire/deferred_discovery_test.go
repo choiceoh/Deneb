@@ -113,6 +113,53 @@ func TestDeferredToolsStayReachableByKoreanQuery(t *testing.T) {
 	}
 }
 
+// TestDeferredForecastReachableWhenSidecarConfigured extends the same contract
+// to the Chronos-2 tool, which differs from the rest in one way: it only exists
+// when DENEB_FORECAST_URL is set, so a description drifting out of reach would
+// be invisible on any host without the sidecar.
+func TestDeferredForecastReachableWhenSidecarConfigured(t *testing.T) {
+	t.Setenv("DENEB_FORECAST_URL", "http://127.0.0.1:8005")
+	registry := &discoveryRegistry{defs: map[string]toolport.ToolDef{}}
+	RegisterCoreTools(registry, &tooldeps.CoreToolDeps{WorkspaceDir: t.TempDir()})
+	if !registry.HasTool("forecast") {
+		t.Fatal("forecast must register when the sidecar URL is set")
+	}
+
+	fetch := fetchops.ToolFetchTools(registry)
+	ctx := toolport.WithDeferredActivation(context.Background(), toolport.NewDeferredActivation())
+	for _, query := range []string{
+		"다음 달 매출 얼마나 될까",
+		"이 추세면 재고 언제 소진되나",
+		"내년 상반기 전망",
+		"시계열 예측",
+	} {
+		t.Run(query, func(t *testing.T) {
+			input, err := json.Marshal(map[string]any{"query": query})
+			if err != nil {
+				t.Fatal(err)
+			}
+			out, err := fetch(ctx, input)
+			if err != nil {
+				t.Fatalf("fetch_tools(%q): %v", query, err)
+			}
+			if !strings.Contains(out, "## forecast\n") {
+				t.Fatalf("%q did not surface forecast:\n%s", query, out)
+			}
+		})
+	}
+}
+
+// TestForecastAbsentWithoutSidecar keeps the unconfigured host honest: the
+// agent must not be shown a tool whose only possible answer is a refusal.
+func TestForecastAbsentWithoutSidecar(t *testing.T) {
+	t.Setenv("DENEB_FORECAST_URL", "")
+	registry := &discoveryRegistry{defs: map[string]toolport.ToolDef{}}
+	RegisterCoreTools(registry, &tooldeps.CoreToolDeps{WorkspaceDir: t.TempDir()})
+	if registry.HasTool("forecast") {
+		t.Fatal("forecast must not register without DENEB_FORECAST_URL")
+	}
+}
+
 // TestFetchToolsDoesNotDenyEagerTools is the registration-side half of the
 // fetch_tools fix: whatever RegisterCoreTools leaves eager must come back as
 // "already in your tools array", never as "not found" — the old answer read as
