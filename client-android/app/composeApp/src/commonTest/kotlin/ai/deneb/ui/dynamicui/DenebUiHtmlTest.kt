@@ -265,6 +265,14 @@ class DenebUiHtmlTest {
     }
 
     @Test
+    fun `card dismissible attribute parses and stays absent on plain cards`() {
+        val card = assertIs<CardNode>(parseUi("""<card dismissible><text>넘길 수 있는 질문</text></card>"""))
+        assertEquals(true, card.dismissible)
+        val plain = assertIs<CardNode>(parseUi("""<card><text>보통 카드</text></card>"""))
+        assertEquals(null, plain.dismissible)
+    }
+
+    @Test
     fun `chips list layout carries letters and descriptions`() {
         // The Grok-style choice card: vertical rows with A/B/C badges and a one-line
         // description per option. layout is cosmetic — an invented value keeps the flow.

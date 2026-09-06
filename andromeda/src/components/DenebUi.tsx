@@ -358,8 +358,32 @@ export function DenebUi({
           firstKids[0]?.type === "icon" &&
           firstKids[1]?.type === "text" &&
           String(firstKids[1]?.style) === "caption";
+        // dismissible: a close affordance folds the card to one quiet line
+        // instead of answering it. State lives with this render (toggles), so
+        // a reload brings an unanswered card back — the honest state.
+        const dismissible = n.dismissible === true;
+        const dismissKey = "dismiss:" + key;
+        if (dismissible && toggles[dismissKey] === true) {
+          return (
+            <div key={key} className="dui-card dui-card-dismissed">
+              <span className="dui-card-dismissed-label">넘긴 카드</span>
+              <button className="dui-card-undismiss" onClick={() => setToggles((t) => ({ ...t, [dismissKey]: false }))}>
+                다시 보기
+              </button>
+            </div>
+          );
+        }
         return (
-          <div key={key} className="dui-card">
+          <div key={key} className={"dui-card" + (dismissible ? " dui-card-dismissible" : "")}>
+            {dismissible ? (
+              <button
+                className="dui-card-x"
+                aria-label="카드 넘기기"
+                onClick={() => setToggles((t) => ({ ...t, [dismissKey]: true }))}
+              >
+                ×
+              </button>
+            ) : null}
             {isHeader ? (
               <div className="dui-card-hd">
                 {render(firstKids[0], `${key}.hicon`)}

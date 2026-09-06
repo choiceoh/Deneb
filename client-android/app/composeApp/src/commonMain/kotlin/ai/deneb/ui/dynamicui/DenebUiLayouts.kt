@@ -5,6 +5,7 @@ package ai.deneb.ui.dynamicui
 import ai.deneb.ui.denebAdaptiveCardBorder
 import ai.deneb.ui.denebAdaptiveCardColors
 import ai.deneb.ui.denebExpandIn
+import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebShrinkOut
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.icons.filled.Map
@@ -30,14 +31,17 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -174,48 +178,96 @@ internal fun RenderCard(
         row.children.size == 2 && row.children[0] is IconNode &&
             (row.children[1] as? TextNode)?.style == TextNodeStyle.CAPTION
     }
+    // `dismissible`: a close affordance folds the card to one quiet line instead
+    // of answering it. Keyed to the parsed node, so it lives as long as this
+    // message's document — a restart brings an unanswered card back.
+    var dismissed by remember(node) { mutableStateOf(false) }
+    if (node.dismissible == true && dismissed) {
+        DismissedCard(onRestore = { dismissed = false })
+        return
+    }
     Card(
         modifier = Modifier.fillMaxWidth().wrapContentHeight(),
         colors = denebAdaptiveCardColors(),
         border = denebAdaptiveCardBorder(),
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp).wrapContentHeight(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (header != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+        Box(Modifier.fillMaxWidth()) {
+            if (node.dismissible == true) {
+                IconButton(
+                    onClick = { dismissed = true },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(32.dp),
                 ) {
-                    val iconNode = header.children[0] as IconNode
-                    val glyph = resolveIcon(iconNode.name)
-                    if (glyph != null) {
-                        Icon(
-                            imageVector = glyph,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size((iconNode.size ?: 16).dp),
-                        )
-                    } else {
-                        // Emoji icon names ("⚠️") have no vector — keep the
-                        // generic renderer's fallback instead of dropping the
-                        // glyph just because the header path special-cases it
-                        // (review catch on #3233).
-                        RenderNode(header.children[0], isInteractive, formState, toggleState, onCallback, depth + 1)
-                    }
-                    Text(
-                        text = (header.children[1] as TextNode).value,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 1.1.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "카드 넘기기",
+                        tint = denebHint(),
+                        modifier = Modifier.size(18.dp),
                     )
                 }
-                RenderChildren(node.children.drop(1).toImmutableList(), isInteractive, formState, toggleState, onCallback, depth)
-            } else {
-                RenderChildren(node.children, isInteractive, formState, toggleState, onCallback, depth)
             }
+            // Only the FIRST child (title / header row) needs to stay clear of the
+            // close glyph; the body below runs full width like any other card.
+            val clearX = if (node.dismissible == true) Modifier.padding(end = 28.dp) else Modifier
+            Column(
+                modifier = Modifier.padding(16.dp).wrapContentHeight(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (header != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = clearX,
+                    ) {
+                        val iconNode = header.children[0] as IconNode
+                        val glyph = resolveIcon(iconNode.name)
+                        if (glyph != null) {
+                            Icon(
+                                imageVector = glyph,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size((iconNode.size ?: 16).dp),
+                            )
+                        } else {
+                            // Emoji icon names ("⚠️") have no vector — keep the
+                            // generic renderer's fallback instead of dropping the
+                            // glyph just because the header path special-cases it
+                            // (review catch on #3233).
+                            RenderNode(header.children[0], isInteractive, formState, toggleState, onCallback, depth + 1)
+                        }
+                        Text(
+                            text = (header.children[1] as TextNode).value,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 1.1.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    RenderChildren(node.children.drop(1).toImmutableList(), isInteractive, formState, toggleState, onCallback, depth)
+                } else if (node.dismissible == true && node.children.isNotEmpty()) {
+                    Box(clearX) { RenderNode(node.children[0], isInteractive, formState, toggleState, onCallback, depth + 1) }
+                    RenderChildren(node.children.drop(1).toImmutableList(), isInteractive, formState, toggleState, onCallback, depth)
+                } else {
+                    RenderChildren(node.children, isInteractive, formState, toggleState, onCallback, depth)
+                }
+            }
+        }
+    }
+}
+
+/** The folded state of a dismissible card: one hint line and a way back. */
+@Composable
+private fun DismissedCard(onRestore: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+        colors = denebAdaptiveCardColors(),
+        border = denebAdaptiveCardBorder(),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text = "넘긴 카드", style = MaterialTheme.typography.bodySmall, color = denebHint(), modifier = Modifier.weight(1f))
+            TextButton(onClick = onRestore) { Text("다시 보기") }
         }
     }
 }

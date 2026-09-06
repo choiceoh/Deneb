@@ -41,6 +41,12 @@ data class RowNode(
 data class CardNode(
     override val id: String? = null,
     @Contextual val children: ImmutableList<DenebUiNode> = persistentListOf(),
+    /**
+     * Shows a close affordance; the user can fold the card away ("넘김") without
+     * answering it. Session-local: the fold is not persisted, so an unanswered
+     * decision card comes back on the next open — which is the honest state.
+     */
+    val dismissible: Boolean? = null,
 ) : DenebUiNode
 
 @Immutable
