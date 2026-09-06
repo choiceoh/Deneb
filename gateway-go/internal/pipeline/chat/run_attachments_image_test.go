@@ -49,3 +49,53 @@ func TestDescribeCapturedImageFallsBackToOCR(t *testing.T) {
 		t.Errorf("empty image should yield empty, got %q", got)
 	}
 }
+
+// The mail path reads attachments through an extractor, which OCRs images. These
+// cover the upgrade that puts vision in front of it — and, just as important, the
+// cases that must NOT spend a vision call (mail arrives unattended and in bulk).
+func TestWithImageVisionRoutesAttachments(t *testing.T) {
+	big := make([]byte, visionAttachmentMinBytes)
+	small := make([]byte, visionAttachmentMinBytes-1)
+
+	cases := []struct {
+		name       string
+		data       []byte
+		filename   string
+		mime       string
+		visionText string
+		want       string
+		wantVision bool
+	}{
+		{"big image goes to vision", big, "site.jpg", "image/jpeg", "현장 사진 설명", "현장 사진 설명", true},
+		{"vision empty falls through to the extractor", big, "site.jpg", "image/jpeg", "", "extracted", true},
+		{"small image is not worth a vision call", small, "logo.png", "image/png", "should not run", "extracted", false},
+		{"non-image never goes to vision", big, "quote.pdf", "application/pdf", "should not run", "extracted", false},
+		{"octet-stream is judged by filename", big, "scan.JPEG", "application/octet-stream", "스캔 견적서", "스캔 견적서", true},
+		{"extensionless octet-stream stays on the extractor", big, "attachment", "application/octet-stream", "should not run", "extracted", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			visionCalled := false
+			vis := func(context.Context, string, string, string, string, int) string {
+				visionCalled = true
+				return tc.visionText
+			}
+			extract := func(context.Context, []byte, string, string) string { return "extracted" }
+			got := withImageVision(extract, vis)(context.Background(), tc.data, tc.filename, tc.mime)
+			if got != tc.want {
+				t.Errorf("text = %q, want %q", got, tc.want)
+			}
+			if visionCalled != tc.wantVision {
+				t.Errorf("vision called = %v, want %v", visionCalled, tc.wantVision)
+			}
+		})
+	}
+}
+
+func TestWithImageVisionKeepsNilExtractorNil(t *testing.T) {
+	// mailanalysis treats a nil AttachmentExtractFn as "attachments disabled";
+	// wrapping must not turn that off by handing back a non-nil func.
+	if WithImageVision(nil) != nil {
+		t.Error("wrapping a nil extractor must stay nil")
+	}
+}
