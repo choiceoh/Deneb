@@ -124,3 +124,76 @@ func TestToolDealLedgerMetricDefinitionsFooter(t *testing.T) {
 		t.Errorf("footer not capped: %d runes", got)
 	}
 }
+
+// TestToolDealLedgerMonthlyBucketsAreExact is the contract 월별 매출/발주 추이
+// depends on: a month filter returns that month and nothing else, including for
+// documents whose date was written in a Korean shorthand, and it says out loud
+// how many rows carry no date at all rather than quietly counting them in every
+// month. Dates here are the shapes the production ledger actually holds.
+func TestToolDealLedgerMonthlyBucketsAreExact(t *testing.T) {
+	dir := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
+	for _, in := range []wiki.DealPageInput{
+		{Counterparty: "연우철강", DocType: "발주품의", Amount: "505,000원", Date: "26.08.26", SourceRef: "m:1"},
+		{Counterparty: "우림건설", DocType: "지출결의", Amount: "1,000,000원", Date: "2026-08-31", SourceRef: "m:2"},
+		{Counterparty: "금비전자", DocType: "발주품의", Amount: "2,000,000원", Date: "2026-07-16 (목)", SourceRef: "m:3"},
+		{Counterparty: "SKB", DocType: "기타", Amount: "3,000,000원", Date: "2026년 6월 29일", SourceRef: "m:4"},
+		{Counterparty: "남제주빛드림", DocType: "계약서", Amount: "4,000,000원", Date: "2026. 8.", SourceRef: "m:5"},
+	} {
+		if _, _, err := store.UpsertDealPage(in, now); err != nil {
+			t.Fatalf("UpsertDealPage(%s): %v", in.Counterparty, err)
+		}
+	}
+	tool := ToolDealLedger(store)
+
+	// August holds exactly the two August documents — the 26.08.26 shorthand
+	// lands in its real month, and the month-only "2026. 8." row does not.
+	out, err := tool(context.Background(), json.RawMessage(`{"since":"2026-08-01","until":"2026-08-31"}`))
+	if err != nil {
+		t.Fatalf("deal_ledger: %v", err)
+	}
+	if !strings.Contains(out, "거래 원장 2건") {
+		t.Errorf("August bucket is not exactly 2 rows:\n%s", out)
+	}
+	for _, want := range []string{"연우철강", "우림건설"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("August bucket missing %s:\n%s", want, out)
+		}
+	}
+	for _, unwanted := range []string{"금비전자", "SKB", "남제주빛드림"} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("August bucket leaked %s (wrong month or undated):\n%s", unwanted, out)
+		}
+	}
+	// The undated row is reported, not dropped in silence.
+	if !strings.Contains(out, "날짜 미상 1건은 기간 필터에서 제외됨") {
+		t.Errorf("undated row was excluded without saying so:\n%s", out)
+	}
+
+	// Neighbouring months are equally exact.
+	for _, tc := range []struct{ since, until, want, counterparty string }{
+		{"2026-07-01", "2026-07-31", "거래 원장 1건", "금비전자"},
+		{"2026-06-01", "2026-06-30", "거래 원장 1건", "SKB"},
+	} {
+		got, err := tool(context.Background(), json.RawMessage(`{"since":"`+tc.since+`","until":"`+tc.until+`"}`))
+		if err != nil {
+			t.Fatalf("deal_ledger %s: %v", tc.since, err)
+		}
+		if !strings.Contains(got, tc.want) || !strings.Contains(got, tc.counterparty) {
+			t.Errorf("%s bucket = wrong contents:\n%s", tc.since, got)
+		}
+	}
+
+	// Without a date bound nothing is hidden, and nothing is reported hidden.
+	all, err := tool(context.Background(), json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("deal_ledger unbounded: %v", err)
+	}
+	if !strings.Contains(all, "거래 원장 5건") || strings.Contains(all, "날짜 미상") {
+		t.Errorf("unbounded query should show all 5 rows and no exclusion notice:\n%s", all)
+	}
+}

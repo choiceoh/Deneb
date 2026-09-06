@@ -70,7 +70,7 @@ func ToolDealLedger(store *wiki.Store) toolport.ToolFunc {
 				return "", fmt.Errorf("deal_ledger: invalid arguments: %w", err)
 			}
 		}
-		recs, err := store.QueryDealRecords(wiki.DealRecordFilter{
+		recs, stats, err := store.QueryDealRecordsWithStats(wiki.DealRecordFilter{
 			Counterparty: args.Counterparty,
 			Project:      args.Project,
 			DocType:      args.DocType,
@@ -80,10 +80,16 @@ func ToolDealLedger(store *wiki.Store) toolport.ToolFunc {
 		if err != nil {
 			return "", fmt.Errorf("deal_ledger: %w", err)
 		}
+		// A date range can only bucket rows that carry a date. Say how many it
+		// set aside — silence here reads as "there were none".
+		undated := ""
+		if stats.UndatedExcluded > 0 {
+			undated = fmt.Sprintf("\n날짜 미상 %d건은 기간 필터에서 제외됨 (기간 없이 조회하면 보임)", stats.UndatedExcluded)
+		}
 		if len(recs) == 0 {
 			// Definitions matter most here: an empty result is often a
 			// mis-chosen doc_type filter, and the page names the valid ones.
-			out := "거래 원장 기록 없음 (필터: " + filterDesc(args.Counterparty, args.Project, args.DocType, args.Since, args.Until) + ")"
+			out := "거래 원장 기록 없음 (필터: " + filterDesc(args.Counterparty, args.Project, args.DocType, args.Since, args.Until) + ")" + undated
 			if defs := metricDefinitionsFooter(store); defs != "" {
 				out += "\n\n" + defs
 			}
@@ -114,6 +120,7 @@ func ToolDealLedger(store *wiki.Store) toolport.ToolFunc {
 		}
 
 		b.WriteString(renderDealTotals(totals))
+		b.WriteString(undated)
 		// The tool advertises 거래처별 합계: when the result spans several
 		// counterparties, append the deterministic per-counterparty breakdown
 		// (always over the FULL filtered set, independent of the list limit).

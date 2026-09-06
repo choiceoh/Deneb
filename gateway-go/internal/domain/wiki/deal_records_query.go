@@ -16,9 +16,12 @@ import (
 )
 
 // DealRecordFilter narrows the ledger. String fields are optional; empty means
-// "any". Since/Until compare ISO dates lexically and only against records whose
-// Date is itself ISO (free-text dates pass the range filter rather than being
-// silently dropped).
+// "any". Since/Until compare ISO dates lexically; a row whose Date is not ISO
+// carries no month and is excluded from a bounded query — counted in
+// DealQueryStats.UndatedExcluded so the caller reports it instead of dropping
+// it silently. (Filing normalizes the Korean date shorthands to ISO, so what
+// remains here is genuinely dateless: month-only forms, unfilled contract
+// blanks — see deal_date.go.)
 type DealRecordFilter struct {
 	Counterparty string // fuzzy: normalized containment either way
 	Project      string // fuzzy match against record Projects
@@ -27,12 +30,28 @@ type DealRecordFilter struct {
 	Until        string // YYYY-MM-DD inclusive
 }
 
+// DealQueryStats reports what a query set aside, so an aggregate answer can say
+// what it is not counting.
+type DealQueryStats struct {
+	// UndatedExcluded counts rows dropped by an active Since/Until bound
+	// because their Date is not an ISO date. Always 0 for an unbounded query.
+	UndatedExcluded int
+}
+
 // QueryDealRecords returns matching records, newest first (ISO dates ordered,
 // free-text dates last in recorded order).
 func (s *Store) QueryDealRecords(f DealRecordFilter) ([]DealRecord, error) {
+	recs, _, err := s.QueryDealRecordsWithStats(f)
+	return recs, err
+}
+
+// QueryDealRecordsWithStats is QueryDealRecords plus what the date bounds set
+// aside — the surface a 월별 집계 needs to qualify its own totals.
+func (s *Store) QueryDealRecordsWithStats(f DealRecordFilter) ([]DealRecord, DealQueryStats, error) {
+	var stats DealQueryStats
 	recs, err := s.ListDealRecords()
 	if err != nil {
-		return nil, err
+		return nil, stats, err
 	}
 	// Range bounds must themselves be ISO or they silently mis-filter via
 	// lexical comparison (" 2026-06-01", "지난달"): trim, and drop non-ISO.
@@ -64,6 +83,14 @@ func (s *Store) QueryDealRecords(f DealRecordFilter) ([]DealRecord, error) {
 		if !matchDealRecord(r, f) {
 			continue
 		}
+		// Checked after the other filters so the count describes only rows the
+		// query was otherwise about: an undated row has no month to place it
+		// in, and letting it through would land it in every bucket a 월별 추이
+		// asks for. Counted out loud rather than dropped silently.
+		if (f.Since != "" || f.Until != "") && !isoDate(r.Date) {
+			stats.UndatedExcluded++
+			continue
+		}
 		out = append(out, r)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -77,7 +104,7 @@ func (s *Store) QueryDealRecords(f DealRecordFilter) ([]DealRecord, error) {
 			return out[i].RecordedAt > out[j].RecordedAt
 		}
 	})
-	return out, nil
+	return out, stats, nil
 }
 
 func matchDealRecord(r DealRecord, f DealRecordFilter) bool {

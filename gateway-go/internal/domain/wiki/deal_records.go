@@ -42,18 +42,24 @@ type DealLineItem struct {
 // DealRecord is one filed business document as typed, computable fields — the
 // structured counterpart of the prose entry dealEntryLine renders.
 type DealRecord struct {
-	Counterparty string   `json:"counterparty"`
-	DocType      string   `json:"docType,omitempty"`
-	AmountRaw    string   `json:"amountRaw,omitempty"`   // original free-text, always kept
-	AmountValue  float64  `json:"amountValue,omitempty"` // parsed numeric; 0 when unparsed
-	Currency     string   `json:"currency,omitempty"`    // "KRW"|"USD"|"EUR"|"JPY"|""
-	AmountParsed bool     `json:"amountParsed"`          // false → exclude from sums
-	Date         string   `json:"date,omitempty"`        // YYYY-MM-DD (or raw when unparseable)
-	DueDate      string   `json:"dueDate,omitempty"`
-	Items        []string `json:"items,omitempty"`
-	Summary      string   `json:"summary,omitempty"`
-	SourceRef    string   `json:"sourceRef,omitempty"`
-	Projects     []string `json:"projects,omitempty"` // owning project names resolved at file time (older rows lack it)
+	Counterparty string  `json:"counterparty"`
+	DocType      string  `json:"docType,omitempty"`
+	AmountRaw    string  `json:"amountRaw,omitempty"`   // original free-text, always kept
+	AmountValue  float64 `json:"amountValue,omitempty"` // parsed numeric; 0 when unparsed
+	Currency     string  `json:"currency,omitempty"`    // "KRW"|"USD"|"EUR"|"JPY"|""
+	AmountParsed bool    `json:"amountParsed"`          // false → exclude from sums
+	Date         string  `json:"date,omitempty"`        // YYYY-MM-DD (or raw when unparseable)
+	// DateRaw is the source text of Date whenever normalization rewrote it
+	// ("26.08.31", "2026년 6월 29일" — deal_date.go). Empty when the document
+	// was already filed in ISO or when its date could not be resolved and Date
+	// itself still holds the original. Same audit contract as AmountRaw.
+	DateRaw    string   `json:"dateRaw,omitempty"`
+	DueDate    string   `json:"dueDate,omitempty"`
+	DueDateRaw string   `json:"dueDateRaw,omitempty"` // as DateRaw, for DueDate
+	Items      []string `json:"items,omitempty"`
+	Summary    string   `json:"summary,omitempty"`
+	SourceRef  string   `json:"sourceRef,omitempty"`
+	Projects   []string `json:"projects,omitempty"` // owning project names resolved at file time (older rows lack it)
 	// Terms are the quote-verified commercial terms (물량·단가·지급조건·하자보수·
 	// 지체상금, deal_terms.go) — nil on rows filed before the fact layer or when
 	// the mail carried none that survived verification.
@@ -72,9 +78,21 @@ type DealRecord struct {
 // free-text 금액. now is injected for deterministic tests.
 func dealRecordFrom(in DealPageInput, now time.Time) DealRecord {
 	val, cur, ok := parseAmount(in.Amount)
+	// 문서 일자 normalizes to ISO at file time (deal_date.go): the Korean
+	// shorthands are all one date written differently, and leaving them raw on
+	// the same field ISO lives on is what makes 월별 집계 impossible. now
+	// anchors the year-less forms ("7/8") — a document is filed at its own date.
 	date := strings.TrimSpace(in.Date)
+	dateRaw := ""
 	if date == "" {
 		date = now.Format("2006-01-02")
+	} else if iso, dok := normalizeDealDate(date, now); dok && iso != date {
+		date, dateRaw = iso, date
+	}
+	due := strings.TrimSpace(in.DueDate)
+	dueRaw := ""
+	if iso, dok := normalizeDealDate(due, now); dok && iso != due {
+		due, dueRaw = iso, due
 	}
 	var projects []string
 	for _, p := range in.RelatedProjects {
@@ -90,7 +108,9 @@ func dealRecordFrom(in DealPageInput, now time.Time) DealRecord {
 		Currency:     cur,
 		AmountParsed: ok,
 		Date:         date,
-		DueDate:      strings.TrimSpace(in.DueDate),
+		DateRaw:      dateRaw,
+		DueDate:      due,
+		DueDateRaw:   dueRaw,
 		Items:        textutil.DedupeStrings(in.Items),
 		Summary:      strings.TrimSpace(in.Summary),
 		SourceRef:    strings.TrimSpace(in.SourceRef),
