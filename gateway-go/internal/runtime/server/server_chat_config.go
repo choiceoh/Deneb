@@ -134,6 +134,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 	}
 
 	s.gmailPollSvc = mailanalysis.NewService(cfg, s.logger)
+	s.mailBackfillAnalyzer = s.gmailPollSvc
 
 	// Wire proactive relay as the gmail-poll notifier so email summaries
 	// are delivered verbatim AND mirrored into the main session
@@ -325,6 +326,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	// (wiki, mail_archive) execute instead of leaking as <tool_call> text.
 	cfg.AgentSynthesisFn = s.mailAnalysisAgentSynthesis
 	svc := mailanalysis.NewService(cfg, s.logger)
+	s.mailBackfillAnalyzer = svc
 	svc.SetNotifier(s.proactiveRelay.MailNotifierForSession(proactive.NativeWorkSessionKey))
 
 	queue, err := lmtpd.NewQueue(filepath.Join(stateDir, "lmtp-queue"))

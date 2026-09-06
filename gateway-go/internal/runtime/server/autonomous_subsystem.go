@@ -15,11 +15,12 @@ import (
 // registerWorkflowSideEffects().
 // Embedded in Server so fields are promoted and existing access patterns are unchanged.
 type AutonomousSubsystem struct {
-	autonomousSvc    *autonomous.Service
-	wikiDreamer      *wiki.WikiDreamer // set during initMemorySubsystem()
-	gmailPollSvc     *mailanalysis.Service
-	roleHealth       *rolehealth.Watch // set during registerWorkflowSideEffects()
-	modelMaintenance *modelmaintenance.Suite
+	autonomousSvc        *autonomous.Service
+	wikiDreamer          *wiki.WikiDreamer // set during initMemorySubsystem()
+	gmailPollSvc         *mailanalysis.Service
+	mailBackfillAnalyzer archivedMailAnalyzer
+	roleHealth           *rolehealth.Watch // set during registerWorkflowSideEffects()
+	modelMaintenance     *modelmaintenance.Suite
 
 	// agentLogWriter is the shared behavioral event log (the same instance the
 	// chat pipeline uses). Promoted to Server so registerWorkflowSideEffects can
