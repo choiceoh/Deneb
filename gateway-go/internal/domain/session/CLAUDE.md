@@ -18,8 +18,8 @@ runtime/server는 이 계약을 소비하며 session 상태 규칙을 복제하�
   `EventBus.Emit`이 비동기 lifecycle 알림을 소유한다.
 - `run_marker.go`의 `RunMarkerStore`, `NewRunMarkerStore`가 crash 후
   resume를 위한 최소 on-disk marker를 원자적으로 기록한다.
-- `native_keys.go`의 `RestorableTranscriptChannel`과
-  `HeartbeatTargetSession`이 native session key 해석을 중앙화한다.
+- `native_keys.go`의 `RestorableTranscriptChannel`이 native session key 해석을
+  중앙화한다.
 
 ## 의존 방향과 불변조건
 

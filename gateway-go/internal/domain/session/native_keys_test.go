@@ -119,19 +119,3 @@ func TestSpawnedChildKeyRoundTripsThroughClassifier(t *testing.T) {
 		}
 	}
 }
-
-// The heartbeat continues the user's last conversation — but a delegated run is
-// the agent's own scratch work, not a conversation to wake up inside.
-func TestHeartbeatTargetSessionSkipsSpawnedChildren(t *testing.T) {
-	t.Parallel()
-	for key, want := range map[string]string{
-		"client:main:6c4385b5-6124-4224-afc2-492017824ef2": "client:main:6c4385b5-6124-4224-afc2-492017824ef2",
-		"client:sub:verify-docs-1784342370344":             NativeWorkSessionKey,
-		"client:main:subagent:1784342370344":               NativeWorkSessionKey,
-		"cron:mailpoll":                                    NativeWorkSessionKey,
-	} {
-		if got := HeartbeatTargetSession(key); got != want {
-			t.Errorf("HeartbeatTargetSession(%q) = %q, want %q", key, got, want)
-		}
-	}
-}

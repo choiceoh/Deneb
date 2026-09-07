@@ -213,20 +213,6 @@ func IsLiveTestSession(sessionKey string) bool {
 		strings.HasPrefix(sessionKey, "livetest:")
 }
 
-// HeartbeatTargetSession keeps an active native conversation as the target and
-// otherwise falls back to the primary work session.
-func HeartbeatTargetSession(lastSessionKey string) string {
-	// A sub-agent run is a client session too, but the heartbeat must not reason
-	// inside the agent's own delegated scratch conversation.
-	if IsSpawnedChildKey(lastSessionKey) {
-		return NativeWorkSessionKey
-	}
-	if IsClientSession(lastSessionKey) {
-		return lastSessionKey
-	}
-	return NativeWorkSessionKey
-}
-
 // WorkTypeForKey classifies a session key into a coarse work-type slug for usage
 // reporting (heartbeat, phone-event, chat, mail-analysis, …). The session key
 // encodes the work type by prefix; this is the single source of truth for that
