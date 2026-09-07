@@ -253,8 +253,16 @@ func recordClientCrash(logger *slog.Logger, source, text string) {
 }
 
 // phoneEventMaxTokens caps the judgment turn's reply. A phone-event alert should
-// be a tight "왜 지금 중요한가 + 무엇을 언제까지" message, not an essay.
-const phoneEventMaxTokens = 1536
+// be a tight "왜 지금 중요한가 + 무엇을 언제까지" message, not an essay — but the
+// cap has to cover the THINKING the submain model does before writing it.
+//
+// 2026-09-08: at 1536 this lane produced 94 truncated turns in three days, 93 of
+// them with zero text. The session default is thinking level "low", which is a
+// 4096-token budget — nearly 3x this cap — so the model reasoned until the cap
+// and never began the answer. 6144 = that budget plus room for the alert itself.
+// A model that honors thinking-off still returns in a few hundred tokens; the
+// ceiling only affects the tail.
+const phoneEventMaxTokens = 6144
 
 // phoneEventTurnDeadline bounds the async judgment turn. Long enough for a few
 // tool calls (calendar/wiki/mail/contact lookups) but capped so a wedged turn

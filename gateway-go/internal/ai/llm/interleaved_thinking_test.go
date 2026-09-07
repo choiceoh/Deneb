@@ -64,7 +64,7 @@ func TestStreamChat_InterleavedThinkingBetaHeader(t *testing.T) {
 	events, err := client.StreamChat(context.Background(), ChatRequest{
 		Model:     "test-model",
 		Messages:  []Message{NewTextMessage("user", "hi")},
-		MaxTokens: 8,
+		MaxTokens: 8192, // above the 4096 budget: below it, thinking is reconciled off
 		Thinking: &ThinkingConfig{
 			Type:         "enabled",
 			BudgetTokens: 4096,
@@ -95,7 +95,7 @@ func TestStreamChat_NoBetaHeaderWhenInterleavedOff(t *testing.T) {
 	events, err := client.StreamChat(context.Background(), ChatRequest{
 		Model:     "test-model",
 		Messages:  []Message{NewTextMessage("user", "hi")},
-		MaxTokens: 8,
+		MaxTokens: 8192, // above the 4096 budget: below it, thinking is reconciled off
 		Thinking: &ThinkingConfig{
 			Type:         "enabled",
 			BudgetTokens: 4096,
@@ -125,7 +125,7 @@ func TestStreamChat_BetaHeadersPassThrough(t *testing.T) {
 	events, err := client.StreamChat(context.Background(), ChatRequest{
 		Model:       "test-model",
 		Messages:    []Message{NewTextMessage("user", "hi")},
-		MaxTokens:   8,
+		MaxTokens:   8192, // above the 4096 budget (see ReconcileThinkingBudget)
 		BetaHeaders: []string{"prompt-caching-2024-07-31", "interleaved-thinking-2025-05-14"},
 		Thinking: &ThinkingConfig{
 			Type:         "enabled",

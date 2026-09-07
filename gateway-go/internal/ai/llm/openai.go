@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -278,6 +279,12 @@ func convertMultipartMessage(role string, parts openAIMessageParts) openAIMessag
 
 // applySamplingParams copies optional sampling and thinking parameters to the OpenAI request.
 func applySamplingParams(oaiReq *openAIRequest, req *ChatRequest) {
+	// Same arithmetic as the Anthropic path: reasoning tokens are billed against
+	// max_tokens here too, so a budget that does not fit truncates the answer to
+	// nothing (vLLM/GLM emit the chain of thought into the same allowance).
+	if note := req.ReconcileThinkingBudget(); note != "" {
+		slog.Warn("llm: thinking budget reconciled", "model", req.Model, "detail", note)
+	}
 	if req.Temperature != nil {
 		oaiReq.Temperature = req.Temperature
 	}
