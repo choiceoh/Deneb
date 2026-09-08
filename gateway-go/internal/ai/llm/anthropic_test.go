@@ -44,8 +44,10 @@ func TestStreamChat_AnthropicMode_BuildsMessagesEndpointRequest(t *testing.T) {
 	client := NewClient(srv.URL, "secret-key", WithAPIMode(APIModeAnthropic))
 
 	events, err := client.StreamChat(context.Background(), ChatRequest{
-		Model:            "glm-5.1",
-		MaxTokens:        1024,
+		Model: "glm-5.1",
+		// Roomy on purpose: this asserts the Anthropic body SHAPE, and a cap
+		// below the thinking budget would (correctly) reconcile it away.
+		MaxTokens:        8192,
 		System:           SystemString("be helpful"),
 		Temperature:      &temperature,
 		TopP:             &topP,
@@ -80,8 +82,8 @@ func TestStreamChat_AnthropicMode_BuildsMessagesEndpointRequest(t *testing.T) {
 	if gotBody["model"] != "glm-5.1" {
 		t.Errorf("body.model = %v, want glm-5.1", gotBody["model"])
 	}
-	if gotBody["max_tokens"].(float64) != 1024 {
-		t.Errorf("body.max_tokens = %v, want 1024", gotBody["max_tokens"])
+	if gotBody["max_tokens"].(float64) != 8192 {
+		t.Errorf("body.max_tokens = %v, want 8192", gotBody["max_tokens"])
 	}
 	if gotBody["system"] != "be helpful" {
 		t.Errorf("body.system = %v, want \"be helpful\"", gotBody["system"])

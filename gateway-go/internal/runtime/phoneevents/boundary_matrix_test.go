@@ -667,7 +667,10 @@ func TestPhoneEventPathsReturnExpectedConstants(t *testing.T) {
 			}
 		})
 	}
-	if phoneEventMaxTokens != 1536 {
+	// 6144, not 1536: the cap must cover the submain model's thinking budget
+	// (session level "low" = 4096) plus the alert itself. At 1536 this lane
+	// returned 93 empty answers out of 94 truncated turns (2026-09-05..08).
+	if phoneEventMaxTokens != 6144 {
 		t.Errorf("max tokens=%d", phoneEventMaxTokens)
 	}
 	if phoneEventTurnDeadline != 4*time.Minute {

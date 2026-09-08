@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -56,6 +57,11 @@ const defaultAnthropicMaxTokens = 4096
 // buildAnthropicRequestBody serializes a ChatRequest into Anthropic
 // Messages API JSON, merging ExtraBody fields at the top level.
 func buildAnthropicRequestBody(req ChatRequest) ([]byte, error) {
+	// A thinking budget larger than the output allowance returns an empty answer
+	// (Anthropic counts thinking against max_tokens). Fit it before sending.
+	if note := req.ReconcileThinkingBudget(); note != "" {
+		slog.Warn("llm: thinking budget reconciled", "model", req.Model, "detail", note)
+	}
 	maxTokens := req.MaxTokens
 	if maxTokens <= 0 {
 		maxTokens = defaultAnthropicMaxTokens

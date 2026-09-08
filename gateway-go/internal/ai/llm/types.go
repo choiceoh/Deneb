@@ -4,6 +4,7 @@ package llm
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 )
@@ -483,4 +484,49 @@ type TokenUsage struct {
 	OutputTokens             int `json:"output_tokens"`
 	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
 	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
+}
+
+// answerReserveTokens is the output room a request keeps for the ANSWER when a
+// thinking budget is also set. A judgment or extraction reply is short, but zero
+// is not an answer.
+const answerReserveTokens = 512
+
+// minThinkingBudgetTokens is the smallest budget worth sending (Anthropic's own
+// floor for extended thinking). Below it, thinking is turned off rather than
+// squeezed into a size no provider accepts.
+const minThinkingBudgetTokens = 1024
+
+// ReconcileThinkingBudget keeps an enabled thinking budget from swallowing the
+// entire output allowance.
+//
+// Thinking budgets come from a LEVEL name shared by every caller (level "low" =
+// 4096 tokens), while MaxTokens is chosen per call site for the answer alone. Put
+// together, a caller that budgets 1536 tokens for a short judgment ships
+// "think up to 4096, stop after 1536" — the model reasons, hits the cap, and
+// returns NOTHING. Measured on srv4 2026-09-05..08: 94 truncated turns,
+// 93 of them with zero text, all in the phone-event lane (MaxTokens 1536).
+//
+// The fix is arithmetic, not policy: shrink the budget so the answer still has
+// room, and when that leaves less than a provider will accept, drop thinking for
+// this request. Callers keep their own MaxTokens; nothing silently returns empty.
+// Returns a non-empty note when it changed something, for the caller to log.
+func (r *ChatRequest) ReconcileThinkingBudget() string {
+	if r.Thinking == nil || r.Thinking.Type != "enabled" || r.Thinking.BudgetTokens <= 0 || r.MaxTokens <= 0 {
+		return ""
+	}
+	if r.Thinking.BudgetTokens+answerReserveTokens <= r.MaxTokens {
+		return ""
+	}
+	fitted := r.MaxTokens - answerReserveTokens
+	if fitted < minThinkingBudgetTokens {
+		was := r.Thinking.BudgetTokens
+		r.Thinking = &ThinkingConfig{Type: "disabled"}
+		return fmt.Sprintf("thinking disabled: budget %d does not fit MaxTokens %d (needs %d+%d)",
+			was, r.MaxTokens, minThinkingBudgetTokens, answerReserveTokens)
+	}
+	was := r.Thinking.BudgetTokens
+	shrunk := *r.Thinking
+	shrunk.BudgetTokens = fitted
+	r.Thinking = &shrunk
+	return fmt.Sprintf("thinking budget %d -> %d to fit MaxTokens %d", was, fitted, r.MaxTokens)
 }
