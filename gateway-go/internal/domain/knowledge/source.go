@@ -63,44 +63,6 @@ func (c SyncContract) Validate() error {
 	return nil
 }
 
-// SyncEnvelope is the normalized mutation carried by a connector. Deleted
-// envelopes intentionally keep StableID/Revision so tombstones participate in
-// replay and idempotency instead of becoming an out-of-band cleanup path.
-type SyncEnvelope struct {
-	StableID    string
-	Revision    string
-	ContentHash string
-	Deleted     bool
-	ObservedAt  int64
-	ACL         []string
-}
-
-func (e SyncEnvelope) Validate() error {
-	if strings.TrimSpace(e.StableID) == "" {
-		return fmt.Errorf("knowledge sync envelope requires stable id")
-	}
-	if strings.TrimSpace(e.Revision) == "" && strings.TrimSpace(e.ContentHash) == "" {
-		return fmt.Errorf("knowledge sync envelope %q requires revision or content hash", e.StableID)
-	}
-	if e.ObservedAt < 0 {
-		return fmt.Errorf("knowledge sync envelope %q has negative observed time", e.StableID)
-	}
-	return nil
-}
-
-// SameRevision is the replay/dedup primitive: identity and a stable revision
-// (or content hash fallback) must agree. Deletion state is part of the revision
-// so an explicit tombstone is never deduped against the live record it removes.
-func (e SyncEnvelope) SameRevision(other SyncEnvelope) bool {
-	if e.StableID == "" || e.StableID != other.StableID || e.Deleted != other.Deleted {
-		return false
-	}
-	if e.Revision != "" && other.Revision != "" {
-		return e.Revision == other.Revision
-	}
-	return e.ContentHash != "" && e.ContentHash == other.ContentHash
-}
-
 // SourceDescriptor is the compact catalog entry used by the planner and
 // emitted in its plan. Cost is a relative class (1 cheap/local, 3 slower
 // model/network path), not a latency promise.
