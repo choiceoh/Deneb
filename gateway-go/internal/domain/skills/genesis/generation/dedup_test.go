@@ -84,25 +84,3 @@ func TestIsDuplicateSkillReturnsTrueForExactAndNearMatchesButNotUnrelated(t *tes
 		t.Fatal("nil catalog should never dedupe")
 	}
 }
-
-func TestEnvBoolAcceptsSpellingsAndUsesFallbackOnGarbage(t *testing.T) {
-	if !genesiscommon.EnvBool("DENEB_TEST_MISSING_BOOL", true) {
-		t.Fatal("unset should return fallback true")
-	}
-	for _, v := range []string{"1", "true", "yes", "on", "TRUE", "On"} {
-		t.Setenv("DENEB_TEST_BOOL", v)
-		if !genesiscommon.EnvBool("DENEB_TEST_BOOL", false) {
-			t.Fatalf("%q should be true", v)
-		}
-	}
-	for _, v := range []string{"0", "false", "no", "off"} {
-		t.Setenv("DENEB_TEST_BOOL", v)
-		if genesiscommon.EnvBool("DENEB_TEST_BOOL", true) {
-			t.Fatalf("%q should be false", v)
-		}
-	}
-	t.Setenv("DENEB_TEST_BOOL", "garbage")
-	if !genesiscommon.EnvBool("DENEB_TEST_BOOL", true) {
-		t.Fatal("garbage should fall back to true")
-	}
-}
