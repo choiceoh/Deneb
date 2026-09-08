@@ -1,5 +1,71 @@
 # Changelog
 
+## [5.13.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.12.1...deneb-v5.13.0) (2026-09-08)
+
+
+### ✨ Features
+
+* **browser-android:** 광고 차단 누수 스윕 — 차단율 28%→50%, 구글 측정 엔드포인트는 경로로 ([#5008](https://github.com/choiceoh/Deneb/issues/5008)) ([1e4faf4](https://github.com/choiceoh/Deneb/commit/1e4faf4cda1798fbf69dca03434f3c4f215c8de9))
+* **browser:** browse 경로에 광고·추적 차단 — donga 기준 6.3초→2.5초, 요청 359→169 ([#5007](https://github.com/choiceoh/Deneb/issues/5007)) ([5c7b12b](https://github.com/choiceoh/Deneb/commit/5c7b12bd7a1a6d6ab207ee3d96d82b548b477b83))
+* **chat:** 복원된 대화의 추론도 한국어로 — 저장 시점에 표시용 사본을 붙인다 ([#5029](https://github.com/choiceoh/Deneb/issues/5029)) ([26c6d90](https://github.com/choiceoh/Deneb/commit/26c6d900430093af4674d8eda926f69f46403e75))
+* **chat:** 추론을 흘러나오는 대로 딥엘에 태운다 — 정착할 때가 아니라 ([#5025](https://github.com/choiceoh/Deneb/issues/5025)) ([9b1a6fe](https://github.com/choiceoh/Deneb/commit/9b1a6fe32251f6844a83569884e8d66e4ff4e896))
+* **client-android:** 웜홀 모델을 롱탭으로 제거한다 ([#5035](https://github.com/choiceoh/Deneb/issues/5035)) ([2a99cc9](https://github.com/choiceoh/Deneb/commit/2a99cc99991d50432186a80da525e3baf4316082))
+* **client-android:** 지난 방문 이후 새 메시지 앞에 '신규' 구분선 (Grok 참조 ④) ([#5049](https://github.com/choiceoh/Deneb/issues/5049)) ([aea20f0](https://github.com/choiceoh/Deneb/commit/aea20f09340c569e0f19f08e0822723db1183975))
+* **denebui:** 설명 달린 선택 목록과 선택 전 비활성 제출 — Grok 참조 슬라이스 ①·② ([#5046](https://github.com/choiceoh/Deneb/issues/5046)) ([2f73bf7](https://github.com/choiceoh/Deneb/commit/2f73bf7de47b3e6495334ffb46cddefdc19cec24))
+* **denebui:** 카드 닫기 — &lt;card dismissible&gt;로 답하지 않고 접어두기 (Grok 참조 ③) ([#5048](https://github.com/choiceoh/Deneb/issues/5048)) ([c8a6a29](https://github.com/choiceoh/Deneb/commit/c8a6a29792619e7131d4f0c9a4b87a7c1aafe396))
+* **forecast:** Chronos-2 사이드카 — 에이전트가 든 숫자에 예측 구간을 붙인다 ([#5053](https://github.com/choiceoh/Deneb/issues/5053)) ([c456ca2](https://github.com/choiceoh/Deneb/commit/c456ca21d3b64cbe3d696e5a76f1bfe0db988494))
+* **mail:** 첨부 이미지도 비전으로 먼저 읽는다 — OCR 글리프로 납작해지던 자리 ([#5041](https://github.com/choiceoh/Deneb/issues/5041)) ([3502fe0](https://github.com/choiceoh/Deneb/commit/3502fe02c59c6d865d6dcb8d4417af034ab7fdae))
+* **recall:** 회상 계측에 방향 축과 안정성 축을 더한다 — 역방향 실패의 성격과 반복 변동을 처음으로 가른다 ([#5016](https://github.com/choiceoh/Deneb/issues/5016)) ([61d11dc](https://github.com/choiceoh/Deneb/commit/61d11dcefe7f534f55510a376aac670d02d1ed13))
+* **skills:** 성공했지만 절차가 안 돈 스킬 런을 세어 낡은 스킬에 신호를 만든다 ([#5015](https://github.com/choiceoh/Deneb/issues/5015)) ([1d50cd1](https://github.com/choiceoh/Deneb/commit/1d50cd102fff024adc54ac6a3cba953fd0c4cd1d))
+* **translate:** Propus 라이프사이클 판정도 딥엘 경로에 태운다 ([#5018](https://github.com/choiceoh/Deneb/issues/5018)) ([071bc1c](https://github.com/choiceoh/Deneb/commit/071bc1cd847decafc0cab297bde62e426dd87566))
+* **translate:** 자가개선 코딩 큐를 딥엘 경로에 태운다 — 운영자가 읽는 화면만 ([#5017](https://github.com/choiceoh/Deneb/issues/5017)) ([902bcda](https://github.com/choiceoh/Deneb/commit/902bcdac8ff7c0367b5dc36dd4687c09af2ac0f5))
+* **web:** source_check — 주장 하나를 웹 출처로 검증해 판정 아티팩트로 돌려준다 ([#5052](https://github.com/choiceoh/Deneb/issues/5052)) ([7e43e13](https://github.com/choiceoh/Deneb/commit/7e43e13793fb4c18679d8c77e41daf6b65fca964))
+* **wiki:** 문서 일자가 파일링 시각과 동떨어지면 경고 — 연도 오기를 보이게 한다 ([#5055](https://github.com/choiceoh/Deneb/issues/5055)) ([2cd55d3](https://github.com/choiceoh/Deneb/commit/2cd55d3dd8aad5d6eca509db9730de60a3641af5))
+* **wormhole:** 로컬 GLM에 이포트 레벨을 명시한다 — 빈칸은 max다 ([#5037](https://github.com/choiceoh/Deneb/issues/5037)) ([7284043](https://github.com/choiceoh/Deneb/commit/7284043c4110d36453436a77afd882a444754eff))
+
+
+### 🐛 Bug Fixes
+
+* **agent:** 소프트 마감에서 최종 응답 예산을 보존한다 ([#5022](https://github.com/choiceoh/Deneb/issues/5022)) ([d166b68](https://github.com/choiceoh/Deneb/commit/d166b68e558cef7855a614f0dd100ffd8f2ca66d))
+* **audit:** 토폴로지 패리티에 플릿 4노드를 넣고 낡은 사이드카 대상을 정정한다 ([#5042](https://github.com/choiceoh/Deneb/issues/5042)) ([d9db797](https://github.com/choiceoh/Deneb/commit/d9db797755f50ccff2062c6175857b512b3e3e4d))
+* **browser:** 정착 계약 수리 — 명시 wait_ms 는 바닥, 셀렉터는 매칭까지 대기, 프로브는 실제 코드 검사 ([#5004](https://github.com/choiceoh/Deneb/issues/5004)) ([92bde33](https://github.com/choiceoh/Deneb/commit/92bde3384b3f53f02593708be9dc4b60646bde50))
+* **chat:** done 프레임이 라이브 추론을 영어로 되돌리던 자리 ([#5027](https://github.com/choiceoh/Deneb/issues/5027)) ([467cd18](https://github.com/choiceoh/Deneb/commit/467cd18741a5114db0c01101d0d16c27461f2ebd))
+* **chat:** 런 예산 소진을 체크포인트 폴백으로 복구 ([#5031](https://github.com/choiceoh/Deneb/issues/5031)) ([f5df42b](https://github.com/choiceoh/Deneb/commit/f5df42bf18c6eaaaedbf30569798e61fec3abf39))
+* **client-android:** 모델 삭제를 롱탭으로 옮긴다 — 파괴적 버튼이 목록에 상주하지 않게 ([#5040](https://github.com/choiceoh/Deneb/issues/5040)) ([3d86eba](https://github.com/choiceoh/Deneb/commit/3d86eba8b62128a342ff479aee57ffdc33c52d4a))
+* **client-android:** 받을 뷰가 없을 때 북마크 탭을 삼키던 자리 ([#5033](https://github.com/choiceoh/Deneb/issues/5033)) ([fa0d2ca](https://github.com/choiceoh/Deneb/commit/fa0d2ca627cd8753ac2db05773f7a5d296afab59))
+* **client-android:** 설정 행에서 설명 줄을 걷어낸다 — 둘째 줄은 알릴 게 있을 때만 ([#5045](https://github.com/choiceoh/Deneb/issues/5045)) ([1e8aec6](https://github.com/choiceoh/Deneb/commit/1e8aec6d675385cb634954ae434f22a1475204cd))
+* **client-android:** 첨부 피커의 MIME 필터를 걷어낸다 — 녹음이 회색으로 죽던 자리 ([#5026](https://github.com/choiceoh/Deneb/issues/5026)) ([d457f9d](https://github.com/choiceoh/Deneb/commit/d457f9d0ecba20c7e4bfb645c086c7b9d1c97bb4))
+* **letter:** 구리 카드를 COMEX 달러/톤 표기로 바로잡는다 ([#5060](https://github.com/choiceoh/Deneb/issues/5060)) ([a4268e0](https://github.com/choiceoh/Deneb/commit/a4268e0170b5bd2d207a4566a35b590fe16958eb))
+* **llm:** thinking 예산이 출력 예산을 통째로 먹지 못하게 맞춘다 ([#5063](https://github.com/choiceoh/Deneb/issues/5063)) ([8b87a48](https://github.com/choiceoh/Deneb/commit/8b87a48680d1fe0df81ebc38a60d5b254ce89781))
+* **mail:** enable LMTP backfill drain ([#5058](https://github.com/choiceoh/Deneb/issues/5058)) ([b8274fb](https://github.com/choiceoh/Deneb/commit/b8274fbfbe5671c3867718f0a83b9f86c701e677))
+* **modelpicker:** 역할이 쓰는 모델을 표시 캡이 자르지 못하게 한다 ([#5043](https://github.com/choiceoh/Deneb/issues/5043)) ([224e02c](https://github.com/choiceoh/Deneb/commit/224e02cef30db7b08ebe7bf0226add77308fe864))
+* **nativeapi:** keep panic recovery at goroutine boundary ([#5032](https://github.com/choiceoh/Deneb/issues/5032)) ([f79ca98](https://github.com/choiceoh/Deneb/commit/f79ca9881ca490ceccd849630599ce242dad106b))
+* **proactive:** 카드 제목에 새던 판정기 사고·지시문을 살리거나 기각한다 ([#5056](https://github.com/choiceoh/Deneb/issues/5056)) ([b8f4997](https://github.com/choiceoh/Deneb/commit/b8f499719e7545afce5995c94acbc2c527ad46be))
+* **translate:** 번역 실패가 원문을 기기에 영구 캐시하던 경로를 끊는다 ([#5013](https://github.com/choiceoh/Deneb/issues/5013)) ([ba701f7](https://github.com/choiceoh/Deneb/commit/ba701f7304eb561cd0d23a801247c16377b681f9))
+* **translate:** 번역기가 거부할 때 범위를 쪼개 79번 다시 묻지 않는다 ([#5014](https://github.com/choiceoh/Deneb/issues/5014)) ([846544d](https://github.com/choiceoh/Deneb/commit/846544d745ce45f168c7a8e6af566248539b3f58))
+* **translate:** 클라이언트 배치 예산을 서버 한 웨이브에 맞추고 그 결합을 테스트로 묶는다 ([#5011](https://github.com/choiceoh/Deneb/issues/5011)) ([133578c](https://github.com/choiceoh/Deneb/commit/133578cdc73780bf43f874c81bce2afb69573853))
+* **wiki:** 거래 원장 날짜를 파일링 시점에 ISO로 정규화 — 월별 집계가 가능해진다 ([#5054](https://github.com/choiceoh/Deneb/issues/5054)) ([5a63171](https://github.com/choiceoh/Deneb/commit/5a631712a07055e65e4e3ab0bd9f9264eac5d80d))
+* **wiki:** 거래 총액이 같은 계약을 네 번 세고 있었다 — 읽을 때 거래로 접는다 ([#5059](https://github.com/choiceoh/Deneb/issues/5059)) ([7936384](https://github.com/choiceoh/Deneb/commit/793638435fa5113168e54d53839f5b4882ace565))
+* **wiki:** 원격 API 합성의 thinking을 끈다 ([#5023](https://github.com/choiceoh/Deneb/issues/5023)) ([31015d4](https://github.com/choiceoh/Deneb/commit/31015d4f50a6726a57bd8b04a69d2a9b31713a2a))
+
+
+### ⚡ Performance
+
+* **browser-android:** 읽는 중인 페이지의 UI 스레드에서 번역·세션 저장 작업을 걷어낸다 ([#5012](https://github.com/choiceoh/Deneb/issues/5012)) ([b9bf8c9](https://github.com/choiceoh/Deneb/commit/b9bf8c9a00a883f9faf8a6886c11b4cfa363f049))
+* **chat:** 버려지는 추론 번역을 없애고, 라이브 스트림에 턴 이음매를 넣는다 ([#5028](https://github.com/choiceoh/Deneb/issues/5028)) ([056ddd4](https://github.com/choiceoh/Deneb/commit/056ddd4399f37a7dc24e8b4c7833e39e4c4e6f38))
+* **chat:** 번역 캐시를 디스크로 내리고, 지출을 처음으로 계측한다 ([#5030](https://github.com/choiceoh/Deneb/issues/5030)) ([4ec4dd2](https://github.com/choiceoh/Deneb/commit/4ec4dd2fc37be84284a2442f327cebd00b25f58a))
+* **translate:** DeepL 배치를 왕복 수 기준으로 재조정 — 페이지 번역 44% 단축 ([#5009](https://github.com/choiceoh/Deneb/issues/5009)) ([74e925e](https://github.com/choiceoh/Deneb/commit/74e925ea33f5ede6819136e8cf1b513b2973f80e))
+* **translate:** 배치 동시성 3→6 + DeepL 429 재시도 — 페이지 번역 꼬리 36% 단축 ([#5010](https://github.com/choiceoh/Deneb/issues/5010)) ([b32bf3f](https://github.com/choiceoh/Deneb/commit/b32bf3f131ee9f508143e8a0c513ce7e7f7583e0))
+
+
+### 🔧 Internal
+
+* **client-android:** 칩을 우리 프리미티브로 통일한다 ([#5047](https://github.com/choiceoh/Deneb/issues/5047)) ([3482ae0](https://github.com/choiceoh/Deneb/commit/3482ae0a4e94e77d9f296b70aab70bdf0d17bdb5))
+* **client-android:** 컨트롤 외형을 앱 전체에서 Deneb 래퍼로 통일한다 ([#5051](https://github.com/choiceoh/Deneb/issues/5051)) ([ec9a759](https://github.com/choiceoh/Deneb/commit/ec9a7590be396eaa1efba67f757c137573adb7dd))
+* **genesis:** remove unreachable EnvBool helper ([#5064](https://github.com/choiceoh/Deneb/issues/5064)) ([f54d048](https://github.com/choiceoh/Deneb/commit/f54d048548ca2425198533f06885b17ab83e5925))
+* **knowledge:** remove unused sync envelope ([#5065](https://github.com/choiceoh/Deneb/issues/5065)) ([27cc0bf](https://github.com/choiceoh/Deneb/commit/27cc0bf3ec090af126a9acecd48093469b2d599a))
+* **session:** 폐기된 heartbeat 세션 선택기를 제거한다 ([#5062](https://github.com/choiceoh/Deneb/issues/5062)) ([cbcad58](https://github.com/choiceoh/Deneb/commit/cbcad5802d692c353d5ef83cf56431d900036f2f))
+
 ## [5.12.1](https://github.com/choiceoh/Deneb/compare/deneb-v5.12.0...deneb-v5.12.1) (2026-09-02)
 
 

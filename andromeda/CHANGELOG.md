@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.0.125](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.124...andromeda-v0.0.125) (2026-09-08)
+
+
+### ✨ Features
+
+* **denebui:** 설명 달린 선택 목록과 선택 전 비활성 제출 — Grok 참조 슬라이스 ①·② ([#5046](https://github.com/choiceoh/Deneb/issues/5046)) ([2f73bf7](https://github.com/choiceoh/Deneb/commit/2f73bf7de47b3e6495334ffb46cddefdc19cec24))
+* **denebui:** 카드 닫기 — &lt;card dismissible&gt;로 답하지 않고 접어두기 (Grok 참조 ③) ([#5048](https://github.com/choiceoh/Deneb/issues/5048)) ([c8a6a29](https://github.com/choiceoh/Deneb/commit/c8a6a29792619e7131d4f0c9a4b87a7c1aafe396))
+* **translate:** Propus 라이프사이클 판정도 딥엘 경로에 태운다 ([#5018](https://github.com/choiceoh/Deneb/issues/5018)) ([071bc1c](https://github.com/choiceoh/Deneb/commit/071bc1cd847decafc0cab297bde62e426dd87566))
+* **translate:** 자가개선 코딩 큐를 딥엘 경로에 태운다 — 운영자가 읽는 화면만 ([#5017](https://github.com/choiceoh/Deneb/issues/5017)) ([902bcda](https://github.com/choiceoh/Deneb/commit/902bcdac8ff7c0367b5dc36dd4687c09af2ac0f5))
+
 ## [0.0.124](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.123...andromeda-v0.0.124) (2026-09-02)
 
 
