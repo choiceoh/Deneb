@@ -44,20 +44,6 @@ func EnvInt(name string, fallback int) int {
 	return value
 }
 
-// EnvBool reads a conventional boolean environment override with a fallback.
-func EnvBool(name string, fallback bool) bool {
-	switch strings.TrimSpace(strings.ToLower(os.Getenv(name))) {
-	case "":
-		return fallback
-	case "1", "true", "yes", "on":
-		return true
-	case "0", "false", "no", "off":
-		return false
-	default:
-		return fallback
-	}
-}
-
 // SanitizeSkillName normalizes a generated skill name to lowercase hyphens.
 func SanitizeSkillName(name string) string {
 	name = strings.ToLower(strings.TrimSpace(name))
