@@ -212,19 +212,19 @@ func GrepToolSchema() map[string]any {
 		"type": "object",
 		"properties": map[string]any{
 			"after": map[string]any{
-				"type":        "number",
+				"type":        "integer",
 				"description": "Lines of context after each match (overrides contextLines for after)",
 				"minimum":     0,
 				"maximum":     10,
 			},
 			"before": map[string]any{
-				"type":        "number",
+				"type":        "integer",
 				"description": "Lines of context before each match (overrides contextLines for before)",
 				"minimum":     0,
 				"maximum":     10,
 			},
 			"contextLines": map[string]any{
-				"type":        "number",
+				"type":        "integer",
 				"description": "Lines of context around each match (0-10)",
 				"default":     0,
 				"minimum":     0,
@@ -241,10 +241,10 @@ func GrepToolSchema() map[string]any {
 			},
 			"include": map[string]any{
 				"type":        "string",
-				"description": "Glob pattern to filter files (e.g. \"*.ts\")",
+				"description": "One glob or a comma-separated string of globs filtering file names (e.g. \"*.go,*.md\"). Do not pass a JSON array",
 			},
 			"maxResults": map[string]any{
-				"type":        "number",
+				"type":        "integer",
 				"description": "Maximum matches to return",
 				"default":     100,
 				"minimum":     1,
@@ -262,11 +262,12 @@ func GrepToolSchema() map[string]any {
 			},
 			"path": map[string]any{
 				"type":        "string",
-				"description": "File or directory to search in",
+				"description": "Optional reachable file or directory. Defaults to the workspace; paths outside the workspace and curated read roots are rejected",
 			},
 			"pattern": map[string]any{
 				"type":        "string",
-				"description": "Regular expression pattern to search for",
+				"description": "Required ripgrep regular expression to match against file contents. Pass only the pattern, not a shell command or file glob",
+				"minLength":   1,
 			},
 		},
 		"required": []string{"pattern"},
