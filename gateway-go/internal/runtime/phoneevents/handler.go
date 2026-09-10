@@ -497,6 +497,17 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 			"source", strings.TrimSpace(source))
 		return
 	}
+	// Android System Intelligence emits high-volume ambient status updates that
+	// have no user action behind them. Production evidence (2026-09-04..10) saw
+	// 1,125 full judgment turns from this label and zero delivered cards. Cut the
+	// source deterministically before the tiny gate so routine platform churn
+	// cannot consume the interactive model lane. Explicit context/clipboard
+	// events keep flowing even when they carry the same source label.
+	if isIgnoredAndroidSystemNotification(eventType, source) {
+		s.logger.Info("phone-event: Android system notification skipped",
+			"source", strings.TrimSpace(source))
+		return
+	}
 	source = strings.TrimSpace(source)
 	if source == "" {
 		source = "(미상)"
@@ -690,6 +701,16 @@ func isIgnoredTossNotification(eventType, source string) bool {
 	}
 	s := strings.ToLower(strings.TrimSpace(source))
 	return s == "토스" || s == "toss" || s == "viva.republica.toss" || strings.HasPrefix(s, "viva.republica.toss.")
+}
+
+func isIgnoredAndroidSystemNotification(eventType, source string) bool {
+	switch strings.TrimSpace(strings.ToLower(eventType)) {
+	case "notification", "":
+	default:
+		return false
+	}
+	s := strings.TrimSpace(source)
+	return strings.EqualFold(s, "Android System Intelligence") || s == "Android 시스템"
 }
 
 // notificationLikeEvent reports whether an event type uses the "worth surfacing?"

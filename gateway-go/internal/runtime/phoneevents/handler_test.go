@@ -115,6 +115,31 @@ func TestIsIgnoredTossNotificationIgnoresOnlyTossSource(t *testing.T) {
 	}
 }
 
+// Android System Intelligence posts ambient platform updates at high volume.
+// Only notification events are noise: an explicit context or clipboard event
+// with the same label still represents user intent and must reach judgment.
+func TestIsIgnoredAndroidSystemNotificationIgnoresOnlyNotifications(t *testing.T) {
+	cases := []struct {
+		eventType string
+		source    string
+		want      bool
+	}{
+		{"notification", "Android 시스템", true},
+		{"notification", "Android System Intelligence", true},
+		{"", " Android 시스템 ", true},
+		{"notification", "android system intelligence", true},
+		{"notification", "Android 시스템 UI", false},
+		{"notification", "시스템", false},
+		{"context", "Android 시스템", false},
+		{"clipboard", "Android System Intelligence", false},
+	}
+	for _, c := range cases {
+		if got := isIgnoredAndroidSystemNotification(c.eventType, c.source); got != c.want {
+			t.Errorf("isIgnoredAndroidSystemNotification(%q, %q) = %v, want %v", c.eventType, c.source, got, c.want)
+		}
+	}
+}
+
 // The usage type carries its own label + guidance, and the guidance embeds the
 // NO_REPLY placeholder so its default-silence branch can be filled by the caller.
 func TestUsageEventLabelAndGuidanceFormatPlaceholder(t *testing.T) {
