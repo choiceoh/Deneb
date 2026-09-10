@@ -31,6 +31,7 @@
 import { stdin as input } from "node:process";
 import { envConfig, loginAndSave, loadSession } from "./lib/client.mjs";
 import {
+  MAX_APPROVAL_LIST_ENTRIES,
   actApproval,
   listApproval,
   listApprovalEntries,
@@ -66,7 +67,8 @@ const docId = (argValue("--doc-id") || argValue("--docId") || "").trim();
 const attachment = (argValue("--attachment") || "").trim();
 const comment = argValue("--comment");
 const limitRaw = parseInt(argValue("--limit") || "20", 10);
-const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : 20;
+const maxLimit = area === "approval" && action === "list" ? MAX_APPROVAL_LIST_ENTRIES : 50;
+const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, maxLimit) : 20;
 const folder = normalizeFolder(
   argValue("--folder") || (action === "list" ? "all" : "pending"),
 );

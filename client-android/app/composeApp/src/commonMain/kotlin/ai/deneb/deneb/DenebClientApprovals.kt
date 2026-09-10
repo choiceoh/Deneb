@@ -53,8 +53,10 @@ private fun freshCachedApprovalsPage(folder: String, limit: Int, nowMs: Long): C
     val hit = approvalListCache ?: return null
     if (hit.folder != folder) return null
     if (nowMs - hit.atMs > APPROVAL_LIST_CACHE_TTL_MS) return null
+    // The server cursor belongs to the complete cached page, never a truncated prefix.
+    if (hit.rows.size > limit) return null
     if (hit.rows.size < limit && hit.nextAfterDocId != null) return null
-    return hit.copy(rows = hit.rows.take(limit))
+    return hit
 }
 
 private fun markApprovalActed(rows: List<GroupwareApprovalRow>, docId: String): List<GroupwareApprovalRow> = rows.map { row -> if (row.docId == docId) row.copy(canAct = false) else row }
@@ -173,12 +175,7 @@ suspend fun DenebGatewayClient.loadMoreApprovals(
         merged.size >= APPROVALS_MAX_LIMIT -> null
         else -> p.nextAfterDocId.ifBlank { null }
     }
-    // Keep session cache as first page only; persist stays first page too.
-    approvalListCache = approvalListCache?.copy(
-        rows = merged.take(APPROVALS_PERSIST_PAGE_SIZE).ifEmpty { merged },
-        nextAfterDocId = _denebApprovalsNextAfter.value,
-        atMs = kotlin.time.Clock.System.now().toEpochMilliseconds(),
-    )
+    // Keep the first-page cache and its matching cursor intact for screen re-entry.
 }
 
 /**

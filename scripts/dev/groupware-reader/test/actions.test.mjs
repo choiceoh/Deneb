@@ -8,6 +8,7 @@ import {
   htmlToText,
   listApproval,
   listApprovalEntries,
+  listTotal,
   readApproval,
   listBoard,
   listBoardEntries,
@@ -112,6 +113,18 @@ test("normalizeApprovalDoc handles both approval list payload shapes", () => {
   });
 });
 
+test("normalizeApprovalDoc converts compact dates and preserves formatted dates", () => {
+  for (const [date, expected] of [
+    ["20260910", "2026-09-10"],
+    ["20260910123456", "2026-09-10"],
+    ["2026-09-10", "2026-09-10"],
+    ["26.09.10", "26.09.10"],
+    ["", ""],
+  ]) {
+    assert.equal(normalizeApprovalDoc({ REP_DT: date }).date, expected);
+  }
+});
+
 test("listApprovalEntries normalizes without network and preserves human list output", async () => {
   const calls = [];
   const loaders = {
@@ -123,8 +136,8 @@ test("listApprovalEntries normalizes without network and preserves human list ou
       throw new Error("unexpected total loader");
     },
   };
-  const entries = await listApprovalEntries("pending", 80, loaders);
-  assert.deepEqual(calls, [["pending", 50]]);
+  const entries = await listApprovalEntries("pending", 120, loaders);
+  assert.deepEqual(calls, [["pending", 100]]);
   assert.equal(entries[0].docId, "12");
   assert.equal(entries[0].folder, "pending");
 
@@ -132,13 +145,154 @@ test("listApprovalEntries normalizes without network and preserves human list ou
   assert.equal(human, "전자결재 · 미결문서 (1건)\n\n1. 지출결의 · 기안 이대리 · id=12");
 });
 
-test("readApproval searches the full list window used by the radar", async () => {
+test("listTotal uses the paged full-document endpoint and preserves its row metadata", async () => {
+  const docs = Array.from({ length: 100 }, (_, index) => ({
+    DOC_ID: String(1000 - index),
+    DOC_TITLE_ORIGIN: `Document ${index}`,
+    USER_NM: "Drafter",
+    DOC_STSNM: "진행",
+    REP_DT: "20260910100000",
+  }));
+  const rows = await listTotal(100, async (endpoint, params) => {
+    assert.equal(endpoint, "/eap/eap105A12");
+    assert.equal(params.page, "1");
+    assert.equal(params.pageSize, "100");
+    assert.equal(params.pageCode, "UBA1060");
+    assert.equal(params.menuNo, "1001500");
+    assert.equal(params.sortField, "REP_DT");
+    assert.equal(params.sortType, "DESC");
+    assert.equal(params.sfrDt, "19000101");
+    assert.equal(params.stoDt, "99991231");
+    return { json: { resultCode: 0, resultData: { result: { list: docs, totalCount: 200 } } } };
+  });
+  assert.equal(rows.length, 100);
+  assert.equal(rows[99].DOC_ID, "901");
+  const normalized = normalizeApprovalDoc(rows[99], "total");
+  assert.equal(normalized.drafter, "Drafter");
+  assert.equal(normalized.status, "진행");
+  assert.equal(normalized.date, "2026-09-10");
+});
+
+test("listTotal handles an empty list and rejects upstream errors", async () => {
+  assert.deepEqual(await listTotal(20, async () => ({
+    json: { resultCode: 0, resultData: { result: { list: [], totalCount: 0 } } },
+  })), []);
+  await assert.rejects(listTotal(20, async () => ({
+    status: 503, json: { resultCode: 503, resultMsg: "list unavailable" },
+  })), /list unavailable/);
+});
+
+test("total includes old pending documents, deduplicates IDs, and keeps cursor prefixes stable", async (t) => {
+  for (const pendingCount of [6, 25]) {
+    await t.test(`${pendingCount} pending documents`, async () => {
+      const pending = Array.from({ length: pendingCount }, (_, index) => ({
+        DOC_ID: String(500 - index), DOC_TITLE_ORIGIN: `Pending ${index}`, RET_ITEM_NM: "미결",
+      }));
+      const recent = [
+        { ...pending[0], RET_ITEM_NM: "" },
+        ...Array.from({ length: 100 }, (_, index) => ({
+          DOC_ID: String(1000 - index), DOC_TITLE_ORIGIN: `Recent ${index}`,
+        })),
+      ];
+      const loaders = {
+        async listBoxPortlet(folder, limit) {
+          assert.equal(folder, "pending");
+          return pending.slice(0, limit);
+        },
+        async listTotal(limit) { return recent.slice(0, limit); },
+      };
+      const first = await listApprovalEntries("total", 20, loaders);
+      const expanded = await listApprovalEntries("total", 100, loaders);
+      assert.equal(first.length, 20);
+      assert.equal(expanded.length, 100);
+      assert.deepEqual(first, expanded.slice(0, 20));
+      assert.equal(new Set(expanded.map((doc) => doc.docId)).size, 100);
+      assert.deepEqual(expanded.slice(0, pendingCount).map((doc) => doc.docId), pending.map((doc) => doc.DOC_ID));
+      assert.ok(expanded.slice(0, pendingCount).every((doc) => doc.folder === "pending" && doc.status === "미결"));
+      const cursor = first.at(-1).docId;
+      const next = expanded.slice(expanded.findIndex((doc) => doc.docId === cursor) + 1, 40);
+      assert.deepEqual([...first, ...next], expanded.slice(0, 40));
+    });
+  }
+});
+
+test("total does not publish a partial list when either source fails", async (t) => {
+  for (const failingSource of ["pending", "total"]) {
+    await t.test(failingSource, async () => {
+      await assert.rejects(listApprovalEntries("total", 20, {
+        async listBoxPortlet() {
+          if (failingSource === "pending") throw new Error("pending unavailable");
+          return [{ DOC_ID: "1" }];
+        },
+        async listTotal() {
+          if (failingSource === "total") throw new Error("total unavailable");
+          return [{ DOC_ID: "2" }];
+        },
+      }), /unavailable/);
+    });
+  }
+});
+
+test("readApproval reads old pending documents listed in the total folder", async () => {
+  const pending = [{ DOC_ID: "500000", DOC_TITLE_ORIGIN: "Old pending approval", RET_ITEM_NM: "미결" }];
+  const recent = Array.from({ length: 100 }, (_, index) => ({
+    DOC_ID: String(100_000 - index), DOC_TITLE_ORIGIN: `Recent document ${index}`,
+  }));
   const calls = [];
-  const docs = Array.from({ length: 50 }, (_, index) => ({
+  const loaders = {
+    async listBoxPortlet(folder, limit) {
+      calls.push([folder, limit]);
+      assert.equal(folder, "pending");
+      return pending.slice(0, limit);
+    },
+    async listTotal(limit) {
+      calls.push(["total", limit]);
+      return recent.slice(0, limit);
+    },
+    async fetchDocDetail(docId) {
+      assert.equal(docId, "500000");
+      return { doc_id: docId, doc_title: "Old pending approval", doc_contents: "<p>Pending document body</p>" };
+    },
+    async fetchDocLine() { return []; },
+    async formatAttachments() { return ""; },
+  };
+  const rows = await listApprovalEntries("total", 20, loaders);
+  assert.equal(rows[0].docId, "500000");
+  assert.equal(rows[0].folder, "pending");
+  assert.equal(rows[0].status, "미결");
+
+  const out = await readApproval("total", rows[0].docId, "", loaders);
+
+  assert.match(out, /Old pending approval/);
+  assert.match(out, /Pending document body/);
+  assert.deepEqual(calls, [["pending", 20], ["total", 20], ["pending", 100], ["total", 100]]);
+});
+
+test("readApproval skips empty titles and matches total-document title aliases", async () => {
+  const loaders = {
+    async listBoxPortlet() { return []; },
+    async listTotal() {
+      return [{ DOC_ID: "100001", DOC_TITLE: "" }, { DOC_ID: "100000", DOC_TITLE: "Aliased approval" }];
+    },
+    async fetchDocDetail(docId) {
+      assert.equal(docId, "100000");
+      return { doc_id: docId, doc_title: "Aliased approval", doc_contents: "<p>Correct document body</p>" };
+    },
+    async fetchDocLine() { return []; },
+    async formatAttachments() { return ""; },
+  };
+  for (const query of ["100000", "Aliased approval"]) {
+    assert.match(await readApproval("total", query, "", loaders), /Correct document body/);
+  }
+});
+
+test("readApproval searches the full list window exposed by approval lists", async () => {
+  const calls = [];
+  const docs = Array.from({ length: 100 }, (_, index) => ({
     DOC_ID: String(100_000 - index),
     DOC_TITLE_ORIGIN: `수신참조 ${index + 1}`,
   }));
-  docs[49] = { DOC_ID: "93481", DOC_TITLE_ORIGIN: "가장 오래된 수신참조" };
+  docs[99] = { DOC_ID: "93481", DOC_TITLE_ORIGIN: "가장 오래된 수신참조" };
 
   const out = await readApproval("cc", "93481", "", {
     async listBoxPortlet(folder, limit) {
@@ -160,7 +314,7 @@ test("readApproval searches the full list window used by the radar", async () =>
     },
   });
 
-  assert.deepEqual(calls, [["cc", 50]]);
+  assert.deepEqual(calls, [["cc", 100]]);
   assert.match(out, /가장 오래된 수신참조/);
   assert.match(out, /본문/);
 });
