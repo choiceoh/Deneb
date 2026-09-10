@@ -287,7 +287,7 @@ func interfaceSlice(raw any) []any {
 
 func TestRequiredFieldsMatchMinimalSchemaContract(t *testing.T) {
 	want := map[string][]string{
-		"read":             {"file_path"},
+		"read":             nil, // file_path or file_paths is required through anyOf.
 		"write":            {"file_path", "content"},
 		"edit":             {"file_path"},
 		"grep":             {"pattern"},
@@ -349,6 +349,33 @@ func TestEditSchemaRequiresOneEditMode(t *testing.T) {
 	edits := props["edits"].(map[string]any)
 	if edits["minItems"] != 1 {
 		t.Fatalf("edit edits.minItems = %v, want 1", edits["minItems"])
+	}
+}
+
+func TestReadSchemaAcceptsSingleOrBatchPath(t *testing.T) {
+	s := schema.ReadToolSchema()
+	if _, exists := s["required"]; exists {
+		t.Fatal("read schema must not require file_path when file_paths is valid")
+	}
+
+	alternatives, ok := s["anyOf"].([]any)
+	if !ok {
+		t.Fatalf("read schema anyOf = %T, want []any", s["anyOf"])
+	}
+	got := make([][]string, 0, len(alternatives))
+	for _, raw := range alternatives {
+		alt, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("read schema anyOf alternative = %T, want map[string]any", raw)
+		}
+		got = append(got, stringSlice(alt["required"]))
+	}
+	if want := [][]string{{"file_path"}, {"file_paths"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("read anyOf required = %#v, want %#v", got, want)
+	}
+	filePaths := s["properties"].(map[string]any)["file_paths"].(map[string]any)
+	if filePaths["minItems"] != 1 || filePaths["maxItems"] != 8 {
+		t.Fatalf("read file_paths bounds = %v..%v, want 1..8", filePaths["minItems"], filePaths["maxItems"])
 	}
 }
 

@@ -16,7 +16,7 @@ import (
 func RegisterFileTools(registry toolport.ToolRegistrar, workspaceDir string, extraReadRoots ...string) {
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "read",
-		Description: "Read file contents with line numbers for code review (default: 2000 lines). Reading SEVERAL files? pass them all as file_paths in ONE call instead of one read per turn. Use offset/limit for large files; equivalent to a clean bat/cat -n view",
+		Description: "Read workspace file contents with line numbers. Pass exactly one mode: file_path (one absolute path; optionally offset/limit/function/force/hashes) or file_paths (1-8 absolute paths for whole-file batch reads; no single-file options). Default single-file limit: 2000 lines. Use read for inspecting existing files; use grep to find text and edit/write to change files.",
 		InputSchema: schema.ReadToolSchema(),
 		Fn:          filesystem.ToolRead(workspaceDir, extraReadRoots...),
 	})

@@ -10,11 +10,13 @@ func ReadToolSchema() map[string]any {
 		"properties": map[string]any{
 			"file_path": map[string]any{
 				"type":        "string",
-				"description": "The absolute path to the file to read",
+				"description": "Single-file mode (required unless file_paths is used): the absolute path to one file. Do not pass together with file_paths.",
 			},
 			"file_paths": map[string]any{
 				"type":        "array",
-				"description": "Read several files in ONE call — pass every path you need instead of one read per turn (up to 8; each arrives under its own [i/N] header, and a path that fails fills its slot without killing the batch). Whole-file only: use file_path with offset/limit/function/hashes for one file's interior.",
+				"description": "Batch mode (required unless file_path is used): 1-8 absolute file paths in ONE call. Do not pass file_path, offset, limit, function, force, or hashes with file_paths. Each result arrives under its own [i/N] header; one failed path does not fail the batch.",
+				"minItems":    1,
+				"maxItems":    8,
 				"items": map[string]any{
 					"type": "string",
 				},
@@ -45,7 +47,14 @@ func ReadToolSchema() map[string]any {
 				"minimum":     1,
 			},
 		},
-		"required": []string{"file_path"},
+		"anyOf": []any{
+			map[string]any{
+				"required": []string{"file_path"},
+			},
+			map[string]any{
+				"required": []string{"file_paths"},
+			},
+		},
 	}
 }
 
