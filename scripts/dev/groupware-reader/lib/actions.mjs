@@ -9,7 +9,7 @@ export const BOX = {
   pending: "1001000", // 미결문서
   done: "1001100", // 기결문서
   cc: "1001200", // 수신참조문서
-  total: "1001500", // 전체결재문서 (list via eap126A04)
+  total: "1001500", // 전체결재문서 (UBA1060 list via eap105A12)
 };
 
 export const FOLDER_TITLE = {
@@ -22,7 +22,7 @@ export const FOLDER_TITLE = {
 const MAX_ATTACH_DOWNLOAD = 3;
 const MAX_ATTACH_BYTES = 8 * 1024 * 1024;
 const MAX_EXTRACT_CHARS = 4_000;
-const MAX_APPROVAL_LIST_ENTRIES = 50;
+export const MAX_APPROVAL_LIST_ENTRIES = 100;
 
 export function normalizeFolder(raw) {
   const f = String(raw || "").trim().toLowerCase();
@@ -211,6 +211,8 @@ function firstApprovalValue(...values) {
 export function normalizeApprovalDoc(d, folder = "") {
   const doc = d || {};
   const folderValue = firstApprovalValue(folder, doc.folder);
+  const date = firstApprovalValue(doc.REP_DT, doc.req_dt, doc.draft_dt, doc.rep_dt, doc.date);
+  const compactDate = /^(\d{4})(\d{2})(\d{2})(?:\d{6})?$/.exec(date);
   return {
     docId: firstApprovalValue(doc.DOC_ID, doc.doc_id, doc.docId),
     title: firstApprovalValue(doc.DOC_TITLE_ORIGIN, doc.doc_title, doc.DOC_TITLE, doc.title),
@@ -218,12 +220,13 @@ export function normalizeApprovalDoc(d, folder = "") {
     drafter: firstApprovalValue(
       doc.userNm,
       doc.user_name,
+      doc.USER_NM,
       doc.DISP_TITLE_HEAD,
       doc.displayNm,
       doc.drafter,
     ),
-    date: firstApprovalValue(doc.REP_DT, doc.req_dt, doc.draft_dt, doc.rep_dt, doc.date),
-    status: firstApprovalValue(doc.RET_ITEM_NM, doc.box_nm, doc.status),
+    date: compactDate ? `${compactDate[1]}-${compactDate[2]}-${compactDate[3]}` : date,
+    status: firstApprovalValue(doc.RET_ITEM_NM, doc.DOC_STSNM, doc.box_nm, doc.status),
     folder: folderValue ? normalizeFolder(folderValue) : "",
   };
 }
@@ -266,17 +269,29 @@ async function listBoxPortlet(folder, limit) {
   return r.json?.resultData?.EaPortletDocList || [];
 }
 
-async function listTotal(limit) {
-  const r = await apiPost("/eap/eap126A04", {
-    boxCodes: ["10", "20", "30", "40", "50", "60"],
-    pageCode: "UBA",
+export async function listTotal(limit, post = apiPost) {
+  // The UBA1060 screen supports a real list window. eap126A04 returns only a
+  // ten-document dashboard snapshot and ignores pageSize/listCount.
+  const r = await post("/eap/eap105A12", {
+    page: "1",
+    pageSize: String(limit),
+    eaBoxId: "1000900",
+    nMenuID: BOX.total,
+    pageCode: "UBA1060",
     upperMenuNo: "1000900",
     menuNo: BOX.total,
+    sortField: "REP_DT",
+    sortType: "DESC",
+    periodPicker: "REP_DT",
+    // Empty dates return zero documents, so request the full document period.
+    sfrDt: "19000101",
+    stoDt: "99991231",
+    fDocSts: [],
   });
   if (r.json?.resultCode !== 0 && r.json?.resultCode !== 200) {
-    throw new Error(r.json?.resultMsg || `eap126A04 failed (${r.status})`);
+    throw new Error(r.json?.resultMsg || `eap105A12 failed (${r.status})`);
   }
-  const docs = r.json?.resultData?.docList || [];
+  const docs = r.json?.resultData?.result?.list || [];
   return docs.slice(0, limit);
 }
 
@@ -759,8 +774,21 @@ export async function listApprovalEntries(folder, limit, loaders = {}) {
     }
     return entries;
   }
-  const docs =
-    normalizedFolder === "total" ? await loadTotal(lim) : await loadBox(normalizedFolder, lim);
+  if (normalizedFolder === "total") {
+    // Pending documents can be older than the recent list window. Keep them
+    // first so both first-page and expanded cursor reads share the same prefix.
+    const pending = (await loadBox("pending", lim)).map((doc) => normalizeApprovalDoc(doc, "pending"));
+    const recent = (await loadTotal(lim)).map((doc) => normalizeApprovalDoc(doc, "total"));
+    const seen = new Set();
+    return [...pending, ...recent]
+      .filter((doc) => {
+        if (!doc.docId || seen.has(doc.docId)) return false;
+        seen.add(doc.docId);
+        return true;
+      })
+      .slice(0, lim);
+  }
+  const docs = await loadBox(normalizedFolder, lim);
   return docs.map((doc) => normalizeApprovalDoc(doc, normalizedFolder));
 }
 
@@ -784,29 +812,20 @@ export async function readApproval(folder, query, matchText, loaders = {}) {
   const q = queryFrom(query, matchText);
   if (!q) throw new Error("read requires --query or notification body on stdin");
 
-  const loadBox = loaders.listBoxPortlet || listBoxPortlet;
-  const loadTotal = loaders.listTotal || listTotal;
   const loadDetail = loaders.fetchDocDetail || fetchDocDetail;
   const loadLine = loaders.fetchDocLine || fetchDocLine;
   const loadAttachments = loaders.formatAttachments || formatAttachments;
   const folders = folder === "all" ? ["pending", "done", "cc", "total"] : [folder];
   for (const key of folders) {
-    let docs;
-    if (key === "total") docs = await loadTotal(MAX_APPROVAL_LIST_ENTRIES);
-    else docs = await loadBox(key, MAX_APPROVAL_LIST_ENTRIES);
-    const hit = docs.find((d) => {
-      const title = d.DOC_TITLE_ORIGIN || d.doc_title || "";
-      const no = d.DOC_NO || d.doc_no || "";
-      const id = String(d.DOC_ID || d.doc_id || "");
-      return (
-        title.includes(q) ||
-        q.includes(title.slice(0, 12)) ||
-        no.includes(q) ||
-        id === q
-      );
-    });
+    // Detail searches must include the same pending-first window as the list.
+    const docs = await listApprovalEntries(key, MAX_APPROVAL_LIST_ENTRIES, loaders);
+    const hit = docs.find(({ title, docNo, docId }) => (
+      docId === q ||
+      (title !== "" && (title.includes(q) || q.includes(title.slice(0, 12)))) ||
+      (docNo !== "" && docNo.includes(q))
+    ));
     if (!hit) continue;
-    const docId = hit.DOC_ID || hit.doc_id;
+    const docId = hit.docId;
     const [detail, lines, attachBlock] = await Promise.all([
       loadDetail(docId),
       loadLine(docId),

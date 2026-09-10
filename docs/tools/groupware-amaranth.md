@@ -165,17 +165,36 @@ POST /eap/eap106A03
 
 ### List (전체결재문서) — **confirmed**
 
-```
-POST /eap/eap126A04
+`POST /eap/eap105A12` (the UBA1060 full-document screen):
+
+```json5
 {
-  "boxCodes": ["10","20","30","40","50","60"],
-  "pageCode": "UBA",
+  "page": "1",
+  "pageSize": "100",
+  "eaBoxId": "1000900",
+  "nMenuID": "1001500",
+  "pageCode": "UBA1060",
   "upperMenuNo": "1000900",
-  "menuNo": "1001500"
+  "menuNo": "1001500",
+  "sortField": "REP_DT",
+  "sortType": "DESC",
+  "periodPicker": "REP_DT",
+  "sfrDt": "19000101",
+  "stoDt": "99991231",
+  "fDocSts": []
 }
 ```
 
-- Response: `resultData.docList[]`
+- Response: `resultData.result.list[]`. A non-empty date range is required.
+- `/eap/eap126A04` returns a ten-document dashboard snapshot and ignores
+  `pageSize` / `listCount`; it cannot back the paginated approval menu.
+- Deneb combines pending documents first with recent documents, deduplicates by
+  document ID, and caps the result at 100. This keeps older pending documents
+  visible and preserves the first-page prefix for expanded cursor reads.
+- The approval reader uses the same 100-document search window for detail lookup.
+  Other CLI areas retain their existing 50-row limit.
+- `USER_NM` and `DOC_STSNM` map to drafter and status; compact eight- or
+  fourteen-digit dates normalize to `YYYY-MM-DD` for client compatibility.
 
 ### Document body — **confirmed**
 
