@@ -38,7 +38,7 @@ func RegisterFileTools(registry toolport.ToolRegistrar, workspaceDir string, ext
 	})
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "grep",
-		Description: "Regex search across files (rg / ripgrep). Use include/fileType to narrow scope. Returns file:line:match format",
+		Description: "Search file contents with ripgrep. Required: pattern, a regular expression (not a shell command or file glob). path is an optional reachable file or directory and defaults to the workspace; narrow searches with include (one glob or a comma-separated string of globs) or fileType. Use mode=content (default), files_only, or count. Context and result limits are integer line/match counts. Returns file:line:match in content mode; no matches is a successful result.",
 		InputSchema: schema.GrepToolSchema(),
 		Fn:          filesystem.ToolGrep(workspaceDir, extraReadRoots...),
 	})

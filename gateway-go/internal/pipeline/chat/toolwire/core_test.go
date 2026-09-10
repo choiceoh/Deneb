@@ -1,6 +1,7 @@
 package toolwire
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
@@ -43,6 +44,30 @@ func TestRegisterFileToolsCreatesOnlyFileToolSet(t *testing.T) {
 
 	for _, name := range want {
 		assertRegisteredContract(t, registeredTool(t, reg, name), name == "edit")
+	}
+}
+
+func TestRegisterFileToolsGrepContractPreventsCommonArgumentMistakes(t *testing.T) {
+	reg := &mockRegistrar{}
+	RegisterFileTools(reg, t.TempDir())
+
+	grep := registeredTool(t, reg, "grep")
+	for _, phrase := range []string{"Required: pattern", "not a shell command or file glob", "comma-separated string of globs", "integer"} {
+		if !strings.Contains(grep.Description, phrase) {
+			t.Errorf("grep description missing %q: %s", phrase, grep.Description)
+		}
+	}
+
+	properties := grep.InputSchema["properties"].(map[string]any)
+	for _, name := range []string{"contextLines", "before", "after", "maxResults"} {
+		property := properties[name].(map[string]any)
+		if got := property["type"]; got != "integer" {
+			t.Errorf("grep %s type = %v, want integer", name, got)
+		}
+	}
+	pattern := properties["pattern"].(map[string]any)
+	if got := pattern["minLength"]; got != 1 {
+		t.Errorf("grep pattern minLength = %v, want 1", got)
 	}
 }
 
