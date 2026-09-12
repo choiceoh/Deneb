@@ -88,6 +88,14 @@ type router struct {
 	// a downstream client (the Deneb gateway, the native picker) discover a
 	// wormhole-fronted model's context window without probing the backend directly.
 	windows atomic.Pointer[map[string]int]
+	// missingUpstream marks local entries whose backend answered /v1/models and
+	// did NOT list their upstreamModel -- a stale entry that fails over on every
+	// call. Written by refreshWindows (sole writer) beside `windows`, read
+	// lock-free by status. missingLogged is the previous pass's set, touched ONLY
+	// by the watcher goroutine so the warning fires on transitions, like
+	// fleetState, instead of once a minute forever.
+	missingUpstream atomic.Pointer[map[string]bool]
+	missingLogged   map[string]bool
 	// keyHealth caches each CLOUD model's last upstream-auth probe (keyhealth.go),
 	// refreshed by refreshKeyHealth on the watch loop. Lock-free read in status;
 	// never nil after newRouter. Empty for local (keyless) models. Surfacing it lets
