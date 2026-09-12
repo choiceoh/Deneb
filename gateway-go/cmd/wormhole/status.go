@@ -16,6 +16,10 @@ type statusModelRow struct {
 	Thinking    bool   `json:"thinking"`
 	Source      string `json:"source"`
 	MaxModelLen int    `json:"max_model_len,omitempty"` // backend vLLM context length (local only)
+	// UpstreamMissing is true when the backend answered /v1/models and did not
+	// list this entry's upstreamModel: the entry is stale and every call to it
+	// fails over. Absent for cloud models and for backends we could not reach.
+	UpstreamMissing bool `json:"upstreamMissing,omitempty"`
 	// KeyHealth is the last upstream-auth probe for a cloud model: "ok" |
 	// "auth_failed" (dead/invalid key) | "rate_limited" | "unreachable" | "http_N"
 	// | "unchecked". Empty for local (keyless) models. Lets the picker flag a dead
@@ -52,6 +56,7 @@ func (rt *router) status(w http.ResponseWriter, r *http.Request) {
 	}
 	s := rt.cur()
 	windows := rt.windows.Load()
+	missing := rt.missingUpstream.Load()
 	out := statusOut{
 		Listen:        s.cfg.Listen,
 		LocalOnly:     s.cfg.LocalOnly,
@@ -65,6 +70,9 @@ func (rt *router) status(w http.ResponseWriter, r *http.Request) {
 		}
 		return 0
 	}
+	stale := func(name string) bool {
+		return missing != nil && (*missing)[name]
+	}
 	health := rt.keyHealth.Load()
 	healthLabel := func(e modelEntry) string {
 		st := keyHealthState{}
@@ -74,14 +82,14 @@ func (rt *router) status(w http.ResponseWriter, r *http.Request) {
 		return st.label(!e.isLocal())
 	}
 	for _, e := range s.cfg.Models {
-		out.Models = append(out.Models, statusRow(e, "config", window(e.Name), healthLabel(e), rt.circuits.view(e.Name)))
+		out.Models = append(out.Models, statusRow(e, "config", window(e.Name), stale(e.Name), healthLabel(e), rt.circuits.view(e.Name)))
 	}
 	if f := rt.fleet.Load(); f != nil {
 		for name, e := range *f {
 			if _, shadowed := s.models[name]; shadowed {
 				continue // a configured model of the same name already covers it
 			}
-			out.Models = append(out.Models, statusRow(e, "fleet", window(name), healthLabel(e), rt.circuits.view(e.Name)))
+			out.Models = append(out.Models, statusRow(e, "fleet", window(name), stale(name), healthLabel(e), rt.circuits.view(e.Name)))
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -91,7 +99,7 @@ func (rt *router) status(w http.ResponseWriter, r *http.Request) {
 // statusRow projects a modelEntry into a (keyless) status row tagged with its
 // source, the backend's discovered context window (0 = unknown / cloud), and the
 // last cloud-key-health label ("" for local).
-func statusRow(e modelEntry, source string, maxModelLen int, keyHealth string, circuit circuitView) statusModelRow {
+func statusRow(e modelEntry, source string, maxModelLen int, upstreamMissing bool, keyHealth string, circuit circuitView) statusModelRow {
 	return statusModelRow{
 		Name:            e.Name,
 		Protocol:        e.protocol(),
@@ -99,6 +107,7 @@ func statusRow(e modelEntry, source string, maxModelLen int, keyHealth string, c
 		Thinking:        e.ToggleKwarg != "",
 		Source:          source,
 		MaxModelLen:     maxModelLen,
+		UpstreamMissing: upstreamMissing,
 		KeyHealth:       keyHealth,
 		CircuitState:    circuit.State,
 		CircuitFailures: circuit.Failures,
