@@ -45,7 +45,9 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 >
 > ⚙️ **tiny 역할은 thinking 무조건 off** (2026-07-22, 운영자 지시 — 코드로 강제): tiny 는 품질보다 **속도·동시성** 우선(단순 분류/추출·세션 제목·라이브 '생각 중' 칩 요약)이라 chain-of-thought 는 순수 오버헤드다. thinking-off 를 **모델이 아니라 역할 속성**으로 강제한다 — `modelrole.Registry.ThinkingOffDirectiveForRole` 이 per-model 정책이 thinking 을 켜둔(추론모델) 경우에도 vLLM-backed 프로바이더면 `enable_thinking=false` 를 얹는다(pilot 직접경로 `CallRoleLLM`). 계기: tiny 모델이 `dsv4-nothink`(무-think)→`qwen3.6-35b-a3b`(듀얼모드 추론)로 스왑되며 thinking 이 켜진 채 돌아 요약이 ~2배 느리고(1.5s 타임아웃 근접→부하 시 드롭) 가끔 중복/장황했다(라이브 실측: `enable_thinking=false` 0.44s 깔끔 vs 무토글 ~1s). 역할 강제라 이후 모델 스왑에도 무회귀. 같은 실패 모드 전례=워크피드 카드 각주(thinking-off 미적용→256토큰을 추론이 소진→빈응답).
 >
-> ⚠️ **2026-07 현재는 main도 클라우드다.** 폴백 방향이 뒤집혔다: 클라우드 main(glm)이 죽으면 **로컬 dsv4로 낙하**한다(가용성 관점에선 건강한 배치). 실측(2026-07-04) glm 소비 ≈ 3.2M input tok/일, main 턴 평균 54~73s. vLLM APC(prefix cache) 핫패스는 main이 아니라 **dsv4 경로**(fallback·dsv4-nothink 헬퍼)로 축소됐다 — `docs/agent-rules/prompt-cache.md` §1.5 의 원칙은 그 트래픽과 main 의 로컬 복귀 대비로 그대로 준수한다.
+> ⚠️ **위 문단은 이 파일이 스스로 경고한 대로 썩었다.** 2026-07 에 적힌 *"main 도 클라우드"* 는 **더 이상 사실이 아니다**. 2026-09-12 `python3 scripts/dev/model_role.py --all` 실측: **main·coding·lightweight·submain·vision → `glm-5.3-flash-local`, tiny → `-local-low`, fallback → `deepseek-v4-flash-api`**. 일곱 중 여섯이 로컬이다.
+> **폴백 방향이 다시 뒤집혔다**: 로컬이 죽으면 **유료 API 로 떨어진다** — 도그마 #7 이 다루는 바로 그 방향이고, 가용성 관점의 "건강한 배치" 가 아니다. 그리고 `prompt-cache.md` §1.5 는 **축소된 코너가 아니라 핫패스다**.
+> 스냅샷을 또 적지 말 것. 필요하면 `--all` 을 돌려라.
 >
 > ★ **chatbot 역할은 2026-07-08 제거됐다** — 챗봇 워크스페이스(`chat:` 세션) 자체가 제품에서 삭제되면서(단일 업무 워크스페이스로 통합) `RoleChatbot`·`agents.chatbotModel`도 함께 은퇴했다. 레거시 `chat:` 세션은 일반 세션으로 흡수되어 main을 쓴다.
 
