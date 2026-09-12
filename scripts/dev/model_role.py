@@ -90,12 +90,30 @@ def role_model(role: str, fallback: str = "", config_path: str = DENEB_CONFIG) -
     return _find(config, key).rsplit("/", 1)[-1] or fallback
 
 
+def role_table(config_path: str = DENEB_CONFIG) -> list[tuple[str, str]]:
+    """Every role and the route serving it, for docs and audits.
+
+    A doc that pastes today's mapping rots -- model-roles.md says so itself and
+    then does it anyway, twice. One call that prints the whole table is what a
+    doc can point at instead of a snapshot.
+    """
+    return [(role, role_model(role, "", config_path) or "-") for role in sorted(ROLE_KEYS)]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("role", choices=sorted(ROLE_KEYS), help="Deneb model role")
+    parser.add_argument("role", nargs="?", choices=sorted(ROLE_KEYS), help="Deneb model role")
+    parser.add_argument("--all", action="store_true", help="print every role and its route")
     parser.add_argument("--fallback", default="", help="value when the role is unresolvable")
     parser.add_argument("--config", default=DENEB_CONFIG, help="deneb.json path")
     args = parser.parse_args(argv)
+    if args.all:
+        width = max(len(role) for role, _ in role_table(args.config))
+        for role, model in role_table(args.config):
+            print(f"{role:<{width}}  {model}")
+        return 0
+    if not args.role:
+        parser.error("a role is required unless --all is given")
     model = role_model(args.role, args.fallback, args.config)
     if not model:
         print(

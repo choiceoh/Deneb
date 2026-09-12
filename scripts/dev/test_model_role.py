@@ -90,3 +90,21 @@ class RoleCoverageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RoleTableTests(unittest.TestCase):
+    """`--all` exists so a doc can point at a command instead of pasting a mapping.
+    model-roles.md warned that snapshots rot and then wrote two that did."""
+
+    def test_the_table_covers_every_role_and_marks_the_unconfigured(self):
+        import tempfile, json as _json
+        from model_role import ROLE_KEYS, role_table
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+            _json.dump({"agents": {"defaultModel": "wormhole/glm-5.3-flash-local",
+                                   "tinyModel": "wormhole/glm-5.3-flash-local-low"}}, fh)
+            path = fh.name
+        table = dict(role_table(path))
+        self.assertEqual(sorted(table), sorted(ROLE_KEYS))
+        self.assertEqual(table["main"], "glm-5.3-flash-local")
+        self.assertEqual(table["tiny"], "glm-5.3-flash-local-low")
+        self.assertEqual(table["vision"], "-", "an unconfigured role is marked, not omitted")
