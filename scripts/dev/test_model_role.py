@@ -97,7 +97,8 @@ class RoleTableTests(unittest.TestCase):
     model-roles.md warned that snapshots rot and then wrote two that did."""
 
     def test_the_table_covers_every_role_and_marks_the_unconfigured(self):
-        import tempfile, json as _json
+        import json as _json
+        import tempfile
         from model_role import ROLE_KEYS, role_table
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
             _json.dump({"agents": {"defaultModel": "wormhole/glm-5.3-flash-local",
