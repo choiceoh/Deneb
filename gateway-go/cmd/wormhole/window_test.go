@@ -89,3 +89,44 @@ func TestRefreshWindows_LoadsLocalWindowsIntoModelsList(t *testing.T) {
 		t.Errorf("/v1/models cloudy max_model_len = %d, want 0 (omitted)", got["cloudy"])
 	}
 }
+
+// TestRefreshWindows_FlagsAnUpstreamTheBackendDoesNotServe pins the difference
+// between "could not ask" and "asked, and it is not there". The second is the
+// stale-entry shape sidecar-models.md records as a paid-API leak that went
+// twelve days unnoticed: wormhole already probed /v1/models and already knew.
+func TestRefreshWindows_FlagsAnUpstreamTheBackendDoesNotServe(t *testing.T) {
+	srv := vllmModelsSrv(t, `{"data":[{"id":"glm-5.3-flash","max_model_len":1048576}]}`)
+	local := true
+	rt := quietRouter(config{Models: []modelEntry{
+		{Name: "glm-5.3-flash-local", URL: srv.URL + "/v1", UpstreamModel: "glm-5.3-flash", Local: &local},
+		{Name: "dsv4-nothink", URL: srv.URL + "/v1", UpstreamModel: "deepseek-v4-flash", Local: &local},
+	}})
+
+	rt.refreshWindows(context.Background())
+
+	if w := (*rt.windows.Load())["glm-5.3-flash-local"]; w != 1048576 {
+		t.Errorf("served entry window = %d, want 1048576", w)
+	}
+	missing := *rt.missingUpstream.Load()
+	if !missing["dsv4-nothink"] {
+		t.Error("an entry whose upstreamModel the backend does not serve must be flagged")
+	}
+	if missing["glm-5.3-flash-local"] {
+		t.Error("a served entry must not be flagged")
+	}
+}
+
+// A backend we cannot reach is NOT a stale entry: saying so would cry wolf on
+// every restart and during every deploy.
+func TestRefreshWindows_AnUnreachableBackendIsNotFlagged(t *testing.T) {
+	local := true
+	rt := quietRouter(config{Models: []modelEntry{
+		{Name: "down", URL: "http://127.0.0.1:1/v1", UpstreamModel: "whatever", Local: &local},
+	}})
+
+	rt.refreshWindows(context.Background())
+
+	if (*rt.missingUpstream.Load())["down"] {
+		t.Error("unreachable must not be reported as not-served")
+	}
+}

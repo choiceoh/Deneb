@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -119,38 +120,87 @@ func (rt *router) watch(ctx context.Context) {
 // atomic swap is the only synchronization needed.
 func (rt *router) refreshWindows(parent context.Context) {
 	next := map[string]int{}
+	missing := map[string]bool{}
 	for _, m := range rt.mergedModels() {
 		e, ok := rt.lookup(m.Name) // resolve fleet-backed entries to a live URL
 		if !ok || e.URL == "" || !e.isLocal() || e.protocol() != protocolOpenAI {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(parent, windowProbeTimeout)
-		if w := probeMaxModelLen(ctx, rt.client, e); w > 0 {
-			next[m.Name] = w
-		}
+		served, probed := probeServed(ctx, rt.client, e)
 		cancel()
+		if !probed {
+			continue // could not ask; say nothing, the next pass tries again
+		}
+		want := upstreamModelOf(e)
+		if w, has := served[want]; has {
+			if w > 0 {
+				next[m.Name] = w
+			}
+			continue
+		}
+		// The backend answered and this is not one of its models. Every request
+		// naming this entry will therefore fail over -- to a paid API if the
+		// chain ends at one -- and nothing else in wormhole notices.
+		missing[m.Name] = true
+		if !rt.missingLogged[m.Name] {
+			rt.log.Warn("upstream model not served by its backend: every call to this entry fails over",
+				"model", m.Name, "upstreamModel", want, "url", e.URL, "serves", servedNames(served))
+		}
 	}
+	for name := range rt.missingLogged {
+		if !missing[name] {
+			rt.log.Info("upstream model is served again", "model", name)
+		}
+	}
+	rt.missingLogged = missing
 	rt.windows.Store(&next)
+	rt.missingUpstream.Store(&missing)
 }
 
-// probeMaxModelLen GETs a backend's /v1/models and returns the max_model_len for
-// the entry's served model id (UpstreamModel, or Name), or 0 if the backend is
-// unreachable, returns non-200, isn't JSON, or doesn't report the field.
-func probeMaxModelLen(ctx context.Context, client *http.Client, e modelEntry) int {
+// servedNames is what the backend did answer with, for the warning above: the
+// whole point is to see the name it serves next to the name we asked for.
+func servedNames(served map[string]int) []string {
+	out := make([]string, 0, len(served))
+	for id := range served {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// upstreamModelOf is the id an entry actually asks its backend for.
+func upstreamModelOf(e modelEntry) string {
+	if e.UpstreamModel != "" {
+		return e.UpstreamModel
+	}
+	return e.Name
+}
+
+// probeServed GETs a backend's /v1/models and returns the ids it serves with
+// their max_model_len, plus whether the probe itself succeeded.
+//
+// The two answers are deliberately separate: "we could not ask" (backend down,
+// non-200, not JSON) and "we asked and it does not serve this model" are very
+// different problems, and collapsing both into a zero window is how a stale
+// entry stays invisible. sidecar-models.md records what that costs — an entry
+// left pointing at a backend that no longer serves its model fails over to a
+// paid API, and the last time nobody noticed for twelve days.
+func probeServed(ctx context.Context, client *http.Client, e modelEntry) (map[string]int, bool) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(e.URL, "/")+"/models", nil)
 	if err != nil {
-		return 0
+		return nil, false
 	}
 	if e.Key != "" {
 		req.Header.Set("Authorization", "Bearer "+e.Key)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0
+		return nil, false
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return 0
+		return nil, false
 	}
 	var out struct {
 		Data []struct {
@@ -159,18 +209,24 @@ func probeMaxModelLen(ctx context.Context, client *http.Client, e modelEntry) in
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, false
+	}
+	served := make(map[string]int, len(out.Data))
+	for _, m := range out.Data {
+		served[m.ID] = m.MaxModelLen
+	}
+	return served, true
+}
+
+// probeMaxModelLen returns the max_model_len for the entry's served model id, or
+// 0 when the backend is unreachable, answers badly, does not serve that id, or
+// does not report the field.
+func probeMaxModelLen(ctx context.Context, client *http.Client, e modelEntry) int {
+	served, ok := probeServed(ctx, client, e)
+	if !ok {
 		return 0
 	}
-	want := e.UpstreamModel
-	if want == "" {
-		want = e.Name
-	}
-	for _, m := range out.Data {
-		if m.ID == want {
-			return m.MaxModelLen
-		}
-	}
-	return 0
+	return served[upstreamModelOf(e)]
 }
 
 // refreshFleet re-polls SparkFleet and swaps in the freshly discovered model set.
