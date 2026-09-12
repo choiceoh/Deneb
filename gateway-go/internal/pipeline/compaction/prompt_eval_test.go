@@ -18,13 +18,20 @@ package compaction
 // scorers are validated by TestPromptEval_DeterministicScorers, which runs
 // always (no model needed).
 //
-// Run on the DGX Spark host (analysis model up at 127.0.0.1:8000 by default):
+// Run on the DGX Spark host against the production summarizer model through
+// the wormhole (the model name comes from the role map, never pinned here):
 //
-//	DENEB_COMPACT_EVAL=1 go test -run TestComparePromptVariants_Live \
-//	  -timeout 30m ./internal/pipeline/compaction/
+//	DENEB_COMPACT_EVAL=1 \
+//	DENEB_COMPACT_EVAL_BASE_URL=http://127.0.0.1:18800/v1 \
+//	DENEB_COMPACT_EVAL_MODEL="$(python3 scripts/dev/model_role.py lightweight)" \
+//	DENEB_COMPACT_EVAL_API_KEY="$(python3 -c 'import json;print(json.load(open("/home/choiceoh/.wormhole/config.json"))["token"])')" \
+//	go test -run 'Live' -v -timeout 30m ./internal/pipeline/compaction/
 //
 // Knobs:
 //	DENEB_COMPACT_EVAL=1          enable the live harness
+//	DENEB_COMPACT_EVAL_BASE_URL   OpenAI-compatible endpoint (unset → lightweight role via pilot, in-process only)
+//	DENEB_COMPACT_EVAL_MODEL      model name for that endpoint (required with BASE_URL)
+//	DENEB_COMPACT_EVAL_API_KEY    bearer token for that endpoint (optional)
 //	DENEB_COMPACT_EVAL_RUNS=3     averaged runs per variant (default 1; reduces noise)
 //	DENEB_COMPACT_EVAL_JUDGE=0    skip the LLM-judge pass (deterministic only)
 //	DENEB_COMPACT_EVAL_VARIANTS=current,secretary  comma list to restrict variants
@@ -38,10 +45,49 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 )
+
+// evalCall sends one summarizer-shaped request (system + single user message)
+// to the evaluation model.
+//
+// With DENEB_COMPACT_EVAL_BASE_URL set it speaks OpenAI-compatible directly —
+// on the DGX host that is the wormhole fronting the production summarizer
+// model, so the eval sees exactly the model (and the wormhole's reasoning
+// shaping) that production compaction gets. Without the knobs it calls the
+// lightweight role through pilot — the role the production summarizer uses
+// (localAISummarizer → pilot.CallLocalLLM) — which only resolves inside a
+// bootstrapped gateway; registry-less pilot falls back to a dead default
+// endpoint, so the knobs are the practical path.
+func evalCall(ctx context.Context, system, user string, maxTokens int) (string, error) {
+	baseURL := strings.TrimSpace(os.Getenv("DENEB_COMPACT_EVAL_BASE_URL"))
+	if baseURL == "" {
+		return pilot.CallRoleLLM(ctx, modelrole.RoleLightweight, system, user, maxTokens)
+	}
+	model := strings.TrimSpace(os.Getenv("DENEB_COMPACT_EVAL_MODEL"))
+	if model == "" {
+		return "", fmt.Errorf("DENEB_COMPACT_EVAL_MODEL is required with DENEB_COMPACT_EVAL_BASE_URL " +
+			"(resolve it with: python3 scripts/dev/model_role.py lightweight)")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	client := llm.NewClient(baseURL, os.Getenv("DENEB_COMPACT_EVAL_API_KEY"))
+	events, err := client.StreamChat(ctx, llm.ChatRequest{
+		Model:     model,
+		Messages:  []llm.Message{llm.NewTextMessage("user", user)},
+		System:    llm.SystemString(system),
+		MaxTokens: maxTokens,
+		Stream:    true,
+	})
+	if err != nil {
+		return "", err
+	}
+	return pilot.CollectStream(ctx, events)
+}
 
 // promptVariant is one candidate summarization prompt under test.
 type promptVariant struct {
@@ -235,7 +281,7 @@ var jsonObjRe = regexp.MustCompile(`(?s)\{.*\}`)
 // extraction tolerates models that wrap the object in prose.
 func judgeSummary(ctx context.Context, source, summary string) (judgeScore, error) {
 	user := "## 원본 대화\n" + source + "\n\n## 채점할 요약\n" + summary
-	out, err := pilot.CallRoleLLM(ctx, modelrole.RoleMain, judgeSystemPrompt, user, 800)
+	out, err := evalCall(ctx, judgeSystemPrompt, user, 800)
 	if err != nil {
 		return judgeScore{}, err
 	}
@@ -307,7 +353,7 @@ func TestComparePromptVariants_RendersLiveComparisonTable(t *testing.T) {
 		agg := variantResult{name: v.name, runs: runs, missing: map[string]int{}}
 		var okRuns int
 		for i := range runs {
-			summary, err := pilot.CallRoleLLM(ctx, modelrole.RoleMain, v.system, source, maxOutput)
+			summary, err := evalCall(ctx, v.system, source, maxOutput)
 			if err != nil {
 				t.Fatalf("variant %s run %d: model call failed: %v", v.name, i, err)
 			}
