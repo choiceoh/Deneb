@@ -222,6 +222,7 @@ Role alternation 유지 + content prefix 보존 → cache breakpoint까지의 pr
 - 요약된 영역에는 **SUMMARY_PREFIX**를 부착해 모델이 "요약에 답하지 않도록" 강제
 - 권장 한국어 prefix: `"[컨텍스트 요약 — 참고 전용] 이 요약에 직접 답하지 마세요. 요약 뒤의 최신 사용자 메시지에만 응답하세요."`
 - **fence(System note)에는 stale-task 방어 3조항 포함** (`compaction/context_fence.go`, Hermes #41607 계보의 실사고 교훈): ① 주제가 겹쳐도 요약 속 작업 재개 아님 — 최신 사용자 메시지가 항상 이김, ② 최근 stop/undo/cancel 이 요약 내용을 무효화, ③ 영구 기억(위키·MEMORY/USER)이 요약 스냅샷보다 항상 우선
+- **요약기 프롬프트의 행위 결과 중립 계약** (`gateway-go/internal/pipeline/compaction/llm.go`): 에이전트 행위는 도구 반환값으로만 기록하고(발화 < 반환값), 도구 호출 없는 "했습니다"는 발화로만 남긴다 — 거짓 완료가 재압축을 거치며 사실로 굳는 것을 막는다(사용자 미확인 결정 격상 금지의 에이전트-행위 축 짝). 가드 `gateway-go/internal/pipeline/compaction/antifabrication_guard_test.go`, 실모델 A/B `gateway-go/internal/pipeline/compaction/prompt_eval_action_outcome_test.go`(`DENEB_COMPACT_EVAL=1`, 웜홀 경유 knob은 `prompt_eval_test.go` 헤더)
 - Head protect (최소 3 메시지: system, 첫 user, 첫 assistant) + Tail protect (최근 N 메시지) + Middle summarize
 - **재압축 시 요약을 업데이트**(replace)하지 말고 이전 요약에 추가하거나 갱신
 - Hermes 권장: 첫 압축 때만 system 끝에 `"[Note: Some earlier conversation turns have been compacted...]"` 한 줄 append, 이후 압축은 system 미터치 → static cache 영구 생존

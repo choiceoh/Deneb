@@ -47,6 +47,31 @@ var forbiddenLeakTokens = []string{
 	"<thinking", "NO_REPLY", "SILENT_REPLY", "<function", "<tool_call", "cache_control",
 }
 
+// Transcript builders shared by every prompt-eval fixture (the deal fixture
+// below and the action-outcome fixture in prompt_eval_action_outcome_test.go).
+// They emit the same block shapes the pipeline persists, so serializeMessages
+// renders them exactly as a real compaction input.
+func fxToolUse(id, name string, input map[string]any) llm.ContentBlock {
+	raw, _ := json.Marshal(input)
+	return llm.ContentBlock{Type: "tool_use", ID: id, Name: name, Input: llm.FlexibleFromRaw(raw)}
+}
+
+func fxToolResult(id, content string) llm.Message {
+	return llm.NewBlockMessage("user", []llm.ContentBlock{
+		{Type: "tool_result", ToolUseID: id, Content: content},
+	})
+}
+
+func fxAssistantText(s string) llm.Message { return llm.NewTextMessage("assistant", s) }
+
+func fxAssistantTool(s, id, name string, input map[string]any) llm.Message {
+	return llm.NewBlockMessage("assistant", []llm.ContentBlock{
+		{Type: "text", Text: s}, fxToolUse(id, name, input),
+	})
+}
+
+func fxUserText(s string) llm.Message { return llm.NewTextMessage("user", s) }
+
 // fixtureMessages builds the source transcript. It deliberately mixes:
 //   - user asks (analyst questions about a deal)
 //   - assistant gmail tool_use + tool_result (a real-ish mail thread)
@@ -54,22 +79,7 @@ var forbiddenLeakTokens = []string{
 //   - calendar + deadline + capture (비서 모드)
 //   - a correction (price changed) to exercise the "record only the updated value" rule
 func fixtureMessages() []llm.Message {
-	toolUse := func(id, name string, input map[string]any) llm.ContentBlock {
-		raw, _ := json.Marshal(input)
-		return llm.ContentBlock{Type: "tool_use", ID: id, Name: name, Input: llm.FlexibleFromRaw(raw)}
-	}
-	toolResult := func(id, content string) llm.Message {
-		return llm.NewBlockMessage("user", []llm.ContentBlock{
-			{Type: "tool_result", ToolUseID: id, Content: content},
-		})
-	}
-	asstText := func(s string) llm.Message { return llm.NewTextMessage("assistant", s) }
-	asstTool := func(s, id, name string, input map[string]any) llm.Message {
-		return llm.NewBlockMessage("assistant", []llm.ContentBlock{
-			{Type: "text", Text: s}, toolUse(id, name, input),
-		})
-	}
-	userText := func(s string) llm.Message { return llm.NewTextMessage("user", s) }
+	toolResult, asstText, asstTool, userText := fxToolResult, fxAssistantText, fxAssistantTool, fxUserText
 
 	return []llm.Message{
 		userText("탑솔라 딜 어디까지 진행됐는지 정리해줘. 메일 확인하고."),
