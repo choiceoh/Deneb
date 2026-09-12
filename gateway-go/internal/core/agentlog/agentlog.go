@@ -270,9 +270,19 @@ type RunErrorData struct {
 // and cumulative, so the delta since this gateway's previous sample
 // approximates the run's own share under the single-user, mostly-serial
 // workload; overlapping runs smear into whichever samples next. Token counts:
-// EngineHitTokens/EngineQueryTokens ≈ the window's APC hit rate. This is the
-// only per-turn cache signal on the vLLM path — the engine does not report
-// cached_tokens in per-request usage (run.end's CacheReadTokens stays 0).
+// EngineHitTokens/EngineQueryTokens ≈ the window's APC hit rate.
+//
+// This is the ENGINE-WIDE view, which is not the same thing as the run's own
+// number and is not a substitute for it. It used to be the only signal we had:
+// the vLLM deployment behind glm-5.3-flash-local did not fill
+// prompt_tokens_details.cached_tokens, so run.end's CacheReadTokens stayed 0
+// and this delta was all there was. That is no longer an absolute — the ST
+// engine that replaced it reports cached_tokens per request, streamed or not,
+// and splitPromptTokens already turns it into CacheReadTokens with no change
+// here. Treat CacheReadTokens as the run's number when it is non-zero, and
+// this as what the engine served everybody (other clients included) in the
+// same window. A backend that still reports nothing leaves CacheReadTokens at
+// 0, and then this is again the only thing to read.
 type RunCacheData struct {
 	EngineHitTokens   int64  `json:"engineHitTokens"`
 	EngineQueryTokens int64  `json:"engineQueryTokens"`
