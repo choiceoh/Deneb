@@ -142,6 +142,10 @@ object DenebRsi
 object DenebUsage
 
 @Serializable
+@SerialName("deneb_engine")
+object DenebEngine
+
+@Serializable
 @SerialName("deneb_org")
 object DenebOrgChart
 
