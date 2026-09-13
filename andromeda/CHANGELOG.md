@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.0.126](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.125...andromeda-v0.0.126) (2026-09-13)
+
+
+### ✨ Features
+
+* **andromeda:** Cygnus 라이트 퍼스트 전환·구체 제거 + 헤드리스 GUI 검증 루프 ([#4872](https://github.com/choiceoh/Deneb/issues/4872)) ([8a78a8a](https://github.com/choiceoh/Deneb/commit/8a78a8a4bf5c6b264eb99a03010a509ccabd659e))
+* **andromeda:** Cygnus 에이전트 컴패니언 창 — 트레이·글로벌 단축키 소환형 표면 ([#4868](https://github.com/choiceoh/Deneb/issues/4868)) ([f878386](https://github.com/choiceoh/Deneb/commit/f878386921e3eef3df00276b869e21618a49bfdf))
+* **andromeda:** Cygnus를 작업창으로 재포지셔닝 ([#4915](https://github.com/choiceoh/Deneb/issues/4915)) ([ade7d98](https://github.com/choiceoh/Deneb/commit/ade7d989e7591e8bfe7b6b533b5cca78fbe7bdc9))
+* **andromeda:** Cygnus에서 작업할 저장소를 고른다 ([#4932](https://github.com/choiceoh/Deneb/issues/4932)) ([c55b30d](https://github.com/choiceoh/Deneb/commit/c55b30d91d615cbf8f78a65ef32b7114f9ddafb2))
+* **andromeda:** 열었더니 돌고 있는 턴을 받아낸다 (foreign-turn watch) ([#4896](https://github.com/choiceoh/Deneb/issues/4896)) ([35f1b91](https://github.com/choiceoh/Deneb/commit/35f1b9111f0d116165b70389b8c4831ccc7ac3ee))
+* **andromeda:** 컴퓨터 use — computer 도구로 데스크톱 화면·마우스·키보드 조종 ([#4576](https://github.com/choiceoh/Deneb/issues/4576)) ([fe78035](https://github.com/choiceoh/Deneb/commit/fe78035f42bc798d0a8630475eebd6e37d75bd70))
+* **andromeda:** 툴콜 소요시간 표시 — 단계마다 얼마 걸렸는지 ([#4921](https://github.com/choiceoh/Deneb/issues/4921)) ([90b83cd](https://github.com/choiceoh/Deneb/commit/90b83cd8b7462ca1ae7081e15f2cc566bfb95c47))
+* **andromeda:** 폭 스윕 검증 도구 + Cygnus 작업창 마감 ([#4919](https://github.com/choiceoh/Deneb/issues/4919)) ([12e9699](https://github.com/choiceoh/Deneb/commit/12e9699c62f8ba581f83d0aaa359d2825cee1fba))
+* **browser:** 원격 규칙·새 창 번역·주소창 자동완성·탭 상한 완화·탭 복원 ([#4665](https://github.com/choiceoh/Deneb/issues/4665)) ([127d1ed](https://github.com/choiceoh/Deneb/commit/127d1eda4639fcb7dac359c778c6e216373ecd92))
+* **chat:** 관전 창에 게이트웨이 페이즈 내레이션 (statusHint) ([#4908](https://github.com/choiceoh/Deneb/issues/4908)) ([2a28519](https://github.com/choiceoh/Deneb/commit/2a2851938aa72d38d746eca926dbbb728dffc131))
+* **chat:** 대화 검색·고정·세션 복원과 모델 기본 되돌리기 ([#4644](https://github.com/choiceoh/Deneb/issues/4644)) ([eac149f](https://github.com/choiceoh/Deneb/commit/eac149fbfcd22807c8330a1596344ebfe5669af0))
+* **chat:** 대화 목록에 작업 중 표시 ([#4922](https://github.com/choiceoh/Deneb/issues/4922)) ([36e5fec](https://github.com/choiceoh/Deneb/commit/36e5fec735c76818095be6487259bc038b331574))
+* **chat:** 대화의 PR·CI 상태를 배지로 ([#4934](https://github.com/choiceoh/Deneb/issues/4934)) ([2c93636](https://github.com/choiceoh/Deneb/commit/2c93636261b5892b582df0bcc2d53939b80ce14d))
+* **chat:** 복원된 대화가 툴 칩을 되찾는다 (toolTrace) ([#4890](https://github.com/choiceoh/Deneb/issues/4890)) ([b097972](https://github.com/choiceoh/Deneb/commit/b09797245dd0d9936cb691797a423beddf0ef6dc))
+* **chat:** 실시간 관전 — 다른 기기의 턴이 라이브로 흐른다 (spectate) ([#4904](https://github.com/choiceoh/Deneb/issues/4904)) ([abfabed](https://github.com/choiceoh/Deneb/commit/abfabeda9e26fb4636c928160ba6def908a0b6ef))
+* **chat:** 완료된 툴칩에 결과 한 줄 요약을 싣는다 ([#4882](https://github.com/choiceoh/Deneb/issues/4882)) ([2a30d07](https://github.com/choiceoh/Deneb/commit/2a30d0740fa18f6f2d0d61ac78b348e938d4b579))
+* **chat:** 채팅 모델 전환을 해당 세션에만 적용 ([#4631](https://github.com/choiceoh/Deneb/issues/4631)) ([bf4fec7](https://github.com/choiceoh/Deneb/commit/bf4fec761f96ebf1ed034ebde58f9eef8214c162))
+* **chat:** 툴 이름을 게이트웨이가 짓는다 — 데스크톱이 영문 식별자를 노출하던 것 ([#4924](https://github.com/choiceoh/Deneb/issues/4924)) ([0eb31bf](https://github.com/choiceoh/Deneb/commit/0eb31bfc00933bcf864ad0c791e425e3bd055111))
+* **chat:** 툴칩을 펼치면 결과 본문을 보여준다 ([#4885](https://github.com/choiceoh/Deneb/issues/4885)) ([755530d](https://github.com/choiceoh/Deneb/commit/755530df6b13d0f6617bca1fa62bcfcec44e9043))
+* **denebui:** 설명 달린 선택 목록과 선택 전 비활성 제출 — Grok 참조 슬라이스 ①·② ([#5046](https://github.com/choiceoh/Deneb/issues/5046)) ([2f73bf7](https://github.com/choiceoh/Deneb/commit/2f73bf7de47b3e6495334ffb46cddefdc19cec24))
+* **denebui:** 카드 닫기 — &lt;card dismissible&gt;로 답하지 않고 접어두기 (Grok 참조 ③) ([#5048](https://github.com/choiceoh/Deneb/issues/5048)) ([c8a6a29](https://github.com/choiceoh/Deneb/commit/c8a6a29792619e7131d4f0c9a4b87a7c1aafe396))
+* **fleet:** 플릿에서 벤치를 제거하고 레시피 제어를 AI 전용으로 전환 ([#4874](https://github.com/choiceoh/Deneb/issues/4874)) ([55aed7b](https://github.com/choiceoh/Deneb/commit/55aed7b44c362fe43b8d6923d4da15e7a186f689))
+* **gateway:** 코드 레포 등록 목록 — 에이전트가 일할 수 있는 곳을 운영자가 정한다 ([#4927](https://github.com/choiceoh/Deneb/issues/4927)) ([c347440](https://github.com/choiceoh/Deneb/commit/c3474401b4e4a353c558683af7d15b457d31eaee))
+* **knowledge:** add grounded personal search and approval Q&A ([#4607](https://github.com/choiceoh/Deneb/issues/4607)) ([bd26ea7](https://github.com/choiceoh/Deneb/commit/bd26ea710df10048e6108af733d6a6b059094f79))
+* **knowledge:** person dossier RPC and client surfaces (improvement-ideas 4.8) ([#4578](https://github.com/choiceoh/Deneb/issues/4578)) ([57f28a9](https://github.com/choiceoh/Deneb/commit/57f28a94c3304b1a70920e510b600dcba1d5ea95))
+* **translate:** Propus 라이프사이클 판정도 딥엘 경로에 태운다 ([#5018](https://github.com/choiceoh/Deneb/issues/5018)) ([071bc1c](https://github.com/choiceoh/Deneb/commit/071bc1cd847decafc0cab297bde62e426dd87566))
+* **translate:** 자가개선 코딩 큐를 딥엘 경로에 태운다 — 운영자가 읽는 화면만 ([#5017](https://github.com/choiceoh/Deneb/issues/5017)) ([902bcda](https://github.com/choiceoh/Deneb/commit/902bcdac8ff7c0367b5dc36dd4687c09af2ac0f5))
+* **wiki:** 현행 사실 계층과 stale-free recall 도입 ([#4653](https://github.com/choiceoh/Deneb/issues/4653)) ([099dcef](https://github.com/choiceoh/Deneb/commit/099dcef4ec7f7ab96b297774c582b01f8b974122))
+* **wormhole:** 페일오버가 조용히 일어나지 않게 — 서킷 상태를 wire에 싣는다 ([#4972](https://github.com/choiceoh/Deneb/issues/4972)) ([0c738f3](https://github.com/choiceoh/Deneb/commit/0c738f342da96d570ce3f06ced46e7308f0aae93))
+* 폰 실시간 관전 + Cygnus 상시 스레드 사이드바 ([#4911](https://github.com/choiceoh/Deneb/issues/4911)) ([e04bbcf](https://github.com/choiceoh/Deneb/commit/e04bbcff7b9577618a11d85f58f639ab9d7d6716))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** Cygnus 3차 복기 — 소환 즉시 타이핑·데스크톱 크롬 공유 훅 ([#4871](https://github.com/choiceoh/Deneb/issues/4871)) ([5557b12](https://github.com/choiceoh/Deneb/commit/5557b126583bf032182c92b1aefc5c7a0b3ec3f6))
+* **andromeda:** Cygnus 대화·입력에 가독 폭 캡 — 최대화 시 줄이 화면 끝까지 흐르던 회귀 ([#4917](https://github.com/choiceoh/Deneb/issues/4917)) ([36202cd](https://github.com/choiceoh/Deneb/commit/36202cd69c3d46638239515824601f818a9de51f))
+* **andromeda:** Cygnus 창 식별 삼중화 + 퍼플렉시티 대조 폴리싱 ([#4875](https://github.com/choiceoh/Deneb/issues/4875)) ([0d2517a](https://github.com/choiceoh/Deneb/commit/0d2517a1e6edb577d9360cf6861e2bd7e6998142))
+* **andromeda:** Cygnus 최소 너비를 도킹 문턱 위로 — 저장된 좁은 창이 상시 목록을 가리던 문제 ([#4913](https://github.com/choiceoh/Deneb/issues/4913)) ([39a38e3](https://github.com/choiceoh/Deneb/commit/39a38e307a88d5c5bda335054774bc9943f5acee))
+* **andromeda:** resync wholesale when native sync reports retention truncation ([#4667](https://github.com/choiceoh/Deneb/issues/4667)) ([4586f05](https://github.com/choiceoh/Deneb/commit/4586f05f330ecde3db0b56054d31f02ac36a93fa))
+* **andromeda:** 완료된 툴칩이 실행 힌트를 잃던 것 수리 + Cygnus 갭 4종 ([#4880](https://github.com/choiceoh/Deneb/issues/4880)) ([847eeed](https://github.com/choiceoh/Deneb/commit/847eeed60a542ef6693307971e2b64b63617f72e))
+* **chat:** Cygnus 폴리시 4종 — 세션 제목 상속·요약 링거·diff 프리뷰·차트 쿨-우선 ([#4887](https://github.com/choiceoh/Deneb/issues/4887)) ([886bb15](https://github.com/choiceoh/Deneb/commit/886bb15508819d6a785315b8610df02d11a940c4))
+* **chat:** 복원 경험 마감 — 네이티브 작업 내역 복원·죽은 재생성 버튼·고아 파일 정리 ([#4894](https://github.com/choiceoh/Deneb/issues/4894)) ([35e4e66](https://github.com/choiceoh/Deneb/commit/35e4e661489017c1068a2ddc87e9ef605313c496))
+* **chat:** 웹 응답 카드 아래 빈 공간 — 프레임이 다시 줄어들 수 있어야 한다 ([#4979](https://github.com/choiceoh/Deneb/issues/4979)) ([1d96df2](https://github.com/choiceoh/Deneb/commit/1d96df22c3b9b60feff495606c8acf4701cad781))
+
 ## [0.0.125](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.124...andromeda-v0.0.125) (2026-09-08)
 
 

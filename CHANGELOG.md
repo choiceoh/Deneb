@@ -1,5 +1,26 @@
 # Changelog
 
+## [5.14.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.13.0...deneb-v5.14.0) (2026-09-13)
+
+
+### ✨ Features
+
+* **compaction:** 요약기 행위 결과 중립 계약 — 도구 반환값이 어시스턴트 발화를 이긴다 ([#5077](https://github.com/choiceoh/Deneb/issues/5077)) ([b21244e](https://github.com/choiceoh/Deneb/commit/b21244e6d5fa76bbcd447df1def453f12e00b435))
+* **observe:** 로컬 서빙 엔진의 일자별 디코드·프리필 속도와 동시성 ([#5078](https://github.com/choiceoh/Deneb/issues/5078)) ([9d3a0f4](https://github.com/choiceoh/Deneb/commit/9d3a0f4c84d72000a347b3ef3f87ab05bd30f526))
+* **wormhole:** warn when a local entry's upstreamModel is not served by its backend ([#5075](https://github.com/choiceoh/Deneb/issues/5075)) ([6a6a899](https://github.com/choiceoh/Deneb/commit/6a6a8995df0aba3b55b99702c5042b3ac74913d9))
+
+
+### 🐛 Bug Fixes
+
+* **approvals:** 결재 목록 누락과 페이지 캐시 오류 수정 ([#5069](https://github.com/choiceoh/Deneb/issues/5069)) ([54acd7e](https://github.com/choiceoh/Deneb/commit/54acd7e2de0bac6beee3be346fa058692794bc50))
+* **chat:** clarify grep tool contract ([#5070](https://github.com/choiceoh/Deneb/issues/5070)) ([02474b1](https://github.com/choiceoh/Deneb/commit/02474b1b7cc4108a9b5bb9eec93f7d75c23d0417))
+* **chat:** clarify read tool input modes ([#5068](https://github.com/choiceoh/Deneb/issues/5068)) ([a0cb75d](https://github.com/choiceoh/Deneb/commit/a0cb75d0ccec5873b03c999b51adb1ec2a5b31da))
+
+
+### ⚡ Performance
+
+* **phoneevents:** skip ambient Android system alerts ([#5067](https://github.com/choiceoh/Deneb/issues/5067)) ([a1397de](https://github.com/choiceoh/Deneb/commit/a1397ded3e8af04f6279dadac682ab4822cc7292))
+
 ## [5.13.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.12.1...deneb-v5.13.0) (2026-09-08)
 
 
