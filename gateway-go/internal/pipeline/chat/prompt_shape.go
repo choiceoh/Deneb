@@ -42,6 +42,12 @@ type promptBudgetOutcome struct {
 	// the condition under which NO variable addition can ever be admitted.
 	BaseTokens   int
 	BudgetTokens int
+	// BaseTokensExact says BaseTokens came from the serving engine's own
+	// tokenizer rather than the estimator. It matters in the journal: the
+	// remainder these two numbers leave for memory is small enough that the
+	// estimator's error band can exceed it, so "how was this measured" changes
+	// how much weight a reader should put on an admission or a drop.
+	BaseTokensExact bool
 }
 
 // tier1Dropped reports a tier-1 block that was built and then admitted at zero.
