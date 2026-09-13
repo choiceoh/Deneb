@@ -8,6 +8,11 @@ for operator diagnostics. Leaf relative to RPC handlers.
 - `capture.go` — `NewRing`, `NewCapture`, `LogCapture`, `ParseLevel`, `QueryOpts`
 - `turn.go` — `BuildTurnView`, `TurnView`
 - `vllm_cache.go` — `FetchVllmPrefixCaches`, `VllmPrefixCache`
+- `engine_speed.go` — `FetchEngineCounters`, `EngineDeltaBetween`, `EngineDelta.Rates`:
+  the serving engine's own latency/token/occupancy series. Cumulative series may
+  be differenced; the occupancy gauges must not be (a peak is watched for, not
+  subtracted). A counter that moved backwards means the engine restarted, so the
+  interval is refused rather than negated.
 
 ## Dependency direction and invariants
 

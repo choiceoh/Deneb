@@ -21,7 +21,6 @@ import (
 	"bufio"
 	"context"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -166,23 +165,12 @@ func engineMetricsURL(baseURL string) string {
 
 // isPrivateEngineHost reports whether host is plausibly a self-hosted engine:
 // localhost, loopback, RFC1918 private, or CGNAT 100.64/10 (Tailscale).
+//
+// The rule itself lives in pkg/httputil so the engine-speed sampler, which
+// scrapes the same endpoints from another package, cannot drift into a second
+// and differently-permissive copy of a security decision.
 func isPrivateEngineHost(host string) bool {
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return false
-	}
-	return ip.IsLoopback() || ip.IsPrivate() || isCGNAT(ip)
-}
-
-// isCGNAT reports whether ip falls in 100.64.0.0/10 (carrier-grade NAT — the
-// Tailscale address space, which is how this deployment reaches its second
-// DGX node).
-func isCGNAT(ip net.IP) bool {
-	v4 := ip.To4()
-	return v4 != nil && v4[0] == 100 && v4[1]&0xC0 == 0x40
+	return httputil.IsPrivateHost(host)
 }
 
 // sampleEngineCacheDelta scrapes metricsURL and returns the hit/query token

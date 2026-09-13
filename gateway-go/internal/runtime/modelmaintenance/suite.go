@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modeltuner"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/regressionwatch"
@@ -55,10 +56,21 @@ type Deps struct {
 }
 
 // Suite is the cohesive set of model-quality background tasks. The compaction
-// tuner is also exposed for the operator-triggered prompt-tuner RPC.
+// tuner is also exposed for the operator-triggered prompt-tuner RPC, and the
+// engine-speed store for the observe surface that reads it.
 type Suite struct {
 	tasks           []PeriodicTask
 	compactionTuner *compactuner.Task
+	engineSpeed     *enginespeed.Store
+}
+
+// EngineSpeed returns the serving-engine speed history, or nil when no local
+// engine is configured (DENEB_ENGINE_METRICS_URL).
+func (s *Suite) EngineSpeed() *enginespeed.Store {
+	if s == nil {
+		return nil
+	}
+	return s.engineSpeed
 }
 
 // New constructs the enabled model-maintenance tasks in their stable
@@ -91,6 +103,19 @@ func New(deps Deps) *Suite {
 			Logger:    logger,
 		}),
 	)
+
+	// Engine speed is measured by reading the local serving engines rather than
+	// by timing the gateway's own calls; it is therefore independent of the
+	// telemetry the other tasks need, and absent whenever no engine is
+	// configured.
+	if endpoints := enginespeed.Endpoints(); len(endpoints) > 0 {
+		suite.engineSpeed = enginespeed.NewStore(enginespeed.DefaultStatePath())
+		if task := enginespeed.NewTask(suite.engineSpeed, endpoints, logger); task != nil {
+			suite.tasks = append(suite.tasks, task)
+			logger.Info("engine-speed: sampling local serving engines",
+				"endpoints", len(endpoints), "interval", enginespeed.PollInterval)
+		}
+	}
 
 	if os.Getenv("DENEB_COMPACTION_TUNER") != "1" || deps.Summaries == nil {
 		return suite
