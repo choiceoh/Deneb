@@ -130,6 +130,7 @@ var requiredMethods = []string{
 	"miniapp.models.delete_custom",
 	"miniapp.models.list",
 	"miniapp.models.set",
+	"miniapp.engine.status",
 	"miniapp.usage.stats",
 	"miniapp.files.list",
 	"miniapp.files.search",

@@ -109,6 +109,24 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("lanes"),
         ),
         contract(
+            name = "EngineDay",
+            serializer = EngineDay.serializer(),
+            empty = EngineDay(),
+            fields = listOf("day", "model", "measured", "decodeTokensPerSec", "prefillTokensPerSec", "concurrencyWhileBusy", "peakConcurrency", "pollIntervalSec", "requests", "promptTokens", "generatedTokens", "restarts"),
+        ),
+        contract(
+            name = "EngineRoutingRow",
+            serializer = EngineRoutingRow.serializer(),
+            empty = EngineRoutingRow(),
+            fields = listOf("model", "local", "requests", "inputTokens", "outputTokens"),
+        ),
+        contract(
+            name = "EngineStatusResult",
+            serializer = EngineStatusResult.serializer(),
+            empty = EngineStatusResult(),
+            fields = listOf("configured", "endpoint", "reachable", "model", "runningRequests", "waitingRequests", "days", "routerAvailable", "routerWindow", "localRequests", "remoteRequests", "routing"),
+        ),
+        contract(
             name = "FilesEntryOut",
             serializer = FilesEntryOut.serializer(),
             empty = FilesEntryOut(),

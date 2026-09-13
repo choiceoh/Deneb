@@ -22,6 +22,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
@@ -496,6 +497,16 @@ func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities 
 				}
 				return requested
 			},
+		}),
+		handlerminiapp.EngineMethods(handlerminiapp.EngineDeps{
+			// Lazy: the maintenance suite that owns the engine-speed history is
+			// built after this early registration, so resolve it per call.
+			Speed:     func() *enginespeed.Store { return s.modelMaintenance.EngineSpeed() },
+			Endpoints: enginespeed.Endpoints,
+			// The router's meter is the only place the local/cloud split exists —
+			// both answer under the same model name. Re-read per call so a
+			// hot-reloaded router config counts.
+			RouterMeter: func() (string, string, map[string]bool) { return configresolve.RouterMeter(s.logger) },
 		}),
 		// miniapp.models.* is deliberately registered in registerLateMethods:
 		// the picker snapshots the model registry and chat handler at creation.
