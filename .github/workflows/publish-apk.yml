@@ -3,7 +3,7 @@ name: Publish APK (OTA)
 # Build the foss release APK on the srv4 self-hosted runner (srv4-apk — the
 # gateway host itself since the 2026-07-06 dev/deploy unification) via
 # scripts/dev/publish-apk.sh, which assigns the versionCode under flock and stages
-# the artifact in the runner-local ~/.cache/deneb-apk. Because the runner shares
+# the artifact in the runner-local ~/.deneb/apk. Because the runner shares
 # the gateway host, that directory IS the OTA serve dir — the sync step below
 # self-skips and only matters if the runner ever moves off-host again. This is a
 # thin trigger over the same script the operator runs by hand. The pre-publish
@@ -89,7 +89,7 @@ jobs:
       # The gateway runs on srv4 and the build runs here (the srv4 self-hosted
       # runner, which has the Android SDK). publish-apk.sh wrote the APK + version.json to THIS
       # runner's serve dir; copy the just-published build to srv4's serve dir so the
-      # gateway's OTA manifest (highest-versionCode scan of ~/.cache/deneb-apk) sees it.
+      # gateway's OTA manifest (highest-versionCode scan of ~/.deneb/apk) sees it.
       # Only the newest APK matters (manifest takes the top code), so we ship that one
       # + version.json, not the whole 300+ build history.
       - name: Sync published APK to srv4 gateway serve dir
@@ -102,13 +102,13 @@ jobs:
             echo "runner is on the gateway host — publish dir is the serve dir; skip sync"
             exit 0
           fi
-          d="${DENEB_APK_DIR:-$HOME/.cache/deneb-apk}"
+          d="${DENEB_APK_DIR:-$HOME/.deneb/apk}"
           # Newest APK by mtime. Avoid `ls | head`: under `set -o pipefail` head
           # closing early makes ls fail with SIGPIPE once the serve dir holds many
           # builds, which silently broke this sync. mapfile reads the full stream.
           mapfile -t _apks < <(ls -t "$d"/*.apk 2>/dev/null)
           latest="${_apks[0]:-}"
           if [ -z "$latest" ]; then echo "no APK to sync" >&2; exit 0; fi
-          ssh -o StrictHostKeyChecking=accept-new srv4 'mkdir -p ~/.cache/deneb-apk'
-          rsync -a "$latest" "$d/version.json" srv4:.cache/deneb-apk/
+          ssh -o StrictHostKeyChecking=accept-new srv4 'mkdir -p ~/.deneb/apk'
+          rsync -a "$latest" "$d/version.json" srv4:.deneb/apk/
           echo "synced $(basename "$latest") + version.json -> srv4 gateway serve dir"

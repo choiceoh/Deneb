@@ -205,7 +205,9 @@ printf 'Signer #1 certificate SHA-256 digest: %s\n' "${CERT_GOT:-AABBCC}"
     ) -> None:
         deneb = self.home / ".deneb"
         keys = deneb / "keys"
-        apk_dir = self.home / ".cache/deneb-apk"
+        # Under the state dir, not ~/.cache: a published APK and version.json
+        # are release state, and a disk sweep took the cache copy on 2026-09-13.
+        apk_dir = self.home / ".deneb/apk"
         keys.mkdir(parents=True, exist_ok=True)
         apk_dir.mkdir(parents=True, exist_ok=True)
         (deneb / "apk-signing.env").write_text("KEYSTORE_PASSWORD=x\n", encoding="utf-8")

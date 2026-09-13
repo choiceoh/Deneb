@@ -21,7 +21,7 @@
 # the publish; a harness that cannot start is a warning, not a block.
 #
 # Env:
-#   DENEB_APK_DIR       publish dir            (default: ~/.cache/deneb-apk)
+#   DENEB_APK_DIR       publish dir            (default: ~/.deneb/apk)
 #   DENEB_APK_BASE_URL  base URL the app uses  (default: http://127.0.0.1:19010)
 #   ANDROID_HOME        Android SDK            (default: ~/android-sdk)
 #   DENEB_SKIP_SMOKE    set to skip the pre-publish smoke gate entirely
@@ -33,7 +33,11 @@
 set -euo pipefail
 
 NOTES="${1:-}"
-APK_DIR="${DENEB_APK_DIR:-$HOME/.cache/deneb-apk}"
+# Under the state dir, NOT ~/.cache: a published APK is the only copy a phone
+# can download and version.json is live release state — nothing here
+# regenerates. A 2026-09-13 disk sweep removed ~/.cache/deneb-apk with the
+# caches around it, which is what that name invites.
+APK_DIR="${DENEB_APK_DIR:-$HOME/.deneb/apk}"
 BASE_URL="${DENEB_APK_BASE_URL:-http://127.0.0.1:19010}"
 SDK="${ANDROID_HOME:-$HOME/android-sdk}"
 # Build variant. fossRelease is the default — the production build users actually run

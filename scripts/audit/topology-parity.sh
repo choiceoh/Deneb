@@ -140,7 +140,7 @@ fi
 # End-to-end signature guard: the NEWEST published APK must carry the release
 # cert. Catches every debug-signed-publish path (missing env was one; a gradle
 # signingConfig regression would be another) at the artifact, not the process.
-APK_DIR="$HOME/.cache/deneb-apk"
+APK_DIR="${DENEB_APK_DIR:-$HOME/.deneb/apk}"
 REF_CERT="$HOME/.deneb/keys/deneb-release-cert.sha256"
 APKSIGNER="$(find "$HOME/android-sdk/build-tools" -name apksigner 2>/dev/null | sort -V | tail -1)"
 latest_apk="$(ls -t "$APK_DIR"/*.apk 2>/dev/null | head -1)"
