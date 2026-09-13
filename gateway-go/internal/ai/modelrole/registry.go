@@ -140,6 +140,13 @@ type RegistryOptions struct {
 	// endpoint/credentials). A role whose provider is present here resolves
 	// from the catalog; otherwise it falls back to the built-in switch.
 	Providers map[string]ProviderResolved
+
+	// MeteredModels names the models that bill per token, read from the
+	// wormhole router's own config (configresolve.MeteredModels). A metered
+	// model stays reachable when a role is pointed AT it deliberately; what the
+	// registry refuses is letting a fallback chain arrive at one, which is how
+	// a dead local model turns into a silent bill. Nil disables the guard.
+	MeteredModels map[string]bool
 }
 
 // clientEntry caches a lazily-initialized LLM client per role.
@@ -173,10 +180,23 @@ type Registry struct {
 	// entries are absent. In-memory only — re-derived from the agent-log effort
 	// scorecard each tuner cycle, so a restart loses at most one interval.
 	tunedMaxSimpleRunes map[string]int
+	// meteredModels names pay-per-token models (from the wormhole config).
+	// Read-only after construction.
+	meteredModels map[string]bool
 	// health tracks per-model failure streaks for the circuit breaker
 	// (health.go). Guarded by its own mutex, independent of mu.
 	health healthState
 	logger *slog.Logger
+}
+
+// IsMetered reports whether model bills per token. The name is matched as the
+// registry stores it (ModelConfig.Model — the name sent to the API, which for
+// routed models is the router entry name the metered flag is set on).
+func (r *Registry) IsMetered(model string) bool {
+	if r == nil || len(r.meteredModels) == 0 {
+		return false
+	}
+	return r.meteredModels[strings.TrimSpace(model)]
 }
 
 // Default constants for known providers.
@@ -347,8 +367,18 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 		vllmProbedAt:        make(map[Role]time.Time),
 		tunedMaxTokens:      make(map[string]int),
 		tunedMaxSimpleRunes: make(map[string]int),
+		meteredModels:       opts.MeteredModels,
 		health:              healthState{models: make(map[string]*modelHealth)},
 		logger:              logger,
+	}
+	// Dogma #7: a metered endpoint does not belong in a fallback chain. Say so
+	// at resolve time, not on the first outage — the 2026-08 leak ran twelve
+	// days because nothing named the arrangement out loud.
+	for _, role := range []Role{RoleFallback, RoleMain2, RoleLightweight, RoleTiny} {
+		if cfg, ok := models[role]; ok && r.IsMetered(cfg.Model) {
+			logger.Warn("role points at a metered model; fallback chains will skip it and may end without a candidate",
+				"role", string(role), "model", cfg.Model)
+		}
 	}
 
 	// Pre-create client entries for lazy initialization.
