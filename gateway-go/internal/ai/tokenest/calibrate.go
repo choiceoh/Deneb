@@ -140,8 +140,20 @@ func (c *Calibrator) factor(family Family) float64 {
 // calFile is the filename for persisted calibration data.
 const calFile = "tokenest-cal.json"
 
+// calRatioGeneration changes whenever familyRatios or byteDivisor changes. A
+// correction factor is only a correction for the ratios it was learned against,
+// so a file from an older generation is dropped instead of applied.
+//
+// Generation 2 (2026-09-13): ratios re-measured against the served GLM
+// tokenizer and byteDivisor's multi-byte term un-inverted. The factor on disk
+// at that point was 0.81 over 29,441 samples, learned against the old ratios
+// AND against a contaminated signal (see recordTokenFeedback) — carrying it
+// forward would have re-applied both errors on top of the fix.
+const calRatioGeneration = 2
+
 // calPersist is the on-disk format.
 type calPersist struct {
+	Version int         `json:"version"`
 	Entries [4]calEntry `json:"entries"`
 }
 
@@ -156,6 +168,11 @@ func LoadCalibration(dataDir string) {
 	var p calPersist
 	if err := json.Unmarshal(data, &p); err != nil {
 		slog.Warn("tokenest: ignoring corrupt calibration file", "path", path, "err", err)
+		return
+	}
+	if p.Version != calRatioGeneration {
+		slog.Info("tokenest: dropping calibration learned against older ratios",
+			"path", path, "stored", p.Version, "want", calRatioGeneration)
 		return
 	}
 	globalCal.mu.Lock()
@@ -177,7 +194,7 @@ func LoadCalibration(dataDir string) {
 // Call this on graceful shutdown.
 func SaveCalibration(dataDir string) error {
 	globalCal.mu.RLock()
-	p := calPersist{Entries: globalCal.entries}
+	p := calPersist{Version: calRatioGeneration, Entries: globalCal.entries}
 	globalCal.mu.RUnlock()
 
 	// Only save if we have meaningful data.

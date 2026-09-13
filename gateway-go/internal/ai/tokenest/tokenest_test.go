@@ -156,11 +156,17 @@ func TestEstimateBytesWithinRangeForASCIIContent(t *testing.T) {
 func TestEstimateBytesWithinRangeForKoreanContent(t *testing.T) {
 	data := []byte("서울에서 맛있는 김치를 먹었습니다")
 	got := EstimateBytes(data)
-	// Korean UTF-8: ~4.5 bytes/token.
-	if got < 5 || got > 20 {
-		t.Errorf("EstimateBytes(Korean) = %d, want 5-20", got)
+	// The served GLM tokenizer makes this exact string 14 tokens (measured
+	// 2026-09-13). 48 bytes / 14 = 3.4 bytes per token for a sentence this
+	// clean; Deneb's own Korean — wiki entries, prompt snapshots, proper nouns
+	// and numbers — runs nearer 2.3, which is what the calibration targets. So
+	// the estimate reads high here, and the band says by how much rather than
+	// pretending the old "~4.5 bytes/token" was ever true: that assumption
+	// under-counted Korean by 47%.
+	if got < 12 || got > 24 {
+		t.Errorf("EstimateBytes(Korean) = %d, want 12-24 (measured truth 14)", got)
 	}
-	t.Logf("Korean %d bytes → %d tokens", len(data), got)
+	t.Logf("Korean %d bytes → %d tokens (measured truth 14)", len(data), got)
 }
 
 func TestCountBytesStaysWithinRatioOfRuneCount(t *testing.T) {

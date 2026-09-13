@@ -84,9 +84,37 @@ var familyRatios = [4][numClasses]float64{
 	// FamilyGemini — SentencePiece-based, decent multilingual coverage.
 	{4.0, 1.4, 1.3, 2.5, 2.0, 1.0, 1.0},
 
-	// FamilyDefault — conservative for unknown tokenizers.
-	// Biased toward Korean (the primary language of this application).
-	{3.5, 1.3, 1.2, 2.0, 1.5, 1.0, 1.0},
+	// FamilyDefault — the locally served GLM-5.3 tokenizer, which is what this
+	// deployment actually sends: six of seven model roles resolve to the local
+	// engine (docs/agent-rules/model-roles.md), so "unknown model" here means
+	// GLM far more often than it means anything else.
+	//
+	// Measured 2026-09-13 against the tokenizer the ST engine boots with
+	// (st-glm53-meta/tokenizer.json, vocab 154,856), over Deneb's own prompt
+	// material: context files, persisted prompt snapshots, the rendered tool
+	// schema head and real transcripts. Re-derive by tokenizing that corpus and
+	// fitting counts-per-class, then biasing so the estimate lands slightly
+	// high: a budget that over-counts compacts early, a budget that
+	// under-counts overflows the window.
+	//
+	// Hangul is the one class worth sweeping rather than fitting. The raw fit
+	// against Deneb's own corpus says 0.86, but that corpus is business wiki
+	// and prompt snapshots — proper nouns, figures and markdown, which the BPE
+	// splits hard. Ordinary Korean prose merges far better (about 1.2), so a
+	// ratio tuned to the corpus over-counts a plain sentence by 58%. 0.9 is the
+	// value that still never under-counts either one: corpus 1.02, plain
+	// sentences 1.05, worst single string 1.41.
+	//
+	// The previous row {3.5, 1.3, 1.2, 2.0, 1.5, 1.0, 1.0} was inherited from
+	// Claude-family assumptions and was wrong per script in both directions at
+	// once: Korean costs MORE than one token per syllable here (not 1.3 syllables
+	// per token), Latin and whitespace cost far less. On real prompt material it
+	// over-counted by 15% overall and by 69% at p90 — the dispersion, not the
+	// mean, is what made budget decisions unpredictable.
+	//
+	//  cjk/other keep the old values: the corpus held under 1,000 runes of each,
+	//  which is not enough to fit.
+	{4.2, 0.9, 1.2, 0.95, 7.5, 1.6, 1.0},
 }
 
 // ── Estimator ───────────────────────────────────────────────────────────
@@ -298,11 +326,39 @@ func byteDivisor(data []byte) float64 {
 	}
 	ratio := float64(multiByte) / float64(len(sample))
 
-	// Interpolate between pure-ASCII (4.0) and pure-multibyte (4.5).
-	// The small range reflects the empirical observation that bytes/token
-	// is surprisingly stable across scripts (~4.0-4.5).
-	return 4.0 + ratio*0.5
+	// Bytes per token FALLS as multi-byte content rises, it does not rise.
+	// A Hangul syllable is 3 UTF-8 bytes and costs MORE than one token, so it
+	// is ~2.2 bytes per token; an ASCII run is 1 byte per rune and several
+	// runes per token, so it is ~3.5. This function used to interpolate
+	// 4.0 → 4.5 in the wrong direction, which under-counted Korean by 47% and
+	// every prompt by 29% overall (measured 2026-09-13 against the engine's own
+	// tokenizer). That error fed the calibration loop below as if it were
+	// tokenizer drift.
+	//
+	// Shape follows the cause: split the bytes into an ASCII part and a
+	// multi-byte part (3 bytes per rune), price each at its own runes-per-token,
+	// and return the effective divisor so rawCountBytes stays a single division.
+	asciiPart := (1 - ratio) / bytesASCIIRunesPerToken
+	multiPart := ratio / (utf8BytesPerCJKRune * bytesMultibyteRunesPerToken)
+	if per := asciiPart + multiPart; per > 0 {
+		return 1 / per
+	}
+	return bytesASCIIRunesPerToken
 }
+
+// Constants for byteDivisor, measured with the rest of the calibration above.
+// They are deliberately separate from familyRatios: this path never decodes
+// UTF-8, so it can only tell ASCII from not-ASCII and has to price each half
+// as a blend of the script classes that actually appear there.
+const (
+	// These are tuned for ACCURACY, not for the conservative bias the rune
+	// ratios carry: this path is what recordTokenFeedback measures with, and a
+	// deliberate bias here would be learned by the calibrator as if it were
+	// tokenizer drift. Measured over the same corpus: total 1.00, p90 1.16.
+	bytesASCIIRunesPerToken     = 3.7  // latin + space + punct + digit, blended
+	bytesMultibyteRunesPerToken = 0.85 // Hangul dominates; CJK is close
+	utf8BytesPerCJKRune         = 3.0  // Hangul and CJK are 3 bytes in UTF-8
+)
 
 // resolveFamily maps a model ID to its tokenizer family.
 func resolveFamily(modelID string) Family {
@@ -320,6 +376,10 @@ func resolveFamily(modelID string) Family {
 		strings.Contains(lower, "gemma"):
 		return FamilyGemini
 	default:
+		// GLM (the locally served family) lands here on purpose: FamilyDefault
+		// IS the GLM calibration. Naming it in a case of its own would suggest
+		// the fallthrough is unrelated, and the next model swap would silently
+		// get Claude-shaped ratios again.
 		return FamilyDefault
 	}
 }
