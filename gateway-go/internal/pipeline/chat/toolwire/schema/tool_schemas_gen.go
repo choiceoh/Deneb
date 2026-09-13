@@ -1731,8 +1731,8 @@ func ObserveToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "What to observe about your own runtime: turn | logs | behavior | effort | proactive | provenance | health (self-improvement machinery: loop liveness, no-op frontier, silent failures)",
-				"enum":        []string{"turn", "logs", "behavior", "effort", "proactive", "provenance", "health"},
+				"description": "What to observe about your own runtime: turn | logs | behavior | effort | proactive | provenance | speed (로컬 서빙 엔진의 일자별 디코드·프리필 속도와 동시성, 엔진 자체 계측) | health (self-improvement machinery: loop liveness, no-op frontier, silent failures)",
+				"enum":        []string{"turn", "logs", "behavior", "effort", "proactive", "provenance", "speed", "health"},
 			},
 			"contains": map[string]any{
 				"type":        "string",
@@ -1740,7 +1740,7 @@ func ObserveToolSchema() map[string]any {
 			},
 			"days": map[string]any{
 				"type":        "number",
-				"description": "Window in days for action=behavior and action=effort (omit = all retained history)",
+				"description": "Window in days for action=behavior, action=effort and action=speed (omit = all retained history)",
 			},
 			"level": map[string]any{
 				"type":        "string",

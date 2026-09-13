@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/observatory"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
@@ -33,6 +34,8 @@ const proactiveStaleWindowMs = 48 * 60 * 60 * 1000
 //   - behavior: cross-session roll-up (tool usage, proactive funnel, bg jobs),
 //     plus the vLLM engine's prefix-cache hit rate scraped live from /metrics
 //   - provenance: recent turn.tool provenance filtered by target/tool/runId
+//   - speed:    the local serving engines' own per-day throughput and
+//     occupancy, read from their /metrics rather than timed by the gateway
 //
 // vllmBases lazily lists the OpenAI-mode vLLM role base URLs to scrape for
 // engine-level prefix-cache counters (nil or empty → the line is omitted).
@@ -41,7 +44,7 @@ const proactiveStaleWindowMs = 48 * 60 * 60 * 1000
 //
 // This is the self-observation adapter: Propus or the operator
 // in chat ("방금 그 턴 왜 느렸어?") can read it without leaving the agent.
-func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Store, vllmBases func() []string) toolport.ToolFunc {
+func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Store, vllmBases func() []string, engineSpeed func() *enginespeed.Store) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action   string           `json:"action"`
@@ -134,6 +137,17 @@ func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Sto
 			})
 			return formatObserveProvenance(events), nil
 
+		case "speed":
+			var store *enginespeed.Store
+			if engineSpeed != nil {
+				store = engineSpeed()
+			}
+			if store == nil {
+				return "no local serving engine is configured (DENEB_ENGINE_METRICS_URL) — " +
+					"engine speed is measured by reading the engine, so cloud models are not covered", nil
+			}
+			return formatEngineSpeed(store.Days(p.Days.Int())), nil
+
 		case "health":
 			// Self-improvement machinery digest: are my own loops alive, and
 			// where are the silent failures / the no-op frontier. The same data
@@ -141,7 +155,7 @@ func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Sto
 			return observatory.Snapshot(config.ResolveStateDir(), time.Now()).Markdown(), nil
 
 		default:
-			return "", fmt.Errorf("observe: unknown action %q — use turn | logs | behavior | effort | proactive | provenance | health", p.Action)
+			return "", fmt.Errorf("observe: unknown action %q — use turn | logs | behavior | effort | proactive | provenance | speed | health", p.Action)
 		}
 	}
 }

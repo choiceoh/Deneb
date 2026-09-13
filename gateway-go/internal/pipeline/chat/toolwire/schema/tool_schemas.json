@@ -1994,7 +1994,7 @@
     "properties": {
       "action": {
         "type": "string",
-        "description": "What to observe about your own runtime: turn | logs | behavior | effort | proactive | provenance | health (self-improvement machinery: loop liveness, no-op frontier, silent failures)",
+        "description": "What to observe about your own runtime: turn | logs | behavior | effort | proactive | provenance | speed (로컬 서빙 엔진의 일자별 디코드·프리필 속도와 동시성, 엔진 자체 계측) | health (self-improvement machinery: loop liveness, no-op frontier, silent failures)",
         "enum": [
           "turn",
           "logs",
@@ -2002,6 +2002,7 @@
           "effort",
           "proactive",
           "provenance",
+          "speed",
           "health"
         ]
       },
@@ -2019,7 +2020,7 @@
       },
       "days": {
         "type": "number",
-        "description": "Window in days for action=behavior and action=effort (omit = all retained history)"
+        "description": "Window in days for action=behavior, action=effort and action=speed (omit = all retained history)"
       },
       "limit": {
         "type": "number",

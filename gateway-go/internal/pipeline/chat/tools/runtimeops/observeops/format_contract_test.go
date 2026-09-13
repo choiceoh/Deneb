@@ -202,7 +202,7 @@ func TestFormatVllmPrefixCachesContract(t *testing.T) {
 }
 
 func TestToolObserveNilDependencyResponsesAndInvalidJSON(t *testing.T) {
-	tool := ToolObserve(nil, nil, nil, nil)
+	tool := ToolObserve(nil, nil, nil, nil, nil)
 	if _, err := tool(context.Background(), json.RawMessage(`{`)); err == nil {
 		t.Fatal("invalid JSON accepted")
 	}

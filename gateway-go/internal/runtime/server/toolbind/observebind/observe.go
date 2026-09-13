@@ -3,6 +3,7 @@
 package observebind
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
@@ -11,6 +12,6 @@ import (
 )
 
 // ToolObserve binds the concrete observeops observe tool.
-func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Store, vllmBases func() []string) toolport.ToolFunc {
-	return observeops.ToolObserve(lc, alog, wf, vllmBases)
+func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Store, vllmBases func() []string, engineSpeed func() *enginespeed.Store) toolport.ToolFunc {
+	return observeops.ToolObserve(lc, alog, wf, vllmBases, engineSpeed)
 }

@@ -1,6 +1,7 @@
 package httputil
 
 import (
+	"net"
 	"net/url"
 	"strings"
 )
@@ -61,4 +62,30 @@ func HostMatches(rawURL, domain string) bool {
 		return false
 	}
 	return host == d || strings.HasSuffix(host, "."+d)
+}
+
+// IsPrivateHost reports whether host is plausibly a machine this deployment
+// owns: loopback, an RFC1918 address, or the Tailscale CGNAT range that this
+// fleet reaches its other DGX nodes through. It guards operator-supplied
+// scrape targets (the serving engine's /metrics endpoint) from being aimed at
+// the public internet.
+//
+// Only the literal name "localhost" is accepted; every other name is rejected
+// rather than resolved, so DNS never gets to decide what we connect to.
+func IsPrivateHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || isCGNAT(ip)
+}
+
+// isCGNAT reports whether ip falls in 100.64.0.0/10 — the Tailscale address
+// space, which is how this deployment reaches its second and third DGX nodes.
+func isCGNAT(ip net.IP) bool {
+	v4 := ip.To4()
+	return v4 != nil && v4[0] == 100 && v4[1]&0xC0 == 0x40
 }
