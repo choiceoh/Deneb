@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import ai.deneb.deneb.generated.EngineDay
 import ai.deneb.deneb.generated.EngineRoutingRow
 import ai.deneb.deneb.generated.EngineStatusResult
+import ai.deneb.deneb.generated.EngineTotals
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
@@ -138,6 +139,10 @@ internal fun EngineStatusContent(status: EngineStatusResult) {
         EngineStateLine(status)
         Spacer(Modifier.height(14.dp))
         EngineShareSection(status)
+        if (status.total.requests > 0) {
+            Spacer(Modifier.height(18.dp))
+            EngineSummarySection(status.total)
+        }
         Spacer(Modifier.height(18.dp))
         EngineSpeedSection(status.days)
         if (status.routing.isNotEmpty()) {
@@ -264,13 +269,14 @@ private fun EngineSpeedSection(days: List<EngineDay>) {
             )
             return@DenebGroup
         }
-        days.forEach { EngineDayRow(it) }
+        val fastest = days.filter { it.measured }.maxOfOrNull { it.decodeTokensPerSec } ?: 0.0
+        days.forEach { EngineDayRow(it, fastest) }
         Spacer(Modifier.height(12.dp))
     }
 }
 
 @Composable
-private fun EngineDayRow(day: EngineDay) {
+private fun EngineDayRow(day: EngineDay, fastestDecode: Double) {
     Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 2.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -290,8 +296,29 @@ private fun EngineDayRow(day: EngineDay) {
             )
         }
         if (day.measured) {
+            // Decode speed against the window's fastest day, so a slow day is
+            // visible without reading every number.
+            if (fastestDecode > 0.0) {
+                Spacer(Modifier.height(4.dp))
+                ShareBar(fraction = (day.decodeTokensPerSec / fastestDecode).toFloat())
+            }
+            Text(
+                text = "첫 토큰 ${formatSeconds(day.meanTtftSeconds)}" +
+                    (if (day.meanQueueSeconds > 0.0) " (대기 ${formatSeconds(day.meanQueueSeconds)})" else "") +
+                    " · 응답 ${formatSeconds(day.meanE2eSeconds)}",
+                style = DenebType.meta,
+                color = denebHint(),
+                modifier = Modifier.padding(top = 6.dp),
+            )
             Text(
                 text = "동시성 ${formatConcurrency(day.concurrencyWhileBusy)} · 최대 ${day.peakConcurrency} · 요청 ${day.requests}",
+                style = DenebType.meta,
+                color = denebHint(),
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            Text(
+                text = "캐시 ${formatPercent(day.promptCacheHitRatio * 100)} · 가동 ${formatPercent(day.utilization * 100)}" +
+                    " (${formatDuration(day.busySeconds)} / ${formatDuration(day.observedSeconds)})",
                 style = DenebType.meta,
                 color = denebHint(),
                 modifier = Modifier.padding(top = 2.dp),
@@ -305,6 +332,41 @@ private fun EngineDayRow(day: EngineDay) {
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
+    }
+}
+
+/**
+ * The whole window folded into one card. Every rate here is recomputed from the
+ * summed work, not averaged across days — a quiet Sunday must not weigh as much
+ * as a busy Monday.
+ */
+@Composable
+private fun EngineSummarySection(total: EngineTotals) {
+    DenebGroup(label = "최근 ${total.days}일 합계") {
+        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 14.dp)) {
+            EngineStatLine("요청", "${total.requests}회")
+            EngineStatLine("토큰", "입력 ${formatTokenCount(total.promptTokens)} · 출력 ${formatTokenCount(total.generatedTokens)}")
+            EngineStatLine("속도", "디코드 ${formatRate(total.decodeTokensPerSec)} · 프리필 ${formatRate(total.prefillTokensPerSec)}")
+            EngineStatLine("첫 토큰", formatSeconds(total.meanTtftSeconds))
+            EngineStatLine("프롬프트 캐시", formatPercent(total.promptCacheHitRatio * 100))
+            EngineStatLine("가동", "${formatPercent(total.utilization * 100)} · ${formatDuration(total.busySeconds)}")
+            if (total.restarts > 0) EngineStatLine("재시작", "${total.restarts}회")
+        }
+    }
+}
+
+/** One label/value line in the summary card. */
+@Composable
+private fun EngineStatLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(text = label, style = DenebType.rowSubtitle, color = denebHint(), modifier = Modifier.weight(1f))
+        Text(
+            text = value,
+            style = DenebType.rowTitle,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -332,7 +394,7 @@ private fun EngineRoutingSection(rows: List<EngineRoutingRow>) {
                     )
                 }
                 Text(
-                    text = "${row.requests}회 · 입력 ${formatTokenCount(row.inputTokens)}",
+                    text = "${row.requests}회 · 입력 ${formatTokenCount(row.inputTokens)} · 출력 ${formatTokenCount(row.outputTokens)}",
                     style = DenebType.meta,
                     color = denebHint(),
                 )
@@ -352,3 +414,24 @@ internal fun formatPercent(pct: Double): String = if (pct >= 10.0) "${pct.roundT
 internal fun formatRate(perSec: Double): String = if (perSec <= 0.0) "—" else "${perSec.roundToInt()} tok/s"
 
 internal fun formatConcurrency(c: Double): String = if (c <= 0.0) "—" else "${(c * 10).roundToInt() / 10.0}"
+
+/** Sub-second latencies read in milliseconds; above that, one decimal second. */
+internal fun formatSeconds(s: Double): String = when {
+    s <= 0.0 -> "—"
+    s < 1.0 -> "${(s * 1000).roundToInt()}ms"
+    else -> "${(s * 10).roundToInt() / 10.0}초"
+}
+
+/** Busy/observed spans read as hours and minutes — a raw second count of a
+ *  day-long window is unreadable. */
+internal fun formatDuration(seconds: Double): String {
+    if (seconds <= 0.0) return "—"
+    val total = seconds.roundToInt()
+    val h = total / 3600
+    val m = (total % 3600) / 60
+    return when {
+        h > 0 -> "${h}시간 ${m}분"
+        m > 0 -> "${m}분"
+        else -> "${total}초"
+    }
+}

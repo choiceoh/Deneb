@@ -480,6 +480,46 @@ class MiniappWireValueContractTest {
                     expectation = Expectation.Exact,
                 ),
                 fieldValue(
+                    name = "meanTtftSeconds",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "meanQueueSeconds",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "meanE2eSeconds",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "promptCacheHitRatio",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "cachedPromptTokens",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "busySeconds",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "observedSeconds",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "utilization",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
                     name = "restarts",
                     value = JsonPrimitive(Int.MAX_VALUE),
                     expectation = Expectation.Exact,
@@ -561,6 +601,11 @@ class MiniappWireValueContractTest {
                     expectation = Expectation.ObjectList,
                 ),
                 fieldValue(
+                    name = "total",
+                    value = JsonObject(emptyMap()),
+                    expectation = Expectation.Object,
+                ),
+                fieldValue(
                     name = "routerAvailable",
                     value = JsonPrimitive(true),
                     expectation = Expectation.Exact,
@@ -588,6 +633,74 @@ class MiniappWireValueContractTest {
             ),
             invalidField = "configured",
             invalidValue = JsonPrimitive(1),
+        ),
+        wireContract(
+            name = "EngineTotals",
+            serializer = EngineTotals.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "days",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "requests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "promptTokens",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "generatedTokens",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "decodeTokensPerSec",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "prefillTokensPerSec",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "meanTtftSeconds",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "promptCacheHitRatio",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "busySeconds",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "observedSeconds",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "utilization",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "restarts",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "days",
+            invalidValue = JsonPrimitive("not-an-int"),
         ),
         wireContract(
             name = "FilesEntryOut",

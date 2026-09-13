@@ -44,9 +44,50 @@ type EngineDay struct {
 	Requests        int64 `json:"requests"`
 	PromptTokens    int64 `json:"promptTokens"`
 	GeneratedTokens int64 `json:"generatedTokens"`
+
+	// Latency as a caller feels it. MeanTtftSeconds INCLUDES the queue;
+	// MeanQueueSeconds is how much of it was waiting for a row rather than
+	// prefilling, so a slow first token can be blamed on the right half.
+	MeanTtftSeconds  float64 `json:"meanTtftSeconds,omitempty"`
+	MeanQueueSeconds float64 `json:"meanQueueSeconds,omitempty"`
+	MeanE2eSeconds   float64 `json:"meanE2eSeconds,omitempty"`
+
+	// PromptCacheHitRatio is the share of prompt TOKENS the engine already had
+	// and did not prefill — the difference between a 40K head costing 20
+	// seconds and costing nothing.
+	PromptCacheHitRatio float64 `json:"promptCacheHitRatio,omitempty"`
+	CachedPromptTokens  int64   `json:"cachedPromptTokens,omitempty"`
+
+	// BusySeconds is stepping time; ObservedSeconds is how long the sampler
+	// watched (polls x interval). Their ratio is utilization, computed here so
+	// the app never has to know the sampling cadence.
+	BusySeconds     float64 `json:"busySeconds,omitempty"`
+	ObservedSeconds float64 `json:"observedSeconds,omitempty"`
+	Utilization     float64 `json:"utilization,omitempty"`
+
 	// Restarts counts intervals dropped because the engine's counters moved
 	// backwards. Those intervals are not in the totals above.
 	Restarts int `json:"restarts"`
+}
+
+// EngineTotals folds the whole window into one row. Rates are recomputed from
+// the summed deltas, never averaged from the daily rates — a day with four
+// requests would otherwise weigh as much as a day with four hundred.
+//
+//deneb:wire
+type EngineTotals struct {
+	Days                int     `json:"days"`
+	Requests            int64   `json:"requests"`
+	PromptTokens        int64   `json:"promptTokens"`
+	GeneratedTokens     int64   `json:"generatedTokens"`
+	DecodeTokensPerSec  float64 `json:"decodeTokensPerSec,omitempty"`
+	PrefillTokensPerSec float64 `json:"prefillTokensPerSec,omitempty"`
+	MeanTtftSeconds     float64 `json:"meanTtftSeconds,omitempty"`
+	PromptCacheHitRatio float64 `json:"promptCacheHitRatio,omitempty"`
+	BusySeconds         float64 `json:"busySeconds,omitempty"`
+	ObservedSeconds     float64 `json:"observedSeconds,omitempty"`
+	Utilization         float64 `json:"utilization,omitempty"`
+	Restarts            int     `json:"restarts"`
 }
 
 // EngineRoutingRow is one router entry's served total. Local marks the entries
@@ -76,7 +117,8 @@ type EngineStatusResult struct {
 	RunningRequests int    `json:"runningRequests"`
 	WaitingRequests int    `json:"waitingRequests"`
 
-	Days []EngineDay `json:"days"`
+	Days  []EngineDay  `json:"days"`
+	Total EngineTotals `json:"total"`
 
 	// RouterAvailable distinguishes "the router said nothing ran locally" from
 	// "we could not ask the router". In a postmortem those look identical.
@@ -132,9 +174,16 @@ func engineStatus(deps EngineDeps) rpcutil.HandlerFunc {
 
 		if deps.Speed != nil {
 			if store := deps.Speed(); store != nil {
-				for _, d := range store.Days(engineHistoryDays) {
+				rows := store.Days(engineHistoryDays)
+				var summed observe.EngineDelta
+				var observed float64
+				for _, d := range rows {
 					out.Days = append(out.Days, engineDayFrom(d))
+					summed = summed.Add(d.Delta)
+					observed += observedSeconds(d)
+					out.Total.Restarts += d.Restarts
 				}
+				out.Total = engineTotalsFrom(out.Total, len(rows), observed, summed)
 			}
 		}
 
@@ -161,8 +210,41 @@ func engineStatus(deps EngineDeps) rpcutil.HandlerFunc {
 // retains 30; a phone screen reads a week.
 const engineHistoryDays = 7
 
+// observedSeconds is how long the sampler actually watched a day: one poll
+// covers one interval. It is the honest denominator for utilization — wall
+// seconds in a day would count the hours the gateway was not even running.
+func observedSeconds(d enginespeed.DayStat) float64 {
+	if d.PollIntervalSec <= 0 || d.Polls <= 0 {
+		return 0
+	}
+	return float64(d.Polls) * float64(d.PollIntervalSec)
+}
+
+func engineTotalsFrom(base EngineTotals, days int, observed float64, summed observe.EngineDelta) EngineTotals {
+	r := summed.Rates()
+	base.Days = days
+	base.Requests = r.Requests
+	base.PromptTokens = r.PromptTokens
+	base.GeneratedTokens = r.GeneratedTokens
+	base.DecodeTokensPerSec = r.DecodeTokensPerSec
+	base.PrefillTokensPerSec = r.PrefillTokensPerSec
+	base.MeanTtftSeconds = r.MeanTTFTSeconds
+	base.PromptCacheHitRatio = r.PromptCacheHitRatio
+	base.BusySeconds = r.BusySeconds
+	base.ObservedSeconds = observed
+	if observed > 0 {
+		base.Utilization = r.BusySeconds / observed
+	}
+	return base
+}
+
 func engineDayFrom(d enginespeed.DayStat) EngineDay {
 	r := d.Rates()
+	observed := observedSeconds(d)
+	util := 0.0
+	if observed > 0 {
+		util = r.BusySeconds / observed
+	}
 	return EngineDay{
 		Day:                  d.Day,
 		Model:                d.Model,
@@ -175,6 +257,14 @@ func engineDayFrom(d enginespeed.DayStat) EngineDay {
 		Requests:             int64(r.Requests),
 		PromptTokens:         int64(r.PromptTokens),
 		GeneratedTokens:      int64(r.GeneratedTokens),
+		MeanTtftSeconds:      r.MeanTTFTSeconds,
+		MeanQueueSeconds:     r.MeanQueueSeconds,
+		MeanE2eSeconds:       r.MeanE2ESeconds,
+		PromptCacheHitRatio:  r.PromptCacheHitRatio,
+		CachedPromptTokens:   r.CachedPromptTokens,
+		BusySeconds:          r.BusySeconds,
+		ObservedSeconds:      observed,
+		Utilization:          util,
 		Restarts:             d.Restarts,
 	}
 }

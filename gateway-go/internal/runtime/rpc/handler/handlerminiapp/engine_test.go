@@ -137,3 +137,70 @@ func TestEngineStatusCarriesTheRouterShare(t *testing.T) {
 		t.Error("an unreachable meter must report no counts at all")
 	}
 }
+
+// Window rates are recomputed from the SUMMED deltas, never averaged from the
+// daily rates. Averaging would let a day with four requests weigh as much as a
+// day with four hundred, which is how a quiet Sunday drags a week's decode
+// figure down by a third.
+func TestEngineTotalsWeighByWorkNotByDay(t *testing.T) {
+	// A busy day and a quiet one, decoding at very different rates.
+	busy := observe.EngineDelta{TPOTCount: 9000, TPOTSeconds: 300, Requests: 90, TTFTSeconds: 90}
+	quiet := observe.EngineDelta{TPOTCount: 10, TPOTSeconds: 10, Requests: 10, TTFTSeconds: 100}
+
+	got := engineTotalsFrom(EngineTotals{}, 2, 1000, busy.Add(quiet))
+
+	// Weighted: 9010 tokens over 310 seconds.
+	want := 9010.0 / 310.0
+	if diff := got.DecodeTokensPerSec - want; diff > 0.01 || diff < -0.01 {
+		t.Errorf("DecodeTokensPerSec = %.3f, want the work-weighted %.3f", got.DecodeTokensPerSec, want)
+	}
+	// The naive average of the two daily rates (30 and 1) is 15.5 — far off.
+	if got.DecodeTokensPerSec < 20 {
+		t.Errorf("rate %.3f looks averaged per day, not weighted by work", got.DecodeTokensPerSec)
+	}
+	if got.Requests != 100 {
+		t.Errorf("Requests = %d, want 100", got.Requests)
+	}
+	// Mean first-token latency is likewise mass-weighted: 190s over 100 requests.
+	if diff := got.MeanTtftSeconds - 1.9; diff > 0.01 || diff < -0.01 {
+		t.Errorf("MeanTtftSeconds = %.3f, want 1.9", got.MeanTtftSeconds)
+	}
+}
+
+// Utilization divides stepping time by the time the sampler actually WATCHED,
+// not by the hours in a day: the gateway is not always running, and a day it
+// only saw an hour of is not a day the engine was idle for twenty-three.
+func TestEngineUtilizationUsesObservedTimeNotWallClock(t *testing.T) {
+	day := enginespeed.DayStat{Polls: 240, PollIntervalSec: 15} // one hour watched
+	if got := observedSeconds(day); got != 3600 {
+		t.Fatalf("observedSeconds = %v, want 3600", got)
+	}
+	totals := engineTotalsFrom(EngineTotals{}, 1, observedSeconds(day), observe.EngineDelta{BusySeconds: 1800})
+	if diff := totals.Utilization - 0.5; diff > 1e-9 || diff < -1e-9 {
+		t.Errorf("Utilization = %v, want 0.5 (half of the watched hour)", totals.Utilization)
+	}
+	// No polls means no window; a ratio would be an invention.
+	if got := observedSeconds(enginespeed.DayStat{Polls: 0, PollIntervalSec: 15}); got != 0 {
+		t.Errorf("observedSeconds with no polls = %v, want 0", got)
+	}
+}
+
+// The prompt-cache ratio is token-valued on this engine, and it is the number
+// with the largest lever behind it — a head the engine already holds costs
+// nothing to prefill.
+func TestEngineDayCarriesThePromptCacheRatio(t *testing.T) {
+	day := enginespeed.DayStat{
+		Day: "2026-09-13", Polls: 240, PollIntervalSec: 15,
+		Delta: observe.EngineDelta{
+			PrefixCacheQueries: 10_000, PrefixCacheHits: 7_500,
+			Requests: 10, TTFTSeconds: 10, TPOTCount: 100, TPOTSeconds: 2,
+		},
+	}
+	got := engineDayFrom(day)
+	if diff := got.PromptCacheHitRatio - 0.75; diff > 1e-9 || diff < -1e-9 {
+		t.Errorf("PromptCacheHitRatio = %v, want 0.75", got.PromptCacheHitRatio)
+	}
+	if got.CachedPromptTokens != 7500 {
+		t.Errorf("CachedPromptTokens = %d, want 7500", got.CachedPromptTokens)
+	}
+}
