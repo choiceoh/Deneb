@@ -18,6 +18,7 @@ import ai.deneb.deneb.DenebCronEditScreen
 import ai.deneb.deneb.DenebCronScreen
 import ai.deneb.deneb.DenebDashboardScreen
 import ai.deneb.deneb.DenebDiaryScreen
+import ai.deneb.deneb.DenebEngineScreen
 import ai.deneb.deneb.DenebFilesScreen
 import ai.deneb.deneb.DenebFleetScreen
 import ai.deneb.deneb.DenebGatewayClient
@@ -495,6 +496,15 @@ internal fun AppContent(
                                 denebComposable<DenebRsi> {
                                     denebClient?.let { client ->
                                         DenebRsiScreen(
+                                            client = client,
+                                            onBack = { navController.navigateUp() },
+                                            navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                        )
+                                    }
+                                }
+                                denebComposable<DenebEngine> {
+                                    denebClient?.let { client ->
+                                        DenebEngineScreen(
                                             client = client,
                                             onBack = { navController.navigateUp() },
                                             navigationTabBar = if (showTabBar) navigationTabBar else null,

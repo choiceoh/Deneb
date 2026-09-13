@@ -6,6 +6,7 @@ import ai.deneb.DenebCategories
 import ai.deneb.DenebConfig
 import ai.deneb.DenebContacts
 import ai.deneb.DenebDashboard
+import ai.deneb.DenebEngine
 import ai.deneb.DenebFiles
 import ai.deneb.DenebGroupware
 import ai.deneb.DenebNotebooks
@@ -26,6 +27,7 @@ import ai.deneb.ui.icons.outlined.Contacts
 import ai.deneb.ui.icons.outlined.Dashboard
 import ai.deneb.ui.icons.outlined.Folder
 import ai.deneb.ui.icons.outlined.Insights
+import ai.deneb.ui.icons.outlined.Memory
 import ai.deneb.ui.icons.outlined.Public
 import ai.deneb.ui.icons.outlined.Storage
 import androidx.compose.foundation.layout.Column
@@ -84,6 +86,7 @@ internal val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
         MoreEntry("브라우저", DenebBrowser(""), Icons.Outlined.Public, key = "deneb_browser"),
     ),
     "시스템" to listOf(
+        MoreEntry("엔진", DenebEngine, Icons.Outlined.Memory, key = "deneb_engine"),
         MoreEntry("설정", DenebConfig, Icons.Outlined.Settings, key = "deneb_config", alwaysShown = true),
     ),
 )

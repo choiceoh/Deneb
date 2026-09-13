@@ -35,6 +35,13 @@ const (
 	// "admission to the answer": the residency of a request, summed.
 	engineE2ESumMetric   = "vllm:e2e_request_latency_seconds_sum"
 	engineE2ECountMetric = "vllm:e2e_request_latency_seconds_count"
+	// Prefix-cache reuse, TOKEN-valued on this engine: queries is the prompt
+	// tokens that were looked up, hits the ones already resident. Their ratio is
+	// the share of prompt the engine did not have to prefill — the lever with
+	// the largest number attached to it (48.5M uncached prompt tokens in the
+	// week of 2026-09-06, about 6.6 hours of prefill).
+	enginePrefixQueriesMetric = "vllm:prefix_cache_queries_total" //nolint:gosec // G101: a metric name, not a secret
+	enginePrefixHitsMetric    = "vllm:prefix_cache_hits_total"    //nolint:gosec // G101: a metric name, not a secret
 	// "one model step, host-observed end to end", labeled by kind
 	// (prefill/decode). The engine only steps when it has work, so this sums to
 	// the time it was BUSY.
@@ -57,6 +64,7 @@ var engineCumulativeMetrics = []string{
 	engineTPOTSumMetric, engineTPOTCountMetric,
 	engineE2ESumMetric, engineE2ECountMetric, engineStepSumMetric,
 	enginePromptTokensMetric, engineGenTokensMetric,
+	enginePrefixQueriesMetric, enginePrefixHitsMetric,
 }
 
 // engineGaugeMetrics are point-in-time and must never be differenced.
@@ -95,6 +103,10 @@ type EngineCounters struct {
 	// found by watching these, not by subtracting them.
 	RunningRequests float64 `json:"runningRequests"`
 	WaitingRequests float64 `json:"waitingRequests"`
+
+	// Prefix-cache reuse in prompt TOKENS (not requests).
+	PrefixCacheQueries float64 `json:"prefixCacheQueries"`
+	PrefixCacheHits    float64 `json:"prefixCacheHits"`
 }
 
 // Concurrency is how many requests the engine held at the instant of this
@@ -163,6 +175,9 @@ func FetchEngineCounters(ctx context.Context, metricsURL string) (EngineCounters
 		GenerationTokens: totals[engineGenTokensMetric],
 		RunningRequests:  totals[engineRunningMetric],
 		WaitingRequests:  totals[engineWaitingMetric],
+
+		PrefixCacheQueries: totals[enginePrefixQueriesMetric],
+		PrefixCacheHits:    totals[enginePrefixHitsMetric],
 	}
 	out.Model = fetchServedModel(ctx, client, metricsURL)
 	return out, true
@@ -177,10 +192,14 @@ type EngineDelta struct {
 	TPOTSeconds      float64
 	TPOTCount        float64
 	E2ESeconds       float64
+	E2ECount         float64
 	BusySeconds      float64
 	Requests         float64
 	PromptTokens     float64
 	GenerationTokens float64
+
+	PrefixCacheQueries float64
+	PrefixCacheHits    float64
 }
 
 // EngineDeltaBetween is the growth from one scrape to the next.
@@ -195,7 +214,8 @@ func EngineDeltaBetween(from, to EngineCounters) (EngineDelta, bool) {
 		to.TPOTSeconds < from.TPOTSeconds || to.TPOTCount < from.TPOTCount ||
 		to.E2ESeconds < from.E2ESeconds || to.E2ECount < from.E2ECount ||
 		to.BusySeconds < from.BusySeconds ||
-		to.PromptTokens < from.PromptTokens || to.GenerationTokens < from.GenerationTokens {
+		to.PromptTokens < from.PromptTokens || to.GenerationTokens < from.GenerationTokens ||
+		to.PrefixCacheQueries < from.PrefixCacheQueries || to.PrefixCacheHits < from.PrefixCacheHits {
 		return EngineDelta{}, false
 	}
 	return EngineDelta{
@@ -204,10 +224,14 @@ func EngineDeltaBetween(from, to EngineCounters) (EngineDelta, bool) {
 		TPOTSeconds:      to.TPOTSeconds - from.TPOTSeconds,
 		TPOTCount:        to.TPOTCount - from.TPOTCount,
 		E2ESeconds:       to.E2ESeconds - from.E2ESeconds,
+		E2ECount:         to.E2ECount - from.E2ECount,
 		BusySeconds:      to.BusySeconds - from.BusySeconds,
 		Requests:         to.TTFTCount - from.TTFTCount,
 		PromptTokens:     to.PromptTokens - from.PromptTokens,
 		GenerationTokens: to.GenerationTokens - from.GenerationTokens,
+
+		PrefixCacheQueries: to.PrefixCacheQueries - from.PrefixCacheQueries,
+		PrefixCacheHits:    to.PrefixCacheHits - from.PrefixCacheHits,
 	}, true
 }
 
@@ -218,10 +242,13 @@ func (d EngineDelta) Add(o EngineDelta) EngineDelta {
 	d.TPOTSeconds += o.TPOTSeconds
 	d.TPOTCount += o.TPOTCount
 	d.E2ESeconds += o.E2ESeconds
+	d.E2ECount += o.E2ECount
 	d.BusySeconds += o.BusySeconds
 	d.Requests += o.Requests
 	d.PromptTokens += o.PromptTokens
 	d.GenerationTokens += o.GenerationTokens
+	d.PrefixCacheQueries += o.PrefixCacheQueries
+	d.PrefixCacheHits += o.PrefixCacheHits
 	return d
 }
 
@@ -238,6 +265,26 @@ type EngineRates struct {
 	// not in the denominator, so this is the average WHILE IN USE and never
 	// dilutes toward zero on a quiet day.
 	ConcurrencyWhileBusy float64 `json:"concurrencyWhileBusy,omitempty"`
+
+	// MeanTTFTSeconds is arrival to first token INCLUDING the queue — what a
+	// caller actually waits. MeanQueueSeconds is how much of that was waiting
+	// for a row rather than prefilling, so the two together say whether a slow
+	// first token is the engine or the admission queue.
+	MeanTTFTSeconds  float64 `json:"meanTtftSeconds,omitempty"`
+	MeanQueueSeconds float64 `json:"meanQueueSeconds,omitempty"`
+	// MeanE2ESeconds is a request's whole residency, admission to last token.
+	MeanE2ESeconds float64 `json:"meanE2eSeconds,omitempty"`
+
+	// PromptCacheHitRatio is the share of PROMPT TOKENS the engine already had
+	// resident and did not prefill. It is the difference between a 40K-token
+	// head costing 20 seconds and costing nothing.
+	PromptCacheHitRatio float64 `json:"promptCacheHitRatio,omitempty"`
+	CachedPromptTokens  int64   `json:"cachedPromptTokens,omitempty"`
+
+	// BusySeconds is how long the engine was stepping in this window. Against
+	// the window's wall time it is utilization; the window length is the
+	// caller's to supply, because only the caller knows how long it watched.
+	BusySeconds float64 `json:"busySeconds,omitempty"`
 
 	// Sample mass, so a reader can tell a settled number from one request.
 	Requests        int64 `json:"requests"`
@@ -268,6 +315,20 @@ func (d EngineDelta) Rates() EngineRates {
 	if d.BusySeconds > 0 && d.E2ESeconds > 0 {
 		out.ConcurrencyWhileBusy = d.E2ESeconds / d.BusySeconds
 	}
+	// Requests IS the TTFT histogram's count (EngineDeltaBetween takes it from
+	// there), so it is the right denominator for both first-token means.
+	if d.Requests > 0 {
+		out.MeanTTFTSeconds = d.TTFTSeconds / d.Requests
+		out.MeanQueueSeconds = d.QueueSeconds / d.Requests
+	}
+	if d.E2ECount > 0 {
+		out.MeanE2ESeconds = d.E2ESeconds / d.E2ECount
+	}
+	if d.PrefixCacheQueries > 0 {
+		out.PromptCacheHitRatio = d.PrefixCacheHits / d.PrefixCacheQueries
+		out.CachedPromptTokens = int64(d.PrefixCacheHits)
+	}
+	out.BusySeconds = d.BusySeconds
 	return out
 }
 

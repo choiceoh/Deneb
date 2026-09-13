@@ -109,6 +109,30 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("lanes"),
         ),
         contract(
+            name = "EngineDay",
+            serializer = EngineDay.serializer(),
+            empty = EngineDay(),
+            fields = listOf("day", "model", "measured", "decodeTokensPerSec", "prefillTokensPerSec", "concurrencyWhileBusy", "peakConcurrency", "pollIntervalSec", "requests", "promptTokens", "generatedTokens", "meanTtftSeconds", "meanQueueSeconds", "meanE2eSeconds", "promptCacheHitRatio", "cachedPromptTokens", "busySeconds", "observedSeconds", "utilization", "restarts"),
+        ),
+        contract(
+            name = "EngineRoutingRow",
+            serializer = EngineRoutingRow.serializer(),
+            empty = EngineRoutingRow(),
+            fields = listOf("model", "local", "requests", "inputTokens", "outputTokens"),
+        ),
+        contract(
+            name = "EngineStatusResult",
+            serializer = EngineStatusResult.serializer(),
+            empty = EngineStatusResult(),
+            fields = listOf("configured", "endpoint", "reachable", "model", "runningRequests", "waitingRequests", "days", "total", "routerAvailable", "routerWindow", "localRequests", "remoteRequests", "routing"),
+        ),
+        contract(
+            name = "EngineTotals",
+            serializer = EngineTotals.serializer(),
+            empty = EngineTotals(),
+            fields = listOf("days", "requests", "promptTokens", "generatedTokens", "decodeTokensPerSec", "prefillTokensPerSec", "meanTtftSeconds", "promptCacheHitRatio", "busySeconds", "observedSeconds", "utilization", "restarts"),
+        ),
+        contract(
             name = "FilesEntryOut",
             serializer = FilesEntryOut.serializer(),
             empty = FilesEntryOut(),

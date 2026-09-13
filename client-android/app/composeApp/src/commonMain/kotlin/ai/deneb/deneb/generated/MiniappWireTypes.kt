@@ -111,6 +111,76 @@ data class DashboardOut(
 
 @Immutable
 @Serializable
+data class EngineDay(
+    val day: String = "",
+    val model: String = "",
+    val measured: Boolean = false,
+    val decodeTokensPerSec: Double = 0.0,
+    val prefillTokensPerSec: Double = 0.0,
+    val concurrencyWhileBusy: Double = 0.0,
+    val peakConcurrency: Int = 0,
+    val pollIntervalSec: Int = 0,
+    val requests: Long = 0L,
+    val promptTokens: Long = 0L,
+    val generatedTokens: Long = 0L,
+    val meanTtftSeconds: Double = 0.0,
+    val meanQueueSeconds: Double = 0.0,
+    val meanE2eSeconds: Double = 0.0,
+    val promptCacheHitRatio: Double = 0.0,
+    val cachedPromptTokens: Long = 0L,
+    val busySeconds: Double = 0.0,
+    val observedSeconds: Double = 0.0,
+    val utilization: Double = 0.0,
+    val restarts: Int = 0,
+)
+
+@Immutable
+@Serializable
+data class EngineRoutingRow(
+    val model: String = "",
+    val local: Boolean = false,
+    val requests: Long = 0L,
+    val inputTokens: Long = 0L,
+    val outputTokens: Long = 0L,
+)
+
+@Immutable
+@Serializable
+data class EngineStatusResult(
+    val configured: Boolean = false,
+    val endpoint: String = "",
+    val reachable: Boolean = false,
+    val model: String = "",
+    val runningRequests: Int = 0,
+    val waitingRequests: Int = 0,
+    val days: List<EngineDay> = emptyList(),
+    val total: EngineTotals = EngineTotals(),
+    val routerAvailable: Boolean = false,
+    val routerWindow: String = "",
+    val localRequests: Long = 0L,
+    val remoteRequests: Long = 0L,
+    val routing: List<EngineRoutingRow> = emptyList(),
+)
+
+@Immutable
+@Serializable
+data class EngineTotals(
+    val days: Int = 0,
+    val requests: Long = 0L,
+    val promptTokens: Long = 0L,
+    val generatedTokens: Long = 0L,
+    val decodeTokensPerSec: Double = 0.0,
+    val prefillTokensPerSec: Double = 0.0,
+    val meanTtftSeconds: Double = 0.0,
+    val promptCacheHitRatio: Double = 0.0,
+    val busySeconds: Double = 0.0,
+    val observedSeconds: Double = 0.0,
+    val utilization: Double = 0.0,
+    val restarts: Int = 0,
+)
+
+@Immutable
+@Serializable
 data class FilesEntryOut(
     val tag: String = "",
     val name: String = "",
