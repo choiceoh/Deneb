@@ -211,6 +211,20 @@ grep -q '^JAVA_HOME='    .env 2>/dev/null || echo 'JAVA_HOME=/usr/lib/jvm/java-2
 sudo ./svc.sh install choiceoh && sudo ./svc.sh start   # 재부팅 후 자동 상주
 ```
 
-- 호스트 전제(2026-07-06 충족): `~/android-sdk`(ANDROID_HOME 기본), JDK 21(+**헤드풀 `openjdk-21-jre`** — 하네스/renderPreviews 의 AWT), Xvfb/matchbox 등 스모크 하네스 의존(`native-live-app.md`). ★**ARM64 필수 오버라이드**: `~/.gradle/gradle.properties` 에 `org.gradle.java.home=/usr/lib/jvm/java-21-openjdk-arm64` + `android.aapt2FromMavenOverride=$HOME/android-sdk/build-tools/<버전>/aapt2` — `<버전>` 은 설치된 최신 build-tools (`ls ~/android-sdk/build-tools | sort -V | tail -1`) 를 그대로 적는다(레포는 build-tools 버전을 고정하지 않으므로 SDK 갱신 시 이 경로도 따라 갱신). 구글 메이븐이 내려주는 aapt2 는 x86_64 라 이 오버라이드 없이는 `Syntax error: ")" unexpected` 로 빌드가 죽는다(2026-07-06 이전 검증에서 실측).
+- 호스트 전제(2026-07-06 충족): `~/android-sdk`(ANDROID_HOME 기본), JDK 21(+**헤드풀 `openjdk-21-jre`** — 하네스/renderPreviews 의 AWT), Xvfb/matchbox 등 스모크 하네스 의존(`native-live-app.md`). ★★**ARM64 aapt2 — 에뮬레이션이 유일한 길**(2026-09-14 재구축에서 정정). **aarch64 aapt2 는 어디에도 없다**: SDK 의 build-tools(`build-tools_r37_linux.zip`)도, 구글 메이븐의 `com.android.tools.build:aapt2`(linux-arm64 분류자 404)도 x86_64 이고, 데비안·우분투 arm64 `aapt` 패키지는 Android 14 세대(2.19-debian)에서 멈춰 있어 **Android 37 리소스 테이블을 못 읽는다**(`RES_TABLE_TYPE_TYPE entry offsets overlap actual entry data`, platform r01·r02 동일). 그러므로 SDK 의 x86_64 aapt2 를 **유저모드 에뮬레이션**으로 돌린다.
+
+  ```bash
+  sudo apt-get install -y qemu-user-static                      # binfmt + qemu-x86_64-static
+  SR=~/android-sdk/x86_64-sysroot                               # 최소 x86_64 glibc (시스템은 안 건드린다)
+  mkdir -p "$SR" && cd /tmp
+  curl -sfLO http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.44-1ubuntu1_amd64.deb
+  curl -sfLO http://archive.ubuntu.com/ubuntu/pool/main/g/gcc-14/libgcc-s1_14.2.0-4ubuntu2~24.04.1_amd64.deb
+  for d in libc6_*_amd64.deb libgcc-s1_*_amd64.deb; do dpkg-deb -x "$d" "$SR"; done
+  ln -sfn usr/lib64 "$SR/lib64"; ln -sfn usr/lib "$SR/lib"     # 로더가 /lib64 에서 찾는다
+  ```
+
+  그 다음 `~/android-sdk/aapt2-arm64/aapt2` 래퍼(`exec qemu-x86_64-static -L "$sdk/x86_64-sysroot" "$real" "$@"`, `$real` = 설치된 최신 build-tools 의 aapt2)를 두고, `~/.gradle/gradle.properties` 에 `org.gradle.java.home=/usr/lib/jvm/java-21-openjdk-arm64` + `android.aapt2FromMavenOverride=$HOME/android-sdk/aapt2-arm64/aapt2`. 검증은 `aapt2 version` 이 **2.20 이상**을 찍는 것(2.19-debian 이 찍히면 잘못된 바이너리다). 오버라이드가 없으면 AGP 가 메이븐 아티팩트를 쓰고 `AAPT2 ... Daemon startup failed` 로 죽는다.
+
+  > `~/.gradle/gradle.properties` 와 `~/android-sdk` 는 **레포 밖**이라 워크트리를 아무리 검증해도 이 설정이 사라진 것은 안 보인다. 2026-09-13 에 둘 다 사라져 publish-apk 워크플로가 그날 처음 실패했고(직전 성공 09-10), 증상은 컴파일이 아니라 **리소스 단계의 데몬 기동 실패**로만 나타났다.
 - 레포 변수 `DENEB_APK_BASE_URL` 를 게이트웨이 도달 base 로 설정(`Settings > Secrets and variables > Actions > Variables`). 미설정이어도 동작하나 version.json url 이 로컬 기본값이 된다(인앱 업데이터는 게이트웨이 다운로드 라우트로 받으므로 무해).
 - 커스텀 라벨 `srv4` 는 `.github/actionlint.yaml` 에 등록돼 있어 워크플로 린트(`workflow-sanity.yml`)를 통과한다.
