@@ -26,6 +26,7 @@
 - **`recall_*` + `run_tail_inject.go`** — 회상 프리플라이트 → 마지막 user 메시지 꼬리 주입.
 - **`slash_*` + `*_dispatch.go`** — 슬래시 커맨드(`/help`·`/reset`·`/status`·`/kill`·`/goal`·`/rollback`·`/update`·`/restart`·`/weekly`).
 - 캐시 마커/바이트 안정성: `cache_breakpoints.go`·`tier1_cache.go`·`prompt_snapshot_persist.go`·`calendar_glance.go`·`tail_register.go`(런 경계 꼬리 재부착 — content-prefix 캐시, prompt-cache.md §1.6).
+- 로컬 엔진 직결 프로브(전부 사설호스트 가드·비동기·실패=무시): `engine_cache_sample.go`(APC 히트 표본 → run.cache), `prompt_exact_tokens.go`(프롬프트 머리의 **정확한** 토큰 수를 엔진 `/tokenize` 에서 — 추정치는 45K 예산 안 40K 머리의 나머지를 임의로 만든다; `internal/ai/enginetokenize`).
 - Variable prompt addition 예산: `promptbudget/`를 `run_prepare_compact.go`가 소비한다. 시스템 프롬프트 본문 조립은 `prompt/`에 둔다.
 
 ## 핵심 흐름: 한 턴의 실행 순서

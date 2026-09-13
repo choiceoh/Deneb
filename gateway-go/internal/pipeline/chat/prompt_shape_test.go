@@ -14,13 +14,13 @@ func TestFinalizePromptSeparatesAbsentFromDiscarded(t *testing.T) {
 	base := json.RawMessage(`"` + strings.Repeat("가", 4000) + `"`)
 
 	// No tier-1 was ever built — nothing to report.
-	_, absent := finalizePrompt(base, "", "", ContextConfig{SystemPromptBudget: 100}, "", "")
+	_, absent := finalizePrompt(base, "", "", ContextConfig{SystemPromptBudget: 100}, "", "", nil)
 	if absent.tier1Dropped() || absent.tier1Shrunk() {
 		t.Errorf("absent tier-1 must not read as a loss: %+v", absent)
 	}
 
 	// Tier-1 was built, but the static prompt already exhausted the budget.
-	_, discarded := finalizePrompt(base, "", "기억 블록", ContextConfig{SystemPromptBudget: 100}, "", "")
+	_, discarded := finalizePrompt(base, "", "기억 블록", ContextConfig{SystemPromptBudget: 100}, "", "", nil)
 	if !discarded.tier1Dropped() {
 		t.Fatalf("built-then-discarded tier-1 must read as dropped: %+v", discarded)
 	}
@@ -36,7 +36,7 @@ func TestFinalizePromptSeparatesAbsentFromDiscarded(t *testing.T) {
 // loss, so the Warn path stays quiet on the healthy majority of turns.
 func TestFinalizePromptReportsIntactAdmission(t *testing.T) {
 	prompt, outcome := finalizePrompt(json.RawMessage(`"짧은 프롬프트"`), "", "기억 블록",
-		ContextConfig{SystemPromptBudget: 100_000}, "", "")
+		ContextConfig{SystemPromptBudget: 100_000}, "", "", nil)
 	if outcome.tier1Dropped() || outcome.tier1Shrunk() {
 		t.Errorf("an addition that fits must report no loss: %+v", outcome)
 	}

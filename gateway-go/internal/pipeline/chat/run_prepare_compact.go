@@ -504,6 +504,7 @@ func finalizePrompt(
 	contextCfg ContextConfig,
 	sessionToolPreset string,
 	message string,
+	logger *slog.Logger,
 ) (json.RawMessage, promptBudgetOutcome) {
 	// Budget-optimize variable prompt additions before appending.
 	if recallAddition != "" {
@@ -520,7 +521,17 @@ func finalizePrompt(
 	var outcome promptBudgetOutcome
 	if tier1Addition != "" {
 		promptBudget := promptbudget.Budget{Total: contextCfg.SystemPromptBudget}
+		// The head is the large half of this subtraction and the remainder is
+		// what tier-1 memory gets. Estimating a ~40K head inside a 45K budget
+		// puts the estimator's whole error band on the remainder, so ask the
+		// engine for the real number when it can answer (prompt_exact_tokens.go).
+		// It answers from cache after the first turn on a given head; a miss
+		// keeps the estimate, which is what this line always did.
 		baseTokens := uint64(promptbudget.EstimateTokens(string(systemPrompt)))
+		if exact, ok := exactPromptTokens(string(systemPrompt), logger); ok {
+			outcome.BaseTokensExact = true
+			baseTokens = uint64(exact) //nolint:gosec // G115 — engine token counts are small positives
+		}
 		outcome.Tier1RequestedTokens = promptbudget.EstimateTokens(tier1Addition)
 		outcome.BaseTokens = int(baseTokens)
 		outcome.BudgetTokens = int(promptBudget.Total)
