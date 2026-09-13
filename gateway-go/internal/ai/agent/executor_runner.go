@@ -3,6 +3,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -450,24 +451,52 @@ func (r *agentRunner) recordTokenFeedback(request llm.ChatRequest, result *turnR
 	if result.usage.InputTokens <= 0 || r.cfg.DisableTokenFeedback {
 		return
 	}
-	// The estimate below covers the WHOLE prompt, so the actual must too.
-	// Anthropic semantics — which the OpenAI translator reproduces, see
-	// llm.openAIUsage.splitPromptTokens — keep the cache-read and
-	// cache-creation portions in their own fields and leave InputTokens holding
-	// only what the provider re-read this turn. Feeding that in as "actual"
-	// taught the calibrator the engine's prefix-cache hit rate instead of the
-	// tokenizer's error, so the correction factor moved with every engine
-	// restart. Measured 2026-09-13: local turns run about half cache-read.
-	actual := result.usage.InputTokens +
-		result.usage.CacheReadInputTokens +
-		result.usage.CacheCreationInputTokens
-
 	estimator := tokenest.ForModel(r.cfg.Model)
+	tokenest.RecordFeedback(estimator.Family(),
+		estimatePromptTokens(estimator, request),
+		promptTokensFromUsage(result.usage))
+}
+
+// promptTokensFromUsage is the WHOLE prompt the provider counted.
+//
+// Anthropic semantics — which the OpenAI translator reproduces, see
+// llm.openAIUsage.splitPromptTokens — keep the cache-read and cache-creation
+// portions in their own fields and leave InputTokens holding only what was
+// freshly read this turn. Feeding that in as "actual" taught the calibrator the
+// engine's prefix-cache hit rate instead of the tokenizer's error, so the
+// correction factor moved with every engine restart. Measured 2026-09-13: local
+// turns run about half cache-read, and the factor on disk had settled at 0.81
+// over 29,441 samples.
+func promptTokensFromUsage(u llm.TokenUsage) int {
+	return u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
+}
+
+// estimatePromptTokens estimates the same prompt promptTokensFromUsage reports:
+// system, messages AND tools.
+//
+// Tools are a separate field on the request but they are rendered INTO the
+// prompt the provider counts — 56 schemas is roughly 70 KB here, about a third
+// of a typical turn. Leaving them out of the estimate while the actual includes
+// them does not make the factor slightly wrong, it makes it measure the tool
+// head: an estimate near 25K against an actual near 47K teaches ~1.85, and
+// every budget in the gateway is then multiplied by it. Both sides have to
+// cover the same prompt or neither number means anything.
+//
+// What is still missing is the chat template's own scaffolding, which no
+// gateway-side estimate can see. That residue is what the correction factor
+// absorbs; measuring it exactly means asking the engine's own /tokenize, which
+// is a separate piece of work.
+func estimatePromptTokens(estimator *tokenest.Estimator, request llm.ChatRequest) int {
 	estimated := estimator.CountBytes(request.System.Bytes())
 	for _, message := range request.Messages {
 		estimated += estimator.CountBytes(message.Content.Bytes())
 	}
-	tokenest.RecordFeedback(estimator.Family(), estimated, actual)
+	if len(request.Tools) > 0 {
+		if raw, err := json.Marshal(request.Tools); err == nil {
+			estimated += estimator.CountBytes(raw)
+		}
+	}
+	return estimated
 }
 
 func (r *agentRunner) logTurnDetail(prepared preparedAgentTurn, result *turnResult) {
