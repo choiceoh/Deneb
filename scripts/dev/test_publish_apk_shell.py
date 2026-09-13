@@ -237,13 +237,13 @@ class PublishAPKShellTests(unittest.TestCase):
         (self.apk_dir / "deneb-4.2.1-605-legacy.apk").write_text("legacy")
         proc = self.invoke()
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("auto-assigned versionCode 606 (serve max=605, libs floor=600)", proc.stdout)
+        self.assertIn("auto-assigned versionCode 606 (serve max=605, durable max=none, libs floor=600)", proc.stdout)
         self.assertTrue((self.apk_dir / "deneb-606-deadbeef-fossDebug.apk").exists())
 
     def test_library_floor_wins_when_publish_directory_is_empty(self) -> None:
         proc = self.invoke()
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("versionCode 600 (serve max=none, libs floor=600)", proc.stdout)
+        self.assertIn("versionCode 600 (serve max=none, durable max=none, libs floor=600)", proc.stdout)
         self.assertIn("-PdenebVersionCode=600", self.calls())
 
     def test_unrelated_or_malformed_apk_names_do_not_inflate_next_version(self) -> None:
@@ -258,8 +258,56 @@ class PublishAPKShellTests(unittest.TestCase):
         (self.apk_dir / "deneb-601-good-fossDebug.apk").write_text("real")
         proc = self.invoke()
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("versionCode 602 (serve max=601, libs floor=600)", proc.stdout)
+        self.assertIn("versionCode 602 (serve max=601, durable max=none, libs floor=600)", proc.stdout)
         self.assertTrue((self.apk_dir / "deneb-602-deadbeef-fossDebug.apk").exists())
+
+    # The 2026-09-13 incident: the publish dir was removed, so the only record of
+    # what had already shipped went with it and numbering restarted at the libs
+    # floor. The build was green and correctly signed, and no phone would take it
+    # — an in-app updater only offers a HIGHER code. The durable mark exists so a
+    # lost serve dir cannot rewind the series.
+    def test_durable_mark_keeps_numbering_after_the_publish_dir_is_lost(self) -> None:
+        state = self.root / "apk-version-code"
+        state.write_text("936\n", encoding="utf-8")
+        proc = self.invoke(env=self.env(DENEB_APK_CODE_STATE=str(state)))
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("versionCode 937 (serve max=none, durable max=936, libs floor=600)", proc.stdout)
+        self.assertIn("-PdenebVersionCode=937", self.calls())
+
+    def test_serve_directory_still_wins_when_it_is_ahead_of_the_mark(self) -> None:
+        state = self.root / "apk-version-code"
+        state.write_text("936\n", encoding="utf-8")
+        self.apk_dir.mkdir()
+        (self.apk_dir / "deneb-940-old-fossDebug.apk").write_text("newer than the mark")
+        proc = self.invoke(env=self.env(DENEB_APK_CODE_STATE=str(state)))
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("versionCode 941 (serve max=940, durable max=936, libs floor=600)", proc.stdout)
+
+    # The guard may only ever raise the code. An absent or unreadable mark has to
+    # behave exactly as before it existed, or a fresh host cannot publish at all.
+    def test_missing_or_malformed_mark_falls_back_to_the_previous_behaviour(self) -> None:
+        state = self.root / "apk-version-code"
+        for contents in (None, "not a number\n", "\n"):
+            with self.subTest(contents=contents):
+                self.log.write_text("", encoding="utf-8")
+                # Each round publishes into the same dir, so without this the
+                # previous round's APK becomes the next round's serve max.
+                if self.apk_dir.exists():
+                    for stale in self.apk_dir.glob("deneb-*"):
+                        stale.unlink()
+                if contents is None:
+                    state.unlink(missing_ok=True)
+                else:
+                    state.write_text(contents, encoding="utf-8")
+                proc = self.invoke(env=self.env(DENEB_APK_CODE_STATE=str(state)))
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                self.assertIn("versionCode 600 (serve max=none, durable max=none, libs floor=600)", proc.stdout)
+
+    def test_publishing_records_the_mark_for_the_next_run(self) -> None:
+        state = self.root / "nested" / "apk-version-code"
+        proc = self.invoke(env=self.env(DENEB_APK_CODE_STATE=str(state)))
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(state.read_text(encoding="utf-8").strip(), "600")
 
     def test_publish_lock_timeout_aborts_before_smoke_or_gradle(self) -> None:
         proc = self.invoke(env=self.env(FLOCK_RC="1"))

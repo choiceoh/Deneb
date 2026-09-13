@@ -167,11 +167,29 @@ SERVE_MAX="$(
     | sort -n \
     | tail -1 || true
 )"
-VERSION_CODE=$(( ${SERVE_MAX:-0} + 1 ))
-if [ "$VERSION_CODE" -lt "$LIBS_VERSION_CODE" ]; then
-  VERSION_CODE="$LIBS_VERSION_CODE"
+# A second, DURABLE floor. Until 2026-09-13 the high-water mark lived only in
+# the serve dir, so losing that dir silently restarted numbering at the libs
+# floor: the 09-13 publish assigned 178 where the previous one had assigned 936.
+# The build succeeded, the workflow went green, and the APK was invisible to
+# every phone — an in-app updater only offers a HIGHER code. A regression that
+# passes every gate and reaches nobody is the worst shape a release bug can take.
+#
+# The mark lives outside APK_DIR on purpose: it has to survive whatever removes
+# the serve dir. Missing or unreadable reads as 0, which is exactly the old
+# behaviour, so this can only ever raise the code.
+CODE_STATE="${DENEB_APK_CODE_STATE:-${DENEB_STATE_DIR:-$HOME/.deneb}/apk-version-code}"
+# tr, not sed s///p: with the p flag `s` only prints when it SUBSTITUTED, so a
+# file holding a bare number prints nothing and the floor silently disappears.
+DURABLE_MAX="$(head -n1 "$CODE_STATE" 2>/dev/null | tr -cd '0-9' || true)"
+FLOOR="$LIBS_VERSION_CODE"
+if [ -n "$DURABLE_MAX" ] && [ "$DURABLE_MAX" -ge "$FLOOR" ] 2>/dev/null; then
+  FLOOR=$(( DURABLE_MAX + 1 ))
 fi
-echo "auto-assigned versionCode $VERSION_CODE (serve max=${SERVE_MAX:-none}, libs floor=$LIBS_VERSION_CODE)"
+VERSION_CODE=$(( ${SERVE_MAX:-0} + 1 ))
+if [ "$VERSION_CODE" -lt "$FLOOR" ]; then
+  VERSION_CODE="$FLOOR"
+fi
+echo "auto-assigned versionCode $VERSION_CODE (serve max=${SERVE_MAX:-none}, durable max=${DURABLE_MAX:-none}, libs floor=$LIBS_VERSION_CODE)"
 
 # Pre-publish smoke gate. Render-time crashes (the #1959 class) only surface when
 # the real screens compose with real data — which neither compileKotlinDesktop nor
@@ -248,6 +266,11 @@ cat > "$APK_DIR/version.json" <<EOF
   "notes": "$NOTES_ESC"
 }
 EOF
+
+# Record the high-water mark before announcing success: the next publish reads
+# it even if the serve dir is gone by then.
+mkdir -p "$(dirname "$CODE_STATE")" 2>/dev/null || true
+printf '%s\n' "$VERSION_CODE" > "$CODE_STATE" 2>/dev/null || echo "warning: could not record $CODE_STATE — a lost serve dir would restart numbering" >&2
 
 echo "published $APK_NAME"
 echo "  apk  -> $APK_DIR/$APK_NAME"
