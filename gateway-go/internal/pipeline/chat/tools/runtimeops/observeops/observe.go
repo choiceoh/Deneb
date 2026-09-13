@@ -44,7 +44,12 @@ const proactiveStaleWindowMs = 48 * 60 * 60 * 1000
 //
 // This is the self-observation adapter: Propus or the operator
 // in chat ("방금 그 턴 왜 느렸어?") can read it without leaving the agent.
-func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Store, vllmBases func() []string, engineSpeed func() *enginespeed.Store) toolport.ToolFunc {
+// RouterMeter resolves what the routing readout needs: the router's base URL,
+// its gate token, and which of its entries target a local engine. Nil or an
+// empty base URL turns the readout into a one-line "unavailable".
+type RouterMeter func() (baseURL, token string, localModels map[string]bool)
+
+func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Store, vllmBases func() []string, engineSpeed func() *enginespeed.Store, routerMeter RouterMeter) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action   string           `json:"action"`
@@ -146,7 +151,7 @@ func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Sto
 				return "no local serving engine is configured (DENEB_ENGINE_METRICS_URL) — " +
 					"engine speed is measured by reading the engine, so cloud models are not covered", nil
 			}
-			return formatEngineSpeed(store.Days(p.Days.Int())), nil
+			return formatEngineSpeed(store.Days(p.Days.Int())) + routingSection(ctx, routerMeter), nil
 
 		case "health":
 			// Self-improvement machinery digest: are my own loops alive, and
@@ -511,4 +516,15 @@ func formatVllmPrefixCaches(stats []observe.VllmPrefixCache) string {
 			model, s.Hits, s.Queries, s.HitRatePct)
 	}
 	return b.String()
+}
+
+// routingSection reads the router's meter so the speed numbers above are read
+// with the share of traffic that actually reached the engine. Best-effort.
+func routingSection(ctx context.Context, meter RouterMeter) string {
+	if meter == nil {
+		return formatRouting(observe.RouterUsage{}, nil, false)
+	}
+	baseURL, token, local := meter()
+	usage, ok := observe.FetchRouterUsage(ctx, baseURL, token)
+	return formatRouting(usage, local, ok)
 }

@@ -242,6 +242,10 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			// history is built after this pipeline, so the tool resolves it per
 			// call instead of capturing a nil.
 			func() *enginespeed.Store { return s.modelMaintenance.EngineSpeed() },
+			// The router's meter is the only place the local/cloud split exists:
+			// both answer under the same model name, so a turn cannot say which
+			// one ran. Re-read per call so a hot-reloaded router config counts.
+			func() (string, string, map[string]bool) { return configresolve.RouterMeter(s.logger) },
 		)),
 		// Deliver phone_write Intent actions (open_url/share/…) to the native app
 		// over SSE for in-app execution — the SSH/Termux-free path.

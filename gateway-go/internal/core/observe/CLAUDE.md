@@ -8,6 +8,13 @@ for operator diagnostics. Leaf relative to RPC handlers.
 - `capture.go` — `NewRing`, `NewCapture`, `LogCapture`, `ParseLevel`, `QueryOpts`
 - `turn.go` — `BuildTurnView`, `TurnView`
 - `vllm_cache.go` — `FetchVllmPrefixCaches`, `VllmPrefixCache`
+- `router_usage.go` — `FetchRouterUsage`, `RouterUsage.LocalShare`: the wormhole
+  router's own per-model meter. It is the ONLY place the local/cloud split
+  exists — the local engine and its cloud twin answer under the same model name,
+  so a turn's providerModel cannot say which one ran. The router meters against
+  the entry that served AFTER failover, so a local entry's row is traffic the
+  engine really took. Diagnostic only: every failure reads as unavailable, never
+  as zero.
 - `engine_speed.go` — `FetchEngineCounters`, `EngineDeltaBetween`, `EngineDelta.Rates`:
   the serving engine's own latency/token/occupancy series. Cumulative series may
   be differenced; the occupancy gauges must not be (a peak is watched for, not
