@@ -42,15 +42,36 @@ func New(logger *slog.Logger) *Handler { return &Handler{logger: logger} }
 
 // denebApkDir is the directory holding published APKs (plus an optional
 // version.json for release notes). Overridable for non-standard deployments.
+//
+// It lives under the state dir, NOT ~/.cache. A published APK is the only copy
+// of a build a phone can download and version.json is live release state:
+// nothing here regenerates. On 2026-09-13 a disk sweep removed
+// ~/.cache/deneb-apk along with the caches around it — exactly what that
+// directory's name invites — and took the release high-water mark with it, so
+// the next publish numbered 178 where the previous had been 936 and no phone
+// would accept it.
+//
+// The old location is still read when the new one holds nothing, so a gateway
+// and a publisher that disagree about which has rolled out still agree on which
+// APK to serve.
 func denebApkDir() string {
 	if d := strings.TrimSpace(os.Getenv("DENEB_APK_DIR")); d != "" {
 		return d
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return filepath.Join(".cache", "deneb-apk")
+		return filepath.Join(".deneb", "apk")
 	}
-	return filepath.Join(home, ".cache", "deneb-apk")
+	current := filepath.Join(home, ".deneb", "apk")
+	if _, ok := latestPublishedApk(current); ok {
+		return current
+	}
+	if legacy := filepath.Join(home, ".cache", "deneb-apk"); legacy != current {
+		if _, ok := latestPublishedApk(legacy); ok {
+			return legacy
+		}
+	}
+	return current
 }
 
 // apkFilePattern matches a published flavor APK by its versionCode. The current
