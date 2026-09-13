@@ -616,6 +616,17 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 		if fbClient == nil || triedModels[fbCfg.Model] {
 			continue
 		}
+		// Dogma #7: never ARRIVE at a pay-per-token model. A role pointed at one
+		// deliberately still runs — this is the chain, not the request. The guard
+		// exists because wormhole enforces the same rule on the routed path
+		// (cmd/wormhole/validate.go) and pointing a role straight at the serving
+		// engine moves the failover decision here, where that rule had no
+		// counterpart. A local outage that silently bills is the 2026-08 leak.
+		if t.deps.registry.IsMetered(fbCfg.Model) {
+			t.logger.Warn("skipping metered fallback candidate",
+				"failedRole", string(failedRole), "skippedRole", string(fbRole), "model", fbCfg.Model)
+			continue
+		}
 		triedModels[fbCfg.Model] = true
 		if errors.Is(t.runErr, errModelCircuitOpen) {
 			t.logger.Debug("model circuit open; trying fallback",
