@@ -54,7 +54,7 @@ dependencies = [
 
 [[package]]
 name = "andromeda"
-version = "0.0.125"
+version = "0.0.126"
 dependencies = [
  "base64 0.23.1",
  "dirs",
