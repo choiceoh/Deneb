@@ -69,7 +69,7 @@ func (c *Client) streamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 			Role: "system", Content: systemText,
 		})
 	}
-	oaiReq.Messages = append(oaiReq.Messages, c.convertMessagesToOpenAI(req.Messages, interleavedEnabled(&req))...)
+	oaiReq.Messages = append(oaiReq.Messages, c.convertMessagesToOpenAI(req.Messages, reasoningHistoryEchoed(&req))...)
 
 	applySamplingParams(&oaiReq, &req)
 
@@ -390,10 +390,23 @@ func (c *Client) setOpenAIBearerAuth(req *http.Request) {
 }
 
 // interleavedEnabled reports whether the request opts into Anthropic's
-// interleaved thinking beta. Centralised so message conversion and header
-// emission stay in lock-step.
+// interleaved thinking beta for THIS request (the beta header).
 func interleavedEnabled(req *ChatRequest) bool {
 	return req != nil && req.Thinking != nil && req.Thinking.Type == "enabled" && req.Thinking.Interleaved
+}
+
+// reasoningHistoryEchoed reports whether prior assistant thinking blocks go
+// back on `reasoning_content` (OpenAI path). It follows the session's
+// interleaved preference, not this request's thinking type: a turn that runs
+// with thinking disabled (the effort router's easy turns and early steps, a
+// budget reconciled off) still carries the reasoning earlier turns produced.
+// Dropping it made those requests render a different prompt prefix than the
+// turns around them, so a serving engine that continues a conversation from
+// its cached history (ST's conversation continuation, a vLLM prefix cache)
+// re-prefilled everything after the first reasoning turn at every switch. The
+// provider is the one this session already echoes to on its thinking turns.
+func reasoningHistoryEchoed(req *ChatRequest) bool {
+	return req != nil && req.Thinking != nil && req.Thinking.Interleaved
 }
 
 // betaHeaderInterleavedThinking is the Anthropic beta flag enabling

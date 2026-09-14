@@ -201,3 +201,58 @@ func TestConvertMessagesIgnoresUserThinkingBlocks(t *testing.T) {
 		t.Errorf("user reasoning_content = %q, want empty", got[0].ReasoningContent)
 	}
 }
+
+// TestStreamChat_ReasoningHistoryFollowsInterleavedNotThisTurn verifies the
+// echo decision: a request whose own thinking is disabled (the effort router's
+// easy turns) still sends prior reasoning back when the session is interleaved,
+// so its prompt prefix matches the thinking turns around it. The beta header
+// stays tied to this request actually thinking.
+func TestStreamChat_ReasoningHistoryFollowsInterleavedNotThisTurn(t *testing.T) {
+	history := []Message{
+		NewTextMessage("user", "first"),
+		NewBlockMessage("assistant", []ContentBlock{
+			{Type: "thinking", Thinking: "prior reasoning"},
+			{Type: "text", Text: "answer"},
+		}),
+		NewTextMessage("user", "second"),
+	}
+	cases := []struct {
+		name       string
+		thinking   *ThinkingConfig
+		wantEcho   bool
+		wantHeader bool
+	}{
+		{"thinking turn, interleaved", &ThinkingConfig{Type: "enabled", BudgetTokens: 4096, Interleaved: true}, true, true},
+		{"routed easy turn keeps the echo", &ThinkingConfig{Type: "disabled", TemplateKwarg: "thinking", Interleaved: true}, true, false},
+		{"not interleaved", &ThinkingConfig{Type: "enabled", BudgetTokens: 4096}, false, false},
+		{"no thinking config", nil, false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cap := &captureRequest{}
+			server := httptest.NewServer(cap.handler(t))
+			defer server.Close()
+
+			client := NewClient(server.URL, "test-key")
+			events, err := client.StreamChat(context.Background(), ChatRequest{
+				Model:     "glm-5.3-flash",
+				Messages:  history,
+				MaxTokens: 8192,
+				Thinking:  tc.thinking,
+			})
+			testutil.NoError(t, err)
+			for range events {
+			}
+
+			cap.mu.Lock()
+			body, header := string(cap.body), cap.headers.Get("anthropic-beta")
+			cap.mu.Unlock()
+			if got := strings.Contains(body, `"reasoning_content":"prior reasoning"`); got != tc.wantEcho {
+				t.Errorf("echo = %v, want %v; body: %s", got, tc.wantEcho, body)
+			}
+			if got := strings.Contains(header, "interleaved-thinking"); got != tc.wantHeader {
+				t.Errorf("anthropic-beta = %q, want the interleaved flag: %v", header, tc.wantHeader)
+			}
+		})
+	}
+}

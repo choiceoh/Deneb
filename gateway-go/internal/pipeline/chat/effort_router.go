@@ -113,8 +113,13 @@ func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, messages []llm.
 	// off-toggle (dsv4), independent of routing/mode: a KEPT-thinking run (e.g.
 	// kept:automation cron analysis) can still loop in the thinking channel until
 	// max_tokens, and dsv4 can't lower effort — only this off-toggle escapes it.
+	// A disabled config keeps the session's interleaved preference: prior
+	// reasoning still rides on reasoning_content when this turn does not think,
+	// so the prompt prefix matches the thinking turns around it (the serving
+	// engine's conversation continuation and prefix cache depend on it).
+	interleaved := cfg.Thinking != nil && cfg.Thinking.Interleaved
 	if profile.ToggleKwarg != "" {
-		cfg.ThinkingOffRetry = &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: profile.ToggleKwarg}
+		cfg.ThinkingOffRetry = &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: profile.ToggleKwarg, Interleaved: interleaved}
 	}
 	mode := effortMode()
 	if mode == effortModeOff || !profile.Enabled {
@@ -142,7 +147,7 @@ func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, messages []llm.
 		origModulator: cfg.ThinkingModulator,
 		reason:        reason,
 	}
-	disabled := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: profile.ToggleKwarg}
+	disabled := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: profile.ToggleKwarg, Interleaved: interleaved}
 	cfg.Thinking = disabled
 	// Compose, don't clobber: the reasoning sandwich (if DENEB_REASONING_SANDWICH
 	// installed origModulator before this) raises reasoning on its boost turns

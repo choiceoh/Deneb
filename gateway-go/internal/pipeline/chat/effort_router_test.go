@@ -293,3 +293,33 @@ func TestEffortStepThinkingReturnsPolicyForObservationSize(t *testing.T) {
 		t.Error("cumulative observation size must revert even when each call is small")
 	}
 }
+
+// TestApplyEffortRouter_DisabledTurnsKeepTheReasoningEcho guards the prompt
+// prefix a serving engine continues from: routed (thinking-off) turns, their
+// early steps and the thinking-off retry keep the session's interleaved
+// preference, so they still send earlier reasoning back like the thinking turns
+// around them. A session that is not interleaved does not start echoing.
+func TestApplyEffortRouter_DisabledTurnsKeepTheReasoningEcho(t *testing.T) {
+	t.Setenv("DENEB_ADAPTIVE_EFFORT", "1")
+	profile := enabledProfile()
+
+	cfg := agent.AgentConfig{Model: "glm-5.3-flash", Thinking: &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 4096, Interleaved: true}}
+	if route, decision := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, nil, profile, nil); route == nil {
+		t.Fatalf("simple message must route (decision=%q)", decision)
+	}
+	if cfg.Thinking.Type != "disabled" || !cfg.Thinking.Interleaved {
+		t.Fatalf("routed thinking = %+v, want disabled with the interleaved echo", cfg.Thinking)
+	}
+	if got := cfg.ThinkingModulator(0, nil); got == nil || got.Type != "disabled" || !got.Interleaved {
+		t.Fatalf("turn 0 = %+v, want disabled with the interleaved echo", got)
+	}
+	if cfg.ThinkingOffRetry == nil || !cfg.ThinkingOffRetry.Interleaved {
+		t.Fatalf("thinking-off retry = %+v, want the interleaved echo", cfg.ThinkingOffRetry)
+	}
+
+	plain := agent.AgentConfig{Model: "glm-5.3-flash", Thinking: &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 4096}}
+	applyEffortRouter(&plain, RunParams{Message: "안녕"}, nil, profile, nil)
+	if plain.Thinking.Interleaved || (plain.ThinkingOffRetry != nil && plain.ThinkingOffRetry.Interleaved) {
+		t.Error("a session that is not interleaved must not start echoing")
+	}
+}

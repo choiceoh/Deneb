@@ -70,3 +70,20 @@ func TestReconcileThinkingBudgetDoesNotMutateSharedConfig(t *testing.T) {
 		t.Errorf("caller's config was mutated: budget = %d, want 4096", shared.BudgetTokens)
 	}
 }
+
+// A budget reconciled off disables thinking for this request only: the
+// session's interleaved echo of earlier reasoning stays, or the request would
+// render a different prompt prefix than the turns around it.
+func TestReconcileThinkingBudgetKeepsTheHistoryEcho(t *testing.T) {
+	req := ChatRequest{
+		Model:     "glm-5.3-flash",
+		MaxTokens: 256,
+		Thinking:  &ThinkingConfig{Type: "enabled", BudgetTokens: 4096, Interleaved: true},
+	}
+	if note := req.ReconcileThinkingBudget(); note == "" || req.Thinking.Type != "disabled" {
+		t.Fatalf("a budget that cannot fit must disable thinking, got %+v (note %q)", req.Thinking, note)
+	}
+	if !req.Thinking.Interleaved {
+		t.Error("disabling thinking for this request must keep the interleaved echo")
+	}
+}
