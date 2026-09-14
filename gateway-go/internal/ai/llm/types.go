@@ -520,7 +520,7 @@ func (r *ChatRequest) ReconcileThinkingBudget() string {
 	fitted := r.MaxTokens - answerReserveTokens
 	if fitted < minThinkingBudgetTokens {
 		was := r.Thinking.BudgetTokens
-		r.Thinking = &ThinkingConfig{Type: "disabled"}
+		r.Thinking = &ThinkingConfig{Type: "disabled", Interleaved: r.Thinking.Interleaved} // the history echo stays
 		return fmt.Sprintf("thinking disabled: budget %d does not fit MaxTokens %d (needs %d+%d)",
 			was, r.MaxTokens, minThinkingBudgetTokens, answerReserveTokens)
 	}
