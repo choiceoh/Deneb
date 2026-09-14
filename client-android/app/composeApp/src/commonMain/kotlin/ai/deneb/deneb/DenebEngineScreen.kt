@@ -269,7 +269,11 @@ private fun EngineSpeedSection(days: List<EngineDay>) {
             )
             return@DenebGroup
         }
-        val fastest = days.filter { it.measured }.maxOfOrNull { it.decodeTokensPerSec } ?: 0.0
+        // A thin day must not set the scale. Its rate swings with a handful of
+        // intervals, so letting it define "fastest" would shrink every settled
+        // day's bar against a number that is mostly noise.
+        val fastest = days.filter { it.measured && !it.sampleIsThin() }
+            .maxOfOrNull { it.decodeTokensPerSec } ?: 0.0
         days.forEach { EngineDayRow(it, fastest) }
         Spacer(Modifier.height(12.dp))
     }
@@ -297,8 +301,9 @@ private fun EngineDayRow(day: EngineDay, fastestDecode: Double) {
         }
         if (day.measured) {
             // Decode speed against the window's fastest day, so a slow day is
-            // visible without reading every number.
-            if (fastestDecode > 0.0) {
+            // visible without reading every number. A thin day gets no bar —
+            // placing it on the scale would assert a precision it does not have.
+            if (fastestDecode > 0.0 && !day.sampleIsThin()) {
                 Spacer(Modifier.height(4.dp))
                 ShareBar(fraction = (day.decodeTokensPerSec / fastestDecode).toFloat())
             }
@@ -319,6 +324,14 @@ private fun EngineDayRow(day: EngineDay, fastestDecode: Double) {
             Text(
                 text = "캐시 ${formatPercent(day.promptCacheHitRatio * 100)} · 가동 ${formatPercent(day.utilization * 100)}" +
                     " (${formatDuration(day.busySeconds)} / ${formatDuration(day.observedSeconds)})",
+                style = DenebType.meta,
+                color = denebHint(),
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        if (day.measured && day.sampleIsThin()) {
+            Text(
+                text = "표본 ${day.generatedTokens}토큰 — 속도는 참고만",
                 style = DenebType.meta,
                 color = denebHint(),
                 modifier = Modifier.padding(top = 2.dp),
@@ -346,7 +359,11 @@ private fun EngineSummarySection(total: EngineTotals) {
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 14.dp)) {
             EngineStatLine("요청", "${total.requests}회")
             EngineStatLine("토큰", "입력 ${formatTokenCount(total.promptTokens)} · 출력 ${formatTokenCount(total.generatedTokens)}")
-            EngineStatLine("속도", "디코드 ${formatRate(total.decodeTokensPerSec)} · 프리필 ${formatRate(total.prefillTokensPerSec)}")
+            EngineStatLine(
+                "속도",
+                "디코드 ${formatRate(total.decodeTokensPerSec)} · 프리필 ${formatRate(total.prefillTokensPerSec)}" +
+                    (if (total.sampleIsThin()) " (표본 부족)" else ""),
+            )
             EngineStatLine("첫 토큰", formatSeconds(total.meanTtftSeconds))
             EngineStatLine("프롬프트 캐시", formatPercent(total.promptCacheHitRatio * 100))
             EngineStatLine("가동", "${formatPercent(total.utilization * 100)} · ${formatDuration(total.busySeconds)}")
@@ -403,6 +420,28 @@ private fun EngineRoutingSection(rows: List<EngineRoutingRow>) {
         Spacer(Modifier.height(12.dp))
     }
 }
+
+// --- sample mass ---------------------------------------------------------
+
+/**
+ * A decode rate is the mean of the engine's per-output-token times, so its
+ * sample count is the number of INTER-token intervals — roughly generated
+ * tokens minus requests, since the first token of each request is timed as
+ * TTFT instead. The relative standard error of such a mean falls as 1/sqrt(n),
+ * so below about a hundred intervals the number moves by more than ten percent
+ * on its own. That is wider than the day-to-day differences this panel exists
+ * to show, so those days are rendered as an indication rather than a rate.
+ *
+ * The engine's counters are honest either way — this is a display threshold,
+ * not a correction. Nothing is hidden: the rate still shows, marked.
+ */
+internal fun engineSampleIsThin(requests: Long, generatedTokens: Long): Boolean = generatedTokens - requests < ENGINE_MIN_DECODE_SAMPLES
+
+private const val ENGINE_MIN_DECODE_SAMPLES = 100L
+
+internal fun EngineDay.sampleIsThin(): Boolean = engineSampleIsThin(requests, generatedTokens)
+
+internal fun EngineTotals.sampleIsThin(): Boolean = engineSampleIsThin(requests, generatedTokens)
 
 // --- formatting ----------------------------------------------------------
 
