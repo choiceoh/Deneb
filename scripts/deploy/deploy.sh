@@ -394,6 +394,13 @@ if [[ -f scripts/dev/groupware-reader/package-lock.json ]]; then
         echo "==> groupware-reader npm ci"
         (cd scripts/dev/groupware-reader && npm ci --omit=dev) || \
             echo "WARN: groupware-reader npm ci failed (전자결재 RPC may be broken)" >&2
+        # The login browser lives outside node_modules (lib/browser.mjs), so
+        # npm ci repairs neither a Playwright bump nor a deleted browser, and
+        # both stay hidden until the 12 h login session expires. A no-op when
+        # the build is already installed.
+        echo "==> groupware-reader login browser"
+        node scripts/dev/groupware-reader/install-browser.mjs || \
+            echo "WARN: groupware-reader browser install failed (전자결재 login breaks when the session expires)" >&2
     else
         echo "WARN: npm not found on PATH, ~/.local/bin, or ~/node-sdk — skipping groupware-reader npm ci (전자결재 RPC may be broken)" >&2
     fi

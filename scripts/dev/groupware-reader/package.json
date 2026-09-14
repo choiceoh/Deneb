@@ -11,6 +11,7 @@
   "scripts": {
     "read": "node read.mjs",
     "login-check": "node read.mjs --login-check",
+    "install-browser": "node install-browser.mjs",
     "list-pending": "node read.mjs --area approval --action list --folder pending --limit 10",
     "list-all": "node read.mjs --area approval --action list --folder all --limit 16",
     "list-board": "node read.mjs --area board --action list --limit 10",

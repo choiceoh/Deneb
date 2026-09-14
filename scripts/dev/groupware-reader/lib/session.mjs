@@ -2,10 +2,10 @@
  * Login once via Playwright, cache auth_a_token + hash_key for signed HTTP.
  * Session file: ~/.deneb/groupware-session.json (mode 0600).
  */
-import { chromium } from "playwright";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { launchChromium } from "./browser.mjs";
 
 const SESSION_PATH =
   process.env.DENEB_GROUPWARE_SESSION ||
@@ -34,7 +34,7 @@ export function saveSession(s) {
 
 export async function loginAndSave({ url, user, pass, company }) {
   const base = url.replace(/\/$/, "");
-  const browser = await chromium.launch({
+  const browser = await launchChromium({
     headless: true,
     args: ["--disable-dev-shm-usage", "--no-sandbox"],
   });
