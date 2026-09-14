@@ -353,8 +353,16 @@ python-lint:
 
 # Operational scripts are checked at warning severity: correctness and safety
 # findings gate delivery, while ShellCheck's style-only suggestions stay advisory.
+# A missing shellcheck is CANNOT RUN, not FAILED — CI installs it and always
+# lints, while a dev box may not have it. Conflating the two either fails an
+# honest local gate or hides a real warning; saying which one happened costs a
+# line.
 shell-lint:
-	@git ls-files -z 'scripts/*.sh' 'scripts/**/*.sh' | xargs -0 shellcheck --severity=warning
+	@if ! command -v shellcheck >/dev/null 2>&1; then \
+	  echo "shell-lint: shellcheck 없음 — 건너뜀 (CI 는 설치하고 항상 돈다)"; \
+	else \
+	  git ls-files -z 'scripts/*.sh' 'scripts/**/*.sh' | xargs -0 shellcheck --severity=warning; \
+	fi
 
 # Deterministic behavioral coverage for operational shell (topology parity, the
 # bench-ratchet operator notifier). Named separately in CI so a deployment- or
