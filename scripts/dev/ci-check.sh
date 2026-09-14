@@ -70,16 +70,25 @@ KOTLIN_GATES=(kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-and
 # trains everyone to ignore red. Scorer unit tests (health-v2-test) remain.
 # Run the ratchet manually via `make health-v2-check` or the nightly sweep.
 AUDIT_GATES=(runtime-health-test health-v2-test cache-cost-audit-test doc-ref-lint)
+# The support tooling under scripts/ has its own test suites and shell contracts,
+# and CI runs them on any scripts/** change. Until 2026-09-14 this gate had no python lane at all, so
+# editing a shell script here printed "nothing to gate" and the break surfaced in
+# CI instead — twice in one day (publish-apk.sh, topology-parity.sh). A local
+# gate that stays silent on a whole tree is worse than no gate for that tree: it
+# reads as a pass.
+SCRIPT_GATES=(python-test shell-behavior-test shell-lint)
 
 # --- Args --------------------------------------------------------------------
 RUN_GO=true
 RUN_KOTLIN=true
 RUN_AUDIT=true
+RUN_SCRIPTS=true
 FAST=false
 case "${1:-}" in
-  --go)      RUN_KOTLIN=false; RUN_AUDIT=false ;;
-  --kotlin)  RUN_GO=false; RUN_AUDIT=false ;;
-  --audit)   RUN_GO=false; RUN_KOTLIN=false ;;
+  --go)      RUN_KOTLIN=false; RUN_AUDIT=false; RUN_SCRIPTS=false ;;
+  --kotlin)  RUN_GO=false; RUN_AUDIT=false; RUN_SCRIPTS=false ;;
+  --audit)   RUN_GO=false; RUN_KOTLIN=false; RUN_SCRIPTS=false ;;
+  --scripts) RUN_GO=false; RUN_KOTLIN=false; RUN_AUDIT=false ;;
   --fast)    FAST=true ;;
   --all|"")  ;;
   -h|--help)
@@ -129,12 +138,18 @@ if $FAST; then
     grep -q '^client-android/' <<<"$changed" || RUN_KOTLIN=false
     grep -Eq '^(gateway-go/|client-android/app/|andromeda/src/|scripts/audit/|Makefile$|\.github/workflows/|docs/agent-rules/|CLAUDE\.md$)' \
       <<<"$changed" || RUN_AUDIT=false
+    # Same trigger CI uses for python-test (.github/workflows/ci.yml "Detect
+    # scripts/ops changes"): scripts/**, Makefile, the lock files and that
+    # workflow itself. Kept in step with it deliberately — a local gate that
+    # covers less than CI sends red pull requests.
+    grep -Eq '^(scripts/|Makefile$|requirements.*\.lock$|\.github/workflows/ci\.yml$)' \
+      <<<"$changed" || RUN_SCRIPTS=false
   fi
 fi
 
 # Fast mode with nothing relevant changed: nothing to gate.
-if $FAST && ! $RUN_GO && ! $RUN_KOTLIN && ! $RUN_AUDIT; then
-  echo "${GREEN}${BOLD}make ci/fast${RESET} — no Go, Kotlin, or audit changes vs ${BASE_REF}; nothing to gate."
+if $FAST && ! $RUN_GO && ! $RUN_KOTLIN && ! $RUN_AUDIT && ! $RUN_SCRIPTS; then
+  echo "${GREEN}${BOLD}make ci/fast${RESET} — no Go, Kotlin, audit, or script changes vs ${BASE_REF}; nothing to gate."
   echo "${DIM}(run the full ${RESET}${BOLD}make ci${RESET}${DIM} before pushing.)${RESET}"
   exit 0
 fi
@@ -304,15 +319,17 @@ run_gate() {
 go_lane()     { local g; for g in "${GO_GATES[@]}";     do run_gate "$g"; done; }
 kotlin_lane() { local g; for g in "${KOTLIN_GATES[@]}"; do run_gate "$g"; done; }
 audit_lane()  { local g; for g in "${AUDIT_GATES[@]}";  do run_gate "$g"; done; }
+script_lane() { local g; for g in "${SCRIPT_GATES[@]}"; do run_gate "$g"; done; }
 
 # --- Run lanes in parallel ---------------------------------------------------
 SELECTED=()
 $RUN_GO     && SELECTED+=("${GO_GATES[@]}")
 $RUN_KOTLIN && SELECTED+=("${KOTLIN_GATES[@]}")
 $RUN_AUDIT  && SELECTED+=("${AUDIT_GATES[@]}")
+$RUN_SCRIPTS && SELECTED+=("${SCRIPT_GATES[@]}")
 
 if $FAST; then
-  desc="vs ${BASE_REF} → Go:$($RUN_GO && echo run || echo skip)  Kotlin:$($RUN_KOTLIN && echo run || echo skip)  Audit:$($RUN_AUDIT && echo run || echo skip); Go tests cached"
+  desc="vs ${BASE_REF} → Go:$($RUN_GO && echo run || echo skip)  Kotlin:$($RUN_KOTLIN && echo run || echo skip)  Audit:$($RUN_AUDIT && echo run || echo skip)  Scripts:$($RUN_SCRIPTS && echo run || echo skip); Go tests cached"
 else
   desc="${#SELECTED[@]} gates"
   desc="$desc, selected lanes run in parallel"
@@ -325,6 +342,7 @@ pids=()
 $RUN_GO     && { go_lane &     pids+=($!); }
 $RUN_KOTLIN && { kotlin_lane & pids+=($!); }
 $RUN_AUDIT  && { audit_lane &  pids+=($!); }
+$RUN_SCRIPTS && { script_lane & pids+=($!); }
 for p in "${pids[@]}"; do wait "$p"; done
 wall_ms=$(( $(now_ms) - wall_start ))
 

@@ -206,7 +206,7 @@ class CICheckShellTests(unittest.TestCase):
             ),
         )
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("Go:run  Kotlin:skip  Audit:run", proc.stdout)
+        self.assertIn("Go:run  Kotlin:skip  Audit:run  Scripts:skip", proc.stdout)
         self.assertIn("go-test", proc.stdout)
         self.assertIn("make go-test-cached", self.calls())
         self.assertNotIn("make go-test", self.calls())
@@ -218,23 +218,55 @@ class CICheckShellTests(unittest.TestCase):
             env=self.env(CHANGED_UNTRACKED="scripts/audit/runtime_health.py\\n"),
         )
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("Go:skip  Kotlin:skip  Audit:run", proc.stdout)
+        self.assertIn("Go:skip  Kotlin:skip  Audit:run  Scripts:run", proc.stdout)
+        # scripts/audit/ is in BOTH triggers: the audit lane owns the runtime
+        # health gates, the script lane owns the suites that test the tooling
+        # itself. Order across lanes is not deterministic (they run in
+        # parallel), so compare as a set.
         self.assertEqual(
-            [call for call in self.calls() if call.startswith("make ")],
-            [
+            sorted(call for call in self.calls() if call.startswith("make ")),
+            sorted([
                 "make runtime-health-test",
                 "make health-v2-test",
                 "make cache-cost-audit-test",
                 "make doc-ref-lint",
-            ],
+                "make python-test",
+                "make shell-behavior-test",
+                "make shell-lint",
+            ]),
         )
+
+    # The gap this lane closes: until 2026-09-14 a change under scripts/dev/
+    # matched no lane at all, so the gate printed "nothing to gate" and the
+    # break landed in CI instead — twice in one day. A local gate that stays
+    # silent about a whole tree reads as a pass, which is worse than no gate.
+    def test_when_a_dev_script_change_selects_the_script_lane_alone(self) -> None:
+        proc = self.invoke(
+            "--fast",
+            env=self.env(CHANGED_UNSTAGED="scripts/dev/publish-apk.sh\\n"),
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("Go:skip  Kotlin:skip  Audit:skip  Scripts:run", proc.stdout)
+        self.assertEqual(
+            sorted(call for call in self.calls() if call.startswith("make ")),
+            sorted(["make python-test", "make shell-behavior-test", "make shell-lint"]),
+        )
+
+    # The Makefile and the lock files carry the same suites in CI, so they pick
+    # the lane too — the local trigger is kept identical to ci.yml's on purpose.
+    def test_when_makefile_or_lockfile_changes_select_the_script_lane(self) -> None:
+        for path in ("Makefile", "requirements-dev.lock"):
+            with self.subTest(path=path):
+                proc = self.invoke("--fast", env=self.env(CHANGED_STAGED=path + "\\n"))
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                self.assertIn("Scripts:run", proc.stdout)
 
     def test_when_unresolvable_fast_base_warns_and_runs_all_lanes(self) -> None:
         proc = self.invoke("--fast", env=self.env(GIT_BASE_OK="0"))
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("can't resolve 'origin/main' merge-base", proc.stderr)
-        self.assertIn("Go:run  Kotlin:run  Audit:run", proc.stdout)
-        self.assertIn("15 passed, 0 failed", proc.stdout)
+        self.assertIn("Go:run  Kotlin:run  Audit:run  Scripts:run", proc.stdout)
+        self.assertIn("18 passed, 0 failed", proc.stdout)
         make_calls = [call for call in self.calls() if call.startswith("make ")]
         self.assertIn("make go-test-cached", make_calls)
         self.assertIn("make kotlin-android-compile", make_calls)
