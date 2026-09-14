@@ -56,6 +56,7 @@ See also: [page-agent-browser.md](./page-agent-browser.md) (tool env + phone pat
 | Board radar controls | `DENEB_GROUPWARE_BOARD_RADAR_DISABLE=1`, `DENEB_GROUPWARE_BOARD_RADAR_INTERVAL_MINUTES` (default `30`), `DENEB_GROUPWARE_BOARD_RADAR_MAX_PER_CYCLE` (default `3`) |
 | Dev-only board radar opt-in | `DENEB_GROUPWARE_BOARD_RADAR_ALLOW_DEV=1` (production state dir is otherwise required) |
 | Session cache | `~/.deneb/groupware-session.json` (mode `0600`) |
+| Login browser | `~/.deneb/ms-playwright` (`PLAYWRIGHT_BROWSERS_PATH` overrides; not `~/.cache`, which cleanups delete). `scripts/deploy/deploy.sh` installs it after `npm ci`; by hand: `node scripts/dev/groupware-reader/install-browser.mjs` |
 | Approval radar state | `<stateDir>/groupware_radar_state.json` (atomic, mode `0600`) |
 | Board radar state | `<stateDir>/groupware_board_radar_state.json` (atomic, mode `0600`) |
 
