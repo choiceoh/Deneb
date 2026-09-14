@@ -86,6 +86,68 @@ export interface DashboardOut {
   lanes?: LaneOut[]
 }
 
+export interface EngineDay {
+  day?: string
+  model?: string
+  measured?: boolean
+  decodeTokensPerSec?: number
+  prefillTokensPerSec?: number
+  concurrencyWhileBusy?: number
+  peakConcurrency?: number
+  pollIntervalSec?: number
+  requests?: number
+  promptTokens?: number
+  generatedTokens?: number
+  meanTtftSeconds?: number
+  meanQueueSeconds?: number
+  meanE2eSeconds?: number
+  promptCacheHitRatio?: number
+  cachedPromptTokens?: number
+  busySeconds?: number
+  observedSeconds?: number
+  utilization?: number
+  restarts?: number
+}
+
+export interface EngineRoutingRow {
+  model?: string
+  local?: boolean
+  requests?: number
+  inputTokens?: number
+  outputTokens?: number
+}
+
+export interface EngineStatusResult {
+  configured?: boolean
+  endpoint?: string
+  reachable?: boolean
+  model?: string
+  runningRequests?: number
+  waitingRequests?: number
+  days?: EngineDay[]
+  total?: EngineTotals
+  routerAvailable?: boolean
+  routerWindow?: string
+  localRequests?: number
+  remoteRequests?: number
+  routing?: EngineRoutingRow[]
+}
+
+export interface EngineTotals {
+  days?: number
+  requests?: number
+  promptTokens?: number
+  generatedTokens?: number
+  decodeTokensPerSec?: number
+  prefillTokensPerSec?: number
+  meanTtftSeconds?: number
+  promptCacheHitRatio?: number
+  busySeconds?: number
+  observedSeconds?: number
+  utilization?: number
+  restarts?: number
+}
+
 export interface FilesEntryOut {
   tag?: string
   name?: string
