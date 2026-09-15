@@ -74,10 +74,26 @@ def chat_once(base_url, api_key, model, system, user, max_tokens, timeout, respo
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — local/tailnet endpoints only
         payload = json.load(resp)
-    content = payload["choices"][0]["message"]["content"] or ""
+    choices = payload.get("choices") if isinstance(payload, dict) else None
+    if not choices:
+        # OpenRouter reports an upstream provider failing mid-request as HTTP 200
+        # with an error object and no choices ("Service temporarily overloaded").
+        # Indexing it crashed the whole battery and lost every other case's result.
+        err = payload.get("error") if isinstance(payload, dict) else None
+        detail = json.dumps(err, ensure_ascii=False)[:200] if err else "no choices in response"
+        raise UpstreamErrorPayload(detail)
+    content = (choices[0].get("message") or {}).get("content") or ""
     usage = payload.get("usage") or {}
     out_tokens = usage.get("completion_tokens") or max(1, len(content) // 3)
     return content, out_tokens
+
+
+class UpstreamErrorPayload(OSError):
+    """A 200 response carrying an error object instead of choices.
+
+    An OSError so chat_with_retry treats it like any other transient failure: one
+    retry, then the case is recorded as failed rather than taking the battery down.
+    """
 
 
 # 재시도할 가치가 있는 상태만 — 4xx(400/401/404 등)는 재시도해도 같은 답이고
@@ -122,7 +138,20 @@ def chat_with_retry(base_url, api_key, model, system, user, max_tokens, timeout,
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         print(f"  ! transient error for {model}: {e} — retrying once", file=sys.stderr)
     time.sleep(2)
-    return done(*attempt())
+    try:
+        return done(*attempt())
+    except urllib.error.HTTPError as e:
+        if e.code not in TRANSIENT_HTTP:
+            raise
+        failure = f"HTTP {e.code}"
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        failure = str(e)
+    # Failed twice on a transient cause. Content None, not "": an empty string is
+    # a real answer to some scorers — the production triage parser reads anything
+    # not starting with NO as YES — and a dead call must not collect those points.
+    # The wall clock stays in the latency, so a flaky candidate still reads slow.
+    print(f"  ! {model}: failed twice ({failure}) — case scored 0, battery continues", file=sys.stderr)
+    return done(None, 0)
 
 
 # --- Production-path extract (POST /api/eval/extract) -----------------------
