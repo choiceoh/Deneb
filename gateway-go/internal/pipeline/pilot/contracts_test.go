@@ -544,7 +544,7 @@ func TestCallRoleLLMInBandTransientExhaustedWalksChain(t *testing.T) {
 	}
 	want := []string{"tiny", "tiny", "tiny", "light"}
 	if models := requestedModels(); !reflect.DeepEqual(models, want) {
-		t.Fatalf("requests = %v, want %v (1 + %d retries, then the chain)", models, want, inBandRetries)
+		t.Fatalf("requests = %v, want %v (1 + %d retries, then the chain)", models, want, llm.InBandRetries)
 	}
 }
 

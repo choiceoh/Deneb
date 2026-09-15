@@ -176,6 +176,17 @@ func (t *openAIStreamTranslator) handleRawEvent(raw StreamEvent) bool {
 		return t.handleChoiceLessChunk(raw.Payload, chunk)
 	}
 	if t.sawFinishReason {
+		// OpenRouter sends the usage in a final chunk that repeats the finishing
+		// choice. The choice is a duplicate; the usage is not, and dropping it
+		// reported every OpenRouter call as zero tokens.
+		if chunk.Usage != nil {
+			t.emitUsageMessageStart(chunk)
+			emit(t.ctx, t.out, StreamEvent{
+				Type:    "message_delta",
+				Payload: marshalMessageDelta("", chunk.Usage.CompletionTokens),
+			})
+			return true
+		}
 		t.client.logger.Debug("ignoring OpenAI choice chunk after finish_reason")
 		return true
 	}

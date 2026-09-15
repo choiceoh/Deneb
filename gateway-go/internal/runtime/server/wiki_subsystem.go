@@ -161,7 +161,18 @@ func (s *Server) initWikiSubsystem(chatCfg *chat.HandlerConfig, reg *modelrole.R
 		if directive := reg.ThinkingOffDirectiveFor(tinyCfg.ProviderID, tinyCfg.Model); directive != nil {
 			extraBody = llm.ThinkingOffFields(directive.TemplateKwarg(), directive.DisablesReasoningParam())
 		}
-		wikiStore.SetQueryExpander(makeWikiQueryExpander(tinyClient, tinyModel, extraBody, s.logger))
+		// The tiny role's unmetered chain after it, each shaped for its own
+		// provider: with the tiny model's engine down, expansion moves on to tiny's
+		// fallback instead of returning nothing.
+		var fallbacks []wikiExpanderTarget
+		for _, fb := range reg.UnmeteredFallbacks(modelrole.RoleTiny) {
+			var fbExtra map[string]any
+			if d := reg.ThinkingOffDirectiveForRole(modelrole.RoleTiny, fb.Config.ProviderID, fb.Config.Model); d != nil {
+				fbExtra = llm.ThinkingOffFields(d.TemplateKwarg(), d.DisablesReasoningParam())
+			}
+			fallbacks = append(fallbacks, wikiExpanderTarget{client: fb.Client, model: fb.Config.Model, extraBody: fbExtra})
+		}
+		wikiStore.SetQueryExpander(makeWikiQueryExpander(tinyClient, tinyModel, extraBody, s.logger, fallbacks...))
 	}
 
 	// Wiki dreamer. This bounded JSON-synthesis lane favors the tiny

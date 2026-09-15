@@ -359,11 +359,9 @@ func collectStreamCore(ctx context.Context, events <-chan llm.StreamEvent) (stri
 				// mailanalysis's collectStreamText: try both shapes, fall back to the
 				// raw payload, and always surface the error.
 				var errPayload struct {
-					Message string          `json:"message"`
-					Code    json.RawMessage `json:"code"`
+					Message string `json:"message"`
 					Error   struct {
-						Message string          `json:"message"`
-						Code    json.RawMessage `json:"code"`
+						Message string `json:"message"`
 					} `json:"error"`
 				}
 				_ = json.Unmarshal(ev.Payload.Bytes(), &errPayload)
@@ -374,11 +372,7 @@ func collectStreamCore(ctx context.Context, events <-chan llm.StreamEvent) (stri
 				if msg == "" {
 					msg = ev.Payload.String()
 				}
-				var code int
-				if json.Unmarshal(errPayload.Code, &code) != nil || code == 0 {
-					_ = json.Unmarshal(errPayload.Error.Code, &code)
-				}
-				return sb.String(), usage, &StreamError{Message: msg, Code: code, Partial: sb.Len() > 0}
+				return sb.String(), usage, &StreamError{Message: msg, Code: llm.InBandErrorCode(ev.Payload), Partial: sb.Len() > 0}
 			}
 		}
 	}

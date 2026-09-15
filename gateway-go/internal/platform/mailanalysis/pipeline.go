@@ -3,6 +3,7 @@ package mailanalysis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -47,7 +48,11 @@ type PipelineDeps struct {
 	LLMClient   *llm.Client // main LLM for final analysis (stage 2)
 	LocalClient *llm.Client // local AI for extractors (stage 1)
 	LocalModel  string      // local AI model name
-	MainModel   string      // main LLM model name
+	// LocalFallbacks are tried, in order, when the stage-1 model never gets to
+	// answer — its engine reported down, a failed start, or an upstream transient
+	// inside the stream. Not on an answer that fails to parse. Nil = no fallback.
+	LocalFallbacks []LocalTarget
+	MainModel      string // main LLM model name
 	// AnalysisPrompt is the operator-editable instruction block for the final
 	// mail analysis. Empty falls back to DefaultPrompt.
 	AnalysisPrompt string
@@ -200,7 +205,7 @@ type ThreadSource interface {
 // ThreadContext holds extracted context from email thread history. Stays on
 // plain json_object (no strict json_schema): no enum to enforce, and its long
 // free-text fields are explosion-prone under strict guided decoding (see
-// callLocalLLMJSON), so strict would add latency-tax risk for no shape benefit.
+// callLocalModelJSON), so strict would add latency-tax risk for no shape benefit.
 type ThreadContext struct {
 	ThreadSummary  string   `json:"thread_summary"`
 	PriorExchanges string   `json:"prior_exchanges"`
@@ -378,7 +383,70 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 // --- batch analysis ---
 // --- helpers ---
 
-// callLocalLLMJSON calls the local AI model with structured-output mode and
+// LocalTarget is one model a stage-1 extraction may run on.
+type LocalTarget struct {
+	Client *llm.Client
+	Model  string
+	// Provider is the provider the model is reached through, for usage
+	// attribution. Empty means the stage-1 model's own (SetLocalUsageLog).
+	Provider string
+}
+
+// localTargets is the stage-1 model followed by its fallbacks, without repeats.
+func (d PipelineDeps) localTargets() []LocalTarget {
+	return withLocalFallbacks(LocalTarget{Client: d.LocalClient, Model: d.LocalModel}, d.LocalFallbacks)
+}
+
+func withLocalFallbacks(primary LocalTarget, fallbacks []LocalTarget) []LocalTarget {
+	out := []LocalTarget{primary}
+	seen := map[string]bool{primary.Model: true}
+	for _, fb := range fallbacks {
+		if fb.Client == nil || fb.Model == "" || seen[fb.Model] {
+			continue
+		}
+		seen[fb.Model] = true
+		out = append(out, fb)
+	}
+	return out
+}
+
+// callLocalTargetsJSON runs a stage-1 extraction on the first target that gets
+// to answer. It moves on only when a model never answered (callLocalModelJSON's
+// moveOn) — an answer that does not parse is the extraction's result, and
+// sending the mail to another model for a second opinion is not a fallback.
+func callLocalTargetsJSON[T any](ctx context.Context, targets []LocalTarget, system, user string, maxTokens int, schema json.RawMessage) (T, error) {
+	var zero T
+	var lastErr error
+	tried := 0
+	for _, target := range targets {
+		if target.Client == nil || target.Model == "" {
+			continue
+		}
+		tried++
+		result, moveOn, err := callLocalModelJSON[T](ctx, target, system, user, maxTokens, schema)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+		if !moveOn || ctx.Err() != nil {
+			return zero, err
+		}
+	}
+	switch {
+	case lastErr == nil:
+		return zero, fmt.Errorf("no stage-1 model configured")
+	case tried > 1:
+		return zero, fmt.Errorf("all %d stage-1 models failed: %w", tried, lastErr)
+	default:
+		return zero, lastErr
+	}
+}
+
+// stageRetryPause is llm.InBandRetryDelay, held in a var so tests do not sleep
+// through it.
+var stageRetryPause = llm.InBandRetryDelay
+
+// callLocalModelJSON calls one stage-1 model with structured-output mode and
 // unmarshals the result. A non-nil schema requests strict json_schema: vLLM
 // constrains generation to the schema via guided decoding, so enum fields (action
 // priority, fact type) and the object shape can't silently drift — the failure
@@ -387,17 +455,23 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 // json_object (used for the wide free-text extractors — deal, thread — where
 // strict guided decoding triggers the explosion below for no enum benefit).
 //
-// Fallback: if a json_schema attempt errors OR the guided output is unparseable,
+// Retry: if a json_schema attempt errors OR the guided output is unparseable,
 // it retries once in plain json_object. This covers two cases — an endpoint that
 // doesn't support guided decoding, and vLLM xgrammar's whitespace-explosion bug
 // (the model degenerates into an unbounded space run as a string value and
 // truncates the JSON; rare on the narrow schemas we send strict, but real). The
 // json_object retry is explosion-free in live probing, so extraction still lands.
-func callLocalLLMJSON[T any](ctx context.Context, client *llm.Client, model, system, user string, maxTokens int, schema json.RawMessage) (T, error) {
+//
+// moveOn reports that the model never got to answer — a failed start or an
+// upstream transient in the stream — which is what a fallback model is for.
+// Extractors call it through callLocalTargetsJSON, never directly.
+func callLocalModelJSON[T any](ctx context.Context, target LocalTarget, system, user string, maxTokens int, schema json.RawMessage) (T, bool, error) {
+	client, model := target.Client, target.Model
 	var zero T
 
 	useSchema := len(schema) > 0
-	for attempt := range 2 {
+	inBandRetried := 0
+	for attempt := 0; ; attempt++ {
 		format := &llm.ResponseFormat{Type: "json_object"}
 		if useSchema {
 			format = &llm.ResponseFormat{Type: "json_schema", JSONSchema: llm.FlexibleFromRaw(schema)}
@@ -414,7 +488,8 @@ func callLocalLLMJSON[T any](ctx context.Context, client *llm.Client, model, sys
 			// JSON this helper parses. See anthropic.go's disabled handling.
 			Thinking: &llm.ThinkingConfig{Type: "disabled"},
 		})
-		if err == nil {
+		started := err == nil
+		if started {
 			var raw string
 			var usage llm.TokenUsage
 			raw, usage, err = collectStreamTextCore(ctx, events)
@@ -422,25 +497,62 @@ func callLocalLLMJSON[T any](ctx context.Context, client *llm.Client, model, sys
 				// The model produced a full response — record its tokens whether or
 				// not the JSON parses. A parse-then-retry still spent tokens on both
 				// attempts, so emitting per successful stream is the accurate count.
-				emitLocalHelperUsage(model, usage)
+				emitLocalHelperUsage(target, usage)
 				result, perr := jsonutil.UnmarshalLLM[T](raw)
 				if perr == nil {
-					return result, nil
+					return result, false, nil
 				}
 				err = fmt.Errorf("JSON parse failed: %s", jsonutil.Truncate(raw, 200))
 			}
 		}
+		// An engine reported down refuses the second attempt the same way.
+		if errors.Is(err, llm.ErrBackendDown) {
+			return zero, true, err
+		}
+		transient, retrySame := classifyStageStreamError(err)
 
-		// err != nil here. Retry once on the first attempt, dropping json_schema if
-		// that was the mode so an endpoint rejecting guided decoding still extracts.
-		if attempt == 0 {
+		// err != nil here. The first attempt is retried whatever the error,
+		// dropping json_schema so an endpoint rejecting guided decoding still
+		// extracts. An upstream transient inside the stream earns the same-model
+		// retries the helper path gives it, spaced the same way — measured
+		// 2026-09-15, two attempts on the free Nvidia endpoint both came back
+		// overloaded within 0.75s.
+		switch {
+		case retrySame && inBandRetried < llm.InBandRetries:
+			inBandRetried++
+			useSchema = false
+			select {
+			case <-ctx.Done():
+				return zero, false, err
+			case <-time.After(stageRetryPause * time.Duration(inBandRetried)):
+			}
+			continue
+		case attempt == 0:
 			useSchema = false
 			continue
 		}
-		return zero, err
+		return zero, !started || transient, err
 	}
+}
 
-	return zero, fmt.Errorf("unreachable")
+// stageStreamError is an error the provider reported inside a stream the HTTP
+// layer accepted with 200 — OpenRouter's upstream failures arrive this way.
+type stageStreamError struct {
+	message string
+	code    int
+	partial bool
+}
+
+func (e *stageStreamError) Error() string {
+	return "LLM stream error: " + e.message
+}
+
+func classifyStageStreamError(err error) (transient, retrySame bool) {
+	var se *stageStreamError
+	if !errors.As(err, &se) {
+		return false, false
+	}
+	return llm.ClassifyInBandError(se.code, se.message, se.partial)
 }
 
 // collectStreamText gathers all text deltas from a streaming response. It is a
@@ -522,10 +634,11 @@ func collectStreamTextCore(ctx context.Context, events <-chan llm.StreamEvent) (
 				var errBody struct {
 					Message string `json:"message"`
 				}
+				msg := ev.Payload.String()
 				if json.Unmarshal(ev.Payload.Bytes(), &errBody) == nil && errBody.Message != "" {
-					return "", usage, fmt.Errorf("LLM stream error: %s", errBody.Message)
+					msg = errBody.Message
 				}
-				return "", usage, fmt.Errorf("LLM stream error: %s", ev.Payload.String())
+				return "", usage, &stageStreamError{message: msg, code: llm.InBandErrorCode(ev.Payload), partial: sb.Len() > 0}
 			}
 		}
 	}

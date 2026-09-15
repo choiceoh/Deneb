@@ -12,7 +12,7 @@
 |---|---|
 | `service.go` | 폴링 서비스 — 주기 루프, 신규 감지, 보고 배선 |
 | `state.go` | 폴 상태 persist(처리한 메일 추적). 패키지 닥(`Package mailanalysis …`) |
-| `pipeline.go` | ★`AnalyzeEmailPipeline` — 분석 오케스트레이터. `PipelineDeps`, 프로젝트 후보 매칭, 로컬 LLM JSON 헬퍼(`callLocalLLMJSON`) |
+| `pipeline.go` | ★`AnalyzeEmailPipeline` — 분석 오케스트레이터. `PipelineDeps`, 프로젝트 후보 매칭, 로컬 LLM JSON 헬퍼(`callLocalTargetsJSON` — stage-1 모델 + `LocalFallbacks`) |
 | `pipeline_synthesis.go` | `AnalyzeEmailPipeline`의 단계들: **stage-1 컨텍스트 추출**(스레드·발신자 기억·위키 그래프) + **stage-2 합성** 호출 + 중요도 판정/관련 프로젝트 suffix 파싱 |
 | `pipeline_extractors.go` | 합성된 분석 텍스트 위에서 도는 로컬-AI 추출기: 위키 fact 제안·운영자 action item·거래 정보. 전부 lightweight 모델 JSON 모드 |
 | `deal_facts.go` | 거래 조건 인용 추출기(사실 레이어 2단계): 물량·단가·지급조건·하자보수·지체상금을 원문 인용과 함께 뽑고 결정적 인용 게이트(`verifyDealFacts`)로 미검증 필드 드롭. 거래 메일 한정 2차 패스 |
@@ -56,6 +56,7 @@ service.go (주기 폴 / 외부 트리거)
 
 - **모델 역할 직교**: stage1=tiny(단순 구조화 추출), stage2=main(사용자가 읽는 합성 — analysis 제거로 main, **의도적 클라우드 OK**), 단 자동 agent synthesis는 `agents.submainModel` 구성 시 자율 배경 lane(submain)을 사용하고 실패 시 main single-completion으로 fallback한다. 추출기=lightweight. 추출기를 main으로 올리면 비용·레이턴시가 샌다 — `docs/agent-rules/model-roles.md` 도그마 5.
 - **`mailAnalysisModels()`는 server에 있다**(`runtime/server/`), 역할 해석의 단일 지점. mailanalysis는 그 모델을 소비만.
+- **stage-1 폴백은 "답을 못 한 경우"에만 넘어간다**: `callLocalTargetsJSON`은 엔진 다운(`llm.ErrBackendDown`)·시작 실패·토큰 전 스트림 내 일시 오류(`llm.ClassifyInBandError`)일 때만 다음 모델(server `mailStageOneFallbacks` = tiny 의 비종량 체인)로 간다. 파싱 안 되는 답은 그 추출의 결과다 — 다른 모델에 다시 묻는 건 폴백이 아니라 재채점이다. 새 stage-1 추출기는 `callLocalTargetsJSON(…, deps.localTargets(), …)`로 부를 것 — 단일 모델 헬퍼(`callLocalModelJSON`)를 직접 부르면 그 추출기만 엔진 다운 때 조용히 죽는다(`extractDealInfo`가 그랬다). 폴백이 답한 사용량은 그 폴백의 provider 로 기록된다(`LocalTarget.Provider`).
 - **추론 누출 방어**: 분석 텍스트에 모델 self-talk/reasoning이 새는 이력 — `reasoning_leak.go`로 스트립([project_cron_narration_leak]). 본문에 메타발화 의심되면 여기부터.
 - **cron 트리거 회귀 이력**: bind·잡이름404·배포폭풍 in-flight abort 3회. cron 복원은 `deliverableLen>0`까지 라이브 검증([project_kakao_mail_pipeline]).
 - **dev가 prod cron 공유 실행** → 라이브 검증 시 prod 부수효과(위키 쓰기 등). 검증 후 즉시 stop([reference_livetest_dev_cron_shared]).

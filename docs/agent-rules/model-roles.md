@@ -54,6 +54,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 > ★ **tinyfallback 후보 선정 (2026-09-15, 운영자 제안 "타이니 폴백을 오픈라우터 빠른 무료모델로")** — 사건 기록이지 현재값이 아니다(현재값은 `model_role.py --all`).
 > 오픈라우터 무료 22종 중 계정 허용 제공자 목록(nvidia·google-ai-studio 등)을 통과하고 JSON 모드를 지원하는 후보를 `lightweight-model-ab.py` 로 채점: **thinking off 조건에서** nemotron-3-super-120b-a12b:free = extract 100·title 90·triage 100(평균 2.5s), gemma-4-26b-a4b-it:free = extract 0(객체를 배열로 감쌈)·triage 35(max_tokens=4 에서 빈 응답 → 프로덕션 파서가 YES 로 읽음). ★함정 두 개가 설계를 바꿨다: ① nemotron 은 `reasoning.enabled=false` 없이 추론을 **본문에 흘린다** → 오픈라우터용 thinking-off 는 템플릿 kwarg 가 아니라 `reasoning` 필드(`modelcaps.SpeaksReasoningParam`, `llm.ThinkingOffFields`) ② Nvidia 무료 엔드포인트는 과부하를 **HTTP 200 + 스트림 내 오류 이벤트**로 알린다(측정 14건 중 8건) → 헬퍼는 토큰 전 5xx 는 같은 모델에 짧게 2회 재시도, 429 는 바로 다음 칸, 결정적 오류와 부분 출력 후 오류는 그대로 표면화(`pipeline/pilot/stream_retry.go`). 무료 한도: 분당 20건, 누적 구매 10크레딧 이상이면 하루 1,000건.
+> 후속(같은 날, 운영자 "그 폴백 써"): tiny 클라이언트를 직접 쥐고 체인을 안 걷던 경로 — 메일 stage-1 추출(사실·액션·거래·스레드 맥락·첨부 게이트·결재 비용)과 위키 질의 확장 — 도 `Registry.UnmeteredFallbacks(RoleTiny)`로 같은 폴백을 쓴다. ★함정 둘: ① 오픈라우터는 사용량을 finish 뒤 마지막 청크에 실어, 그걸 버리던 스트림 변환기 탓에 헬퍼 사용량이 0 토큰으로 찍혔다 ② `ChatRequest.Thinking{disabled}` 만 보내는 호출자는 오픈라우터에서 `reasoning_effort` 로 번역돼 thinking 이 안 꺼졌다 → 클라이언트 옵션 `llm.WithReasoningParam`.
 
 ## 역할 선택 헬퍼 (`pipeline/pilot/localai.go`)
 
@@ -75,7 +76,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 일간/모닝레터 합성 | `tools/routine/morning_letter.go` 결정적 수집 → `cronrunner` 1회 무도구 의미 투영 → `morning_card.go` 고정 렌더 | **main** | 사용자가 읽는 프로젝트별 중요도·맥락·후행 제안은 품질 종합이라 main. 모델은 JSON 의미 슬롯만 1턴 채우고 양식·수치·이스케이프는 서버가 소유한다. 모델/채팅 장애 시 동일 수집값의 사실 전용 카드로 fail-open. 수동 요청은 도구의 결정적 `delivery`를 그대로 반환 |
 | 프로젝트 위키 딥리서치 갱신 (6h) | `runtime/wikiwork/wiki_research_task.go` | **main** | 도구무거운 에이전트 턴(내부 소스 재조사→위키 본문 갱신·supersede). boot/heartbeat/goal과 동형의 에이전트 턴이라 main, 헬퍼 요약 콜 아님. wiki-research 프리셋(웹 제외)으로 내부 소스 한정, 로컬 |
 | 메일 리포트 종합 (stage2) | `mailAnalysisModels()` / `mailAnalysisAgentSynthesis()` | **main** for 수동·fallback single completion, **submain** for 자동 agent synthesis when configured | 사용자가 읽는 리포트라 수동 분석과 agent 실패 fallback은 main 품질 하한을 유지한다. 자동 메일 합성은 도구무거운 배경 레인이라 submain 구성 시 heartbeat·phone-event와 같은 자율 lane으로 보내 main latency p95를 보호한다. |
-| 메일 추출 (stage1) · gmail facts/actions/deal | `mailAnalysisModels()`, `platform/mailanalysis/pipeline_extractors.go` | **tiny** | 단순 구조화 JSON 추출 |
+| 메일 추출 (stage1) · gmail facts/actions/deal | `mailAnalysisModels()`, `platform/mailanalysis/pipeline_extractors.go` | **tiny** | 단순 구조화 JSON 추출. tiny 클라이언트를 직접 쥐므로 체인은 `Registry.UnmeteredFallbacks(RoleTiny)`로 따로 받는다(`mailStageOneFallbacks`) — 모델이 답을 못 했을 때만 다음 칸, 종량제 칸 제외 |
 | 거래 조건 인용 추출 (deal facts 2차 패스) | `platform/mailanalysis/deal_facts.go` | **tiny** | 거래 메일 한정 — 물량·단가·지급조건·하자보수·지체상금을 **원문 인용 필수**로 추출, Go 결정적 게이트(`verifyDealFacts`: 인용⊂원문 + 값 숫자⊂인용)가 미검증 필드 드롭. stage1과 같은 배치·같은 예산, fail-open |
 | 세션 자동 제목 | `chat/session_autotitle.go` | **tiny** | 짧은 명사구 제목 |
 | 워크피드 카드 제목+요약 | `runtime/proactive/workfeed_title_llm.go` | **tiny** | 짧은 제목 + 2줄 카드 요약을 단일 호출로 생성 — 세션 자동제목과 같은 단순 추출이라 tiny. lightweight였을 땐 클라우드 추론모델(deepseek-v4-flash-api)로 폴백 시 thinking-off 미적용→256토큰을 추론이 소진→빈응답→휴리스틱 폴백(라이브 확인: tiny 1.0–1.4초 정상). 휴리스틱(extractCardTitle/Summary)이 여전히 최종 폴백 |

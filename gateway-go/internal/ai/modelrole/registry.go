@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
@@ -540,6 +541,9 @@ func buildClient(logger *slog.Logger, cfg ModelConfig, engineDown func(model str
 	if engineDown != nil {
 		opts = append(opts, llm.WithBackendDownCheck(engineDown))
 	}
+	if modelcaps.SpeaksReasoningParam(cfg.ProviderID) {
+		opts = append(opts, llm.WithReasoningParam())
+	}
 	if cfg.APIMode != "" {
 		opts = append(opts, llm.WithAPIMode(cfg.APIMode))
 	}
@@ -721,6 +725,44 @@ func (r *Registry) ModelsAt(hostport string) []string {
 		out = append(out, cfg.Model)
 	}
 	sort.Strings(out)
+	return out
+}
+
+// FallbackTarget is one rung of a role's fallback chain, resolved.
+type FallbackTarget struct {
+	Role   Role
+	Config ModelConfig
+	Client *llm.Client
+}
+
+// UnmeteredFallbacks lists role's fallback chain after the role itself: every
+// configured rung that has a client, a model different from the role's own, and
+// does not bill per token — neither marked metered in the wormhole config nor a
+// paid OpenRouter model, which is called directly and never passes the router.
+//
+// It is for callers that hold a role's client directly and never had a
+// fallback — mail stage-1 extraction, wiki query expansion. Giving them the
+// chain must not introduce a bill where there was none (dogma #7), so billed
+// rungs are left out rather than tried.
+func (r *Registry) UnmeteredFallbacks(role Role) []FallbackTarget {
+	if r == nil {
+		return nil
+	}
+	own := r.Config(role).Model
+	seen := map[string]bool{own: true}
+	var out []FallbackTarget
+	for _, fbRole := range r.FallbackChain(role)[1:] {
+		cfg := r.Config(fbRole)
+		if cfg.Model == "" || seen[cfg.Model] || r.IsMetered(cfg.Model) || modelcaps.OpenRouterPaid(cfg.ProviderID, cfg.Model) {
+			continue
+		}
+		client := r.Client(fbRole)
+		if client == nil {
+			continue
+		}
+		seen[cfg.Model] = true
+		out = append(out, FallbackTarget{Role: fbRole, Config: cfg, Client: client})
+	}
 	return out
 }
 

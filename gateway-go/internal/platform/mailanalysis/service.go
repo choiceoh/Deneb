@@ -48,6 +48,9 @@ type Config struct {
 	// Multi-stage pipeline deps (all optional — nil = skip that stage).
 	LocalClient *llm.Client // local AI for stage-1 extractors
 	LocalModel  string      // local AI model name
+	// LocalFallbacks are the stage-1 models tried when LocalModel never gets to
+	// answer. See PipelineDeps.LocalFallbacks.
+	LocalFallbacks []LocalTarget
 
 	// DiaryDir is the wiki diary directory for logging analysis results.
 	// Empty = diary logging disabled.
@@ -559,6 +562,7 @@ func (s *Service) pipelineDeps(gmailClient *gmail.Client) PipelineDeps {
 		LLMClient:              s.llmClient,
 		LocalClient:            s.cfg.LocalClient,
 		LocalModel:             s.cfg.LocalModel,
+		LocalFallbacks:         s.cfg.LocalFallbacks,
 		MainModel:              s.cfg.Model,
 		AnalysisPrompt:         s.analysisPrompt(),
 		Logger:                 s.log,

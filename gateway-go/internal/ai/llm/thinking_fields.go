@@ -22,3 +22,16 @@ func ThinkingOffFields(templateKwarg string, reasoningParam bool) map[string]any
 		return nil
 	}
 }
+
+// applyReasoningParam rewrites a disabled-thinking request for an endpoint that
+// takes the unified reasoning field (WithReasoningParam): the switch travels as
+// reasoning.enabled=false, and the vLLM-shaped fields applySamplingParams set
+// are dropped — they either never reach the model or keep it reasoning.
+func (c *Client) applyReasoningParam(oaiReq *openAIRequest, req *ChatRequest) {
+	if !c.reasoningParam || req.Thinking == nil || req.Thinking.Type != "disabled" {
+		return
+	}
+	oaiReq.Reasoning = &openAIReasoning{Enabled: false}
+	oaiReq.ReasoningEffort = ""
+	oaiReq.ChatTemplateKwargs = nil
+}

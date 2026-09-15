@@ -79,8 +79,9 @@ func (f *ApprovalCostFacts) Empty() bool {
 // ExtractApprovalCostFacts runs the quote-mandatory cost extractor over one
 // approval document and returns only what survives verification, or nil.
 // Best-effort like extractDealFacts: any error degrades to nil, never to a
-// plausible-but-wrong record.
-func ExtractApprovalCostFacts(ctx context.Context, client *llm.Client, model string, logger *slog.Logger, source string) *ApprovalCostFacts {
+// plausible-but-wrong record. fallbacks are tried when the model never gets to
+// answer (see callLocalTargetsJSON).
+func ExtractApprovalCostFacts(ctx context.Context, client *llm.Client, model string, logger *slog.Logger, source string, fallbacks ...LocalTarget) *ApprovalCostFacts {
 	if client == nil || strings.TrimSpace(model) == "" || strings.TrimSpace(source) == "" {
 		return nil
 	}
@@ -90,7 +91,8 @@ func ExtractApprovalCostFacts(ctx context.Context, client *llm.Client, model str
 	prompt := fmt.Sprintf(approvalCostExtractorPrompt, source)
 	// json_object (schema=nil) — free-text string fields are the xgrammar
 	// whitespace-explosion shape; see the DealFacts doc.
-	facts, err := callLocalLLMJSON[ApprovalCostFacts](extractCtx, client, model, approvalCostExtractorSystem, prompt, approvalCostMaxTokens, nil)
+	targets := withLocalFallbacks(LocalTarget{Client: client, Model: model}, fallbacks)
+	facts, err := callLocalTargetsJSON[ApprovalCostFacts](extractCtx, targets, approvalCostExtractorSystem, prompt, approvalCostMaxTokens, nil)
 	if err != nil {
 		return nil
 	}

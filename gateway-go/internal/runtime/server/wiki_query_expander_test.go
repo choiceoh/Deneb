@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,5 +42,35 @@ func TestWikiQueryExpanderHonorsItsOwnDeadline(t *testing.T) {
 		}
 	case <-time.After(wikiExpanderTimeout + 5*time.Second):
 		t.Fatalf("expansion outlived its %s budget", wikiExpanderTimeout)
+	}
+}
+
+// With the tiny model's engine down, expansion moves on to the tiny role's
+// fallback instead of returning nothing.
+func TestWikiQueryExpanderFallsBackInOrder(t *testing.T) {
+	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "upstream unreachable", http.StatusBadGateway)
+	}))
+	defer dead.Close()
+	var sawReasoningOff bool
+	alive := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if reasoning, ok := body["reasoning"].(map[string]any); ok && reasoning["enabled"] == false {
+			sawReasoningOff = true
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"해저케이블\n계통연계"},"finish_reason":"stop"}]}`))
+	}))
+	defer alive.Close()
+
+	expander := makeWikiQueryExpander(llm.NewClient(dead.URL, ""), "tiny", nil, nil,
+		wikiExpanderTarget{client: llm.NewClient(alive.URL, ""), model: "free", extraBody: llm.ThinkingOffFields("", true)})
+	terms := expander(context.Background(), "완도 케이블 인허가")
+	if strings.Join(terms, ",") != "해저케이블,계통연계" {
+		t.Fatalf("terms = %v, want the fallback's answer", terms)
+	}
+	if !sawReasoningOff {
+		t.Fatal("the fallback request lost its own shaping (reasoning.enabled=false)")
 	}
 }

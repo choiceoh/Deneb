@@ -91,7 +91,7 @@ func extractDealFacts(ctx context.Context, deps PipelineDeps, source string) *De
 
 	prompt := fmt.Sprintf(dealFactsExtractorPrompt, source)
 	// json_object (schema=nil) — see the DealFacts doc for the xgrammar caveat.
-	facts, err := callLocalLLMJSON[DealFacts](extractCtx, deps.LocalClient, deps.LocalModel, dealFactsExtractorSystem, prompt, stage1MaxTokens, nil)
+	facts, err := callLocalTargetsJSON[DealFacts](extractCtx, deps.localTargets(), dealFactsExtractorSystem, prompt, stage1MaxTokens, nil)
 	if err != nil {
 		return nil
 	}

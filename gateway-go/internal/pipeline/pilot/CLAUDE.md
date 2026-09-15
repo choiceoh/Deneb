@@ -30,7 +30,9 @@ role; provider selection and health fallback remain centralized here.
   moves on at once. A code-less error, or one after partial text, surfaces as
   before — wording is not trusted to mean "transient". OpenRouter's free tier
   reports upstream overload exactly this way (HTTP 200 + in-stream error), which
-  the LLM client's HTTP-status retries never see.
+  the LLM client's HTTP-status retries never see. The decision itself is
+  `llm.ClassifyInBandError`, shared with mail stage-1 extraction — change it
+  there, not here.
 - Model hub and degradation state are race-safe. Vision rejects empty or
   malformed frames before contacting a provider.
 - Output truncation is rune-safe and preserves the leading diagnostic context.
