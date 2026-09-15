@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -11,6 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/chatportwire"
@@ -177,6 +179,12 @@ func isContextOverflow(err error) bool {
 // handled by a separate compaction path upstream.
 func isTransientLLMError(err error) bool {
 	if err == nil {
+		return false
+	}
+	// A liveness-gate refusal is the opposite of transient: the engine said it
+	// accepts nothing. Checked by identity, not by the classifier, so no
+	// wording in the message can turn it back into a retry.
+	if errors.Is(err, llm.ErrBackendDown) {
 		return false
 	}
 	switch classifyLLMError(err).Reason {

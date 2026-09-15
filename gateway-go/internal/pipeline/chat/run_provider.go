@@ -61,7 +61,7 @@ func configuredProviderClient(ctx context.Context, deps runDeps, providerID stri
 	}
 
 	mode := apiModeFor(providerID, cfg.API)
-	client := newResolvedProviderClient(providerID, credentials, mode, cfg.Headers, logger)
+	client := newResolvedProviderClient(providerID, credentials, mode, cfg.Headers, engineDownGate(deps), logger)
 	logger.Info("using provider from config", "provider", providerID, "apiMode", mode)
 	return client
 }
@@ -87,7 +87,7 @@ func managedProviderClient(ctx context.Context, deps runDeps, providerID string,
 		credentials.baseURL = resolveDefaultBaseURL(target)
 	}
 	credentials = prepareRuntimeProviderCredentials(ctx, deps.providerRuntime, target, credentials, logger)
-	return newResolvedProviderClient(target, credentials, apiModeFor(target, ""), nil, logger)
+	return newResolvedProviderClient(target, credentials, apiModeFor(target, ""), nil, engineDownGate(deps), logger)
 }
 
 type providerClientCredentials struct {
@@ -130,14 +130,31 @@ func prepareRuntimeProviderCredentials(
 	return credentials
 }
 
+// engineDownGate is the registry's engine liveness check, for clients the chat
+// pipeline builds itself. The registry's own clients carry it from
+// construction, but a provider configured in deneb.json resolves here first —
+// and that is the client production turns use: on 2026-09-15 a live turn on a
+// model whose engine was already reported down still ran the full retry ladder
+// (79.6s) through it. Nil without a registry, which leaves the client ungated.
+func engineDownGate(deps runDeps) func(model string) bool {
+	if deps.registry == nil {
+		return nil
+	}
+	return deps.registry.EngineDown
+}
+
 func newResolvedProviderClient(
 	providerID string,
 	credentials providerClientCredentials,
 	apiMode string,
 	configuredHeaders map[string]string,
+	engineDown func(model string) bool,
 	logger *slog.Logger,
 ) *llm.Client {
 	opts := []llm.ClientOption{llm.WithLogger(logger)}
+	if engineDown != nil {
+		opts = append(opts, llm.WithBackendDownCheck(engineDown))
+	}
 	if apiMode != "" {
 		opts = append(opts, llm.WithAPIMode(apiMode))
 	}

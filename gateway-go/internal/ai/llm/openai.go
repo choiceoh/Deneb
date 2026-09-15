@@ -98,7 +98,7 @@ func (c *Client) streamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 	setBetaHeaders(httpReq, &req)
 	c.applyHeaders(httpReq)
 
-	respBody, err := c.DoStream(ctx, httpReq)
+	respBody, err := c.doStream(ctx, httpReq, req.Model)
 	if err != nil {
 		return nil, err
 	}

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginelive"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
@@ -34,6 +36,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 func (s *Server) registerProcessApprovalSideEffect(hub *rpcutil.GatewayHub) {
@@ -599,4 +602,26 @@ func (s *Server) registerRoleHealthWorkflow() {
 		filepath.Join(s.denebDir, "role_health.json"),
 	)
 	s.roleHealth.Start(s.ShutdownCtx())
+}
+
+// registerEngineLivenessWorkflow watches the local serving engines' /health
+// and marks the models they serve down in the model registry while they refuse
+// requests — so chat turns go straight to the fallback chain and no client
+// retries a refusing engine. Starts nothing without DENEB_ENGINE_METRICS_URL.
+func (s *Server) registerEngineLivenessWorkflow() {
+	if s.modelRegistry == nil || s.engineLiveness != nil {
+		return
+	}
+	reg := s.modelRegistry
+	s.engineLiveness = enginelive.New(
+		enginespeed.Endpoints(),
+		func(endpoint string) []string {
+			// Routed entries at that server, plus any role pointed straight at
+			// it — the router config cannot see a direct role.
+			return append(configresolve.EngineModels(endpoint), reg.ModelsAt(httputil.HostPort(endpoint))...)
+		},
+		reg,
+		s.logger,
+	)
+	s.engineLiveness.Start(s.ShutdownCtx())
 }
