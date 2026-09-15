@@ -21,11 +21,22 @@ import "github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
 // representation.
 type ThinkingOffDirective struct {
 	templateKwarg string
+	// reasoningParam marks a provider that takes the switch as its own request
+	// field (OpenRouter's reasoning.enabled=false) instead of a template kwarg.
+	reasoningParam bool
 }
 
-// TemplateKwarg returns the provider template's thinking toggle name.
+// TemplateKwarg returns the provider template's thinking toggle name, or "" when
+// the directive is the reasoning-parameter kind.
 func (d ThinkingOffDirective) TemplateKwarg() string {
 	return d.templateKwarg
+}
+
+// DisablesReasoningParam reports whether the directive is carried by the
+// provider's unified reasoning field rather than a template kwarg. Adapters turn
+// either kind into request fields with llm.ThinkingOffFields.
+func (d ThinkingOffDirective) DisablesReasoningParam() bool {
+	return d.reasoningParam
 }
 
 // ThinkingOffDirectiveFor returns the typed policy directive a raw LLM adapter
@@ -34,6 +45,14 @@ func (d ThinkingOffDirective) TemplateKwarg() string {
 //
 // Decision order — the template toggle comes FIRST:
 //
+//  0. Providers with a unified reasoning field (OpenRouter): reasoning.enabled=
+//     false for non-reasoning models. A template kwarg would not reach the model
+//     through the hosting provider. Measured 2026-09-15 on
+//     nvidia/nemotron-3-super-120b-a12b:free: without the field it reasons by
+//     default and writes the reasoning into the content ("We need to output a
+//     short Korean noun phrase title..."), exhausting a title's 32-token budget.
+//     Reasoning models are left alone here as in branch 2; a role that forces
+//     thinking off still gets the field (ThinkingOffDirectiveForRole).
 //  1. Dual-mode models with a per-request template off-switch (deepseek-v4 →
 //     chat_template_kwargs.thinking=false, provider-gated to vLLM-backed
 //     servings by modelcaps.ThinkingToggleKwarg). These deliberately report
@@ -49,6 +68,12 @@ func (d ThinkingOffDirective) TemplateKwarg() string {
 //     OpenAI-compat APIs (wormhole-fronted models still count as vLLM-backed,
 //     preserving today's passthrough behavior).
 func ThinkingOffDirectiveFor(providerID, model string) *ThinkingOffDirective {
+	if modelcaps.SpeaksReasoningParam(providerID) {
+		if IsReasoningModel(model) {
+			return nil
+		}
+		return &ThinkingOffDirective{reasoningParam: true}
+	}
 	if kw := modelcaps.ThinkingToggleKwarg(providerID, model); kw != "" {
 		return &ThinkingOffDirective{templateKwarg: kw}
 	}
@@ -83,7 +108,7 @@ func (r *Registry) ThinkingOffDirectiveFor(providerID, model string) *ThinkingOf
 // "생각 중" chip summary): thinking there is pure overhead, and the role runs at
 // high concurrency where the wasted tokens/latency compound.
 func roleForcesThinkingOff(role Role) bool {
-	return role == RoleTiny
+	return role == RoleTiny || role == RoleTinyFallback
 }
 
 // ThinkingOffDirectiveForRole is the ROLE-aware directive resolver for raw role
@@ -101,8 +126,15 @@ func (r *Registry) ThinkingOffDirectiveForRole(role Role, providerID, model stri
 	if d := r.ThinkingOffDirectiveFor(providerID, model); d != nil {
 		return d
 	}
-	if roleForcesThinkingOff(role) && modelcaps.ServesVllmBacked(providerID) {
-		return &ThinkingOffDirective{templateKwarg: "enable_thinking"}
+	if !roleForcesThinkingOff(role) {
+		return nil
 	}
-	return nil
+	switch {
+	case modelcaps.ServesVllmBacked(providerID):
+		return &ThinkingOffDirective{templateKwarg: "enable_thinking"}
+	case modelcaps.SpeaksReasoningParam(providerID):
+		return &ThinkingOffDirective{reasoningParam: true}
+	default:
+		return nil
+	}
 }

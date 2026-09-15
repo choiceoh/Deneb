@@ -34,7 +34,8 @@ func TestTierRolesUsesTinyModelWhenConfigured(t *testing.T) {
 	}
 }
 
-// TestTierRoles_FallbackChains pins the tiny fallback ordering: it
+// TestTierRoles_FallbackChains pins the tiny fallback ordering: tiny's own
+// opt-in fallback first (skipped by the walk when unconfigured), then it
 // degrades to lightweight, then the shared fallback role.
 func TestTierRoles_FallbackChains(t *testing.T) {
 	reg := NewRegistry(slog.Default(), "zai/test", "gemma4")
@@ -42,7 +43,7 @@ func TestTierRoles_FallbackChains(t *testing.T) {
 		role Role
 		want []Role
 	}{
-		{RoleTiny, []Role{RoleTiny, RoleLightweight, RoleFallback}},
+		{RoleTiny, []Role{RoleTiny, RoleTinyFallback, RoleLightweight, RoleFallback}},
 	}
 	for _, c := range cases {
 		got := reg.FallbackChain(c.role)

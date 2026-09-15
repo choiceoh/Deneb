@@ -178,7 +178,9 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 		directive := pkgRegistry.ThinkingOffDirectiveForRole(role, providerID, model) // nil-receiver safe
 		merged := make(map[string]any, len(callerExtra)+2)
 		if directive != nil {
-			merged["chat_template_kwargs"] = map[string]any{directive.TemplateKwarg(): false}
+			for k, v := range llm.ThinkingOffFields(directive.TemplateKwarg(), directive.DisablesReasoningParam()) {
+				merged[k] = v
+			}
 		}
 		for k, v := range callerExtra {
 			merged[k] = v
@@ -204,44 +206,51 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 		ExtraBody: pilotExtraBody(shapedExtra(providerID, model)),
 	}
 
-	usedModel, usedProvider := model, providerID
-	events, err := client.StreamChat(ctx, req)
-	if err != nil {
-		// Role model failed — walk its fallback chain if the registry is available.
-		if pkgRegistry != nil {
-			fbChain := pkgRegistry.FallbackChain(role)
-			for _, fbRole := range fbChain[1:] {
-				fbCfg := pkgRegistry.Config(fbRole)
-				fbClient := pkgRegistry.Client(fbRole)
-				if fbClient == nil {
-					continue
-				}
-				req.Model = fbCfg.Model
-				req.ExtraBody = pilotExtraBody(shapedExtra(fbCfg.ProviderID, fbCfg.Model))
-				events, err = fbClient.StreamChat(ctx, req)
-				if err == nil {
-					usedModel, usedProvider = fbCfg.Model, fbCfg.ProviderID
-					break
-				}
+	// Candidates: the role's own model, then its fallback chain (registry-aware).
+	type candidate struct {
+		client            *llm.Client
+		model, providerID string
+	}
+	candidates := []candidate{{client: client, model: model, providerID: providerID}}
+	if pkgRegistry != nil {
+		for _, fbRole := range pkgRegistry.FallbackChain(role)[1:] {
+			fbClient := pkgRegistry.Client(fbRole)
+			if fbClient == nil {
+				continue
 			}
-			if err != nil {
-				return "", fmt.Errorf("all models failed: %w", err)
-			}
-		} else {
-			return "", fmt.Errorf("localai stream: %w", err)
+			fbCfg := pkgRegistry.Config(fbRole)
+			candidates = append(candidates, candidate{client: fbClient, model: fbCfg.Model, providerID: fbCfg.ProviderID})
 		}
 	}
 
-	text, usage, err := collectStreamCore(ctx, events)
-	if err != nil {
-		return "", err
+	var lastErr error
+	for _, c := range candidates {
+		req.Model = c.model
+		req.ExtraBody = pilotExtraBody(shapedExtra(c.providerID, c.model))
+		text, usage, started, err := streamCandidate(ctx, c.client, req)
+		if err == nil {
+			emitHelperUsage(role, c.model, c.providerID, usage)
+			if text == "" {
+				return "(no response from local model)", nil
+			}
+			return text, nil
+		}
+		lastErr = err
+		// A model that answered with an error of its own surfaces it, as before.
+		// What moves on is a failure to start and an upstream transient reported
+		// inside the stream before any text (StreamError) — both mean the model
+		// never got to answer.
+		if transient, _ := classifyStreamFailure(err); started && !transient {
+			return "", err
+		}
+		if ctx.Err() != nil {
+			break
+		}
 	}
-	emitHelperUsage(role, usedModel, usedProvider, usage)
-
-	if text == "" {
-		return "(no response from local model)", nil
+	if pkgRegistry == nil {
+		return "", fmt.Errorf("localai stream: %w", lastErr)
 	}
-	return text, nil
+	return "", fmt.Errorf("all models failed: %w", lastErr)
 }
 
 // ReflectionDirective is an optional one-line self-check to append to the SYSTEM
@@ -350,9 +359,11 @@ func collectStreamCore(ctx context.Context, events <-chan llm.StreamEvent) (stri
 				// mailanalysis's collectStreamText: try both shapes, fall back to the
 				// raw payload, and always surface the error.
 				var errPayload struct {
-					Message string `json:"message"`
+					Message string          `json:"message"`
+					Code    json.RawMessage `json:"code"`
 					Error   struct {
-						Message string `json:"message"`
+						Message string          `json:"message"`
+						Code    json.RawMessage `json:"code"`
 					} `json:"error"`
 				}
 				_ = json.Unmarshal(ev.Payload.Bytes(), &errPayload)
@@ -363,7 +374,11 @@ func collectStreamCore(ctx context.Context, events <-chan llm.StreamEvent) (stri
 				if msg == "" {
 					msg = ev.Payload.String()
 				}
-				return sb.String(), usage, fmt.Errorf("stream error: %s", msg)
+				var code int
+				if json.Unmarshal(errPayload.Code, &code) != nil || code == 0 {
+					_ = json.Unmarshal(errPayload.Error.Code, &code)
+				}
+				return sb.String(), usage, &StreamError{Message: msg, Code: code, Partial: sb.Len() > 0}
 			}
 		}
 	}

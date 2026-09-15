@@ -14,6 +14,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
@@ -58,17 +59,18 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 	chatCfg.SubagentDefaultModel = configresolve.SubagentDefaultModel(s.logger)
 	localVllmModel := configresolve.LocalVLLMModel(s.logger)
 	reg := modelrole.NewRegistryWithOptions(s.logger, modelrole.RegistryOptions{
-		MainModel:        chatCfg.DefaultModel,
-		LocalVllmModel:   localVllmModel,
-		Main2Model:       configresolve.Main2Model(s.logger),
-		LightweightModel: configresolve.LightweightModel(s.logger),
-		TinyModel:        configresolve.TinyModel(s.logger),
-		CodingModel:      configresolve.CodingModel(s.logger),
-		FallbackModel:    configresolve.FallbackModel(s.logger),
-		VisionModel:      configresolve.VisionModel(s.logger),
-		SubmainModel:     configresolve.SubmainModel(s.logger),
-		Providers:        configresolve.ProviderCatalog(s.logger),
-		MeteredModels:    configresolve.MeteredModels(s.logger),
+		MainModel:         chatCfg.DefaultModel,
+		LocalVllmModel:    localVllmModel,
+		Main2Model:        configresolve.Main2Model(s.logger),
+		LightweightModel:  configresolve.LightweightModel(s.logger),
+		TinyModel:         configresolve.TinyModel(s.logger),
+		TinyFallbackModel: configresolve.TinyFallbackModel(s.logger),
+		CodingModel:       configresolve.CodingModel(s.logger),
+		FallbackModel:     configresolve.FallbackModel(s.logger),
+		VisionModel:       configresolve.VisionModel(s.logger),
+		SubmainModel:      configresolve.SubmainModel(s.logger),
+		Providers:         configresolve.ProviderCatalog(s.logger),
+		MeteredModels:     configresolve.MeteredModels(s.logger),
 	})
 	*regPtr = reg
 	chatCfg.Registry = reg
@@ -481,9 +483,7 @@ func dreamerLLMShapeFor(reg *modelrole.Registry, providerID, model string) (extr
 	// overrides shape the dreamer like they shape foreground turns (see
 	// modelrole.ThinkingOffDirectiveFor).
 	if directive := reg.ThinkingOffDirectiveFor(providerID, model); directive != nil {
-		return map[string]any{
-			"chat_template_kwargs": map[string]any{directive.TemplateKwarg(): false},
-		}, 0
+		return llm.ThinkingOffFields(directive.TemplateKwarg(), directive.DisablesReasoningParam()), 0
 	}
 	// nil kwargs + a reasoning model = untoggleable chain-of-thought: the
 	// only defense is budgeting reasoning + answer. The dreamer scales its

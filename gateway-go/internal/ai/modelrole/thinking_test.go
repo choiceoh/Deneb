@@ -86,9 +86,14 @@ func TestThinkingOffDirectiveForRoleForcesTinyOff(t *testing.T) {
 		t.Errorf("tiny/dsv4 = %v, want thinking", d)
 	}
 
-	// Off vLLM-backed providers, chat_template_kwargs is unsupported → nil even for tiny.
-	if d := reg.ThinkingOffDirectiveForRole(RoleTiny, "openrouter", "qwen3.6-35b-a3b"); d != nil {
-		t.Errorf("tiny/openrouter = %v, want nil off vLLM-backed", d)
+	// Off vLLM-backed providers chat_template_kwargs is unsupported, so tiny never
+	// gets the kwarg there. A provider with no off-switch at all stays nil even
+	// for tiny; OpenRouter has its own field and gets that instead.
+	if d := reg.ThinkingOffDirectiveForRole(RoleTiny, "zai", "qwen3.6-35b-a3b"); d != nil {
+		t.Errorf("tiny/zai = %v, want nil: no supported off-switch", d)
+	}
+	if d := reg.ThinkingOffDirectiveForRole(RoleTiny, "openrouter", "qwen3.6-35b-a3b"); d == nil || d.TemplateKwarg() != "" || !d.DisablesReasoningParam() {
+		t.Errorf("tiny/openrouter = %v, want the reasoning field and no template kwarg", d)
 	}
 }
 
@@ -117,5 +122,41 @@ func TestThinkingOffDirectivePreservesWireShape(t *testing.T) {
 				t.Errorf("wire body = %s, want %s", got, test.wantJSON)
 			}
 		})
+	}
+}
+
+// OpenRouter takes the switch as its own request field; a chat_template_kwargs
+// toggle never reaches the model behind the hosting provider. Measured
+// 2026-09-15: nemotron-3-super without reasoning.enabled=false wrote its
+// reasoning into the content and exhausted a 32-token title budget.
+func TestThinkingOffDirectiveUsesReasoningParamOnOpenRouter(t *testing.T) {
+	d := ThinkingOffDirectiveFor("openrouter", "nvidia/nemotron-3-super-120b-a12b:free")
+	if d == nil || !d.DisablesReasoningParam() || d.TemplateKwarg() != "" {
+		t.Fatalf("openrouter non-reasoning directive = %+v, want the reasoning-param kind", d)
+	}
+	// vLLM-backed servings keep the template kwarg, byte-identical to before.
+	if v := ThinkingOffDirectiveFor("vllm", "gemma4"); v == nil || v.DisablesReasoningParam() || v.TemplateKwarg() != "enable_thinking" {
+		t.Fatalf("vllm directive = %+v, want the enable_thinking kwarg", v)
+	}
+	// Direct cloud providers without the field still get nothing.
+	if z := ThinkingOffDirectiveFor("zai", "glm-5.3"); z != nil {
+		t.Fatalf("zai directive = %+v, want nil", z)
+	}
+}
+
+func TestThinkingOffDirectiveForRoleForcesReasoningParamForTinyRoles(t *testing.T) {
+	reasoning := "deepseek-r1" // a reasoning model: the per-model policy leaves it on
+	if ThinkingOffDirectiveFor("openrouter", reasoning) != nil {
+		t.Fatal("precondition: the per-model policy must leave a reasoning model alone")
+	}
+	var reg *Registry
+	for _, role := range []Role{RoleTiny, RoleTinyFallback} {
+		d := reg.ThinkingOffDirectiveForRole(role, "openrouter", reasoning)
+		if d == nil || !d.DisablesReasoningParam() {
+			t.Fatalf("role %s on openrouter = %+v, want thinking forced off via the reasoning field", role, d)
+		}
+	}
+	if d := reg.ThinkingOffDirectiveForRole(RoleLightweight, "openrouter", reasoning); d != nil {
+		t.Fatalf("lightweight on openrouter = %+v, want nil (only speed-first roles force it)", d)
 	}
 }

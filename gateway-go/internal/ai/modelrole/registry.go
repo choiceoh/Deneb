@@ -60,6 +60,16 @@ const (
 	// context. Absent unless agents.submainModel is configured; when absent,
 	// callers pass "" and the work stays on the main role exactly as before.
 	RoleSubmain Role = "submain"
+	// RoleTinyFallback is the tiny role's own first fallback, tried before the
+	// chain reaches lightweight. Tiny's work (session titles, stage-1 mail
+	// extraction, notification triage) is small and constant; when the tiny
+	// model's engine is down, lightweight is the next rung — and deployments point
+	// lightweight at larger, sometimes pay-per-token models. A fast model reserved
+	// for tiny-shaped calls keeps that volume off them. Thinking is forced off for
+	// it exactly as for tiny (thinking.go roleForcesThinkingOff).
+	// Absent unless agents.tinyFallbackModel is configured; when absent, the tiny
+	// chain is unchanged.
+	RoleTinyFallback Role = "tinyfallback"
 )
 
 // ModelConfig holds the provider and endpoint settings for a single model role.
@@ -138,6 +148,10 @@ type RegistryOptions struct {
 	// phone-event ingest). Empty → the role is absent and those tasks stay on the
 	// main role. Format: "provider/model".
 	SubmainModel string
+	// TinyFallbackModel sets RoleTinyFallback, the tiny role's first fallback.
+	// Empty → the role is absent and tiny's chain goes straight to lightweight.
+	// Format: "provider/model".
+	TinyFallbackModel string
 	// Providers is the deneb.json provider catalog (providerID → resolved
 	// endpoint/credentials). A role whose provider is present here resolves
 	// from the catalog; otherwise it falls back to the built-in switch.
@@ -320,6 +334,11 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	if opts.SubmainModel != "" {
 		models[RoleSubmain] = resolveModelConfig(opts.SubmainModel, opts.Providers)
 	}
+	// Tiny's own fallback is OPT-IN: present only when configured, so an
+	// unconfigured deployment keeps tiny → lightweight → fallback.
+	if opts.TinyFallbackModel != "" {
+		models[RoleTinyFallback] = resolveModelConfig(opts.TinyFallbackModel, opts.Providers)
+	}
 
 	// Auto-discover the actual model name the local vLLM is serving and
 	// substitute it in when config drifts. reconcileVllmModel is a no-op for
@@ -342,6 +361,9 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	}
 	if _, ok := models[RoleSubmain]; ok {
 		reconcileRoles = append(reconcileRoles, RoleSubmain)
+	}
+	if _, ok := models[RoleTinyFallback]; ok {
+		reconcileRoles = append(reconcileRoles, RoleTinyFallback)
 	}
 	for _, role := range reconcileRoles {
 		cfg := models[role]
@@ -394,6 +416,7 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 		"main2", logModelAlias(models[RoleMain2]),
 		"submain", logModelAlias(models[RoleSubmain]),
 		"tiny", logModelAlias(models[RoleTiny]),
+		"tinyfallback", logModelAlias(models[RoleTinyFallback]),
 		"lightweight", logModelAlias(models[RoleLightweight]),
 		"coding", logModelAlias(models[RoleCoding]),
 		"fallback", logModelAlias(models[RoleFallback]),
@@ -580,7 +603,7 @@ func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Ro
 	case RoleMain, RoleTiny, RoleLightweight, RoleFallback:
 		role = Role(modelOrRole)
 		return r.FullModelID(role), role, true
-	case RoleCoding, RoleMain2, RoleVision, RoleSubmain:
+	case RoleCoding, RoleMain2, RoleVision, RoleSubmain, RoleTinyFallback:
 		// Opt-in roles resolve only when configured; otherwise the literal
 		// string falls through as a raw model name.
 		role = Role(modelOrRole)
@@ -600,7 +623,7 @@ func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Ro
 // Main2 and submain scan last so a model shared with a legacy role (e.g. glm
 // serving coding, main2, and submain at once) keeps mapping to the role it
 // mapped to before rather than being remapped to a newer role.
-var roleMatchOrder = []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleFallback, RoleVision, RoleMain2, RoleSubmain}
+var roleMatchOrder = []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleFallback, RoleVision, RoleMain2, RoleSubmain, RoleTinyFallback}
 
 // RoleForModel returns the role that matches the given model ID, provider
 // qualified ("google/gemini-3.1-pro") or bare ("gemini-3.1-pro"). Returns
@@ -654,7 +677,9 @@ func (r *Registry) FallbackChain(role Role) []Role {
 		// quality ladder as main.
 		return []Role{RoleMain2, RoleMain, RoleCoding, RoleLightweight, RoleFallback}
 	case RoleTiny:
-		return []Role{RoleTiny, RoleLightweight, RoleFallback}
+		// Tiny's own fallback first (when configured) — see RoleTinyFallback.
+		// Unconfigured roles are skipped by the walk (nil client).
+		return []Role{RoleTiny, RoleTinyFallback, RoleLightweight, RoleFallback}
 	case RoleLightweight:
 		return []Role{RoleLightweight, RoleFallback}
 	case RoleCoding:

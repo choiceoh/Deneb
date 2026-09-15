@@ -1,7 +1,7 @@
 # Model Role 변경 지도
 
-이 패키지는 제품 임무의 역할(main, tiny, lightweight, coding, fallback,
-vision)을 실제 provider/model과 LLM client로 해석한다. 호출자는 역할만
+이 패키지는 제품 임무의 역할(main, tiny, tinyfallback, lightweight, coding,
+fallback, vision)을 실제 provider/model과 LLM client로 해석한다. 호출자는 역할만
 선택하며, 현재 배치와 fallback·capability·health 정책은 이 패키지가 소유한다.
 임무별 역할 정책의 정본은 `docs/agent-rules/model-roles.md`다.
 
@@ -19,7 +19,12 @@ vision)을 실제 provider/model과 LLM client로 해석한다. 호출자는 역
   override를 소유한다.
 - `thinking.go`의 `ThinkingOffDirectiveFor`와
   `Registry.ThinkingOffDirectiveFor`가 raw LLM 호출의 thinking-off
-  request shape 단일 소스다.
+  request shape 단일 소스다. 지시는 두 종류다: 템플릿 kwarg(vLLM 계열)와
+  `DisablesReasoningParam`(오픈라우터 `reasoning.enabled=false`). 본문 조립은
+  어댑터가 `llm.ThinkingOffFields` 한 곳으로 한다 — 어댑터가 kwarg 만 옮기면
+  오픈라우터에 `{"chat_template_kwargs":{"":false}}` 가 샌다.
+- `RoleTinyFallback`(`agents.tinyFallbackModel`)은 opt-in tiny 전용 1순위
+  폴백이다. tiny 체인에만 끼고, thinking 강제 off 는 tiny 와 같다.
 - `health.go`의 `Registry.RecordModelFailure`,
   `Registry.RecordModelSuccess`, `Registry.ModelUnhealthy`가 fallback
   circuit breaker를 소유한다. `Registry.SetEngineDown`·`Registry.EngineDown`은

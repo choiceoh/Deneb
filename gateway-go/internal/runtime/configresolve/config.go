@@ -219,6 +219,13 @@ func TinyModel(logger *slog.Logger) string {
 	return agentRoleModel("tinyModel", logger)
 }
 
+// TinyFallbackModel reads the optional agents.tinyFallbackModel override from
+// deneb.json — the tiny role's own first fallback, tried before lightweight.
+// Empty leaves RoleTinyFallback absent and tiny's chain unchanged.
+func TinyFallbackModel(logger *slog.Logger) string {
+	return agentRoleModel("tinyFallbackModel", logger)
+}
+
 // VisionModel reads the optional agents.visionModel override from
 // deneb.json. Empty leaves RoleVision absent, so image turns use the main
 // model — separating a multimodal vision model is fully opt-in.

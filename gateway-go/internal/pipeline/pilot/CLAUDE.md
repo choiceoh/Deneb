@@ -24,6 +24,13 @@ role; provider selection and health fallback remain centralized here.
 - Extra request bodies merge without discarding earlier keys. Stream errors are
   returned even when partial text exists; cancellation remains attributable to
   the caller context.
+- `stream_retry.go`: an error reported INSIDE a 200 stream is a `StreamError`
+  carrying the provider's numeric code. Before any text, a 5xx is retried on the
+  same model twice (short spacing) and then the fallback chain moves on; a 429
+  moves on at once. A code-less error, or one after partial text, surfaces as
+  before — wording is not trusted to mean "transient". OpenRouter's free tier
+  reports upstream overload exactly this way (HTTP 200 + in-stream error), which
+  the LLM client's HTTP-status retries never see.
 - Model hub and degradation state are race-safe. Vision rejects empty or
   malformed frames before contacting a provider.
 - Output truncation is rune-safe and preserves the leading diagnostic context.

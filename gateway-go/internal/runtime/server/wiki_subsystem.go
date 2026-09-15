@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
@@ -158,9 +159,7 @@ func (s *Server) initWikiSubsystem(chatCfg *chat.HandlerConfig, reg *modelrole.R
 		var extraBody map[string]any
 		tinyCfg := reg.Config(modelrole.RoleTiny)
 		if directive := reg.ThinkingOffDirectiveFor(tinyCfg.ProviderID, tinyCfg.Model); directive != nil {
-			extraBody = map[string]any{
-				"chat_template_kwargs": map[string]any{directive.TemplateKwarg(): false},
-			}
+			extraBody = llm.ThinkingOffFields(directive.TemplateKwarg(), directive.DisablesReasoningParam())
 		}
 		wikiStore.SetQueryExpander(makeWikiQueryExpander(tinyClient, tinyModel, extraBody, s.logger))
 	}

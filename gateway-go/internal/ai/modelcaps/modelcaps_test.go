@@ -87,3 +87,21 @@ func TestIsRemoteAPIAlias(t *testing.T) {
 		}
 	}
 }
+
+func TestSpeaksReasoningParam(t *testing.T) {
+	for provider, want := range map[string]bool{
+		"openrouter":      true,
+		" OpenRouter ":    true,
+		"openrouter-free": true,
+		"openrouter_alt":  true,
+		"vllm":            false,
+		"wormhole":        false,
+		"zai":             false,
+		"openrouterx":     false,
+		"":                false,
+	} {
+		if got := SpeaksReasoningParam(provider); got != want {
+			t.Errorf("SpeaksReasoningParam(%q) = %v, want %v", provider, got, want)
+		}
+	}
+}
