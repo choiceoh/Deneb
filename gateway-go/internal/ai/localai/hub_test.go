@@ -425,3 +425,21 @@ func newBlockingLLMClient(t *testing.T) (*llm.Client, <-chan struct{}, <-chan st
 	t.Cleanup(srv.Close)
 	return llm.NewClient(srv.URL, "test", llm.WithRetry(0, 0, 0)), started, canceled
 }
+
+// OpenRouter takes reasoning off through its own request field. The adapter must
+// emit that field and nothing template-shaped: an empty-named kwarg
+// ({"chat_template_kwargs":{"":false}}) is what a forgotten directive kind
+// would leak.
+func TestMergeRequestBodyOpenRouterUsesReasoningField(t *testing.T) {
+	merged := mergeRequestBody(nil, "openrouter", "nvidia/nemotron-3-super-120b-a12b:free", map[string]any{"temperature": 0})
+	reasoning, ok := merged["reasoning"].(map[string]any)
+	if !ok || reasoning["enabled"] != false {
+		t.Fatalf("openrouter body = %v, want reasoning.enabled=false", merged)
+	}
+	if _, exists := merged["chat_template_kwargs"]; exists {
+		t.Fatalf("openrouter body carries chat_template_kwargs: %v", merged)
+	}
+	if merged["temperature"] != 0 {
+		t.Fatalf("caller extras dropped: %v", merged)
+	}
+}

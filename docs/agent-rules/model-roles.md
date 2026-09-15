@@ -7,7 +7,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 > 어떤 임무가 어떤 모델 역할을 쓰는지의 **단일 진실원**. 실제 모델 이름은 코드에 하드코딩하지 않는다 — 코드는 **역할만 고르고**, 역할→모델은 `~/.deneb/deneb.json` 의 `agents.*Model` + wormhole 라우터가 결정한다. 새 LLM 호출을 추가하거나 역할을 바꿀 때 아래 "임무→역할 표"에 행을 추가하고 근거를 적는다.
 
-## 역할 8종 + 의도
+## 역할 9종 + 의도
 
 상수: `gateway-go/internal/ai/modelrole/registry.go` (main·main2·submain·coding·lightweight·tiny·fallback·vision). 모델 매핑: `~/.deneb/deneb.json` `agents.*Model`.
 
@@ -34,6 +34,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | coding | `RoleCoding` | 코드 수정·구현자 서브에이전트·스킬 패치 |
 | lightweight | `RoleLightweight` | **바운드 요약**·잡일꾼 (로컬 선호, 원칙은 아님 — sidecar-models.md) |
 | tiny | `RoleTiny` | **단순 분류/추출** (가장 작음) |
+| tinyfallback | `RoleTinyFallback` | **opt-in tiny 전용 1순위 폴백** — 체인 tiny→tinyfallback→lightweight→fallback. tiny 모델의 엔진이 죽었을 때 tiny 모양 호출(제목·stage1 추출·알림 판정)을 lightweight(더 크고 때로 과금) 전에 받는다. thinking 강제 off 는 tiny 와 동일. 미설정 시 부재(체인 불변). `agents.tinyFallbackModel` |
 | fallback | `RoleFallback` | 폴백 체인 **최종 안전망**. 종량제(metered) 엔드포인트는 여기에도 두지 않는다 — 도그마 #7 |
 | vision | `RoleVision` | 이미지 턴 (#2510) |
 
@@ -50,6 +51,9 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 > 스냅샷을 또 적지 말 것. 필요하면 `--all` 을 돌려라.
 >
 > ★ **chatbot 역할은 2026-07-08 제거됐다** — 챗봇 워크스페이스(`chat:` 세션) 자체가 제품에서 삭제되면서(단일 업무 워크스페이스로 통합) `RoleChatbot`·`agents.chatbotModel`도 함께 은퇴했다. 레거시 `chat:` 세션은 일반 세션으로 흡수되어 main을 쓴다.
+
+> ★ **tinyfallback 후보 선정 (2026-09-15, 운영자 제안 "타이니 폴백을 오픈라우터 빠른 무료모델로")** — 사건 기록이지 현재값이 아니다(현재값은 `model_role.py --all`).
+> 오픈라우터 무료 22종 중 계정 허용 제공자 목록(nvidia·google-ai-studio 등)을 통과하고 JSON 모드를 지원하는 후보를 `lightweight-model-ab.py` 로 채점: **thinking off 조건에서** nemotron-3-super-120b-a12b:free = extract 100·title 90·triage 100(평균 2.5s), gemma-4-26b-a4b-it:free = extract 0(객체를 배열로 감쌈)·triage 35(max_tokens=4 에서 빈 응답 → 프로덕션 파서가 YES 로 읽음). ★함정 두 개가 설계를 바꿨다: ① nemotron 은 `reasoning.enabled=false` 없이 추론을 **본문에 흘린다** → 오픈라우터용 thinking-off 는 템플릿 kwarg 가 아니라 `reasoning` 필드(`modelcaps.SpeaksReasoningParam`, `llm.ThinkingOffFields`) ② Nvidia 무료 엔드포인트는 과부하를 **HTTP 200 + 스트림 내 오류 이벤트**로 알린다(측정 14건 중 8건) → 헬퍼는 토큰 전 5xx 는 같은 모델에 짧게 2회 재시도, 429 는 바로 다음 칸, 결정적 오류와 부분 출력 후 오류는 그대로 표면화(`pipeline/pilot/stream_retry.go`). 무료 한도: 분당 20건, 누적 구매 10크레딧 이상이면 하루 1,000건.
 
 ## 역할 선택 헬퍼 (`pipeline/pilot/localai.go`)
 

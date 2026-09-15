@@ -64,20 +64,31 @@ func mapFinishReason(reason string) string {
 // unmarshals into openAIChunk with all-zero fields, so without the second
 // probe it was swallowed as an empty usage chunk and the turn ended as an
 // empty success.
+//
+// A numeric error code is carried along. OpenRouter reports an upstream provider
+// failing as HTTP 200 plus {"error":{"code":502,"message":"...overloaded"}} in
+// the stream, so the code is the only status a caller ever sees — dropping it
+// left the caller to guess "transient" from the wording.
 func probeOpenAIError(payload FlexibleJSON) (FlexibleJSON, bool) {
 	var errResp struct {
 		Error struct {
-			Message string `json:"message"`
-			Type    string `json:"type"`
+			Message string          `json:"message"`
+			Type    string          `json:"type"`
+			Code    json.RawMessage `json:"code"`
 		} `json:"error"`
 	}
 	if json.Unmarshal(payload.Bytes(), &errResp) != nil || errResp.Error.Message == "" {
 		return FlexibleJSON{}, false
 	}
-	p, _ := json.Marshal(map[string]string{
+	fields := map[string]any{
 		"type":    errResp.Error.Type,
 		"message": errResp.Error.Message,
-	})
+	}
+	var code int
+	if json.Unmarshal(errResp.Error.Code, &code) == nil && code != 0 {
+		fields["code"] = code
+	}
+	p, _ := json.Marshal(fields)
 	return FlexibleFromRaw(p), true
 }
 

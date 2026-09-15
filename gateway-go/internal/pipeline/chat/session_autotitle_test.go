@@ -26,6 +26,12 @@ func TestCleanSessionTitleNormalizesRawText(t *testing.T) {
 		{"rejects English CoT", "We need a short title", ""},
 		{"rejects thinking-tag leak", "<think>", ""},
 		{"rejects Korean CoT", "우리는 제목을 뽑아야 합니다", ""},
+		// OpenRouter tiny fallback quirk (2026-09-15 live): an English tag glued on.
+		{"strips glued English tag", "진도 풍력 주민설명회 자료_summary_request", "진도 풍력 주민설명회 자료"},
+		{"strips single glued tag", "영광 ESS 해저케이블 발주 견적 비교_request", "영광 ESS 해저케이블 발주 견적 비교"},
+		{"keeps identifier the user typed", "API_KEY 교체", "API_KEY 교체"},
+		{"keeps ASCII-glued underscore", "log_level 변경 검토 snake_case", "log_level 변경 검토 snake_case"},
+		{"keeps uppercase suffix", "배포 체크리스트_V2", "배포 체크리스트_V2"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

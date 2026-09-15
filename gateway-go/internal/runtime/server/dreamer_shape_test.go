@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"log/slog"
 	"testing"
 
@@ -202,5 +203,20 @@ func TestDreamerSynthesisFallbackTargetsFollowTinyChain(t *testing.T) {
 	}
 	if targets[1].SynthesisMaxTokens != 16384 {
 		t.Fatalf("glm fallback synthesis max = %d, want reasoning headroom", targets[1].SynthesisMaxTokens)
+	}
+}
+
+// The dreamer's raw-call shape goes through the same thinking-off policy as the
+// other adapters; on OpenRouter that is the reasoning field, never a
+// template kwarg.
+func TestDreamerLLMShapeForOpenRouterUsesReasoningField(t *testing.T) {
+	reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{MainModel: "zai/glm-5.3"})
+	body, maxTokens := dreamerLLMShapeFor(reg, "openrouter", "nvidia/nemotron-3-super-120b-a12b:free")
+	got, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != `{"reasoning":{"enabled":false}}` || maxTokens != 0 {
+		t.Fatalf("dreamer shape = %s / %d, want the reasoning field and no reasoning headroom", got, maxTokens)
 	}
 }

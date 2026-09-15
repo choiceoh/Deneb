@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
@@ -323,6 +324,7 @@ func cleanSessionTitle(s string) string {
 	s = strings.TrimSpace(strings.TrimPrefix(s, "사용자:"))
 	s = strings.TrimSpace(strings.TrimPrefix(s, "어시스턴트:"))
 	s = strings.TrimSpace(strings.Trim(s, "\"'`“”‘’"))
+	s = stripTrailingASCIITag(s)
 	s = strings.TrimRight(s, ".。")
 	s = strings.Join(strings.Fields(s), " ") // collapse internal whitespace/newlines
 	return capRunes(s, sessionTitleLabelCap)
@@ -339,6 +341,26 @@ func looksLikeReasoningTitle(s string) bool {
 		}
 	}
 	return strings.HasPrefix(s, "我们") || strings.HasPrefix(s, "우리는 ")
+}
+
+// trailingASCIITag matches an English snake_case tag at the end of a title.
+var trailingASCIITag = regexp.MustCompile(`_[a-z]+(?:_[a-z]+)*$`)
+
+// stripTrailingASCIITag drops an English snake_case tag glued straight onto a
+// Korean title — "진도 풍력 주민설명회 자료_summary_request". The OpenRouter tiny
+// fallback (nemotron-3-super) appended one to 2 of 14 titles in the 2026-09-15
+// live check, and the session drawer shows the label verbatim. Only a tag that
+// follows a non-ASCII rune goes: glued to ASCII it is part of an identifier the
+// user typed ("API_KEY", "log_level") and stays.
+func stripTrailingASCIITag(s string) string {
+	loc := trailingASCIITag.FindStringIndex(s)
+	if loc == nil || loc[0] == 0 {
+		return s
+	}
+	if prev, _ := utf8.DecodeLastRuneInString(s[:loc[0]]); prev < utf8.RuneSelf {
+		return s
+	}
+	return strings.TrimSpace(s[:loc[0]])
 }
 
 func firstLine(s string) string {

@@ -28,10 +28,13 @@ var pilotHarness struct {
 	mu       sync.Mutex
 	requests []map[string]any
 	modes    map[string]string
+	counts   map[string]int // requests seen per model since reset
 }
 
 func TestMain(m *testing.M) {
 	pilotHarness.modes = make(map[string]string)
+	pilotHarness.counts = make(map[string]int)
+	inBandRetryDelay = time.Millisecond
 	pilotHarness.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -42,8 +45,40 @@ func TestMain(m *testing.M) {
 		pilotHarness.mu.Lock()
 		pilotHarness.requests = append(pilotHarness.requests, req)
 		mode := pilotHarness.modes[model]
+		pilotHarness.counts[model]++
+		seen := pilotHarness.counts[model]
 		pilotHarness.mu.Unlock()
+		// OpenRouter's in-band failure shape: HTTP 200, an error object in the
+		// stream, no choices (measured 2026-09-15, see stream_retry.go).
+		overloaded := "data: {\"error\":{\"code\":502,\"message\":\"Upstream error from Nvidia: Service temporarily overloaded\"}}\n\n"
+		if strings.HasPrefix(mode, "overloaded-then-ok:") {
+			var failures int
+			_, _ = fmt.Sscanf(strings.TrimPrefix(mode, "overloaded-then-ok:"), "%d", &failures)
+			if seen <= failures {
+				w.Header().Set("Content-Type", "text/event-stream")
+				fmt.Fprint(w, overloaded)
+				return
+			}
+			mode = ""
+		}
 		switch mode {
+		case "overloaded":
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, overloaded)
+			return
+		case "overloaded-nocode":
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "data: {\"error\":{\"message\":\"Service temporarily overloaded\"}}\n\n")
+			return
+		case "rate-limited-inband":
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "data: {\"error\":{\"code\":429,\"message\":\"Rate limit exceeded: free-models-per-min\"}}\n\n")
+			return
+		case "partial-then-overloaded":
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"half an ans\"}}]}\n\n")
+			fmt.Fprint(w, overloaded)
+			return
 		case "http-error":
 			// Use a permanent request error so this fallback-chain fixture tests
 			// role routing without also paying the client's transient-error retries.
@@ -93,6 +128,7 @@ func resetPilotHarness() {
 	pilotHarness.mu.Lock()
 	pilotHarness.requests = nil
 	pilotHarness.modes = make(map[string]string)
+	pilotHarness.counts = make(map[string]int)
 	pilotHarness.mu.Unlock()
 	SetLocalAIHub(nil)
 }
@@ -471,5 +507,112 @@ func TestCallVisionLLMEmptyAndStreamErrors(t *testing.T) {
 	setPilotMode("vision", "stream-error")
 	if got, err := CallVisionLLM(context.Background(), "system", "", []VisionFrame{{Base64: "eA=="}}, 50); err == nil || got != "" || !strings.Contains(err.Error(), "generation failed") {
 		t.Fatalf("vision stream error = %q/%v", got, err)
+	}
+}
+
+func requestedModels() []string {
+	var models []string
+	for _, req := range pilotRequests() {
+		m, _ := req["model"].(string)
+		models = append(models, m)
+	}
+	return models
+}
+
+// In-band transient failures (OpenRouter: HTTP 200 + an error object) used to
+// fail the helper call outright — the chain was walked only when a stream
+// failed to start. These pin the new contract.
+
+func TestCallRoleLLMRetriesInBandTransientOnSameModel(t *testing.T) {
+	resetPilotHarness()
+	setPilotMode("tiny", "overloaded-then-ok:2")
+	got, err := CallRoleLLM(context.Background(), modelrole.RoleTiny, "system", "user", 32)
+	if err != nil || got != "reply:tiny" {
+		t.Fatalf("CallRoleLLM = %q/%v, want the same model's reply after quick retries", got, err)
+	}
+	if models := requestedModels(); !reflect.DeepEqual(models, []string{"tiny", "tiny", "tiny"}) {
+		t.Fatalf("requests = %v, want three attempts on tiny and no fallback", models)
+	}
+}
+
+func TestCallRoleLLMInBandTransientExhaustedWalksChain(t *testing.T) {
+	resetPilotHarness()
+	setPilotMode("tiny", "overloaded")
+	got, err := CallRoleLLM(context.Background(), modelrole.RoleTiny, "system", "user", 32)
+	if err != nil || got != "reply:light" {
+		t.Fatalf("CallRoleLLM = %q/%v, want the next model in the chain", got, err)
+	}
+	want := []string{"tiny", "tiny", "tiny", "light"}
+	if models := requestedModels(); !reflect.DeepEqual(models, want) {
+		t.Fatalf("requests = %v, want %v (1 + %d retries, then the chain)", models, want, inBandRetries)
+	}
+}
+
+func TestCallRoleLLMInBandErrorWithoutCodeIsNotGuessedTransient(t *testing.T) {
+	// OpenRouter sends a code with every in-band failure measured. Without one
+	// the wording is not trusted to mean "transient": walking the chain on an
+	// error that was really the model rejecting the request would hide it.
+	resetPilotHarness()
+	setPilotMode("tiny", "overloaded-nocode")
+	got, err := CallRoleLLM(context.Background(), modelrole.RoleTiny, "system", "user", 32)
+	if err == nil || got != "" {
+		t.Fatalf("CallRoleLLM = %q/%v, want the code-less error to surface", got, err)
+	}
+	if models := requestedModels(); !reflect.DeepEqual(models, []string{"tiny"}) {
+		t.Fatalf("requests = %v, want a single attempt", models)
+	}
+}
+
+func TestCallRoleLLMInBandRateLimitMovesOnWithoutRetry(t *testing.T) {
+	resetPilotHarness()
+	setPilotMode("tiny", "rate-limited-inband")
+	got, err := CallRoleLLM(context.Background(), modelrole.RoleTiny, "system", "user", 32)
+	if err != nil || got != "reply:light" {
+		t.Fatalf("CallRoleLLM = %q/%v, want the next model", got, err)
+	}
+	if models := requestedModels(); !reflect.DeepEqual(models, []string{"tiny", "light"}) {
+		t.Fatalf("requests = %v, want no same-model retry inside a rate-limit window", models)
+	}
+}
+
+func TestCallRoleLLMPartialAnswerIsNotReplayed(t *testing.T) {
+	resetPilotHarness()
+	setPilotMode("tiny", "partial-then-overloaded")
+	got, err := CallRoleLLM(context.Background(), modelrole.RoleTiny, "system", "user", 32)
+	if err == nil || got != "" {
+		t.Fatalf("CallRoleLLM = %q/%v, want the mid-answer failure to surface", got, err)
+	}
+	if !strings.Contains(err.Error(), "overloaded") {
+		t.Fatalf("err = %v, want the stream error", err)
+	}
+	if models := requestedModels(); !reflect.DeepEqual(models, []string{"tiny"}) {
+		t.Fatalf("requests = %v, want a single attempt: a model that failed mid-answer is not replayed", models)
+	}
+}
+
+func TestClassifyStreamFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name                 string
+		err                  error
+		transient, retrySame bool
+	}{
+		{"502 before text", &StreamError{Message: "x", Code: 502}, true, true},
+		{"503 before text", &StreamError{Message: "x", Code: 503}, true, true},
+		{"429 before text", &StreamError{Message: "x", Code: 429}, true, false},
+		{"400 before text", &StreamError{Message: "bad request", Code: 400}, false, false},
+		{"502 after text", &StreamError{Message: "x", Code: 502, Partial: true}, false, false},
+		{"deterministic, no code", &StreamError{Message: "generation failed"}, false, false},
+		// Code-less: only what the shared classifier recognizes — not wording.
+		{"overloaded, no code", &StreamError{Message: "Service temporarily overloaded"}, false, false},
+		{"rate limit, no code", &StreamError{Message: "Rate limit exceeded, please retry"}, true, false},
+		{"wrapped", fmt.Errorf("outer: %w", &StreamError{Message: "x", Code: 502}), true, true},
+		{"not a stream error", errors.New("dial tcp: connection refused"), false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			transient, retrySame := classifyStreamFailure(tc.err)
+			if transient != tc.transient || retrySame != tc.retrySame {
+				t.Fatalf("classifyStreamFailure = (%v, %v), want (%v, %v)", transient, retrySame, tc.transient, tc.retrySame)
+			}
+		})
 	}
 }

@@ -40,7 +40,9 @@ func mergeRequestBody(reg *modelrole.Registry, providerID, model string, callerE
 	directive := reg.ThinkingOffDirectiveFor(providerID, model)
 	merged := make(map[string]any, 1+len(callerExtra))
 	if directive != nil {
-		merged["chat_template_kwargs"] = map[string]any{directive.TemplateKwarg(): false}
+		for k, v := range llm.ThinkingOffFields(directive.TemplateKwarg(), directive.DisablesReasoningParam()) {
+			merged[k] = v
+		}
 	}
 	for k, v := range callerExtra {
 		merged[k] = v
