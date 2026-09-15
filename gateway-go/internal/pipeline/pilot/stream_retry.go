@@ -3,11 +3,9 @@ package pilot
 import (
 	"context"
 	"errors"
-	"net/http"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
 )
 
 // StreamError is an error the provider reported inside a stream the HTTP layer
@@ -34,15 +32,9 @@ func (e *StreamError) Error() string {
 	return "stream error: " + e.Message
 }
 
-// inBandRetries bounds same-model retries of a transient in-band error. The
-// failures return in about 0.2s, so two quick retries cost under two seconds
-// and recover most calls at the measured failure rate, before the chain moves
-// on to a model that may be slower or billed.
-const inBandRetries = 2
-
-// inBandRetryDelay is the base spacing between those retries (×attempt). A var
-// so tests do not sleep through it.
-var inBandRetryDelay = 400 * time.Millisecond
+// inBandRetryDelay is llm.InBandRetryDelay, held in a var so tests do not sleep
+// through it.
+var inBandRetryDelay = llm.InBandRetryDelay
 
 // classifyStreamFailure decides what an in-stream error allows. transient: the
 // chain may move on to the next model. retrySame: a quick retry of the same
@@ -55,25 +47,10 @@ var inBandRetryDelay = 400 * time.Millisecond
 // did.
 func classifyStreamFailure(err error) (transient, retrySame bool) {
 	var se *StreamError
-	if !errors.As(err, &se) || se.Partial {
+	if !errors.As(err, &se) {
 		return false, false
 	}
-	switch {
-	case se.Code == http.StatusTooManyRequests:
-		return true, false
-	case se.Code >= 500 && se.Code < 600:
-		return true, true
-	case se.Code != 0:
-		return false, false
-	}
-	switch llmerr.Classify(errors.New(se.Message), 0, nil).Reason {
-	case llmerr.ReasonRateLimit:
-		return true, false
-	case llmerr.ReasonServerError, llmerr.ReasonOverloaded, llmerr.ReasonTimeout:
-		return true, true
-	default:
-		return false, false
-	}
+	return llm.ClassifyInBandError(se.Code, se.Message, se.Partial)
 }
 
 // streamCandidate runs one model: start the stream, collect it, and retry a
@@ -91,7 +68,7 @@ func streamCandidate(ctx context.Context, client *llm.Client, req llm.ChatReques
 			return text, usage, true, nil
 		}
 		_, retrySame := classifyStreamFailure(err)
-		if !retrySame || attempt >= inBandRetries {
+		if !retrySame || attempt >= llm.InBandRetries {
 			return text, usage, true, err
 		}
 		select {

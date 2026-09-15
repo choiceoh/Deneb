@@ -132,16 +132,6 @@ func IsRemoteAPIAlias(model string) bool {
 // (agents.defaultModel = "wormhole/deepseek-v4-…") silently strips both — the
 // effort router goes inert (thinking always on) and the context window resolves
 // to 0 (deferred compaction disabled).
-// SpeaksReasoningParam reports whether providerID accepts OpenRouter's unified
-// `reasoning` request field, whose {"enabled": false} switches a model's
-// reasoning off whatever chat template it is served with. A chat_template_kwargs
-// toggle does not reach the model there: it is a vLLM serving feature, and the
-// hosting provider behind OpenRouter decides what it forwards.
-func SpeaksReasoningParam(providerID string) bool {
-	p := strings.ToLower(strings.TrimSpace(providerID))
-	return p == "openrouter" || strings.HasPrefix(p, "openrouter-") || strings.HasPrefix(p, "openrouter_")
-}
-
 func ServesVllmBacked(providerID string) bool {
 	p := strings.ToLower(strings.TrimSpace(providerID))
 	switch {
@@ -152,6 +142,28 @@ func ServesVllmBacked(providerID string) bool {
 	default:
 		return false
 	}
+}
+
+// SpeaksReasoningParam reports whether providerID accepts OpenRouter's unified
+// `reasoning` request field, whose {"enabled": false} switches a model's
+// reasoning off whatever chat template it is served with. A chat_template_kwargs
+// toggle does not reach the model there: it is a vLLM serving feature, and the
+// hosting provider behind OpenRouter decides what it forwards.
+func SpeaksReasoningParam(providerID string) bool {
+	return isOpenRouter(providerID)
+}
+
+// OpenRouterPaid reports whether model, reached through providerID, is billed
+// per token by OpenRouter: every model there draws on the account's credits
+// except its ":free" variants. The wormhole config's metered flag never sees
+// these — OpenRouter is called directly, not through the router.
+func OpenRouterPaid(providerID, model string) bool {
+	return isOpenRouter(providerID) && !strings.HasSuffix(strings.TrimSpace(model), ":free")
+}
+
+func isOpenRouter(providerID string) bool {
+	p := strings.ToLower(strings.TrimSpace(providerID))
+	return p == "openrouter" || strings.HasPrefix(p, "openrouter-") || strings.HasPrefix(p, "openrouter_")
 }
 
 // IsOpenAIReasoningModel reports whether model is a genuine OpenAI reasoning

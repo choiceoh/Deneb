@@ -105,3 +105,22 @@ func TestSpeaksReasoningParam(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenRouterPaid(t *testing.T) {
+	for _, tc := range []struct {
+		provider, model string
+		want            bool
+	}{
+		{"openrouter", "nvidia/nemotron-3-super-120b-a12b:free", false},
+		{"openrouter", "nvidia/nemotron-3-super-120b-a12b", true},
+		{"openrouter", "openai/gpt-5:nitro", true},
+		{"openrouter-alt", "google/gemma-4-26b-a4b-it:free", false},
+		// Billing elsewhere is not this function's to know.
+		{"wormhole", "deepseek-v4-flash-api", false},
+		{"zai", "glm-5.3", false},
+	} {
+		if got := OpenRouterPaid(tc.provider, tc.model); got != tc.want {
+			t.Errorf("OpenRouterPaid(%q, %q) = %v, want %v", tc.provider, tc.model, got, tc.want)
+		}
+	}
+}

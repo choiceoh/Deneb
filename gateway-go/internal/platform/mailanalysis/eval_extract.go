@@ -21,7 +21,7 @@ import (
 //   - "facts"     → string (the markdown fact block appended to the wiki, "" = none)
 //   - "actions"   → []ActionItem (empty = "nothing the operator must do")
 //
-// Because parsing goes through callLocalLLMJSON (jsonutil), a model that wraps its
+// Because parsing goes through callLocalModelJSON (jsonutil), a model that wraps its
 // JSON in ```json fences still extracts correctly — the benchmark measures the
 // consumed result, not raw formatting.
 func ExtractForEval(ctx context.Context, client *llm.Client, model, kind, input string) (any, error) {

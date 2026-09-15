@@ -341,3 +341,31 @@ func TestResolveClient_ConfiguredProviderCarriesEngineDownGate(t *testing.T) {
 		t.Fatalf("server hits = %d, want 0", hits)
 	}
 }
+
+// A provider configured as openrouter in deneb.json resolves to a client built
+// here, not by the registry — it needs the reasoning field as much as the
+// registry's clients do.
+func TestResolveClient_OpenRouterConfigClientSendsReasoningField(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}]}`)
+	}))
+	defer server.Close()
+
+	client := resolveClient(context.Background(), runDeps{
+		providerConfigs: map[string]ProviderConfig{"openrouter": {BaseURL: server.URL}},
+	}, "openrouter", discardLogger())
+	if _, err := client.Complete(context.Background(), llm.ChatRequest{
+		Model:    "nvidia/nemotron-3-super-120b-a12b:free",
+		Messages: []llm.Message{llm.NewTextMessage("user", "hi")},
+		Thinking: &llm.ThinkingConfig{Type: "disabled"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	reasoning, ok := body["reasoning"].(map[string]any)
+	if !ok || reasoning["enabled"] != false || body["reasoning_effort"] != nil {
+		t.Fatalf("request body = %v, want reasoning.enabled=false and no reasoning_effort", body)
+	}
+}

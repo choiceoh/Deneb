@@ -25,6 +25,12 @@ fallback, vision)을 실제 provider/model과 LLM client로 해석한다. 호출
   오픈라우터에 `{"chat_template_kwargs":{"":false}}` 가 샌다.
 - `RoleTinyFallback`(`agents.tinyFallbackModel`)은 opt-in tiny 전용 1순위
   폴백이다. tiny 체인에만 끼고, thinking 강제 off 는 tiny 와 같다.
+- `Registry.UnmeteredFallbacks`는 역할 클라이언트를 **직접 쥐고** 체인을 걷지
+  않던 호출자(메일 stage-1 추출·결재 비용 추출, 위키 질의 확장)에게 주는 체인이다.
+  종량제 칸(웜홀 `metered` 표시, 그리고 웜홀을 안 거치는 오픈라우터의 `:free` 아닌
+  모델 — `modelcaps.OpenRouterPaid`)은 시도하지 않고 뺀다 — 폴백이 없던 경로에
+  폴백이 생기면서 과금이 시작되면 안 된다(도그마 #7). `buildClient`는 오픈라우터 provider 클라이언트에
+  `llm.WithReasoningParam`을 건다.
 - `health.go`의 `Registry.RecordModelFailure`,
   `Registry.RecordModelSuccess`, `Registry.ModelUnhealthy`가 fallback
   circuit breaker를 소유한다. `Registry.SetEngineDown`·`Registry.EngineDown`은

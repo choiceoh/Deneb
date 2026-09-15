@@ -72,13 +72,14 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 
 	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
 	cfg := mailanalysis.Config{
-		StateDir:      stateDir,
-		LLMClient:     stage2,
-		Model:         stage2Model,
-		LocalClient:   stage1,
-		LocalModel:    stage1Model,
-		SenderFactsFn: s.wikiSenderFacts,
-		TopicFactsFn:  s.wikiTopicFacts,
+		StateDir:       stateDir,
+		LLMClient:      stage2,
+		Model:          stage2Model,
+		LocalClient:    stage1,
+		LocalModel:     stage1Model,
+		LocalFallbacks: s.mailStageOneFallbacks(),
+		SenderFactsFn:  s.wikiSenderFacts,
+		TopicFactsFn:   s.wikiTopicFacts,
 		CounterpartyProjectsFn: func(domain string) []string {
 			return s.cpProjects.Lookup(s.wikiStore, domain)
 		},
@@ -292,13 +293,14 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
 	threadSource := s.archiveThreadSource()
 	cfg := mailanalysis.Config{
-		StateDir:      stateDir,
-		LLMClient:     stage2,
-		Model:         stage2Model,
-		LocalClient:   stage1,
-		LocalModel:    stage1Model,
-		SenderFactsFn: s.wikiSenderFacts,
-		TopicFactsFn:  s.wikiTopicFacts,
+		StateDir:       stateDir,
+		LLMClient:      stage2,
+		Model:          stage2Model,
+		LocalClient:    stage1,
+		LocalModel:     stage1Model,
+		LocalFallbacks: s.mailStageOneFallbacks(),
+		SenderFactsFn:  s.wikiSenderFacts,
+		TopicFactsFn:   s.wikiTopicFacts,
 		CounterpartyProjectsFn: func(domain string) []string {
 			return s.cpProjects.Lookup(s.wikiStore, domain)
 		},
@@ -510,6 +512,22 @@ func (s *Server) mailAnalysisModels() (stage2 *llm.Client, stage2Model string, s
 		s.modelRegistry.Model(modelrole.RoleMain),
 		s.modelRegistry.Client(modelrole.RoleTiny),
 		s.modelRegistry.Model(modelrole.RoleTiny)
+}
+
+// mailStageOneFallbacks is the tiny role's unmetered fallback chain in the form
+// stage-1 extraction takes. Stage 1 runs on RoleTiny (mailAnalysisModels) and
+// holds that client directly, so it never walked tiny's chain: with the tiny
+// model's engine down, every extraction failed. Metered rungs stay out —
+// extraction never had a fallback, and gaining one must not start a bill.
+func (s *Server) mailStageOneFallbacks() []mailanalysis.LocalTarget {
+	if s.modelRegistry == nil {
+		return nil
+	}
+	var out []mailanalysis.LocalTarget
+	for _, fb := range s.modelRegistry.UnmeteredFallbacks(modelrole.RoleTiny) {
+		out = append(out, mailanalysis.LocalTarget{Client: fb.Client, Model: fb.Config.Model, Provider: fb.Config.ProviderID})
+	}
+	return out
 }
 
 // mailStage2ThinkingKwarg returns the chat_template_kwargs thinking off-switch for

@@ -72,6 +72,7 @@ func (c *Client) streamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 	oaiReq.Messages = append(oaiReq.Messages, c.convertMessagesToOpenAI(req.Messages, reasoningHistoryEchoed(&req))...)
 
 	applySamplingParams(&oaiReq, &req)
+	c.applyReasoningParam(&oaiReq, &req)
 
 	body, err := json.Marshal(oaiReq)
 	if err != nil {

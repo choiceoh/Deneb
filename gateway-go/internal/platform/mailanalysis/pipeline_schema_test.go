@@ -16,7 +16,7 @@ import (
 
 // extractorSchemas is every json_schema this package sends strict, keyed by name.
 // (The deal + thread extractors deliberately stay on json_object — see
-// callLocalLLMJSON — so they have no schema here.)
+// callLocalModelJSON — so they have no schema here.)
 var extractorSchemas = map[string]json.RawMessage{
 	"wiki_facts":            wikiFactsSchema,
 	"action_items":          actionItemsSchema,

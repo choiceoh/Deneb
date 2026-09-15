@@ -249,7 +249,7 @@ func judgeAttachments(ctx context.Context, deps PipelineDeps, msg *gmail.Message
 	prompt := fmt.Sprintf(attachGatePrompt,
 		msg.Subject, msg.From, clipChars(msg.Body, 1200), strings.TrimSpace(sb.String()))
 
-	res, err := callLocalLLMJSON[attachGateResult](ctx, deps.LocalClient, deps.LocalModel, attachGateSystem, prompt, stage1MaxTokens, attachGateSchema)
+	res, err := callLocalTargetsJSON[attachGateResult](ctx, deps.localTargets(), attachGateSystem, prompt, stage1MaxTokens, attachGateSchema)
 	if err != nil {
 		// Judge unavailable — include all extracted candidates rather than drop
 		// them. They already cleared the heuristic pre-filter.

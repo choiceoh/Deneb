@@ -576,11 +576,11 @@ func (q *queuedOpenAIServer) Client() *llm.Client {
 	return llm.NewClient(q.server.URL, "key", llm.WithRetry(0, 0, 0))
 }
 
-func TestCallLocalLLMJSONContractAndSchemaFallback(t *testing.T) {
+func TestCallLocalTargetsJSONContractAndSchemaFallback(t *testing.T) {
 	t.Run("valid strict", func(t *testing.T) {
 		q := newQueuedOpenAIServer(t, `{"actions":[{"title":"승인","dueHint":"내일","priority":"high"}]}`)
 		defer q.Close()
-		got, err := callLocalLLMJSON[actionItemsBundle](context.Background(), q.Client(), "model", "system", "user", 123, actionItemsSchema)
+		got, err := callLocalTargetsJSON[actionItemsBundle](context.Background(), []LocalTarget{{Client: q.Client(), Model: "model"}}, "system", "user", 123, actionItemsSchema)
 		if err != nil || len(got.Actions) != 1 || got.Actions[0].Title != "승인" {
 			t.Fatalf("call = %+v/%v", got, err)
 		}
@@ -593,7 +593,7 @@ func TestCallLocalLLMJSONContractAndSchemaFallback(t *testing.T) {
 	t.Run("parse retry drops schema", func(t *testing.T) {
 		q := newQueuedOpenAIServer(t, `not json`, `{"actions":[]}`)
 		defer q.Close()
-		got, err := callLocalLLMJSON[actionItemsBundle](context.Background(), q.Client(), "model", "system", "user", 123, actionItemsSchema)
+		got, err := callLocalTargetsJSON[actionItemsBundle](context.Background(), []LocalTarget{{Client: q.Client(), Model: "model"}}, "system", "user", 123, actionItemsSchema)
 		if err != nil || len(got.Actions) != 0 {
 			t.Fatalf("call = %+v/%v", got, err)
 		}
@@ -611,7 +611,7 @@ func TestCallLocalLLMJSONContractAndSchemaFallback(t *testing.T) {
 	t.Run("both invalid", func(t *testing.T) {
 		q := newQueuedOpenAIServer(t, `{`, `still invalid`)
 		defer q.Close()
-		if _, err := callLocalLLMJSON[actionItemsBundle](context.Background(), q.Client(), "model", "system", "user", 123, nil); err == nil || !strings.Contains(err.Error(), "JSON parse failed") {
+		if _, err := callLocalTargetsJSON[actionItemsBundle](context.Background(), []LocalTarget{{Client: q.Client(), Model: "model"}}, "system", "user", 123, nil); err == nil || !strings.Contains(err.Error(), "JSON parse failed") {
 			t.Fatalf("error = %v", err)
 		}
 	})

@@ -126,6 +126,7 @@ func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, e
 	// reasoning_effort mapping). Previously dropped on this path, so e.g. a
 	// deterministic temperature=0 classifier silently ran at server default.
 	applySamplingParams(&oaiReq, &req)
+	c.applyReasoningParam(&oaiReq, &req)
 
 	body, err := json.Marshal(oaiReq)
 	if err != nil {

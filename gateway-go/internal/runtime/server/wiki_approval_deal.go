@@ -29,7 +29,7 @@ func (s *Server) fileApprovalCost(ctx context.Context, docID, title, date, body 
 	}
 	_, _, localClient, localModel := s.mailAnalysisModels()
 	source := strings.TrimSpace(title) + "\n\n" + body
-	facts := mailanalysis.ExtractApprovalCostFacts(ctx, localClient, localModel, s.logger, source)
+	facts := mailanalysis.ExtractApprovalCostFacts(ctx, localClient, localModel, s.logger, source, s.mailStageOneFallbacks()...)
 	if facts.Empty() {
 		return nil
 	}

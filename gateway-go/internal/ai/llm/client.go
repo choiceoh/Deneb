@@ -110,6 +110,10 @@ type Client struct {
 	// backendDown, when set, reports whether a model's serving backend is
 	// known to be refusing requests right now. See WithBackendDownCheck.
 	backendDown func(model string) bool
+
+	// reasoningParam marks an endpoint that takes OpenRouter's unified
+	// `reasoning` field. See WithReasoningParam.
+	reasoningParam bool
 }
 
 // ClientOption configures a Client.
@@ -142,6 +146,16 @@ var ErrBackendDown = errors.New("serving backend is refusing requests")
 // changes nothing — the gate can only remove attempts, never add one.
 func WithBackendDownCheck(down func(model string) bool) ClientOption {
 	return func(cl *Client) { cl.backendDown = down }
+}
+
+// WithReasoningParam marks the endpoint as taking OpenRouter's unified
+// `reasoning` request field. A request with Thinking disabled is then sent as
+// reasoning.enabled=false instead of reasoning_effort "low". Measured
+// 2026-09-15: behind OpenRouter, nemotron-3-super keeps reasoning at "low" and
+// writes it into the content — which corrupts the JSON a stage-1 extractor
+// parses.
+func WithReasoningParam() ClientOption {
+	return func(cl *Client) { cl.reasoningParam = true }
 }
 
 // WithMinRequestTimeout sets the minimum per-request timeout. Each HTTP

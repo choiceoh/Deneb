@@ -9,6 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 )
@@ -154,6 +155,9 @@ func newResolvedProviderClient(
 	opts := []llm.ClientOption{llm.WithLogger(logger)}
 	if engineDown != nil {
 		opts = append(opts, llm.WithBackendDownCheck(engineDown))
+	}
+	if modelcaps.SpeaksReasoningParam(providerID) {
+		opts = append(opts, llm.WithReasoningParam())
 	}
 	if apiMode != "" {
 		opts = append(opts, llm.WithAPIMode(apiMode))

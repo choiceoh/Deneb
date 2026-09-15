@@ -17,6 +17,17 @@ HTTP wire 형식만 책임진다.
   `modelrole`이 정한다. `openai_stream.go`의 `probeOpenAIError`는 스트림 내 오류의
   숫자 코드를 보존한다 — 오픈라우터가 업스트림 실패를 HTTP 200 안에서 알리므로
   호출자가 보는 유일한 상태 코드다.
+- `WithReasoningParam`(오픈라우터 provider 에 `modelrole`·chat 이 건다)은 요청의
+  `Thinking{Type:"disabled"}` 를 `reasoning.enabled=false` 로 옮기고 템플릿
+  kwarg·`reasoning_effort` 를 뺀다. `ChatRequest.Thinking` 만 채우는 호출자(메일
+  stage-1)가 provider 를 몰라도 맞는 스위치가 나간다.
+- `inband.go`의 `InBandErrorCode`·`ClassifyInBandError`가 스트림 내 오류 판정의 단일
+  소스다(pilot 헬퍼와 메일 stage-1 이 공유): 부분 출력 뒤 오류는 절대 일시 오류가
+  아니고, 429 는 바로 다음 모델, 5xx 는 같은 모델 재시도 후 다음, 코드 없는 오류는
+  `llmerr` 분류가 알아보는 것만 인정한다.
+- 오픈라우터는 사용량을 `finish_reason` 을 반복하는 **마지막 청크**에 싣는다.
+  `openai_stream.go`는 finish 뒤 청크의 choice 는 버리되 usage 는 살린다 — 버리면
+  오픈라우터 호출이 전부 0 토큰으로 기록된다.
 - `types.go`의 `ChatRequest`, `Message`, `ContentBlock`, `StreamEvent`가
   provider와 무관한 공개 계약이다.
 - `openai.go`의 `Client.StreamChat`이 API mode를 분기한다. OpenAI 응답은

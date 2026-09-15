@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
@@ -462,12 +463,30 @@ func TestGmailAnalyzeMethods_MissingDepsReturnsNil(t *testing.T) {
 	}
 }
 
+// The manual analyze button runs the same stage-1 extractors as the poller, so
+// it must carry the same fallbacks.
+func TestPipelineFromMailAnalysisCarriesStageOneFallbacks(t *testing.T) {
+	client := llm.NewClient("http://127.0.0.1:1/v1", "k")
+	fallbacks := []mailanalysis.LocalTarget{{Client: client, Model: "free", Provider: "openrouter"}}
+	p, err := PipelineFromMailAnalysis(nil, client, client, "main", "tiny", fallbacks, "", nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pipeline, ok := p.(*mailAnalysisPipeline)
+	if !ok {
+		t.Fatalf("pipeline type = %T", p)
+	}
+	if got := pipeline.deps.LocalFallbacks; len(got) != 1 || got[0].Model != "free" || got[0].Provider != "openrouter" {
+		t.Fatalf("LocalFallbacks = %+v, want the given fallbacks", got)
+	}
+}
+
 func TestPipelineFromMailAnalysisReturnsErrorWhenLLMClientNil(t *testing.T) {
-	_, err := PipelineFromMailAnalysis(nil, nil, nil, "", "", "", nil, nil, nil, nil)
+	_, err := PipelineFromMailAnalysis(nil, nil, nil, "", "", nil, "", nil, nil, nil, nil)
 	if !errors.Is(err, ErrAnalyzeNoLLM) {
 		t.Errorf("err = %v, want ErrAnalyzeNoLLM", err)
 	}
-	_, err = PipelineFromMailAnalysis(nil, nil, nil, "claude-opus", "", "", nil, nil, nil, nil)
+	_, err = PipelineFromMailAnalysis(nil, nil, nil, "claude-opus", "", nil, "", nil, nil, nil, nil)
 	if !errors.Is(err, ErrAnalyzeNoLLM) {
 		t.Errorf("nil LLMClient should still return ErrAnalyzeNoLLM, got %v", err)
 	}

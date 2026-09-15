@@ -27,6 +27,16 @@ type openAIRequest struct {
 	// thinking phase). Only set when ThinkingConfig.TemplateKwarg names the
 	// model's toggle; other OpenAI-compatible servers never see the field.
 	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
+	// Reasoning is OpenRouter's unified reasoning switch. Set only on clients
+	// built WithReasoningParam, where it replaces both fields above: a template
+	// kwarg does not reach the model behind the hosting provider, and
+	// reasoning_effort "low" keeps it reasoning.
+	Reasoning *openAIReasoning `json:"reasoning,omitempty"`
+}
+
+// openAIReasoning is OpenRouter's request-level reasoning control.
+type openAIReasoning struct {
+	Enabled bool `json:"enabled"`
 }
 
 // openAIStreamOpts controls streaming behavior.

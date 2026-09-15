@@ -197,7 +197,7 @@ func extractStatusSignal(ctx context.Context, deps PipelineDeps, analysisText st
 	defer cancel()
 
 	prompt := fmt.Sprintf(statusSignalPrompt, analysisText)
-	bundle, err := callLocalLLMJSON[statusSignalBundle](extractCtx, deps.LocalClient, deps.LocalModel, statusSignalSystem, prompt, stage1MaxTokens, statusSignalSchema)
+	bundle, err := callLocalTargetsJSON[statusSignalBundle](extractCtx, deps.localTargets(), statusSignalSystem, prompt, stage1MaxTokens, statusSignalSchema)
 	if err != nil {
 		return nil
 	}
@@ -284,7 +284,7 @@ func extractFactsForWiki(ctx context.Context, deps PipelineDeps, analysisText st
 	defer cancel()
 
 	prompt := fmt.Sprintf(factExtractorPrompt, analysisText)
-	bundle, err := callLocalLLMJSON[wikiFactsBundle](extractCtx, deps.LocalClient, deps.LocalModel, factExtractorSystem, prompt, stage1MaxTokens, wikiFactsSchema)
+	bundle, err := callLocalTargetsJSON[wikiFactsBundle](extractCtx, deps.localTargets(), factExtractorSystem, prompt, stage1MaxTokens, wikiFactsSchema)
 	if err != nil || len(bundle.Facts) == 0 {
 		return ""
 	}
@@ -373,7 +373,7 @@ func extractActionItems(ctx context.Context, deps PipelineDeps, analysisText str
 	defer cancel()
 
 	prompt := fmt.Sprintf(actionExtractorPrompt, analysisText)
-	bundle, err := callLocalLLMJSON[actionItemsBundle](extractCtx, deps.LocalClient, deps.LocalModel, actionExtractorSystem, prompt, stage1MaxTokens, actionItemsSchema)
+	bundle, err := callLocalTargetsJSON[actionItemsBundle](extractCtx, deps.localTargets(), actionExtractorSystem, prompt, stage1MaxTokens, actionItemsSchema)
 	if err != nil {
 		return nil
 	}
@@ -441,7 +441,7 @@ func extractDealInfo(ctx context.Context, deps PipelineDeps, analysisText string
 	prompt := fmt.Sprintf(dealExtractorPrompt, analysisText)
 	// json_object (schema=nil): the deal schema is wide free-text and triggers the
 	// xgrammar whitespace explosion under strict mode — see the dealExtract doc.
-	ext, err := callLocalLLMJSON[dealExtract](extractCtx, deps.LocalClient, deps.LocalModel, dealExtractorSystem, prompt, stage1MaxTokens, nil)
+	ext, err := callLocalTargetsJSON[dealExtract](extractCtx, deps.localTargets(), dealExtractorSystem, prompt, stage1MaxTokens, nil)
 	if err != nil {
 		return nil
 	}
