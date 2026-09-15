@@ -1,5 +1,48 @@
 # Changelog
 
+## [5.14.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.13.0...deneb-v5.14.0) (2026-09-15)
+
+
+### ✨ Features
+
+* **chat:** 엔진이 죽어 있으면 재시도하지 않고 바로 폴백한다 ([#5093](https://github.com/choiceoh/Deneb/issues/5093)) ([a09967c](https://github.com/choiceoh/Deneb/commit/a09967c06b654f344799570df2f7ce777dfbeaa7))
+* **chat:** 프롬프트 머리의 토큰 수를 엔진에게 직접 묻는다 ([#5081](https://github.com/choiceoh/Deneb/issues/5081)) ([7c4f9c7](https://github.com/choiceoh/Deneb/commit/7c4f9c7399a36986f3689e41b982918350c5e9fb))
+* **client-android:** 엔진 화면을 main 에 다시 올린다 ([#5083](https://github.com/choiceoh/Deneb/issues/5083) 은 스쿼시된 브랜치로 들어갔다) ([#5084](https://github.com/choiceoh/Deneb/issues/5084)) ([f0e05d8](https://github.com/choiceoh/Deneb/commit/f0e05d87b938f19da2758c7df468aff20ea55bc0))
+* **compaction:** 요약기 행위 결과 중립 계약 — 도구 반환값이 어시스턴트 발화를 이긴다 ([#5077](https://github.com/choiceoh/Deneb/issues/5077)) ([b21244e](https://github.com/choiceoh/Deneb/commit/b21244e6d5fa76bbcd447df1def453f12e00b435))
+* **mailanalysis:** 메일 1단계 추출·위키 질의 확장도 tiny 무료 폴백을 쓴다 ([#5097](https://github.com/choiceoh/Deneb/issues/5097)) ([7891fd5](https://github.com/choiceoh/Deneb/commit/7891fd5d36728de45d1d4c381b1c08b311ae3fe7))
+* **modelrole:** tiny 2차 폴백은 유료 칸 — 과금은 그 칸에서만, 나머지 체인 워크의 조용한 과금을 막는다 ([#5098](https://github.com/choiceoh/Deneb/issues/5098)) ([f32b108](https://github.com/choiceoh/Deneb/commit/f32b108f8c72ee21fc7b42b7e87897252ec7baf8))
+* **modelrole:** tiny 전용 폴백 역할 — 오픈라우터 무료 모델을 게이트웨이에서 안전하게 쓴다 ([#5095](https://github.com/choiceoh/Deneb/issues/5095)) ([b72b5f8](https://github.com/choiceoh/Deneb/commit/b72b5f8c39d9cd44b3920f459968e9d72f0a62df))
+* **modelrole:** 폴백 체인이 종량제 모델에 도착하지 못하게 막는다 ([#5080](https://github.com/choiceoh/Deneb/issues/5080)) ([1fc5e58](https://github.com/choiceoh/Deneb/commit/1fc5e5852dc9c3a46596e817c09de16f593786b0))
+* **observe:** 로컬 서빙 엔진의 일자별 디코드·프리필 속도와 동시성 ([#5078](https://github.com/choiceoh/Deneb/issues/5078)) ([9d3a0f4](https://github.com/choiceoh/Deneb/commit/9d3a0f4c84d72000a347b3ef3f87ab05bd30f526))
+* **observe:** 로컬 엔진이 실제로 몇 퍼센트를 서빙했는지 보여준다 ([#5082](https://github.com/choiceoh/Deneb/issues/5082)) ([d875c01](https://github.com/choiceoh/Deneb/commit/d875c011f58c39b177a907d6ef893080decc89bb))
+* **wormhole:** warn when a local entry's upstreamModel is not served by its backend ([#5075](https://github.com/choiceoh/Deneb/issues/5075)) ([6a6a899](https://github.com/choiceoh/Deneb/commit/6a6a8995df0aba3b55b99702c5042b3ac74913d9))
+
+
+### 🐛 Bug Fixes
+
+* **approvals:** 결재 목록 누락과 페이지 캐시 오류 수정 ([#5069](https://github.com/choiceoh/Deneb/issues/5069)) ([54acd7e](https://github.com/choiceoh/Deneb/commit/54acd7e2de0bac6beee3be346fa058692794bc50))
+* **chat:** clarify grep tool contract ([#5070](https://github.com/choiceoh/Deneb/issues/5070)) ([02474b1](https://github.com/choiceoh/Deneb/commit/02474b1b7cc4108a9b5bb9eec93f7d75c23d0417))
+* **chat:** clarify read tool input modes ([#5068](https://github.com/choiceoh/Deneb/issues/5068)) ([a0cb75d](https://github.com/choiceoh/Deneb/commit/a0cb75d0ccec5873b03c999b51adb1ec2a5b31da))
+* **chat:** 효과 라우터가 생각을 끈 턴이 앞선 추론을 빼고 보내 로컬 엔진 prefix 가 턴마다 갈라졌다 ([#5091](https://github.com/choiceoh/Deneb/issues/5091)) ([c5dd055](https://github.com/choiceoh/Deneb/commit/c5dd055573dbbb5313f6869bae9095c092959f18))
+* **ci:** 로컬 게이트에 스크립트 레인을 만든다 — scripts/ 변경이 아무 레인도 안 골랐다 ([#5088](https://github.com/choiceoh/Deneb/issues/5088)) ([1c947fb](https://github.com/choiceoh/Deneb/commit/1c947fb9bfe67cca6f2aa4f8530fdf4bc48ecb18))
+* **client-android:** 표본이 없다시피 한 날을 잘 측정된 날처럼 보여주고 있었다 ([#5090](https://github.com/choiceoh/Deneb/issues/5090)) ([5ff62f1](https://github.com/choiceoh/Deneb/commit/5ff62f1fe0ab2074fc193ebe320cd3c5ee622be6))
+* **groupware:** 디스크 정리가 ~/.cache 의 로그인 브라우저를 지우면 12시간 뒤 결재가 전부 끊겼다 ([#5092](https://github.com/choiceoh/Deneb/issues/5092)) ([dc24ecb](https://github.com/choiceoh/Deneb/commit/dc24ecb3eb523d258e7f4d2449b9c09b31307043))
+* **release:** APK 버전코드 수위를 지워지지 않는 곳에도 남긴다 ([#5086](https://github.com/choiceoh/Deneb/issues/5086)) ([082843a](https://github.com/choiceoh/Deneb/commit/082843a9980caa52085ae7c62ad421ffc58f1615))
+* **release:** 발행 APK 를 캐시가 아니라 상태 디렉터리에 둔다 ([#5087](https://github.com/choiceoh/Deneb/issues/5087)) ([0a446e3](https://github.com/choiceoh/Deneb/commit/0a446e358af9e672b39a8e01f209a8e91d1d2966))
+* **scripts:** 경량 모델 A/B 배터리가 업스트림 오류 한 번에 통째로 죽었다 ([#5094](https://github.com/choiceoh/Deneb/issues/5094)) ([64c6c56](https://github.com/choiceoh/Deneb/commit/64c6c563dfb813af7fa5f09636d1a7a81a2630d1))
+* **tokenest:** 토큰 추정기를 실제 엔진 토크나이저로 보정하고 오염된 피드백을 끊는다 ([#5079](https://github.com/choiceoh/Deneb/issues/5079)) ([3cc6744](https://github.com/choiceoh/Deneb/commit/3cc674403266d9eabc0682c14a16e976c87490b9))
+* **wire:** 엔진 RPC 타입의 TS 생성물을 맞춘다 — pnpm gen:wire 를 빼먹었다 ([#5089](https://github.com/choiceoh/Deneb/issues/5089)) ([d9b1f0c](https://github.com/choiceoh/Deneb/commit/d9b1f0c6fbdf74219c7b8f86f7e87557aa1c0263))
+
+
+### ⚡ Performance
+
+* **phoneevents:** skip ambient Android system alerts ([#5067](https://github.com/choiceoh/Deneb/issues/5067)) ([a1397de](https://github.com/choiceoh/Deneb/commit/a1397ded3e8af04f6279dadac682ab4822cc7292))
+
+
+### 🔧 Internal
+
+* **ai:** remove unreachable tokenizer client URL ([#5099](https://github.com/choiceoh/Deneb/issues/5099)) ([7e69434](https://github.com/choiceoh/Deneb/commit/7e6943438954969b7b4b07133b4ba21f1ca9de33))
+
 ## [5.13.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.12.1...deneb-v5.13.0) (2026-09-08)
 
 
