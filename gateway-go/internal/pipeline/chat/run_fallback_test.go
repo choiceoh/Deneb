@@ -403,6 +403,20 @@ func TestHealthyFallbackExists(t *testing.T) {
 		}
 	})
 
+	t.Run("only metered candidates", func(t *testing.T) {
+		reg := modelrole.NewRegistryWithOptions(discardLogger(), modelrole.RegistryOptions{
+			MainModel:        "zai/m-main",
+			LightweightModel: "zai/m-metered",
+			FallbackModel:    "zai/m-metered",
+			MeteredModels:    map[string]bool{"m-metered": true},
+		})
+		// walkFallbackChain never arrives at a metered model, so counting one
+		// would skip the requested model for a chain with nothing to run.
+		if healthyFallbackExists(reg, modelrole.RoleMain, "m-main") {
+			t.Error("want false: the only distinct candidate is metered")
+		}
+	})
+
 	t.Run("all candidates unhealthy", func(t *testing.T) {
 		reg := modelrole.NewRegistryWithOptions(discardLogger(), modelrole.RegistryOptions{
 			MainModel:        "zai/m-main",

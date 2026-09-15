@@ -36,6 +36,44 @@ func Hostname(rawURL string) string {
 	return strings.TrimRight(host, ".")
 }
 
+// HostPort returns rawURL's "host:port" with the port made explicit from the
+// scheme when the URL omits it (http → 80, https → 443; a bare authority is
+// read as http). The host is normalized as Hostname does. Returns "" for
+// empty or unparseable input.
+//
+// It exists so two URLs can be asked "is this the same server" without the
+// path deciding: the serving engine is configured as its /metrics URL, while
+// the router reaches it at /v1 — both are http://10.0.0.5:8000.
+func HostPort(rawURL string) string {
+	raw := strings.TrimSpace(rawURL)
+	if raw == "" {
+		return ""
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	host := strings.TrimRight(strings.ToLower(u.Hostname()), ".")
+	if host == "" {
+		return ""
+	}
+	port := u.Port()
+	if port == "" {
+		switch strings.ToLower(u.Scheme) {
+		case "https":
+			port = "443"
+		case "http":
+			port = "80"
+		default:
+			return ""
+		}
+	}
+	return net.JoinHostPort(host, port)
+}
+
 // HostMatches reports whether rawURL's hostname is `domain` or a subdomain
 // of it. Safer counterpart to `strings.Contains(rawURL, domain)`, which
 // mis-classifies attacker-controlled paths and hosts such as

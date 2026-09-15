@@ -1,6 +1,7 @@
 package modelrole
 
 import (
+	"strings"
 	"sync"
 	"time"
 )
@@ -30,6 +31,11 @@ type modelHealth struct {
 type healthState struct {
 	mu     sync.Mutex
 	models map[string]*modelHealth
+	// engineDown maps a serving engine's endpoint to the models it answers
+	// for, while a readiness probe reports that engine refusing requests.
+	// Kept apart from the streaks: a streak is inferred from failures a caller
+	// already paid for; this is reported before anyone pays.
+	engineDown map[string]map[string]bool
 }
 
 // RecordModelFailure notes a hard failure (error or stall) for a model.
@@ -63,6 +69,9 @@ func (r *Registry) RecordModelSuccess(model string) {
 // unhealthyStreak consecutive failures with the latest inside the cooldown
 // window. Outside the window the breaker half-opens (returns false) so the
 // model gets retried; a success then resets the streak, a failure re-arms it.
+//
+// A model whose serving engine a readiness probe reports down is unhealthy
+// too, with no streak required — see SetEngineDown.
 func (r *Registry) ModelUnhealthy(model string) bool {
 	if model == "" {
 		return false
@@ -70,5 +79,73 @@ func (r *Registry) ModelUnhealthy(model string) bool {
 	r.health.mu.Lock()
 	defer r.health.mu.Unlock()
 	h := r.health.models[model]
-	return h != nil && h.streak >= unhealthyStreak && time.Since(h.lastFailure) < unhealthyCooldown
+	if h != nil && h.streak >= unhealthyStreak && time.Since(h.lastFailure) < unhealthyCooldown {
+		return true
+	}
+	return r.engineDownLocked(model)
+}
+
+// SetEngineDown records the models a serving engine answers for while its
+// readiness probe says it accepts nothing. Pass no models once it is back.
+//
+// While a model is listed, ModelUnhealthy and EngineDown report it: the chat
+// pipeline goes straight to the fallback chain and LLM clients stop retrying
+// it. Those retries cannot succeed — the engine refused before a token existed
+// — and on 2026-09-14 they cost about 70 seconds per call, doubled by the
+// run-level transient replay, on every turn that reached the dead engine.
+//
+// A model leaving the set also loses its failure streak. The streak was built
+// against an engine that is no longer the one answering, and keeping it would
+// hold traffic on the fallback for up to unhealthyCooldown after the engine
+// came back — local serving lost for nothing.
+func (r *Registry) SetEngineDown(endpoint string, models []string) {
+	if r == nil || endpoint == "" {
+		return
+	}
+	next := make(map[string]bool, len(models))
+	for _, m := range models {
+		if m = strings.TrimSpace(m); m != "" {
+			next[m] = true
+		}
+	}
+	r.health.mu.Lock()
+	defer r.health.mu.Unlock()
+	prev := r.health.engineDown[endpoint]
+	if len(next) == 0 {
+		delete(r.health.engineDown, endpoint)
+	} else {
+		if r.health.engineDown == nil {
+			r.health.engineDown = make(map[string]map[string]bool)
+		}
+		r.health.engineDown[endpoint] = next
+	}
+	for m := range prev {
+		// Another engine may still list the same name; only a model no engine
+		// reports down is back.
+		if !next[m] && !r.engineDownLocked(m) {
+			delete(r.health.models, m)
+		}
+	}
+}
+
+// EngineDown reports whether a readiness probe currently has model's serving
+// engine refusing requests. Unlike ModelUnhealthy it ignores failure streaks:
+// it answers "is retrying this pointless right now", which a streak cannot.
+func (r *Registry) EngineDown(model string) bool {
+	if r == nil || model == "" {
+		return false
+	}
+	r.health.mu.Lock()
+	defer r.health.mu.Unlock()
+	return r.engineDownLocked(model)
+}
+
+// engineDownLocked requires r.health.mu.
+func (r *Registry) engineDownLocked(model string) bool {
+	for _, served := range r.health.engineDown {
+		if served[model] {
+			return true
+		}
+	}
+	return false
 }

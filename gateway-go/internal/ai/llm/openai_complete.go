@@ -149,7 +149,7 @@ func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, e
 	c.setOpenAIBearerAuth(httpReq)
 	c.applyHeaders(httpReq)
 
-	respBody, err := c.DoStream(ctx, httpReq)
+	respBody, err := c.doStream(ctx, httpReq, req.Model)
 	if err != nil {
 		return "", err
 	}

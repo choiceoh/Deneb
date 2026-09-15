@@ -8,7 +8,10 @@ HTTP wire 형식만 책임진다.
 ## 진입점과 책임
 
 - `client.go`의 `Client`, `NewClient`, `DoStream`이 HTTP 수명주기,
-  인증 header, retry와 request timeout을 소유한다.
+  인증 header, retry와 request timeout을 소유한다. `WithBackendDownCheck`는
+  모델별 liveness 게이트다 — 첫 시도 전과 백오프 대기 중(1초 간격)에 물어
+  참이면 `ErrBackendDown`으로 즉시 끝낸다. 이 오류는 시도 중 받은 502 를
+  감싸지 않는다(감싸면 일시 오류로 분류돼 재생이 되살아난다).
 - `types.go`의 `ChatRequest`, `Message`, `ContentBlock`, `StreamEvent`가
   provider와 무관한 공개 계약이다.
 - `openai.go`의 `Client.StreamChat`이 API mode를 분기한다. OpenAI 응답은

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginelive"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
@@ -19,7 +20,8 @@ type AutonomousSubsystem struct {
 	wikiDreamer          *wiki.WikiDreamer // set during initMemorySubsystem()
 	gmailPollSvc         *mailanalysis.Service
 	mailBackfillAnalyzer archivedMailAnalyzer
-	roleHealth           *rolehealth.Watch // set during registerWorkflowSideEffects()
+	roleHealth           *rolehealth.Watch   // set during registerWorkflowSideEffects()
+	engineLiveness       *enginelive.Watcher // set during registerWorkflowSideEffects()
 	modelMaintenance     *modelmaintenance.Suite
 
 	// agentLogWriter is the shared behavioral event log (the same instance the

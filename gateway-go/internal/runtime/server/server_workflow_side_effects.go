@@ -109,4 +109,5 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	}
 	s.registerCalendarBriefingWorkflow()
 	s.registerRoleHealthWorkflow()
+	s.registerEngineLivenessWorkflow()
 }

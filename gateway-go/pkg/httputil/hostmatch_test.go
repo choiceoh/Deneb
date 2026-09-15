@@ -99,3 +99,32 @@ func TestHostMatchesRejectsSpoofedDomains(t *testing.T) {
 		})
 	}
 }
+
+func TestHostPortComparesServersNotPaths(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"http://100.125.220.117:8000/metrics", "100.125.220.117:8000"},
+		{"http://100.125.220.117:8000/v1/", "100.125.220.117:8000"},
+		{"http://Engine.Local.:8000", "engine.local:8000"},
+		{"http://10.0.0.5/v1", "10.0.0.5:80"},
+		{"https://api.example.com/v1", "api.example.com:443"},
+		{"10.0.0.5:8000", "10.0.0.5:8000"}, // bare authority reads as http
+		{"http://[::1]:8000/health", "[::1]:8000"},
+		{"ftp://10.0.0.5/x", ""}, // no default port to assume
+		{"", ""},
+		{"   ", ""},
+		{"%%", ""},
+	}
+	for _, tc := range cases {
+		if got := HostPort(tc.in); got != tc.want {
+			t.Errorf("HostPort(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+	if HostPort("http://10.0.0.5/metrics") != HostPort("http://10.0.0.5:80/v1") {
+		t.Error("an implicit and an explicit default port must name the same server")
+	}
+}

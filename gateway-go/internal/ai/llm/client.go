@@ -106,6 +106,10 @@ type Client struct {
 	// maxStreamBytes caps raw provider SSE payload bytes before protocol
 	// translation. Zero preserves the production unlimited aggregate behavior.
 	maxStreamBytes int
+
+	// backendDown, when set, reports whether a model's serving backend is
+	// known to be refusing requests right now. See WithBackendDownCheck.
+	backendDown func(model string) bool
 }
 
 // ClientOption configures a Client.
@@ -123,6 +127,21 @@ func WithRetry(maxRetries int, baseDelay, maxDelay time.Duration) ClientOption {
 		cl.baseDelay = baseDelay
 		cl.maxDelay = maxDelay
 	}
+}
+
+// ErrBackendDown marks a request ended without another attempt because the
+// model's serving backend is known to be refusing requests. It wraps nothing
+// from the attempts that did run: a wrapped 502 would classify as transient and
+// invite exactly the retries this exists to stop. Callers with a fallback chain
+// should move on at once.
+var ErrBackendDown = errors.New("serving backend is refusing requests")
+
+// WithBackendDownCheck installs a per-model liveness gate. down(model) is asked
+// before every attempt and again while a retry backoff sleeps; true ends the
+// call with ErrBackendDown. Unset, or asked about a model it does not know,
+// changes nothing — the gate can only remove attempts, never add one.
+func WithBackendDownCheck(down func(model string) bool) ClientOption {
+	return func(cl *Client) { cl.backendDown = down }
 }
 
 // WithMinRequestTimeout sets the minimum per-request timeout. Each HTTP
@@ -283,11 +302,22 @@ func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
 // Retries on transient errors per httpretry.IsRetryable (rate limits, timeouts,
 // server overload — never on permanent 4xx or 501).
 func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser, error) {
+	return c.doStream(ctx, req, "")
+}
+
+// doStream is DoStream for a request whose model is known, so the liveness
+// gate (WithBackendDownCheck) can end it. An empty model is never gated.
+func (c *Client) doStream(ctx context.Context, req *http.Request, model string) (io.ReadCloser, error) {
 	var lastErr error
 	// nil when the caller did not opt in (helper calls, tests) — every record
 	// is then a no-op, so this observability can never change control flow.
 	collector := retryCollectorFrom(ctx)
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
+		// Asked before the first attempt too: an engine already reported down
+		// is not worth one request, let alone six.
+		if c.modelBackendDown(model) {
+			return nil, c.backendDownError(model, attempt, lastErr)
+		}
 		if attempt > 0 {
 			// Agent-level context expired — retrying won't help since
 			// the deadline won't extend.
@@ -310,10 +340,12 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 				attrs = append(attrs, "ctxRemaining", time.Until(dl).Truncate(time.Millisecond))
 			}
 			c.logger.Info("retrying LLM request", attrs...)
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(delay):
+			down, err := c.waitBackoff(ctx, delay, model)
+			if err != nil {
+				return nil, err
+			}
+			if down {
+				return nil, c.backendDownError(model, attempt, lastErr)
 			}
 
 			// Reset the request body for retry. bytes.Reader implements
@@ -374,6 +406,55 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 		}
 	}
 	return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
+}
+
+// backendRecheck bounds how long a retry backoff sleeps before asking the
+// liveness gate again. The sixth backoff is about 35 seconds; an engine
+// reported down during it should end the call within a second, not after.
+const backendRecheck = time.Second
+
+func (c *Client) modelBackendDown(model string) bool {
+	return c.backendDown != nil && model != "" && c.backendDown(model)
+}
+
+// waitBackoff sleeps for delay, returning early with down=true once the
+// liveness gate reports model's backend down, or with ctx's error.
+func (c *Client) waitBackoff(ctx context.Context, delay time.Duration, model string) (down bool, err error) {
+	if c.backendDown == nil || model == "" {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-time.After(delay):
+			return false, nil
+		}
+	}
+	wake := time.Now().Add(delay)
+	for {
+		remaining := time.Until(wake)
+		if remaining <= 0 {
+			return false, nil
+		}
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-time.After(min(remaining, backendRecheck)):
+		}
+		if c.backendDown(model) {
+			return true, nil
+		}
+	}
+}
+
+// backendDownError ends a call on the liveness gate. A call abandoned mid-way
+// logs once, because it already paid for attempts; a call refused up front
+// logs nothing — while an engine is down that is every call, and the watcher
+// has already said so once.
+func (c *Client) backendDownError(model string, attempts int, lastErr error) error {
+	if attempts > 0 {
+		c.logger.Info("serving backend reported down; abandoning retries",
+			"model", model, "attempts", attempts, "lastError", lastErr)
+	}
+	return fmt.Errorf("%w: %s", ErrBackendDown, model)
 }
 
 // requestContext returns a context for a single HTTP request. If the parent

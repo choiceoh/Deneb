@@ -22,7 +22,11 @@ vision)을 실제 provider/model과 LLM client로 해석한다. 호출자는 역
   request shape 단일 소스다.
 - `health.go`의 `Registry.RecordModelFailure`,
   `Registry.RecordModelSuccess`, `Registry.ModelUnhealthy`가 fallback
-  circuit breaker를 소유한다.
+  circuit breaker를 소유한다. `Registry.SetEngineDown`·`Registry.EngineDown`은
+  readiness 프로브(`internal/ai/enginelive`)가 알린 **엔진 다운 집합**이다 — 스트릭 없이
+  `ModelUnhealthy`를 참으로 만들고, 집합에서 빠지는 모델은 스트릭도 지운다
+  (복구 직후 쿨다운 동안 폴백에 묶이지 않게). `buildClient`가 이 판정을 모든
+  레지스트리 클라이언트에 게이트로 건다(`llm.WithBackendDownCheck`).
 
 ## 의존 방향과 불변조건
 

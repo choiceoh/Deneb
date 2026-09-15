@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -58,11 +59,15 @@ const maxCompactionRetries = 2
 // least one model that is distinct from failedModel and whose breaker is
 // closed. The initial-model skip only happens when this holds — when every
 // candidate is unhealthy, trying the requested model is still the best move.
+//
+// A metered candidate does not count: walkFallbackChain never arrives at one
+// (dogma #7), so counting it would skip the requested model for a chain that
+// then has nothing to run — a turn failed without anything having been tried.
 func healthyFallbackExists(reg *modelrole.Registry, role modelrole.Role, failedModel string) bool {
 	chain := reg.FallbackChain(role)
 	for i := 1; i < len(chain); i++ {
 		cfg := reg.Config(chain[i])
-		if cfg.Model == "" || cfg.Model == failedModel {
+		if cfg.Model == "" || cfg.Model == failedModel || reg.IsMetered(cfg.Model) {
 			continue
 		}
 		if !reg.ModelUnhealthy(cfg.Model) {
@@ -147,6 +152,11 @@ type fallbackTurn struct {
 	// alternative. Saves the user the dead model's stall timeout on every turn
 	// while it is down; the cooldown re-admits the model automatically.
 	skipInitial bool
+	// skipErr, when set, replaces errModelCircuitOpen as the skip's error: a
+	// model skipped because its serving engine is reported down had no
+	// "repeated recent failures", and a turn that ends on it must say what
+	// actually happened.
+	skipErr error
 
 	// Evolving state.
 	cfg      agent.AgentConfig
@@ -216,8 +226,14 @@ func runAgentWithFallback(
 		deps.registry.ModelUnhealthy(cfg.Model) &&
 		healthyFallbackExists(deps.registry, initialRole, cfg.Model)
 	if t.skipInitial {
-		logger.Debug("model circuit open; skipping straight to fallback chain",
-			"model", cfg.Model, "role", string(initialRole))
+		if deps.registry.EngineDown(cfg.Model) {
+			t.skipErr = fmt.Errorf("%w: %s", llm.ErrBackendDown, cfg.Model)
+			logger.Debug("serving engine down; skipping straight to fallback chain",
+				"model", cfg.Model, "role", string(initialRole))
+		} else {
+			logger.Debug("model circuit open; skipping straight to fallback chain",
+				"model", cfg.Model, "role", string(initialRole))
+		}
 	}
 
 	for compactAttempt := 0; compactAttempt <= maxCompactionRetries; compactAttempt++ {
@@ -278,6 +294,9 @@ func (t *fallbackTurn) synthStall(recordStalled bool) {
 func (t *fallbackTurn) runInitialAttempt(ctx context.Context) {
 	if t.skipInitial {
 		t.runErr = errModelCircuitOpen
+		if t.skipErr != nil {
+			t.runErr = t.skipErr
+		}
 		return
 	}
 	t.agentResult, t.runErr = agent.RunAgent(ctx, t.cfg, t.messages, t.client, t.deps.tools, t.hooks, t.logger, t.runLog)
@@ -455,6 +474,12 @@ func (t *fallbackTurn) retryTransient(ctx context.Context) (aborted bool, err er
 		// caller's finalizeFailure (mirrors the pre-split skip semantics).
 		return false, nil //nolint:nilerr // deliberate — pending t.runErr is surfaced downstream
 	}
+	// A 502 that raced the readiness probe still looks transient, but an engine
+	// now reported down fails the replay the same way after another full retry
+	// chain. Only the fallback chain can answer.
+	if t.deps.registry != nil && t.deps.registry.EngineDown(t.cfg.Model) {
+		return false, nil //nolint:nilerr // deliberate — pending t.runErr is surfaced downstream
+	}
 	// Don't replay a turn that already committed a side-effecting tool: re-running
 	// from the original messages would execute it again (e.g. send the same
 	// message twice). A transient error after a mutation is left to fail rather
@@ -585,10 +610,12 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 
 	// Feed the circuit breaker: a hard error or stall counts against the
 	// model's health. Context overflow does not (input-size problem, not a
-	// model fault) and neither does the synthetic circuit-open sentinel (the
-	// model was never tried).
+	// model fault), and neither do the synthetic circuit-open sentinel and a
+	// liveness-gate refusal (the model was never, or no longer, tried — its
+	// engine's state is already known without a streak).
 	if !isContextOverflow(t.runErr) &&
 		!errors.Is(t.runErr, errModelCircuitOpen) &&
+		!errors.Is(t.runErr, llm.ErrBackendDown) &&
 		!errors.Is(t.runErr, errRunBudgetExhausted) {
 		t.deps.registry.RecordModelFailure(t.cfg.Model)
 	}
@@ -616,6 +643,14 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 		if fbClient == nil || triedModels[fbCfg.Model] {
 			continue
 		}
+		// A candidate served by an engine reported down would only be refused
+		// by its client — skip the rung instead of spending a hop on it (tiny's
+		// chain reaches the same dead engine twice: tiny, then lightweight).
+		if t.deps.registry.EngineDown(fbCfg.Model) {
+			t.logger.Debug("skipping fallback candidate: serving engine down",
+				"failedRole", string(failedRole), "skippedRole", string(fbRole), "model", fbCfg.Model)
+			continue
+		}
 		// Dogma #7: never ARRIVE at a pay-per-token model. A role pointed at one
 		// deliberately still runs — this is the chain, not the request. The guard
 		// exists because wormhole enforces the same rule on the routed path
@@ -628,7 +663,7 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 			continue
 		}
 		triedModels[fbCfg.Model] = true
-		if errors.Is(t.runErr, errModelCircuitOpen) {
+		if errors.Is(t.runErr, errModelCircuitOpen) || errors.Is(t.runErr, llm.ErrBackendDown) {
 			t.logger.Debug("model circuit open; trying fallback",
 				"failedRole", string(failedRole),
 				"nextRole", string(fbRole),

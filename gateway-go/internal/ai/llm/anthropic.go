@@ -37,7 +37,7 @@ func (c *Client) streamChatAnthropic(ctx context.Context, req ChatRequest) (<-ch
 	setBetaHeaders(httpReq, &req)
 	c.applyHeaders(httpReq)
 
-	respBody, err := c.DoStream(ctx, httpReq)
+	respBody, err := c.doStream(ctx, httpReq, req.Model)
 	if err != nil {
 		return nil, err
 	}

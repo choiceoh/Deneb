@@ -16,11 +16,13 @@ package modelrole
 import (
 	"log/slog"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 // Role identifies a model purpose within the system.
@@ -496,7 +498,7 @@ func (r *Registry) Client(role Role) *llm.Client {
 	}
 
 	entry.once.Do(func() {
-		entry.client = buildClient(r.logger, cfg)
+		entry.client = buildClient(r.logger, cfg, r.EngineDown)
 	})
 	return entry.client
 }
@@ -505,8 +507,16 @@ func (r *Registry) Client(role Role) *llm.Client {
 // applying provider-specific headers, auth scheme, and (for Kimi Code)
 // the per-request token callback. Shared by role clients and on-demand
 // provider clients so both stay consistent.
-func buildClient(logger *slog.Logger, cfg ModelConfig) *llm.Client {
+//
+// engineDown, when set, is the per-model liveness gate (Registry.EngineDown):
+// every client this registry hands out stops retrying a model whose serving
+// engine is reported down, whichever caller holds it — the chat pipeline and
+// the helper paths alike.
+func buildClient(logger *slog.Logger, cfg ModelConfig, engineDown func(model string) bool) *llm.Client {
 	opts := []llm.ClientOption{llm.WithLogger(logger)}
+	if engineDown != nil {
+		opts = append(opts, llm.WithBackendDownCheck(engineDown))
+	}
 	if cfg.APIMode != "" {
 		opts = append(opts, llm.WithAPIMode(cfg.APIMode))
 	}
@@ -558,7 +568,7 @@ func (r *Registry) ClientForProvider(providerID string) *llm.Client {
 		BaseURL:    resolveBaseURL(providerID),
 		APIKey:     resolveAPIKey(providerID),
 		APIMode:    resolveAPIMode(providerID),
-	})
+	}, r.EngineDown)
 }
 
 // ResolveModel resolves a model string that may be a role name ("main", "lightweight",
@@ -666,6 +676,27 @@ func (r *Registry) FallbackChain(role Role) []Role {
 	default:
 		return []Role{role}
 	}
+}
+
+// ModelsAt lists the models of roles whose own endpoint is the server at
+// hostport (an httputil.HostPort value) — roles pointed straight at a serving
+// engine rather than through the router, which a router-config lookup cannot
+// see. Sorted and de-duplicated.
+func (r *Registry) ModelsAt(hostport string) []string {
+	if r == nil || hostport == "" {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var out []string
+	for _, cfg := range r.ConfiguredModels() {
+		if cfg.Model == "" || seen[cfg.Model] || httputil.HostPort(cfg.BaseURL) != hostport {
+			continue
+		}
+		seen[cfg.Model] = true
+		out = append(out, cfg.Model)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // ConfiguredModels returns all configured role→model entries.
