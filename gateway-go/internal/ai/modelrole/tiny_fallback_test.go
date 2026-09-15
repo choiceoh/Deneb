@@ -35,7 +35,7 @@ func TestTinyFallbackRoleIsOptInAndSitsFirstInTinysChain(t *testing.T) {
 		FallbackModel:     "test/fb",
 		Providers:         providers,
 	})
-	want := []Role{RoleTiny, RoleTinyFallback, RoleLightweight, RoleFallback}
+	want := []Role{RoleTiny, RoleTinyFallback, RoleTinyFallbackPaid, RoleLightweight, RoleFallback}
 	if got := reg.FallbackChain(RoleTiny); !reflect.DeepEqual(got, want) {
 		t.Fatalf("FallbackChain(tiny) = %v, want %v", got, want)
 	}
@@ -56,26 +56,42 @@ func TestTinyFallbackRoleIsOptInAndSitsFirstInTinysChain(t *testing.T) {
 	}
 }
 
-func TestUnmeteredFallbacksLeavesOutBilledAndDuplicateRungs(t *testing.T) {
+func TestHelperFallbacksSkipBilledRungsButThePaidOne(t *testing.T) {
 	providers := map[string]ProviderResolved{
 		"openrouter": {BaseURL: "https://openrouter.example/api/v1", APIKey: "k"},
 		"test":       {BaseURL: "http://127.0.0.1:1/v1", APIKey: "k"},
 	}
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
-		TinyModel:         "test/tiny",
-		TinyFallbackModel: "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
-		LightweightModel:  "test/deepseek-v4-flash-api", // billed
-		FallbackModel:     "test/tiny",                  // same as tiny itself
-		Providers:         providers,
-		MeteredModels:     map[string]bool{"deepseek-v4-flash-api": true},
+		TinyModel:             "test/tiny",
+		TinyFallbackModel:     "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+		TinyFallbackPaidModel: "openrouter/nvidia/nemotron-3-super-120b-a12b",
+		LightweightModel:      "test/deepseek-v4-flash-api", // billed, nobody agreed
+		FallbackModel:         "test/tiny",                  // same as tiny itself
+		Providers:             providers,
+		MeteredModels:         map[string]bool{"deepseek-v4-flash-api": true},
 	})
-	got := reg.UnmeteredFallbacks(RoleTiny)
-	if len(got) != 1 || got[0].Role != RoleTinyFallback || got[0].Config.Model != "nvidia/nemotron-3-super-120b-a12b:free" || got[0].Client == nil {
-		t.Fatalf("UnmeteredFallbacks(tiny) = %+v, want only the free tiny fallback", got)
+	var models []string
+	for _, fb := range reg.HelperFallbacks(RoleTiny) {
+		if fb.Client == nil {
+			t.Fatalf("rung %s has no client", fb.Role)
+		}
+		models = append(models, string(fb.Role)+"="+fb.Config.Model)
+	}
+	want := []string{
+		"tinyfallback=nvidia/nemotron-3-super-120b-a12b:free",
+		"tinyfallbackpaid=nvidia/nemotron-3-super-120b-a12b",
+	}
+	if !reflect.DeepEqual(models, want) {
+		t.Fatalf("HelperFallbacks(tiny) = %v, want %v", models, want)
+	}
+	for role, skip := range map[Role]bool{RoleTinyFallback: false, RoleTinyFallbackPaid: false, RoleLightweight: true} {
+		if got := reg.SkipBilledFallback(role); got != skip {
+			t.Errorf("SkipBilledFallback(%s) = %v, want %v", role, got, skip)
+		}
 	}
 
-	// A paid OpenRouter model bills from the account's credits without ever
-	// passing the router, so the wormhole metered set cannot name it.
+	// A paid OpenRouter model in the free slot bills without anyone having
+	// agreed to it there: it is skipped like any billed rung.
 	regPaid := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		TinyModel:         "test/tiny",
 		TinyFallbackModel: "openrouter/nvidia/nemotron-3-super-120b-a12b",
@@ -83,11 +99,11 @@ func TestUnmeteredFallbacksLeavesOutBilledAndDuplicateRungs(t *testing.T) {
 		FallbackModel:     "test/tiny",
 		Providers:         providers,
 	})
-	if got := regPaid.UnmeteredFallbacks(RoleTiny); len(got) != 1 || got[0].Config.Model != "light" {
-		t.Fatalf("UnmeteredFallbacks with a paid OpenRouter rung = %+v, want only test/light", got)
+	if got := regPaid.HelperFallbacks(RoleTiny); len(got) != 1 || got[0].Config.Model != "light" {
+		t.Fatalf("HelperFallbacks with a paid model in the free slot = %+v, want only test/light", got)
 	}
 
-	// Unmetered rungs keep chain order.
+	// Unbilled rungs keep chain order.
 	reg2 := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		TinyModel:         "test/tiny",
 		TinyFallbackModel: "openrouter/free-a:free",
@@ -95,17 +111,38 @@ func TestUnmeteredFallbacksLeavesOutBilledAndDuplicateRungs(t *testing.T) {
 		FallbackModel:     "test/fb",
 		Providers:         providers,
 	})
-	var models []string
-	for _, fb := range reg2.UnmeteredFallbacks(RoleTiny) {
+	models = nil
+	for _, fb := range reg2.HelperFallbacks(RoleTiny) {
 		models = append(models, fb.Config.Model)
 	}
 	if !reflect.DeepEqual(models, []string{"free-a:free", "light", "fb"}) {
-		t.Fatalf("UnmeteredFallbacks order = %v", models)
+		t.Fatalf("HelperFallbacks order = %v", models)
 	}
 
 	var nilReg *Registry
-	if nilReg.UnmeteredFallbacks(RoleTiny) != nil {
-		t.Fatal("nil registry returned fallbacks")
+	if nilReg.HelperFallbacks(RoleTiny) != nil || nilReg.SkipBilledFallback(RoleLightweight) {
+		t.Fatal("nil registry returned fallbacks or skipped a rung")
+	}
+}
+
+func TestTinyFallbackPaidRoleIsOptIn(t *testing.T) {
+	providers := map[string]ProviderResolved{"openrouter": {BaseURL: "https://openrouter.example/api/v1", APIKey: "k"}}
+	unset := NewRegistryWithOptions(slog.Default(), RegistryOptions{Providers: providers})
+	if unset.Client(RoleTinyFallbackPaid) != nil {
+		t.Fatal("tinyfallbackpaid has a client without agents.tinyFallbackPaidModel")
+	}
+	if _, _, ok := unset.ResolveModel("tinyfallbackpaid"); ok {
+		t.Fatal("ResolveModel(tinyfallbackpaid) resolved while unconfigured")
+	}
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		TinyFallbackPaidModel: "openrouter/nvidia/nemotron-3-super-120b-a12b",
+		Providers:             providers,
+	})
+	if id, role, ok := reg.ResolveModel("tinyfallbackpaid"); !ok || role != RoleTinyFallbackPaid || id != "openrouter/nvidia/nemotron-3-super-120b-a12b" {
+		t.Fatalf("ResolveModel(tinyfallbackpaid) = %q %q %v", id, role, ok)
+	}
+	if reg.Client(RoleTinyFallbackPaid) == nil {
+		t.Fatal("configured tinyfallbackpaid has no client")
 	}
 }
 

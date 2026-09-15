@@ -1,7 +1,7 @@
 # Model Role 변경 지도
 
-이 패키지는 제품 임무의 역할(main, tiny, tinyfallback, lightweight, coding,
-fallback, vision)을 실제 provider/model과 LLM client로 해석한다. 호출자는 역할만
+이 패키지는 제품 임무의 역할(main, tiny, tinyfallback, tinyfallbackpaid, lightweight,
+coding, fallback, vision)을 실제 provider/model과 LLM client로 해석한다. 호출자는 역할만
 선택하며, 현재 배치와 fallback·capability·health 정책은 이 패키지가 소유한다.
 임무별 역할 정책의 정본은 `docs/agent-rules/model-roles.md`다.
 
@@ -25,12 +25,15 @@ fallback, vision)을 실제 provider/model과 LLM client로 해석한다. 호출
   오픈라우터에 `{"chat_template_kwargs":{"":false}}` 가 샌다.
 - `RoleTinyFallback`(`agents.tinyFallbackModel`)은 opt-in tiny 전용 1순위
   폴백이다. tiny 체인에만 끼고, thinking 강제 off 는 tiny 와 같다.
-- `Registry.UnmeteredFallbacks`는 역할 클라이언트를 **직접 쥐고** 체인을 걷지
-  않던 호출자(메일 stage-1 추출·결재 비용 추출, 위키 질의 확장)에게 주는 체인이다.
-  종량제 칸(웜홀 `metered` 표시, 그리고 웜홀을 안 거치는 오픈라우터의 `:free` 아닌
-  모델 — `modelcaps.OpenRouterPaid`)은 시도하지 않고 뺀다 — 폴백이 없던 경로에
-  폴백이 생기면서 과금이 시작되면 안 된다(도그마 #7). `buildClient`는 오픈라우터 provider 클라이언트에
-  `llm.WithReasoningParam`을 건다.
+- `RoleTinyFallbackPaid`(`agents.tinyFallbackPaidModel`)은 tiny 체인의 2차 폴백이자
+  **과금이 허용되는 유일한 폴백 칸**이다 — 설정 자체가 운영자의 과금 동의다.
+- 과금 판정은 `Registry.SkipBilledFallback` 한 곳이다: 웜홀 `metered` 표시 또는 웜홀을 안
+  거치는 유료 오픈라우터 모델(`modelcaps.OpenRouterPaid`)이면 건너뛰고, `tinyfallbackpaid` 만
+  예외(도그마 #7). **체인을 걷는 모든 곳이 이걸 묻는다** — 채팅 `walkFallbackChain`·
+  `healthyFallbackExists`, pilot 헬퍼·메일 1단계·위키 확장(`Registry.HelperFallbacks`),
+  dreamer 합성 폴백. `FallbackChain` 을 직접 순회하면서 이 판정을 빼먹으면 조용한 과금이다
+  (pilot 이 그래서 30일간 tiny 2,262건이 metered 모델로 샜다). `buildClient`는 오픈라우터
+  provider 클라이언트에 `llm.WithReasoningParam`을 건다.
 - `health.go`의 `Registry.RecordModelFailure`,
   `Registry.RecordModelSuccess`, `Registry.ModelUnhealthy`가 fallback
   circuit breaker를 소유한다. `Registry.SetEngineDown`·`Registry.EngineDown`은

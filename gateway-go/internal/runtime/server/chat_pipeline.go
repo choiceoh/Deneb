@@ -59,18 +59,19 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 	chatCfg.SubagentDefaultModel = configresolve.SubagentDefaultModel(s.logger)
 	localVllmModel := configresolve.LocalVLLMModel(s.logger)
 	reg := modelrole.NewRegistryWithOptions(s.logger, modelrole.RegistryOptions{
-		MainModel:         chatCfg.DefaultModel,
-		LocalVllmModel:    localVllmModel,
-		Main2Model:        configresolve.Main2Model(s.logger),
-		LightweightModel:  configresolve.LightweightModel(s.logger),
-		TinyModel:         configresolve.TinyModel(s.logger),
-		TinyFallbackModel: configresolve.TinyFallbackModel(s.logger),
-		CodingModel:       configresolve.CodingModel(s.logger),
-		FallbackModel:     configresolve.FallbackModel(s.logger),
-		VisionModel:       configresolve.VisionModel(s.logger),
-		SubmainModel:      configresolve.SubmainModel(s.logger),
-		Providers:         configresolve.ProviderCatalog(s.logger),
-		MeteredModels:     configresolve.MeteredModels(s.logger),
+		MainModel:             chatCfg.DefaultModel,
+		LocalVllmModel:        localVllmModel,
+		Main2Model:            configresolve.Main2Model(s.logger),
+		LightweightModel:      configresolve.LightweightModel(s.logger),
+		TinyModel:             configresolve.TinyModel(s.logger),
+		TinyFallbackModel:     configresolve.TinyFallbackModel(s.logger),
+		TinyFallbackPaidModel: configresolve.TinyFallbackPaidModel(s.logger),
+		CodingModel:           configresolve.CodingModel(s.logger),
+		FallbackModel:         configresolve.FallbackModel(s.logger),
+		VisionModel:           configresolve.VisionModel(s.logger),
+		SubmainModel:          configresolve.SubmainModel(s.logger),
+		Providers:             configresolve.ProviderCatalog(s.logger),
+		MeteredModels:         configresolve.MeteredModels(s.logger),
 	})
 	*regPtr = reg
 	chatCfg.Registry = reg
@@ -514,7 +515,9 @@ func dreamerSynthesisFallbackTargets(reg *modelrole.Registry) []wiki.DreamerLLMT
 	targets := make([]wiki.DreamerLLMTarget, 0, len(chain)-1)
 	for _, role := range chain[1:] {
 		cfg := reg.Config(role)
-		if cfg.Model == "" {
+		// Dogma #7: the dreamer runs on tiny, and tiny's chain reaches
+		// lightweight and fallback, which may bill.
+		if cfg.Model == "" || reg.SkipBilledFallback(role) {
 			continue
 		}
 		key := cfg.ProviderID + "/" + cfg.Model

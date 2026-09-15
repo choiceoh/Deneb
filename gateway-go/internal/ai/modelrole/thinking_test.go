@@ -150,7 +150,7 @@ func TestThinkingOffDirectiveForRoleForcesReasoningParamForTinyRoles(t *testing.
 		t.Fatal("precondition: the per-model policy must leave a reasoning model alone")
 	}
 	var reg *Registry
-	for _, role := range []Role{RoleTiny, RoleTinyFallback} {
+	for _, role := range []Role{RoleTiny, RoleTinyFallback, RoleTinyFallbackPaid} {
 		d := reg.ThinkingOffDirectiveForRole(role, "openrouter", reasoning)
 		if d == nil || !d.DisablesReasoningParam() {
 			t.Fatalf("role %s on openrouter = %+v, want thinking forced off via the reasoning field", role, d)
