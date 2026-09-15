@@ -48,8 +48,8 @@ func TestNewDerivesTokenizeFromAnyEngineURL(t *testing.T) {
 		if c == nil {
 			t.Fatalf("New(%q) = nil, want a client", in)
 		}
-		if !strings.HasSuffix(c.URL(), "/tokenize") || strings.Contains(c.URL(), "/v1/tokenize") {
-			t.Errorf("New(%q).URL() = %q", in, c.URL())
+		if !strings.HasSuffix(c.url, "/tokenize") || strings.Contains(c.url, "/v1/tokenize") {
+			t.Errorf("New(%q) endpoint = %q", in, c.url)
 		}
 	}
 }
@@ -66,7 +66,7 @@ func TestNewRefusesAnythingButAnOwnedHost(t *testing.T) {
 		"http://127.0.0.1:8000/v1#frag",
 	} {
 		if c := New(in); c != nil {
-			t.Errorf("New(%q) = %q, want nil", in, c.URL())
+			t.Errorf("New(%q) = %q, want nil", in, c.url)
 		}
 	}
 }
