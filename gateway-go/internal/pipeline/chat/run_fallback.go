@@ -704,7 +704,8 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 				// model's own profile — the original closure carries the old
 				// kwarg/thresholds, and nil-ing it would pin every fallback
 				// turn non-thinking with no per-step revert.
-				fbDisabled := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: fbProfile.ToggleKwarg}
+				interleaved := t.route.origThinking != nil && t.route.origThinking.Interleaved
+				fbDisabled := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: fbProfile.ToggleKwarg, Interleaved: interleaved}
 				agentCfg.Thinking = fbDisabled
 				agentCfg.ThinkingModulator = effortStepModulator(fbProfile, fbDisabled, t.route.origThinking)
 			} else {
