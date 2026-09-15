@@ -118,6 +118,59 @@ class TransportTest(unittest.TestCase):
         sleep.assert_called_once_with(2)
 
 
+class UpstreamFailureTest(unittest.TestCase):
+    """A free OpenRouter endpoint answered HTTP 200 with an error object and no
+    choices (2026-09-15, "Service temporarily overloaded"). The battery indexed
+    payload["choices"], crashed, and lost every other case's result."""
+
+    def test_error_payload_without_choices_is_transient(self) -> None:
+        body = io.BytesIO(b'{"error":{"message":"Upstream error from Nvidia: Service temporarily overloaded","code":502}}')
+        response = mock.MagicMock()
+        response.__enter__.return_value = body
+        with mock.patch.object(transport.urllib.request, "urlopen", return_value=response):
+            with self.assertRaises(transport.UpstreamErrorPayload) as raised:
+                transport.chat_once("http://local/v1", "", "candidate", "s", "u", 8, 1)
+        self.assertIn("overloaded", str(raised.exception))
+        self.assertIsInstance(raised.exception, OSError)
+
+    def test_failing_twice_is_a_failure_not_an_empty_answer(self) -> None:
+        failure = transport.UpstreamErrorPayload("overloaded")
+        with mock.patch.object(transport, "chat_once", side_effect=[failure, failure]) as chat_once:
+            with mock.patch.object(transport.time, "sleep") as sleep:
+                with contextlib.redirect_stderr(io.StringIO()) as stderr:
+                    content, latency, tokens, rejected = transport.chat_with_retry(
+                        "http://local/v1", "", "candidate", "s", "u", 4, 1
+                    )
+        self.assertIsNone(content, "a dead call must not come back as an empty string")
+        self.assertEqual((tokens, rejected), (0, False))
+        self.assertGreaterEqual(latency, 0)
+        self.assertEqual(chat_once.call_count, 2)
+        sleep.assert_called_once_with(2)
+        self.assertIn("failed twice", stderr.getvalue())
+
+    def test_permanent_error_on_retry_still_stops_the_battery(self) -> None:
+        unauthorized = urllib.error.HTTPError("http://local", 401, "unauthorized", {}, None)
+        with mock.patch.object(transport, "chat_once", side_effect=[TimeoutError("slow"), unauthorized]):
+            with mock.patch.object(transport.time, "sleep"):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(urllib.error.HTTPError):
+                        transport.chat_with_retry("http://local/v1", "", "candidate", "s", "u", 4, 1)
+
+    def test_failed_case_scores_zero_even_where_empty_would_score(self) -> None:
+        # The production triage parser reads anything not starting with NO as YES,
+        # so an empty answer earns points on triage-yes. A failed call must not.
+        triage_yes = next(c for c in battery.TRIAGE_CASES if c["name"] == "triage-yes")
+        self.assertGreater(battery.score_triage(triage_yes, ""), 0.0, "precondition: empty must score on triage-yes")
+
+        dump: list[dict] = []
+        with mock.patch.object(runner, "chat_with_retry", return_value=(None, 7, 0, False)):
+            with contextlib.redirect_stdout(io.StringIO()):
+                result = runner.run_model("http://local/v1", "", "candidate", 1, 1, dump=dump, thinking_off=False)
+        self.assertEqual(result["per_task"]["triage"], 0.0)
+        self.assertEqual(result["total"], 0.0)
+        self.assertTrue(all(row["case"].endswith("(failed)") for row in dump))
+
+
 class MockEndToEndTest(unittest.TestCase):
     def test_when_builtin_mock_battery_still_passes(self) -> None:
         stdout = io.StringIO()

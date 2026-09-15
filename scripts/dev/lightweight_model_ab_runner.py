@@ -61,8 +61,15 @@ def run_model(base_url, api_key, model, rounds, timeout, extra_body=None, dump=N
                     out, ms, otoks, rejected = chat_with_retry(
                         base_url, api_key, model, system, user, max_tokens, timeout, response_format, extra_body
                     )
-                    s = scorer(case, out)
                     label = case["name"]
+                    if out is None:
+                        # The call failed twice (chat_with_retry) — a failure, not an
+                        # empty answer, so no scorer gets to read meaning into it.
+                        s = 0.0
+                        label += "(failed)"
+                        out = "(call failed twice)"
+                    else:
+                        s = scorer(case, out)
                     if rejected:
                         # H3: JSON 모드 거부는 콘텐츠가 좋아도 승격 불가 신호 — 하드캡.
                         s = min(s, JSON_REJECT_CAP)
