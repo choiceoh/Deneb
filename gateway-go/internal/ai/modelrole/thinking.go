@@ -106,9 +106,10 @@ func (r *Registry) ThinkingOffDirectiveFor(providerID, model string) *ThinkingOf
 // latency or output budget on chain-of-thought. RoleTiny is that role — trivial
 // classification/extraction (session titles, stage-1 extractors, the live
 // "생각 중" chip summary): thinking there is pure overhead, and the role runs at
-// high concurrency where the wasted tokens/latency compound.
+// high concurrency where the wasted tokens/latency compound. Its fallbacks do the
+// same work, so they carry the same force.
 func roleForcesThinkingOff(role Role) bool {
-	return role == RoleTiny || role == RoleTinyFallback
+	return role == RoleTiny || role == RoleTinyFallback || role == RoleTinyFallbackPaid
 }
 
 // ThinkingOffDirectiveForRole is the ROLE-aware directive resolver for raw role

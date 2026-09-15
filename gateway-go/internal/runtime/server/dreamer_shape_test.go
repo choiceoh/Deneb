@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
@@ -203,6 +204,31 @@ func TestDreamerSynthesisFallbackTargetsFollowTinyChain(t *testing.T) {
 	}
 	if targets[1].SynthesisMaxTokens != 16384 {
 		t.Fatalf("glm fallback synthesis max = %d, want reasoning headroom", targets[1].SynthesisMaxTokens)
+	}
+}
+
+// The dreamer runs on tiny; tiny's chain reaches lightweight and fallback, and a
+// billed one must not become a synthesis target — the paid tiny rung may.
+func TestDreamerSynthesisFallbackTargetsSkipBilledRungs(t *testing.T) {
+	reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
+		MainModel:             "zai/main-model",
+		TinyModel:             "wormhole/glm-5.3-flash-low",
+		TinyFallbackPaidModel: "openrouter/nvidia/nemotron-3-super-120b-a12b",
+		LightweightModel:      "wormhole/deepseek-v4-flash-api",
+		FallbackModel:         "wormhole/glm-5.3",
+		Providers: map[string]modelrole.ProviderResolved{
+			"wormhole":   {BaseURL: "http://127.0.0.1:1/v1"},
+			"openrouter": {BaseURL: "http://127.0.0.1:2/v1"},
+		},
+		MeteredModels: map[string]bool{"deepseek-v4-flash-api": true},
+	})
+	var labels []string
+	for _, target := range dreamerSynthesisFallbackTargets(reg) {
+		labels = append(labels, target.Label+"="+target.Model)
+	}
+	want := []string{"tinyfallbackpaid=nvidia/nemotron-3-super-120b-a12b", "fallback=glm-5.3"}
+	if strings.Join(labels, ",") != strings.Join(want, ",") {
+		t.Fatalf("dreamer targets = %v, want %v", labels, want)
 	}
 }
 

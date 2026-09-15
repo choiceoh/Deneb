@@ -7,7 +7,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 > 어떤 임무가 어떤 모델 역할을 쓰는지의 **단일 진실원**. 실제 모델 이름은 코드에 하드코딩하지 않는다 — 코드는 **역할만 고르고**, 역할→모델은 `~/.deneb/deneb.json` 의 `agents.*Model` + wormhole 라우터가 결정한다. 새 LLM 호출을 추가하거나 역할을 바꿀 때 아래 "임무→역할 표"에 행을 추가하고 근거를 적는다.
 
-## 역할 9종 + 의도
+## 역할 10종 + 의도
 
 상수: `gateway-go/internal/ai/modelrole/registry.go` (main·main2·submain·coding·lightweight·tiny·fallback·vision). 모델 매핑: `~/.deneb/deneb.json` `agents.*Model`.
 
@@ -34,7 +34,8 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | coding | `RoleCoding` | 코드 수정·구현자 서브에이전트·스킬 패치 |
 | lightweight | `RoleLightweight` | **바운드 요약**·잡일꾼 (로컬 선호, 원칙은 아님 — sidecar-models.md) |
 | tiny | `RoleTiny` | **단순 분류/추출** (가장 작음) |
-| tinyfallback | `RoleTinyFallback` | **opt-in tiny 전용 1순위 폴백** — 체인 tiny→tinyfallback→lightweight→fallback. tiny 모델의 엔진이 죽었을 때 tiny 모양 호출(제목·stage1 추출·알림 판정)을 lightweight(더 크고 때로 과금) 전에 받는다. thinking 강제 off 는 tiny 와 동일. 미설정 시 부재(체인 불변). `agents.tinyFallbackModel` |
+| tinyfallback | `RoleTinyFallback` | **opt-in tiny 전용 1순위 폴백** — 체인 tiny→tinyfallback→tinyfallbackpaid→lightweight→fallback. tiny 모델의 엔진이 죽었을 때 tiny 모양 호출(제목·stage1 추출·알림 판정)을 lightweight(더 크고 때로 과금) 전에 받는다. thinking 강제 off 는 tiny 와 동일. 미설정 시 부재(체인 불변). `agents.tinyFallbackModel` |
+| tinyfallbackpaid | `RoleTinyFallbackPaid` | **opt-in tiny 2차 폴백 — 과금이 허용되는 유일한 폴백 칸.** 무료 tinyfallback 이 한도(429)·과부하로 답을 못 할 때 받는다. 이 키를 설정하는 것이 곧 "이 칸에서만 토큰당 과금해도 된다"는 운영자 동의다(도그마 #7 의 명시 예외, `Registry.SkipBilledFallback`). tiny 볼륨에 맞는 저가 모델만 둔다. thinking 강제 off 는 tiny 와 동일. `agents.tinyFallbackPaidModel` |
 | fallback | `RoleFallback` | 폴백 체인 **최종 안전망**. 종량제(metered) 엔드포인트는 여기에도 두지 않는다 — 도그마 #7 |
 | vision | `RoleVision` | 이미지 턴 (#2510) |
 
@@ -54,7 +55,8 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 > ★ **tinyfallback 후보 선정 (2026-09-15, 운영자 제안 "타이니 폴백을 오픈라우터 빠른 무료모델로")** — 사건 기록이지 현재값이 아니다(현재값은 `model_role.py --all`).
 > 오픈라우터 무료 22종 중 계정 허용 제공자 목록(nvidia·google-ai-studio 등)을 통과하고 JSON 모드를 지원하는 후보를 `lightweight-model-ab.py` 로 채점: **thinking off 조건에서** nemotron-3-super-120b-a12b:free = extract 100·title 90·triage 100(평균 2.5s), gemma-4-26b-a4b-it:free = extract 0(객체를 배열로 감쌈)·triage 35(max_tokens=4 에서 빈 응답 → 프로덕션 파서가 YES 로 읽음). ★함정 두 개가 설계를 바꿨다: ① nemotron 은 `reasoning.enabled=false` 없이 추론을 **본문에 흘린다** → 오픈라우터용 thinking-off 는 템플릿 kwarg 가 아니라 `reasoning` 필드(`modelcaps.SpeaksReasoningParam`, `llm.ThinkingOffFields`) ② Nvidia 무료 엔드포인트는 과부하를 **HTTP 200 + 스트림 내 오류 이벤트**로 알린다(측정 14건 중 8건) → 헬퍼는 토큰 전 5xx 는 같은 모델에 짧게 2회 재시도, 429 는 바로 다음 칸, 결정적 오류와 부분 출력 후 오류는 그대로 표면화(`pipeline/pilot/stream_retry.go`). 무료 한도: 분당 20건, 누적 구매 10크레딧 이상이면 하루 1,000건.
-> 후속(같은 날, 운영자 "그 폴백 써"): tiny 클라이언트를 직접 쥐고 체인을 안 걷던 경로 — 메일 stage-1 추출(사실·액션·거래·스레드 맥락·첨부 게이트·결재 비용)과 위키 질의 확장 — 도 `Registry.UnmeteredFallbacks(RoleTiny)`로 같은 폴백을 쓴다. ★함정 둘: ① 오픈라우터는 사용량을 finish 뒤 마지막 청크에 실어, 그걸 버리던 스트림 변환기 탓에 헬퍼 사용량이 0 토큰으로 찍혔다 ② `ChatRequest.Thinking{disabled}` 만 보내는 호출자는 오픈라우터에서 `reasoning_effort` 로 번역돼 thinking 이 안 꺼졌다 → 클라이언트 옵션 `llm.WithReasoningParam`.
+> 후속(같은 날, 운영자 "그 폴백 써"): tiny 클라이언트를 직접 쥐고 체인을 안 걷던 경로 — 메일 stage-1 추출(사실·액션·거래·스레드 맥락·첨부 게이트·결재 비용)과 위키 질의 확장 — 도 `Registry.HelperFallbacks(RoleTiny)`(당시 이름 UnmeteredFallbacks)로 같은 폴백을 쓴다. ★함정 둘: ① 오픈라우터는 사용량을 finish 뒤 마지막 청크에 실어, 그걸 버리던 스트림 변환기 탓에 헬퍼 사용량이 0 토큰으로 찍혔다 ② `ChatRequest.Thinking{disabled}` 만 보내는 호출자는 오픈라우터에서 `reasoning_effort` 로 번역돼 thinking 이 안 꺼졌다 → 클라이언트 옵션 `llm.WithReasoningParam`.
+> 후속 2(같은 날, 운영자 "무료가 사용량 제한 걸리면 2차 폴백으로 유료 nemotron"): `tinyfallbackpaid` 신설 — nemotron-3-super 유료판(DeepInfra, $0.085/$0.40 per 1M) A/B: extract 97.1·title 85·triage 100·과부하 0 (같은 시각 무료판은 과부하 4회로 triage 50). 월 비용 추정 $0.8~2.3(tiny 14일 평균 하루 22만/1.7만 토큰 전량 기준). ★★발견: pilot 헬퍼는 체인을 **과금 필터 없이** 걸어 **30일간 tiny 호출 2,262건이 metered deepseek-v4-flash-api 로 샜다**(기동 경고는 "체인이 건너뛴다"고 말했지만 채팅 경로만 그랬다). dreamer 합성 폴백도 같은 누수 → 모든 체인 워크를 `SkipBilledFallback` 으로 통일.
 
 ## 역할 선택 헬퍼 (`pipeline/pilot/localai.go`)
 
@@ -76,7 +78,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 일간/모닝레터 합성 | `tools/routine/morning_letter.go` 결정적 수집 → `cronrunner` 1회 무도구 의미 투영 → `morning_card.go` 고정 렌더 | **main** | 사용자가 읽는 프로젝트별 중요도·맥락·후행 제안은 품질 종합이라 main. 모델은 JSON 의미 슬롯만 1턴 채우고 양식·수치·이스케이프는 서버가 소유한다. 모델/채팅 장애 시 동일 수집값의 사실 전용 카드로 fail-open. 수동 요청은 도구의 결정적 `delivery`를 그대로 반환 |
 | 프로젝트 위키 딥리서치 갱신 (6h) | `runtime/wikiwork/wiki_research_task.go` | **main** | 도구무거운 에이전트 턴(내부 소스 재조사→위키 본문 갱신·supersede). boot/heartbeat/goal과 동형의 에이전트 턴이라 main, 헬퍼 요약 콜 아님. wiki-research 프리셋(웹 제외)으로 내부 소스 한정, 로컬 |
 | 메일 리포트 종합 (stage2) | `mailAnalysisModels()` / `mailAnalysisAgentSynthesis()` | **main** for 수동·fallback single completion, **submain** for 자동 agent synthesis when configured | 사용자가 읽는 리포트라 수동 분석과 agent 실패 fallback은 main 품질 하한을 유지한다. 자동 메일 합성은 도구무거운 배경 레인이라 submain 구성 시 heartbeat·phone-event와 같은 자율 lane으로 보내 main latency p95를 보호한다. |
-| 메일 추출 (stage1) · gmail facts/actions/deal | `mailAnalysisModels()`, `platform/mailanalysis/pipeline_extractors.go` | **tiny** | 단순 구조화 JSON 추출. tiny 클라이언트를 직접 쥐므로 체인은 `Registry.UnmeteredFallbacks(RoleTiny)`로 따로 받는다(`mailStageOneFallbacks`) — 모델이 답을 못 했을 때만 다음 칸, 종량제 칸 제외 |
+| 메일 추출 (stage1) · gmail facts/actions/deal | `mailAnalysisModels()`, `platform/mailanalysis/pipeline_extractors.go` | **tiny** | 단순 구조화 JSON 추출. tiny 클라이언트를 직접 쥐므로 체인은 `Registry.HelperFallbacks(RoleTiny)`로 따로 받는다(`mailStageOneFallbacks`) — 모델이 답을 못 했을 때만 다음 칸, 과금 칸은 `tinyfallbackpaid` 만 허용 |
 | 거래 조건 인용 추출 (deal facts 2차 패스) | `platform/mailanalysis/deal_facts.go` | **tiny** | 거래 메일 한정 — 물량·단가·지급조건·하자보수·지체상금을 **원문 인용 필수**로 추출, Go 결정적 게이트(`verifyDealFacts`: 인용⊂원문 + 값 숫자⊂인용)가 미검증 필드 드롭. stage1과 같은 배치·같은 예산, fail-open |
 | 세션 자동 제목 | `chat/session_autotitle.go` | **tiny** | 짧은 명사구 제목 |
 | 워크피드 카드 제목+요약 | `runtime/proactive/workfeed_title_llm.go` | **tiny** | 짧은 제목 + 2줄 카드 요약을 단일 호출로 생성 — 세션 자동제목과 같은 단순 추출이라 tiny. lightweight였을 땐 클라우드 추론모델(deepseek-v4-flash-api)로 폴백 시 thinking-off 미적용→256토큰을 추론이 소진→빈응답→휴리스틱 폴백(라이브 확인: tiny 1.0–1.4초 정상). 휴리스틱(extractCardTitle/Summary)이 여전히 최종 폴백 |
@@ -121,7 +123,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 4. **결정적 포맷·트리아지 → LLM 없음.** 주간보고, 우선순위.
 5. **★ analysis 역할은 2026-07-07 제거됐다.** 내부 요약은 lightweight(로컬), 사용자 품질은 main. 요약류 헬퍼 콜을 클라우드 main에 얹으면 샌다 — "왜 로컬 lightweight로 안 되나"를 답 못 하면 lightweight를 써라. (닥스트링이 `CallLocalLLM`/local을 가리키는데 코드가 `CallRoleLLM(RoleMain)`이면 그건 드리프트 — 원복하라.)
 6. **코드에 모델 이름 하드코딩 금지.** 역할만 고른다. **★ 스크립트·벤치도 마찬가지다** (2026-08-25): `scripts/dev/model_role.py`(`role_model("tiny", fallback)` · CLI `python3 scripts/dev/model_role.py tiny --fallback …`)로 deneb.json 역할을 조회하라. 모델 비교가 목적인 벤치는 `--model`로 이름을 받되 **기본값은 역할 조회**로 둔다. 근거: `recall-health.sh`가 `qwen3.6-35b-a3b`를 이름으로 핀했는데 그 모델이 08-06 죽었고, 웜홀이 조용히 유료 클라우드로 페일오버해 **열흘간 프로덕션과 다른 모델을 측정하며 과금**했다(1,346회). 이름 핀은 죽어도 실패하지 않는다 — 다른 데로 간다.
-7. **★ 유료(종량제) 엔드포인트를 폴백 사슬 안에 두지 마라.** 웜홀 엔트리의 `metered: true`가 종량제 선언이고, 비종량 엔트리의 사슬이 종량 엔트리에 닿으면 **배포가 막힌다**(`scripts/audit/model_route_topology.py`의 `ROUTE_FALLBACK_METERED`, deploy.sh 게이트) + 웜홀 기동/핫리로드 시 경고(`validateConfig`). 사슬이 끊긴 경우(`ROUTE_FALLBACK_UNKNOWN`)·순환(`ROUTE_FALLBACK_CYCLE`)도 같은 게이트가 잡는다. 구독 정액(z.ai·kimi)은 종량이 아니므로 폴백 대상으로 정당하다.
+7. **★ 유료(종량제) 엔드포인트를 폴백 사슬 안에 두지 마라.** (유일한 예외: `tinyfallbackpaid` — 운영자가 그 칸에 과금을 명시 동의한 역할. 게이트웨이의 모든 체인 워크 — 채팅·pilot 헬퍼·메일 1단계·위키 확장·dreamer — 는 `Registry.SkipBilledFallback` 한 곳에서 판정하고, 과금 판정은 웜홀 `metered` 표시 + 웜홀을 안 거치는 유료 오픈라우터 모델(`modelcaps.OpenRouterPaid`)이다.) 웜홀 엔트리의 `metered: true`가 종량제 선언이고, 비종량 엔트리의 사슬이 종량 엔트리에 닿으면 **배포가 막힌다**(`scripts/audit/model_route_topology.py`의 `ROUTE_FALLBACK_METERED`, deploy.sh 게이트) + 웜홀 기동/핫리로드 시 경고(`validateConfig`). 사슬이 끊긴 경우(`ROUTE_FALLBACK_UNKNOWN`)·순환(`ROUTE_FALLBACK_CYCLE`)도 같은 게이트가 잡는다. 구독 정액(z.ai·kimi)은 종량이 아니므로 폴백 대상으로 정당하다.
 8. **★ 도구 무거운 역할(main/fallback)에 새 모델을 배선하기 전, 후보의 도구호출 역량을 측정하라.** 챗 `main`은 ~50개 내장 도구(스키마 `tool_schemas.json`)를 쓰고 도구호출이 에이전트의 성패를 가른다 — `/v1/models` 200·속도만으로는 빈 `tool_calls`(서빙설정 미스로 도구가 안 나오는 인프라 오진단의 단골)나 프롬프트 인젝션 취약을 못 잡는다. SparkFleet의 `run_tool_eval`(tool-eval-bench 래퍼)로 그 엔드포인트를 벤치해 **멀티스텝 체인·에러복구·Category K(안전·프롬프트 인젝션)** 점수를 확인하고 배선한다(결과 회독: `tool_eval_history`). 이건 코드 게이트가 아니라 **운영자 승격 절차**다 — 게이트웨이는 모델을 소비만 하고, 검증은 플릿 매니저(sparkfleet)에서 한다.
 9. **★ 텍스트 역할(lightweight/tiny) 교체 후보는 `scripts/dev/lightweight-model-ab.py`로 실부하 A/B 후 승격하라.** 공개 벤치(특히 에이전트 벤치)는 이 역할의 실제 임무 — 한국어 압축 요약(프로덕션 4-섹션 스켈레톤)·JSON 추출·짧은 제목·바운드 판정(한 단어 + goal judge JSON 계약)·알림 트리아지(YES/NO) — 를 측정하지 않는다. 이 스크립트가 그 5종을 결정적 채점(사실 보존 체크리스트·JSON 파싱·형식 규칙 + 레이턴시/장황함)으로 비교한다: wormhole에 두 모델을 서빙해 두고 `python3 scripts/dev/lightweight-model-ab.py --model-a <현역> --model-b <후보>` → **교체하려는 역할의 서브버딕트**(`AB_VERDICT_TINY`=extract·title·triage / `AB_VERDICT_LIGHTWEIGHT`=compaction·verdict) 우세 + 레이턴시/토큰 비열화 확인 후 deneb.json 역할 매핑 교체. `json_mode=rejected`(JSON 모드 400 거부)가 뜬 후보는 총점과 무관하게 승격 불가 — 프로덕션 gmail stage1은 formatless 폴백이 없다. (에이전트 튜닝 모델의 전형적 실패 모드 — 요약에 계획 서두, 코드펜스 JSON, 판정에 사족 — 을 채점이 감지함은 `--mock` 셀프테스트로 고정.)
 

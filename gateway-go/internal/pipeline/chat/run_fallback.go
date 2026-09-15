@@ -60,14 +60,15 @@ const maxCompactionRetries = 2
 // closed. The initial-model skip only happens when this holds — when every
 // candidate is unhealthy, trying the requested model is still the best move.
 //
-// A metered candidate does not count: walkFallbackChain never arrives at one
-// (dogma #7), so counting it would skip the requested model for a chain that
-// then has nothing to run — a turn failed without anything having been tried.
+// A billed candidate does not count: walkFallbackChain never arrives at one
+// (dogma #7, Registry.SkipBilledFallback), so counting it would skip the
+// requested model for a chain that then has nothing to run — a turn failed
+// without anything having been tried.
 func healthyFallbackExists(reg *modelrole.Registry, role modelrole.Role, failedModel string) bool {
 	chain := reg.FallbackChain(role)
 	for i := 1; i < len(chain); i++ {
 		cfg := reg.Config(chain[i])
-		if cfg.Model == "" || cfg.Model == failedModel || reg.IsMetered(cfg.Model) {
+		if cfg.Model == "" || cfg.Model == failedModel || reg.SkipBilledFallback(chain[i]) {
 			continue
 		}
 		if !reg.ModelUnhealthy(cfg.Model) {
@@ -657,7 +658,7 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 		// (cmd/wormhole/validate.go) and pointing a role straight at the serving
 		// engine moves the failover decision here, where that rule had no
 		// counterpart. A local outage that silently bills is the 2026-08 leak.
-		if t.deps.registry.IsMetered(fbCfg.Model) {
+		if t.deps.registry.SkipBilledFallback(fbRole) {
 			t.logger.Warn("skipping metered fallback candidate",
 				"failedRole", string(failedRole), "skippedRole", string(fbRole), "model", fbCfg.Model)
 			continue

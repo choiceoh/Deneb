@@ -43,7 +43,7 @@ func TestTierRoles_FallbackChains(t *testing.T) {
 		role Role
 		want []Role
 	}{
-		{RoleTiny, []Role{RoleTiny, RoleTinyFallback, RoleLightweight, RoleFallback}},
+		{RoleTiny, []Role{RoleTiny, RoleTinyFallback, RoleTinyFallbackPaid, RoleLightweight, RoleFallback}},
 	}
 	for _, c := range cases {
 		got := reg.FallbackChain(c.role)

@@ -206,21 +206,16 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 		ExtraBody: pilotExtraBody(shapedExtra(providerID, model)),
 	}
 
-	// Candidates: the role's own model, then its fallback chain (registry-aware).
+	// Candidates: the role's own model, then its helper fallbacks — the chain
+	// without rungs that bill unless configured to (Registry.HelperFallbacks).
+	// Walking the raw chain put 2,262 tiny calls in 30 days on a metered model.
 	type candidate struct {
 		client            *llm.Client
 		model, providerID string
 	}
 	candidates := []candidate{{client: client, model: model, providerID: providerID}}
-	if pkgRegistry != nil {
-		for _, fbRole := range pkgRegistry.FallbackChain(role)[1:] {
-			fbClient := pkgRegistry.Client(fbRole)
-			if fbClient == nil {
-				continue
-			}
-			fbCfg := pkgRegistry.Config(fbRole)
-			candidates = append(candidates, candidate{client: fbClient, model: fbCfg.Model, providerID: fbCfg.ProviderID})
-		}
+	for _, fb := range pkgRegistry.HelperFallbacks(role) {
+		candidates = append(candidates, candidate{client: fb.Client, model: fb.Config.Model, providerID: fb.Config.ProviderID})
 	}
 
 	var lastErr error

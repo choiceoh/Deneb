@@ -161,11 +161,11 @@ func (s *Server) initWikiSubsystem(chatCfg *chat.HandlerConfig, reg *modelrole.R
 		if directive := reg.ThinkingOffDirectiveFor(tinyCfg.ProviderID, tinyCfg.Model); directive != nil {
 			extraBody = llm.ThinkingOffFields(directive.TemplateKwarg(), directive.DisablesReasoningParam())
 		}
-		// The tiny role's unmetered chain after it, each shaped for its own
+		// The tiny role's helper chain after it, each shaped for its own
 		// provider: with the tiny model's engine down, expansion moves on to tiny's
-		// fallback instead of returning nothing.
+		// fallbacks instead of returning nothing.
 		var fallbacks []wikiExpanderTarget
-		for _, fb := range reg.UnmeteredFallbacks(modelrole.RoleTiny) {
+		for _, fb := range reg.HelperFallbacks(modelrole.RoleTiny) {
 			var fbExtra map[string]any
 			if d := reg.ThinkingOffDirectiveForRole(modelrole.RoleTiny, fb.Config.ProviderID, fb.Config.Model); d != nil {
 				fbExtra = llm.ThinkingOffFields(d.TemplateKwarg(), d.DisablesReasoningParam())

@@ -514,17 +514,17 @@ func (s *Server) mailAnalysisModels() (stage2 *llm.Client, stage2Model string, s
 		s.modelRegistry.Model(modelrole.RoleTiny)
 }
 
-// mailStageOneFallbacks is the tiny role's unmetered fallback chain in the form
+// mailStageOneFallbacks is the tiny role's helper fallback chain in the form
 // stage-1 extraction takes. Stage 1 runs on RoleTiny (mailAnalysisModels) and
 // holds that client directly, so it never walked tiny's chain: with the tiny
-// model's engine down, every extraction failed. Metered rungs stay out —
-// extraction never had a fallback, and gaining one must not start a bill.
+// model's engine down, every extraction failed. Billed rungs stay out except
+// tiny's paid fallback, which a deployment configures precisely to pay for.
 func (s *Server) mailStageOneFallbacks() []mailanalysis.LocalTarget {
 	if s.modelRegistry == nil {
 		return nil
 	}
 	var out []mailanalysis.LocalTarget
-	for _, fb := range s.modelRegistry.UnmeteredFallbacks(modelrole.RoleTiny) {
+	for _, fb := range s.modelRegistry.HelperFallbacks(modelrole.RoleTiny) {
 		out = append(out, mailanalysis.LocalTarget{Client: fb.Client, Model: fb.Config.Model, Provider: fb.Config.ProviderID})
 	}
 	return out

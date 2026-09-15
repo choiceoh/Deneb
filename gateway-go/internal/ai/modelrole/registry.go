@@ -71,6 +71,15 @@ const (
 	// Absent unless agents.tinyFallbackModel is configured; when absent, the tiny
 	// chain is unchanged.
 	RoleTinyFallback Role = "tinyfallback"
+	// RoleTinyFallbackPaid is the tiny chain's second fallback, and the one rung
+	// of any chain allowed to bill per token. A free tinyfallback runs out — a
+	// rate limit, or an upstream too overloaded to answer — and tiny's volume
+	// then used to land on lightweight or fallback, which bill without anyone
+	// having chosen that (2026-09: 2,262 tiny calls in 30 days on a metered
+	// model). Configuring agents.tinyFallbackPaidModel is that choice, made once
+	// for a model priced for tiny's volume; every other billed rung stays
+	// skipped (SkipBilledFallback). Thinking is forced off as for tiny.
+	RoleTinyFallbackPaid Role = "tinyfallbackpaid"
 )
 
 // ModelConfig holds the provider and endpoint settings for a single model role.
@@ -153,6 +162,10 @@ type RegistryOptions struct {
 	// Empty → the role is absent and tiny's chain goes straight to lightweight.
 	// Format: "provider/model".
 	TinyFallbackModel string
+	// TinyFallbackPaidModel sets RoleTinyFallbackPaid, tried after
+	// tinyfallback. Setting it is consent to pay per token on that rung only.
+	// Empty → the role is absent. Format: "provider/model".
+	TinyFallbackPaidModel string
 	// Providers is the deneb.json provider catalog (providerID → resolved
 	// endpoint/credentials). A role whose provider is present here resolves
 	// from the catalog; otherwise it falls back to the built-in switch.
@@ -340,6 +353,9 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	if opts.TinyFallbackModel != "" {
 		models[RoleTinyFallback] = resolveModelConfig(opts.TinyFallbackModel, opts.Providers)
 	}
+	if opts.TinyFallbackPaidModel != "" {
+		models[RoleTinyFallbackPaid] = resolveModelConfig(opts.TinyFallbackPaidModel, opts.Providers)
+	}
 
 	// Auto-discover the actual model name the local vLLM is serving and
 	// substitute it in when config drifts. reconcileVllmModel is a no-op for
@@ -365,6 +381,9 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	}
 	if _, ok := models[RoleTinyFallback]; ok {
 		reconcileRoles = append(reconcileRoles, RoleTinyFallback)
+	}
+	if _, ok := models[RoleTinyFallbackPaid]; ok {
+		reconcileRoles = append(reconcileRoles, RoleTinyFallbackPaid)
 	}
 	for _, role := range reconcileRoles {
 		cfg := models[role]
@@ -400,7 +419,7 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	// at resolve time, not on the first outage — the 2026-08 leak ran twelve
 	// days because nothing named the arrangement out loud.
 	for _, role := range []Role{RoleFallback, RoleMain2, RoleLightweight, RoleTiny} {
-		if cfg, ok := models[role]; ok && r.IsMetered(cfg.Model) {
+		if cfg, ok := models[role]; ok && r.billsPerToken(cfg) {
 			logger.Warn("role points at a metered model; fallback chains will skip it and may end without a candidate",
 				"role", string(role), "model", cfg.Model)
 		}
@@ -418,6 +437,7 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 		"submain", logModelAlias(models[RoleSubmain]),
 		"tiny", logModelAlias(models[RoleTiny]),
 		"tinyfallback", logModelAlias(models[RoleTinyFallback]),
+		"tinyfallbackpaid", logModelAlias(models[RoleTinyFallbackPaid]),
 		"lightweight", logModelAlias(models[RoleLightweight]),
 		"coding", logModelAlias(models[RoleCoding]),
 		"fallback", logModelAlias(models[RoleFallback]),
@@ -607,7 +627,7 @@ func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Ro
 	case RoleMain, RoleTiny, RoleLightweight, RoleFallback:
 		role = Role(modelOrRole)
 		return r.FullModelID(role), role, true
-	case RoleCoding, RoleMain2, RoleVision, RoleSubmain, RoleTinyFallback:
+	case RoleCoding, RoleMain2, RoleVision, RoleSubmain, RoleTinyFallback, RoleTinyFallbackPaid:
 		// Opt-in roles resolve only when configured; otherwise the literal
 		// string falls through as a raw model name.
 		role = Role(modelOrRole)
@@ -627,7 +647,7 @@ func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Ro
 // Main2 and submain scan last so a model shared with a legacy role (e.g. glm
 // serving coding, main2, and submain at once) keeps mapping to the role it
 // mapped to before rather than being remapped to a newer role.
-var roleMatchOrder = []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleFallback, RoleVision, RoleMain2, RoleSubmain, RoleTinyFallback}
+var roleMatchOrder = []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleFallback, RoleVision, RoleMain2, RoleSubmain, RoleTinyFallback, RoleTinyFallbackPaid}
 
 // RoleForModel returns the role that matches the given model ID, provider
 // qualified ("google/gemini-3.1-pro") or bare ("gemini-3.1-pro"). Returns
@@ -681,9 +701,11 @@ func (r *Registry) FallbackChain(role Role) []Role {
 		// quality ladder as main.
 		return []Role{RoleMain2, RoleMain, RoleCoding, RoleLightweight, RoleFallback}
 	case RoleTiny:
-		// Tiny's own fallback first (when configured) — see RoleTinyFallback.
-		// Unconfigured roles are skipped by the walk (nil client).
-		return []Role{RoleTiny, RoleTinyFallback, RoleLightweight, RoleFallback}
+		// Tiny's own fallbacks first (when configured): the free one, then the one
+		// allowed to bill — see RoleTinyFallback, RoleTinyFallbackPaid. Unconfigured
+		// roles are skipped by the walk (nil client); billed rungs other than
+		// the paid one are skipped too (SkipBilledFallback).
+		return []Role{RoleTiny, RoleTinyFallback, RoleTinyFallbackPaid, RoleLightweight, RoleFallback}
 	case RoleLightweight:
 		return []Role{RoleLightweight, RoleFallback}
 	case RoleCoding:
@@ -735,16 +757,32 @@ type FallbackTarget struct {
 	Client *llm.Client
 }
 
-// UnmeteredFallbacks lists role's fallback chain after the role itself: every
-// configured rung that has a client, a model different from the role's own, and
-// does not bill per token — neither marked metered in the wormhole config nor a
-// paid OpenRouter model, which is called directly and never passes the router.
+// billsPerToken reports whether cfg's model charges per token: marked metered in
+// the wormhole config, or a paid OpenRouter model — called directly, so the
+// router's metered flag never sees it.
+func (r *Registry) billsPerToken(cfg ModelConfig) bool {
+	return r.IsMetered(cfg.Model) || modelcaps.OpenRouterPaid(cfg.ProviderID, cfg.Model)
+}
+
+// SkipBilledFallback reports whether a fallback walk must pass over fbRole
+// because its model bills per token and nobody agreed to pay for it there
+// (dogma #7). RoleTinyFallbackPaid is never skipped for billing — configuring it
+// is that agreement. Every walk over a chain asks this, so the rule has one home.
+func (r *Registry) SkipBilledFallback(fbRole Role) bool {
+	if r == nil || fbRole == RoleTinyFallbackPaid {
+		return false
+	}
+	return r.billsPerToken(r.Config(fbRole))
+}
+
+// HelperFallbacks lists role's fallback chain after the role itself, in order:
+// every configured rung that has a client, a model different from the role's
+// own and from the rungs before it, and that SkipBilledFallback lets through.
 //
-// It is for callers that hold a role's client directly and never had a
-// fallback — mail stage-1 extraction, wiki query expansion. Giving them the
-// chain must not introduce a bill where there was none (dogma #7), so billed
-// rungs are left out rather than tried.
-func (r *Registry) UnmeteredFallbacks(role Role) []FallbackTarget {
+// It is the chain for one-shot helper calls — the pilot role helpers, mail
+// stage-1 extraction, wiki query expansion — none of which may start a bill a
+// deployment did not choose.
+func (r *Registry) HelperFallbacks(role Role) []FallbackTarget {
 	if r == nil {
 		return nil
 	}
@@ -753,7 +791,7 @@ func (r *Registry) UnmeteredFallbacks(role Role) []FallbackTarget {
 	var out []FallbackTarget
 	for _, fbRole := range r.FallbackChain(role)[1:] {
 		cfg := r.Config(fbRole)
-		if cfg.Model == "" || seen[cfg.Model] || r.IsMetered(cfg.Model) || modelcaps.OpenRouterPaid(cfg.ProviderID, cfg.Model) {
+		if cfg.Model == "" || seen[cfg.Model] || r.SkipBilledFallback(fbRole) {
 			continue
 		}
 		client := r.Client(fbRole)

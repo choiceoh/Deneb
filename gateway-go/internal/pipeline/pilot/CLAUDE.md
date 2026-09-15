@@ -20,7 +20,10 @@ role; provider selection and health fallback remain centralized here.
 - Pilot may depend on AI provider/model-role packages, never on runtime server,
   chat handler, or domain consumers.
 - Callers select a role, not a concrete model. Registry resolution and fallback
-  order are the single source of truth.
+  order are the single source of truth. Candidates after the role's own model come
+  from `Registry.HelperFallbacks` — never walk `FallbackChain` directly here: that
+  skips the billing rule (`SkipBilledFallback`), and it did — 2,262 tiny calls in
+  30 days landed on a metered model before the fix.
 - Extra request bodies merge without discarding earlier keys. Stream errors are
   returned even when partial text exists; cancellation remains attributable to
   the caller context.
