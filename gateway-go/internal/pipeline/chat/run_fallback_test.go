@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -781,5 +782,118 @@ func TestEmptyFinalResultRanToolsTracksRoundCount(t *testing.T) {
 	}
 	if emptyFinalResultRanTools(nil) {
 		t.Error("nil result must not claim tool activity")
+	}
+}
+
+// TestWalkFallbackChain_FallbackDisabledThinkingKeepsInterleavedEcho guards the
+// same prompt-prefix contract as #5091 on the effort-routed fallback path: when
+// the main model fails and the chain tries a dual-mode fallback, disabled
+// thinking must still carry the session's interleaved echo so prior reasoning
+// rides on reasoning_content.
+func TestWalkFallbackChain_FallbackDisabledThinkingKeepsInterleavedEcho(t *testing.T) {
+	t.Setenv("DENEB_ADAPTIVE_EFFORT", "1")
+
+	routingOn := true
+	toggleKwarg := "thinking"
+	var (
+		mu            sync.Mutex
+		requestBodies []string
+		requestModels []string
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read body: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if len(body) == 0 || !strings.Contains(r.URL.Path, "chat/completions") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var req struct {
+			Model string `json:"model"`
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			t.Errorf("decode request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		requestBodies = append(requestBodies, string(body))
+		requestModels = append(requestModels, req.Model)
+		mu.Unlock()
+
+		if req.Model == "m-main" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"main hard fail"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, sseResponse("fallback ok", "end_turn"))
+	}))
+	defer server.Close()
+
+	reg := modelrole.NewRegistryWithOptions(discardLogger(), modelrole.RegistryOptions{
+		MainModel:        "test/m-main",
+		LightweightModel: "test/m-fb",
+		FallbackModel:    "test/m-fb",
+		Providers: map[string]modelrole.ProviderResolved{
+			"test": {
+				BaseURL: server.URL,
+				APIKey:  "k",
+				Routing: &modelrole.RoutingOverride{
+					Enabled:     &routingOn,
+					ToggleKwarg: &toggleKwarg,
+				},
+			},
+		},
+	})
+
+	history := []llm.Message{
+		llm.NewTextMessage("user", "first"),
+		llm.NewBlockMessage("assistant", []llm.ContentBlock{
+			{Type: "thinking", Thinking: "prior reasoning"},
+			{Type: "text", Text: "answer"},
+		}),
+		llm.NewTextMessage("user", "second"),
+	}
+	cfg := agent.AgentConfig{
+		Model:     "m-main",
+		MaxTurns:  2,
+		Timeout:   5 * time.Second,
+		MaxTokens: 8192,
+		Thinking:  &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 4096, Interleaved: true},
+	}
+	route, decision := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, history, enabledProfile(), nil)
+	if route == nil {
+		t.Fatalf("simple message must route (decision=%q)", decision)
+	}
+
+	result, actualModel, fellBack, err := runAgentWithFallback(
+		context.Background(), cfg, history, llm.NewClient(server.URL, "k"),
+		runDeps{registry: reg}, "test", modelrole.RoleMain, route,
+		agent.StreamHooks{}, discardLogger(), agentlog.NewRunLogger(nil, "s", "r"),
+	)
+	if err != nil {
+		t.Fatalf("err = %v, want fallback success", err)
+	}
+	if result == nil || result.Text != "fallback ok" {
+		t.Fatalf("result = %+v, want fallback ok", result)
+	}
+	if actualModel != "m-fb" || !fellBack {
+		t.Fatalf("actualModel=%q fellBack=%v, want m-fb true", actualModel, fellBack)
+	}
+
+	mu.Lock()
+	bodies, models := append([]string(nil), requestBodies...), append([]string(nil), requestModels...)
+	mu.Unlock()
+	if len(models) < 2 || models[len(models)-1] != "m-fb" {
+		t.Fatalf("models called = %v, want main then fallback", models)
+	}
+	fallbackBody := bodies[len(bodies)-1]
+	if !strings.Contains(fallbackBody, `"reasoning_content":"prior reasoning"`) {
+		t.Fatalf("fallback request dropped prior reasoning echo; body=%s", fallbackBody)
 	}
 }
