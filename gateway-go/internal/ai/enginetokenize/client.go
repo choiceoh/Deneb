@@ -137,14 +137,6 @@ func (c *Client) Count(ctx context.Context, text string) (Result, bool) {
 	return Result{Count: out.Count, MaxModelLen: out.MaxModelLen, Normalized: out.Normalized != ""}, true
 }
 
-// URL is the resolved endpoint, for logs. Empty for a nil client.
-func (c *Client) URL() string {
-	if c == nil {
-		return ""
-	}
-	return c.url
-}
-
 // Counter is a non-blocking exact-token oracle: a lookup answers from cache or
 // says it does not know and fills in the background.
 //
