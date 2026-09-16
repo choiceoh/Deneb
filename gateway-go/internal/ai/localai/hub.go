@@ -330,6 +330,9 @@ func (h *Hub) CallLocalLLMDetailed(ctx context.Context, system, userMessage stri
 	chain := h.registry.FallbackChain(modelrole.RoleLightweight)
 	var deferredReasoning []modelrole.Role
 	for _, role := range chain[1:] {
+		if h.registry.SkipBilledFallback(role) {
+			continue
+		}
 		if h.registry.RoleIsReasoning(role) {
 			deferredReasoning = append(deferredReasoning, role)
 			continue
@@ -339,6 +342,9 @@ func (h *Hub) CallLocalLLMDetailed(ctx context.Context, system, userMessage stri
 		}
 	}
 	for _, role := range deferredReasoning {
+		if h.registry.SkipBilledFallback(role) {
+			continue
+		}
 		if resp, ok := h.callFallbackRole(ctx, role, system, userMessage, maxTokens, extraBody...); ok {
 			return resp, nil
 		}

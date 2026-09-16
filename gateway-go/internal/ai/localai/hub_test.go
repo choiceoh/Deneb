@@ -4,14 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 )
 
 func TestResponseCachePutGetRoundTrip(t *testing.T) {
@@ -442,4 +446,128 @@ func TestMergeRequestBodyOpenRouterUsesReasoningField(t *testing.T) {
 	if merged["temperature"] != 0 {
 		t.Fatalf("caller extras dropped: %v", merged)
 	}
+}
+
+func TestCallLocalLLMDetailed_SkipsMeteredFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		fallbackModel  string
+		metered        map[string]bool
+		wantText       string
+		wantErr        bool
+		forbidFallback bool
+	}{
+		{
+			name:           "billed fallback never asked",
+			fallbackModel:  "test/fallback-billed",
+			metered:        map[string]bool{"fallback-billed": true},
+			wantErr:        true,
+			forbidFallback: true,
+		},
+		{
+			name:          "unbilled fallback answers",
+			fallbackModel: "test/fallback-free",
+			wantText:      "free ok",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mu sync.Mutex
+			var models []string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet && r.URL.Path == "/models" {
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(`{"data":[]}`))
+					return
+				}
+				if r.Method != http.MethodPost {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Errorf("read body: %v", err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				var req struct {
+					Model string `json:"model"`
+				}
+				if err := json.Unmarshal(body, &req); err != nil {
+					t.Errorf("decode request: %v", err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				mu.Lock()
+				models = append(models, req.Model)
+				mu.Unlock()
+				switch req.Model {
+				case "light":
+					w.WriteHeader(http.StatusInternalServerError)
+					_, _ = w.Write([]byte(`{"error":{"message":"engine down"}}`))
+				case "fallback-billed":
+					if tc.forbidFallback {
+						t.Error("metered fallback must not be called")
+					}
+					w.WriteHeader(http.StatusOK)
+				case "fallback-free":
+					w.Header().Set("Content-Type", "text/event-stream")
+					w.WriteHeader(http.StatusOK)
+					fmt.Fprint(w, hubTestSSE(tc.wantText))
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			t.Cleanup(server.Close)
+
+			reg := modelrole.NewRegistryWithOptions(slog.New(slog.NewTextHandler(io.Discard, nil)), modelrole.RegistryOptions{
+				LightweightModel: "test/light",
+				FallbackModel:    tc.fallbackModel,
+				MeteredModels:    tc.metered,
+				Providers: map[string]modelrole.ProviderResolved{
+					"test": {BaseURL: server.URL, APIKey: "k"},
+				},
+			})
+			primary := llm.NewClient(server.URL, "k", llm.WithRetry(0, 0, 0))
+			h := newDispatchTestHub(t, Config{MaxQueueDepth: 10, TokenBudget: 100_000}, primary)
+			h.registry = reg
+			h.model = "light"
+			h.providerID = "test"
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			resp, err := h.CallLocalLLMDetailed(ctx, "sys", "user", 32)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("want error when primary fails and only fallback is billed")
+				}
+				if containsModel(models, "fallback-billed") {
+					t.Fatalf("models called = %v, billed fallback must be skipped", models)
+				}
+				return
+			}
+			if err != nil || resp.Text != tc.wantText || resp.Model != "fallback-free" {
+				t.Fatalf("CallLocalLLMDetailed = %+v/%v, want free fallback success", resp, err)
+			}
+			if !containsModel(models, "light") || !containsModel(models, "fallback-free") {
+				t.Fatalf("models called = %v, want light then fallback-free", models)
+			}
+		})
+	}
+}
+
+func hubTestSSE(text string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "data: {\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"%s\"}}]}\n\n", text)
+	fmt.Fprint(&b, "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+	b.WriteString("data: [DONE]\n\n")
+	return b.String()
+}
+
+func containsModel(models []string, want string) bool {
+	for _, m := range models {
+		if m == want {
+			return true
+		}
+	}
+	return false
 }
