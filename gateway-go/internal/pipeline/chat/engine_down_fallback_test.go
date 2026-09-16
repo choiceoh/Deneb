@@ -399,5 +399,4 @@ func TestRunAgentWithFallbackDetailed_EngineDownReportsItsReason(t *testing.T) {
 	if reason != FallbackReasonEngineDown {
 		t.Fatalf("reason = %q, want %q", reason, FallbackReasonEngineDown)
 	}
-
 }

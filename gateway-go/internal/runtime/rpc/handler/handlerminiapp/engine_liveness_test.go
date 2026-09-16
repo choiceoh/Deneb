@@ -69,9 +69,11 @@ func TestEngineStatusCarriesLivenessAndDowntimeDays(t *testing.T) {
 	ledger.Record(enginelive.Transition{Endpoint: testEndpoint, AtMs: at(time.Date(2026, 9, 16, 21, 0, 0, 0, loc)), Down: true, Reason: "health 503 draining"})
 
 	live := &fakeLiveness{
-		state: enginelive.EngineState{Endpoint: testEndpoint, Down: true, Probed: true,
+		state: enginelive.EngineState{
+			Endpoint: testEndpoint, Down: true, Probed: true,
 			DownSince: time.Date(2026, 9, 16, 21, 0, 0, 0, loc), Reason: "health 503 draining",
-			Models: []string{"glm-5.3-flash", "glm-5.3-flash-low"}},
+			Models: []string{"glm-5.3-flash", "glm-5.3-flash-low"},
+		},
 		ledger:  ledger,
 		tracked: at(time.Date(2026, 9, 13, 0, 0, 0, 0, loc)),
 	}
@@ -172,8 +174,10 @@ func TestEngineStatusReadsTodayFromTheDayMeterAndFlagsUnknownEntries(t *testing.
 	defer router.Close()
 
 	out := engineResult(clientauth.WithContext(context.Background(), sampleIdentity()), t, EngineDeps{
-		Endpoints:     func() []string { return []string{testEndpoint} },
-		RouterMeter:   func() (string, string, map[string]bool) { return router.URL, "", map[string]bool{"glm-5.3-flash": true} },
+		Endpoints: func() []string { return []string{testEndpoint} },
+		RouterMeter: func() (string, string, map[string]bool) {
+			return router.URL, "", map[string]bool{"glm-5.3-flash": true}
+		},
 		RouterEntries: func() map[string]bool { return map[string]bool{"glm-5.3-flash": true, "glm-5.3": true} },
 		RouterShare:   func() *routershare.Store { return share },
 		Now:           func() time.Time { return now },
@@ -235,8 +239,10 @@ func TestEngineGlanceNeedsNoNetwork(t *testing.T) {
 	ledger := enginelive.NewLedger("")
 	ledger.Record(enginelive.Transition{Endpoint: testEndpoint, AtMs: time.Date(2026, 9, 16, 10, 0, 0, 0, loc).UnixMilli(), Down: true, Reason: "connection refused"})
 	ledger.Record(enginelive.Transition{Endpoint: testEndpoint, AtMs: time.Date(2026, 9, 16, 10, 30, 0, 0, loc).UnixMilli(), Down: false})
-	live := &fakeLiveness{state: enginelive.EngineState{Endpoint: testEndpoint, Probed: true,
-		UpSince: time.Date(2026, 9, 16, 10, 30, 0, 0, loc)}, ledger: ledger, tracked: 1}
+	live := &fakeLiveness{state: enginelive.EngineState{
+		Endpoint: testEndpoint, Probed: true,
+		UpSince: time.Date(2026, 9, 16, 10, 30, 0, 0, loc),
+	}, ledger: ledger, tracked: 1}
 	share := routershare.NewStore("")
 	share.Observe(now.Add(-2*time.Hour), observe.RouterUsage{Window: "2026-09", Models: []observe.RouterModelUsage{{Model: "glm-5.3-flash", Requests: 1}, {Model: "k3", Requests: 1}}})
 	share.Observe(now.Add(-time.Hour), observe.RouterUsage{Window: "2026-09", Models: []observe.RouterModelUsage{{Model: "glm-5.3-flash", Requests: 8}, {Model: "k3", Requests: 3}}})
