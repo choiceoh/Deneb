@@ -131,6 +131,7 @@ var requiredMethods = []string{
 	"miniapp.models.list",
 	"miniapp.models.set",
 	"miniapp.engine.status",
+	"miniapp.engine.glance",
 	"miniapp.usage.stats",
 	"miniapp.files.list",
 	"miniapp.files.search",

@@ -19,7 +19,15 @@ for operator diagnostics. Leaf relative to RPC handlers.
   the serving engine's own latency/token/occupancy series. Cumulative series may
   be differenced; the occupancy gauges must not be (a peak is watched for, not
   subtracted). A counter that moved backwards means the engine restarted, so the
-  interval is refused rather than negated.
+  interval is refused rather than negated. `EngineCounters.Internals` carries
+  the engine's own `st:` gauges (prefix snapshot budget, KV blocks, GPU memory);
+  `Published` is false when the scrape had none of them.
+- `engine_fleet.go` — `FetchEngineFleet`: the engine's root status document
+  (served/steps/parked and the fleet lock owner — the cause behind a
+  "connection refused").
+- `router_status.go` — `FetchRouterStatus`: the router's GET /status reduced
+  to per-entry circuit state, key health and upstream-missing. Same owned-host
+  rule and timeout as the meter.
 
 ## Dependency direction and invariants
 

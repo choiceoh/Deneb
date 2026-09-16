@@ -61,6 +61,12 @@
     <string name="tab_chat">채팅</string>
     <string name="tab_settings">설정</string>
     <string name="fallback_answered_by">%1$s이(가) 응답함 (대체)</string>
+    <string name="fallback_answered_by_reason">%1$s이(가) 응답함 (대체 · %2$s)</string>
+    <string name="fallback_reason_engine_down">로컬 엔진 끊김</string>
+    <string name="fallback_reason_circuit_open">서킷 열림</string>
+    <string name="fallback_reason_stall">응답 없음</string>
+    <string name="fallback_reason_budget">예산 소진</string>
+    <string name="fallback_reason_error">오류</string>
     <string name="fallback_service_failed">%1$s: %2$s</string>
     <string name="fallback_trying_next">%1$s 시도 중…</string>
     <string name="error_all_services_failed">모든 서비스가 실패했습니다.</string>

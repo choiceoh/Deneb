@@ -369,3 +369,35 @@ func TestResolveClient_OpenRouterConfigClientSendsReasoningField(t *testing.T) {
 		t.Fatalf("request body = %v, want reasoning.enabled=false and no reasoning_effort", body)
 	}
 }
+
+// The done frame says WHY the fallback fired, so the answer can read "engine
+// down" rather than only naming the substitute. An engine reported down is
+// "engine_down" — never the circuit-open story, which would blame a failure
+// streak that never happened.
+func TestRunAgentWithFallbackDetailed_EngineDownReportsItsReason(t *testing.T) {
+	server, _ := modelRecorder(t, "m-local")
+	reg := modelrole.NewRegistryWithOptions(discardLogger(), modelrole.RegistryOptions{
+		MainModel:        "test/m-local",
+		LightweightModel: "test/m-local",
+		FallbackModel:    "test/m-cloud",
+		Providers: map[string]modelrole.ProviderResolved{
+			"test": {BaseURL: server.URL, APIKey: "k"},
+		},
+	})
+	reg.SetEngineDown(downEngine, []string{"m-local"})
+	logger := discardLogger()
+	cfg := agent.AgentConfig{Model: "m-local", MaxTurns: 2, Timeout: 5 * time.Second, MaxTokens: 128}
+	result, actualModel, fellBack, reason, err := runAgentWithFallbackDetailed(
+		context.Background(), cfg, []llm.Message{llm.NewTextMessage("user", "hello")},
+		llm.NewClient(server.URL, "test-key"),
+		runDeps{registry: reg, logger: logger},
+		"test", modelrole.RoleMain, nil, agent.StreamHooks{}, logger, agentlog.NewRunLogger(nil, "s", "r"),
+	)
+	if err != nil || result == nil || actualModel != "m-cloud" || !fellBack {
+		t.Fatalf("result=%+v actualModel=%q fellBack=%v err=%v", result, actualModel, fellBack, err)
+	}
+	if reason != FallbackReasonEngineDown {
+		t.Fatalf("reason = %q, want %q", reason, FallbackReasonEngineDown)
+	}
+
+}

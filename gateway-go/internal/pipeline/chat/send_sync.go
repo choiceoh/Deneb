@@ -34,6 +34,7 @@ type SyncResult struct {
 	Model           string
 	ProviderModel   string
 	FellBack        bool // true when the model fallback chain fired (Model is the model that actually answered)
+	FallbackReason  string
 	InputTokens     int
 	OutputTokens    int
 	Turns           int
@@ -357,6 +358,7 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 		Model:           resolvedModel,
 		ProviderModel:   result.ProviderModel,
 		FellBack:        result.FellBack,
+		FallbackReason:  result.FallbackReason,
 		InputTokens:     result.Usage.InputTokens,
 		OutputTokens:    result.Usage.OutputTokens,
 		Turns:           result.Turns,

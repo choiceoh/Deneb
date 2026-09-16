@@ -50,10 +50,10 @@ internal suspend fun DenebGatewayClient.askGateway(
         }
     }
     val accumulated = StringBuilder()
-    val replaceAssistant: (String, String?) -> Unit = { text, fallback ->
+    val replaceAssistant: (String, String?, String?) -> Unit = { text, fallback, reason ->
         _chatHistory.update { list ->
             list.map {
-                if (it.id == assistantId) it.copy(content = text, fallbackServiceName = fallback) else it
+                if (it.id == assistantId) it.copy(content = text, fallbackServiceName = fallback, fallbackReason = reason) else it
             }
         }
     }
@@ -73,7 +73,7 @@ internal suspend fun DenebGatewayClient.askGateway(
                         val backlog = accumulated.length - revealed
                         val step = maxOf(revealMinChars, backlog / revealDrainDivisor)
                         revealed = minOf(accumulated.length, revealed + step)
-                        replaceAssistant(accumulated.toString().take(revealed), null)
+                        replaceAssistant(accumulated.toString().take(revealed), null, null)
                     }
                     delay(revealTickMs)
                 }
@@ -192,6 +192,7 @@ internal suspend fun DenebGatewayClient.askGateway(
     replaceAssistant(
         finalText.ifBlank { "⚠️ 빈 응답" },
         if (reply.fellBack && reply.model.isNotBlank()) reply.model else null,
+        if (reply.fellBack) reply.fallbackReason.ifBlank { null } else null,
     )
     // Attach the turn's reasoning (from the done frame) so the answer shows its
     // expandable reasoning block immediately, without waiting for a transcript

@@ -1,9 +1,7 @@
 package ai.deneb.deneb
 
-import ai.deneb.deneb.generated.EngineDay
-import ai.deneb.deneb.generated.EngineRoutingRow
+import ai.deneb.deneb.generated.EngineOutage
 import ai.deneb.deneb.generated.EngineStatusResult
-import ai.deneb.deneb.generated.EngineTotals
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
@@ -37,26 +35,28 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
+import kotlinx.datetime.TimeZone
 
 /**
- * 엔진 — the local serving engine, as the engine and the router describe
- * themselves (`miniapp.engine.status`).
+ * 엔진 — the local serving engine, as the gateway routes to it
+ * (`miniapp.engine.status`).
  *
- * Leads with the two facts that are actually decided elsewhere and invisible
- * here: whether the engine is up right now, and **how much of the traffic it
- * actually took**. The second is not a detail. The local engine and its cloud
- * twin answer under the same model name, so a speed number alone reads as if
- * every turn ran locally — between 2026-09-06 and 09-13 the router substituted
- * 4,949 times and nothing in the replies said so.
+ * Leads with the gateway's own routing verdict, not a probe made for this
+ * screen: the liveness watcher decides where a turn goes, and on 2026-09-16 it
+ * moved turns to the cloud 22 times for eight hours in total while a scrape
+ * taken at the moment of opening showed a green dot. Then how much of the last
+ * day the engine was gone, how much of today's traffic it actually took, and
+ * only then how fast it is.
  *
  * Design split (docs/agent-rules/native-design-system.md): pull-to-refresh is
  * Material, the frame and type are the Deneb skin (DenebScreenScaffold +
  * DenebType + grouped DenebGroup cards). [EngineStatusContent] is the stateless
- * body; this composable is the stateful shell (fetch + loading/error states).
+ * body; this composable is the stateful shell (fetch + loading/error states),
+ * which also refetches on every engine readiness push.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,6 +84,11 @@ fun DenebEngineScreen(
     LaunchedEffect(Unit) {
         loadOk = null
         load()
+    }
+    // The gateway pushes every readiness change; the screen follows it so the
+    // state line flips the moment routing does, not on the next pull.
+    LaunchedEffect(client) {
+        client.engineEvents.collect { load() }
     }
 
     DenebScreenScaffold(title = "엔진", onBack = onBack, tabBar = navigationTabBar) {
@@ -129,105 +134,269 @@ fun DenebEngineScreen(
 // --- stateless body (previewable) ----------------------------------------
 
 /**
- * The engine page: a live state line, the share of traffic it actually served,
- * the days it measured itself, and the router's per-entry account. Pure
- * presentation — the shell owns the fetch.
+ * The engine page: the routing verdict, the last 24 hours, today's share, the
+ * window's totals, the measured days (each expandable to its full detail), the
+ * engine's internals and the router's per-entry account. Pure presentation —
+ * the shell owns the fetch. [zone] renders wall-clock times; the preview pins
+ * it so the golden is the same on every machine.
  */
 @Composable
-internal fun EngineStatusContent(status: EngineStatusResult) {
+internal fun EngineStatusContent(status: EngineStatusResult, zone: TimeZone = TimeZone.currentSystemDefault()) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         EngineStateLine(status)
         Spacer(Modifier.height(14.dp))
+        EngineAvailabilitySection(status, zone)
+        Spacer(Modifier.height(18.dp))
         EngineShareSection(status)
-        if (status.total.requests > 0) {
+        if (status.total.requests > 0 || status.total.outages > 0) {
             Spacer(Modifier.height(18.dp))
             EngineSummarySection(status.total)
         }
         Spacer(Modifier.height(18.dp))
-        EngineSpeedSection(status.days)
+        EngineDaysSection(status.days)
+        if (status.reachable && (status.internals.published || status.internals.fleetKnown)) {
+            Spacer(Modifier.height(18.dp))
+            EngineInternalsSection(status)
+        }
+        if (status.routingToday.isNotEmpty()) {
+            Spacer(Modifier.height(18.dp))
+            EngineRoutingSection("오늘 실제로 답한 곳", status.routingToday)
+        }
         if (status.routing.isNotEmpty()) {
             Spacer(Modifier.height(18.dp))
-            EngineRoutingSection(status.routing)
+            EngineRoutingSection("이번 달 실제로 답한 곳" + (if (status.routerWindow.isNotBlank()) " · ${status.routerWindow}" else ""), status.routing)
         }
     }
 }
 
-/** 가동 중 / 멈춤, with the served model and whatever is in flight right now. */
+/**
+ * The verdict line. While the watcher runs, its decision is the state: a turn
+ * for the engine's models goes to the fallback chain the whole time it says
+ * down, whatever a scrape says. Without a watcher the live probe is all there
+ * is, and the line says so.
+ */
 @Composable
 private fun EngineStateLine(status: EngineStatusResult) {
-    val live = status.reachable
+    val tracked = status.livenessTracked
+    val live = if (tracked) !status.engineDown else status.reachable
     val dot = if (live) MaterialTheme.colorScheme.primary else denebHint()
-    Row(
-        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(8.dp).background(dot, CircleShape))
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = if (live) "가동 중" else "멈춤",
-                style = DenebType.rowTitleStrong,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            val detail = when {
-                live && status.model.isNotBlank() -> status.model
-                live -> status.endpoint
-                else -> "엔진에 닿지 않습니다"
+    val title = when {
+        tracked && status.engineDown -> "클라우드로 우회 중"
+        tracked -> "가동 중"
+        status.reachable -> "가동 중 (프로브)"
+        else -> "멈춤"
+    }
+    val since = when {
+        tracked && status.engineDown && status.downSinceMs > 0L -> formatSinceFor(status.downSinceMs, status.nowMs)
+        tracked && !status.engineDown && status.upSinceMs > 0L -> "복구 ${formatAgo(status.upSinceMs, status.nowMs)}"
+        else -> ""
+    }
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(8.dp).background(dot, CircleShape))
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = if (since.isNotBlank()) "$title · $since" else title,
+                    style = DenebType.rowTitleStrong,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                val detail = when {
+                    tracked && status.engineDown -> downReasonLabel(status.downReason).ifBlank { "엔진이 요청을 거부합니다" }
+                    status.model.isNotBlank() -> status.model
+                    live -> status.endpoint
+                    else -> "엔진에 닿지 않습니다"
+                }
+                Text(
+                    text = detail,
+                    style = DenebType.rowSubtitle,
+                    color = denebHint(),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-            Text(
-                text = detail,
-                style = DenebType.rowSubtitle,
-                color = denebHint(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (live && (status.runningRequests > 0 || status.waitingRequests > 0)) {
+                Text(
+                    text = "실행 ${status.runningRequests} · 대기 ${status.waitingRequests}",
+                    style = DenebType.meta,
+                    color = denebHint(),
+                )
+            }
         }
-        if (live && (status.runningRequests > 0 || status.waitingRequests > 0)) {
+        if (tracked && status.engineDown && status.downModels.isNotEmpty()) {
             Text(
-                text = "실행 ${status.runningRequests} · 대기 ${status.waitingRequests}",
+                text = "폴백으로 가는 모델: ${status.downModels.joinToString(", ")}",
                 style = DenebType.meta,
                 color = denebHint(),
+                modifier = Modifier.padding(start = 16.dp, top = 6.dp),
+            )
+        }
+        if (!tracked) {
+            Text(
+                text = "게이트웨이의 엔진 감시가 꺼져 있어 지금 이 순간의 프로브만 보입니다.",
+                style = DenebType.meta,
+                color = denebHint(),
+                modifier = Modifier.padding(start = 16.dp, top = 6.dp),
             )
         }
     }
 }
 
 /**
- * How much of the traffic the local engine actually took, from the router's own
- * meter. An unavailable meter says so rather than rendering 0% — in a
- * postmortem "nothing ran locally" and "we could not ask" look identical.
+ * The last 24 hours as one strip — up in the accent, down in the hint, and
+ * the time before tracking began left blank — with the outages listed under
+ * it. This is the card the 2026-09-16 flapping was invisible without.
  */
 @Composable
-private fun EngineShareSection(status: EngineStatusResult) {
-    DenebGroup(label = "점유율") {
-        if (!status.routerAvailable) {
-            Text(
-                text = "라우터 계량기에 닿지 못했습니다 — 점유율을 알 수 없습니다.",
-                style = DenebType.rowSubtitle,
-                color = denebHint(),
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-            )
-            return@DenebGroup
-        }
-        val total = status.localRequests + status.remoteRequests
-        val pct = if (total > 0) (100.0 * status.localRequests / total) else 0.0
+private fun EngineAvailabilitySection(status: EngineStatusResult, zone: TimeZone) {
+    DenebGroup(label = "최근 24시간") {
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 14.dp)) {
+            if (!status.livenessTracked) {
+                Text(
+                    text = "엔진 감시가 꺼져 있어 가용성을 알 수 없습니다.",
+                    style = DenebType.rowSubtitle,
+                    color = denebHint(),
+                )
+                return@DenebGroup
+            }
+            val segments = availabilitySegments(status.outages, status.trackedSinceMs, status.nowMs)
+            val recent = outagesWithin(status.outages, status.nowMs)
+            val downSec = downSecondsIn(segments)
             Text(
-                text = "로컬 ${formatPercent(pct)}",
+                text = if (recent.isEmpty()) "끊김 없음" else "끊김 ${recent.size}회 · 총 ${formatDuration(downSec)}",
                 style = DenebType.rowTitleStrong,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Spacer(Modifier.height(8.dp))
-            ShareBar(fraction = if (total > 0) (status.localRequests.toFloat() / total.toFloat()) else 0f)
-            Spacer(Modifier.height(8.dp))
+            AvailabilityStrip(segments)
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                Text(text = formatClockOrDay(status.nowMs - AVAILABILITY_WINDOW_MS, status.nowMs, zone), style = DenebType.meta, color = denebHint(), modifier = Modifier.weight(1f))
+                Text(text = "지금 ${formatClock(status.nowMs, zone)}", style = DenebType.meta, color = denebHint())
+            }
+            if (segments.any { it.state == AvailabilityState.UNKNOWN }) {
+                Text(
+                    text = "빈 구간은 감시 기록이 없는 시간입니다.",
+                    style = DenebType.meta,
+                    color = denebHint(),
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+            recent.take(MAX_OUTAGE_ROWS).forEach { OutageRow(it, status.nowMs, zone) }
+            if (recent.size > MAX_OUTAGE_ROWS) {
+                Text(
+                    text = "외 ${recent.size - MAX_OUTAGE_ROWS}건",
+                    style = DenebType.meta,
+                    color = denebHint(),
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+private const val MAX_OUTAGE_ROWS = 8
+
+@Composable
+private fun AvailabilityStrip(segments: List<AvailabilitySegment>) {
+    val up = MaterialTheme.colorScheme.primary
+    val down = denebHint()
+    val unknown = denebHint().copy(alpha = 0.12f)
+    Row(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(3.dp))) {
+        if (segments.isEmpty()) {
+            Box(Modifier.weight(1f).fillMaxSize().background(unknown))
+            return@Row
+        }
+        segments.forEach { seg ->
+            // Row weights must be positive; a sub-pixel segment still gets a sliver.
+            val w = (seg.end - seg.start).coerceAtLeast(0.0005f)
+            val color = when (seg.state) {
+                AvailabilityState.UP -> up
+                AvailabilityState.DOWN -> down
+                AvailabilityState.UNKNOWN -> unknown
+            }
+            Box(Modifier.weight(w).fillMaxSize().background(color))
+        }
+    }
+}
+
+@Composable
+private fun OutageRow(outage: EngineOutage, nowMs: Long, zone: TimeZone) {
+    val ongoing = outage.untilMs <= 0L
+    val span = if (ongoing) {
+        "${formatClockOrDay(outage.sinceMs, nowMs, zone)} ~ 진행 중"
+    } else {
+        "${formatClockOrDay(outage.sinceMs, nowMs, zone)} ~ ${formatClockOrDay(outage.untilMs, nowMs, zone)}"
+    }
+    val duration = formatDuration(if (ongoing) (nowMs - outage.sinceMs) / 1000.0 else outage.durationSec)
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(text = span, style = DenebType.rowSubtitle, color = MaterialTheme.colorScheme.onBackground)
+            val reason = downReasonLabel(outage.reason)
+            if (reason.isNotBlank()) {
+                Text(text = reason, style = DenebType.meta, color = denebHint(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Text(text = duration, style = DenebType.meta, color = denebHint())
+    }
+}
+
+/**
+ * How much of the traffic the local engine actually took — today first, from
+ * the day meter, then the month. The month meter straddles routing changes
+ * (the 2026-09-14 rename left its "local" total mostly cloud traffic), so it
+ * is the secondary line, and entries the router config no longer lists are
+ * counted apart from remote rather than folded into it. An unavailable meter
+ * says so rather than rendering 0%.
+ */
+@Composable
+private fun EngineShareSection(status: EngineStatusResult) {
+    DenebGroup(label = "점유율") {
+        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 14.dp)) {
+            val todayPct = sharePercent(status.todayLocalRequests, status.todayRemoteRequests + status.todayUnknownRequests)
+            if (status.routerDayMetered && todayPct != null) {
+                Text(
+                    text = "오늘 로컬 ${formatPercent(todayPct)}",
+                    style = DenebType.rowTitleStrong,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Spacer(Modifier.height(8.dp))
+                ShareBar(fraction = (todayPct / 100.0).toFloat())
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "로컬 ${status.todayLocalRequests} · 원격 ${status.todayRemoteRequests}" +
+                        (if (status.todayUnknownRequests > 0) " · 설정에 없음 ${status.todayUnknownRequests}" else ""),
+                    style = DenebType.meta,
+                    color = denebHint(),
+                )
+            } else {
+                Text(
+                    text = "오늘 로컬 —",
+                    style = DenebType.rowTitleStrong,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Text(
+                    text = "오늘은 아직 계량된 요청이 없습니다.",
+                    style = DenebType.meta,
+                    color = denebHint(),
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            val monthPct = sharePercent(status.localRequests, status.remoteRequests + status.unknownRequests)
             Text(
-                text = "로컬 ${status.localRequests} · 그 외 ${status.remoteRequests}" +
-                    if (status.routerWindow.isNotBlank()) " · ${status.routerWindow}" else "",
+                text = when {
+                    !status.routerAvailable -> "이번 달: 라우터 계량기에 닿지 못했습니다"
+
+                    monthPct == null -> "이번 달: 계량된 요청 없음"
+
+                    else -> "이번 달 ${status.routerWindow}: 로컬 ${formatPercent(monthPct)} · 로컬 ${status.localRequests} · 원격 ${status.remoteRequests}" +
+                        (if (status.unknownRequests > 0) " · 설정에 없음 ${status.unknownRequests}" else "")
+                },
                 style = DenebType.meta,
                 color = denebHint(),
+                modifier = Modifier.padding(top = 8.dp),
             )
             Text(
-                text = "로컬이 죽으면 라우터가 같은 모델의 클라우드로 조용히 넘깁니다. 응답만 봐서는 구분되지 않습니다.",
+                text = "엔진이 끊기면 게이트웨이가 폴백 모델로 넘기고 답변에 표시합니다. 월 합계는 라우팅 설정이 바뀌면 그 전후가 섞이므로 오늘 수치를 먼저 보세요.",
                 style = DenebType.meta,
                 color = denebHint(),
                 modifier = Modifier.padding(top = 6.dp),
@@ -239,7 +408,7 @@ private fun EngineShareSection(status: EngineStatusResult) {
 /** The local share as a single proportional bar — the interactive accent for
  *  the local part, a hairline-weight track for the rest. */
 @Composable
-private fun ShareBar(fraction: Float) {
+internal fun ShareBar(fraction: Float) {
     val f = fraction.coerceIn(0f, 1f)
     Box(
         Modifier.fillMaxWidth().height(6.dp)
@@ -251,226 +420,5 @@ private fun ShareBar(fraction: Float) {
                     .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)),
             )
         }
-    }
-}
-
-/** One row per measured day. Every number is the engine's own counter — the
- *  gateway's clock cannot see prefill at all (the provider withholds response
- *  headers until the first token, so it reads 0 ms). */
-@Composable
-private fun EngineSpeedSection(days: List<EngineDay>) {
-    DenebGroup(label = "속도") {
-        if (days.isEmpty()) {
-            Text(
-                text = "아직 측정된 날이 없습니다 — 표본은 엔진이 살아 있는 동안에만 쌓입니다.",
-                style = DenebType.rowSubtitle,
-                color = denebHint(),
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-            )
-            return@DenebGroup
-        }
-        // A thin day must not set the scale. Its rate swings with a handful of
-        // intervals, so letting it define "fastest" would shrink every settled
-        // day's bar against a number that is mostly noise.
-        val fastest = days.filter { it.measured && !it.sampleIsThin() }
-            .maxOfOrNull { it.decodeTokensPerSec } ?: 0.0
-        days.forEach { EngineDayRow(it, fastest) }
-        Spacer(Modifier.height(12.dp))
-    }
-}
-
-@Composable
-private fun EngineDayRow(day: EngineDay, fastestDecode: Double) {
-    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 2.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = day.day,
-                style = DenebType.rowTitle,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = if (day.measured) {
-                    "디코드 ${formatRate(day.decodeTokensPerSec)} · 프리필 ${formatRate(day.prefillTokensPerSec)}"
-                } else {
-                    "측정 없음"
-                },
-                style = DenebType.meta,
-                color = denebHint(),
-            )
-        }
-        if (day.measured) {
-            // Decode speed against the window's fastest day, so a slow day is
-            // visible without reading every number. A thin day gets no bar —
-            // placing it on the scale would assert a precision it does not have.
-            if (fastestDecode > 0.0 && !day.sampleIsThin()) {
-                Spacer(Modifier.height(4.dp))
-                ShareBar(fraction = (day.decodeTokensPerSec / fastestDecode).toFloat())
-            }
-            Text(
-                text = "첫 토큰 ${formatSeconds(day.meanTtftSeconds)}" +
-                    (if (day.meanQueueSeconds > 0.0) " (대기 ${formatSeconds(day.meanQueueSeconds)})" else "") +
-                    " · 응답 ${formatSeconds(day.meanE2eSeconds)}",
-                style = DenebType.meta,
-                color = denebHint(),
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            Text(
-                text = "동시성 ${formatConcurrency(day.concurrencyWhileBusy)} · 최대 ${day.peakConcurrency} · 요청 ${day.requests}",
-                style = DenebType.meta,
-                color = denebHint(),
-                modifier = Modifier.padding(top = 2.dp),
-            )
-            Text(
-                text = "캐시 ${formatPercent(day.promptCacheHitRatio * 100)} · 가동 ${formatPercent(day.utilization * 100)}" +
-                    " (${formatDuration(day.busySeconds)} / ${formatDuration(day.observedSeconds)})",
-                style = DenebType.meta,
-                color = denebHint(),
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        if (day.measured && day.sampleIsThin()) {
-            Text(
-                text = "표본 ${day.generatedTokens}토큰 — 속도는 참고만",
-                style = DenebType.meta,
-                color = denebHint(),
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        if (day.restarts > 0) {
-            Text(
-                text = "재시작 ${day.restarts}회 — 그 구간은 위 수치에 없습니다",
-                style = DenebType.meta,
-                color = denebHint(),
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-    }
-}
-
-/**
- * The whole window folded into one card. Every rate here is recomputed from the
- * summed work, not averaged across days — a quiet Sunday must not weigh as much
- * as a busy Monday.
- */
-@Composable
-private fun EngineSummarySection(total: EngineTotals) {
-    DenebGroup(label = "최근 ${total.days}일 합계") {
-        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 14.dp)) {
-            EngineStatLine("요청", "${total.requests}회")
-            EngineStatLine("토큰", "입력 ${formatTokenCount(total.promptTokens)} · 출력 ${formatTokenCount(total.generatedTokens)}")
-            EngineStatLine(
-                "속도",
-                "디코드 ${formatRate(total.decodeTokensPerSec)} · 프리필 ${formatRate(total.prefillTokensPerSec)}" +
-                    (if (total.sampleIsThin()) " (표본 부족)" else ""),
-            )
-            EngineStatLine("첫 토큰", formatSeconds(total.meanTtftSeconds))
-            EngineStatLine("프롬프트 캐시", formatPercent(total.promptCacheHitRatio * 100))
-            EngineStatLine("가동", "${formatPercent(total.utilization * 100)} · ${formatDuration(total.busySeconds)}")
-            if (total.restarts > 0) EngineStatLine("재시작", "${total.restarts}회")
-        }
-    }
-}
-
-/** One label/value line in the summary card. */
-@Composable
-private fun EngineStatLine(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(text = label, style = DenebType.rowSubtitle, color = denebHint(), modifier = Modifier.weight(1f))
-        Text(
-            text = value,
-            style = DenebType.rowTitle,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-/** The router's per-entry account: who answered, and how much. */
-@Composable
-private fun EngineRoutingSection(rows: List<EngineRoutingRow>) {
-    DenebGroup(label = "실제로 답한 곳") {
-        rows.forEach { row ->
-            Row(
-                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = row.model,
-                        style = if (row.local) DenebType.rowTitleStrong else DenebType.rowTitle,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = if (row.local) "로컬 엔진" else "원격",
-                        style = DenebType.meta,
-                        color = if (row.local) MaterialTheme.colorScheme.primary else denebHint(),
-                    )
-                }
-                Text(
-                    text = "${row.requests}회 · 입력 ${formatTokenCount(row.inputTokens)} · 출력 ${formatTokenCount(row.outputTokens)}",
-                    style = DenebType.meta,
-                    color = denebHint(),
-                )
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-    }
-}
-
-// --- sample mass ---------------------------------------------------------
-
-/**
- * A decode rate is the mean of the engine's per-output-token times, so its
- * sample count is the number of INTER-token intervals — roughly generated
- * tokens minus requests, since the first token of each request is timed as
- * TTFT instead. The relative standard error of such a mean falls as 1/sqrt(n),
- * so below about a hundred intervals the number moves by more than ten percent
- * on its own. That is wider than the day-to-day differences this panel exists
- * to show, so those days are rendered as an indication rather than a rate.
- *
- * The engine's counters are honest either way — this is a display threshold,
- * not a correction. Nothing is hidden: the rate still shows, marked.
- */
-internal fun engineSampleIsThin(requests: Long, generatedTokens: Long): Boolean = generatedTokens - requests < ENGINE_MIN_DECODE_SAMPLES
-
-private const val ENGINE_MIN_DECODE_SAMPLES = 100L
-
-internal fun EngineDay.sampleIsThin(): Boolean = engineSampleIsThin(requests, generatedTokens)
-
-internal fun EngineTotals.sampleIsThin(): Boolean = engineSampleIsThin(requests, generatedTokens)
-
-// --- formatting ----------------------------------------------------------
-
-/** One decimal below 10%, none above — a share is read, not audited. */
-internal fun formatPercent(pct: Double): String = if (pct >= 10.0) "${pct.roundToInt()}%" else "${(pct * 10).roundToInt() / 10.0}%"
-
-/** Token rates round to whole tokens: the sampling interval is coarser than a
- *  decimal place would suggest. */
-internal fun formatRate(perSec: Double): String = if (perSec <= 0.0) "—" else "${perSec.roundToInt()} tok/s"
-
-internal fun formatConcurrency(c: Double): String = if (c <= 0.0) "—" else "${(c * 10).roundToInt() / 10.0}"
-
-/** Sub-second latencies read in milliseconds; above that, one decimal second. */
-internal fun formatSeconds(s: Double): String = when {
-    s <= 0.0 -> "—"
-    s < 1.0 -> "${(s * 1000).roundToInt()}ms"
-    else -> "${(s * 10).roundToInt() / 10.0}초"
-}
-
-/** Busy/observed spans read as hours and minutes — a raw second count of a
- *  day-long window is unreadable. */
-internal fun formatDuration(seconds: Double): String {
-    if (seconds <= 0.0) return "—"
-    val total = seconds.roundToInt()
-    val h = total / 3600
-    val m = (total % 3600) / 60
-    return when {
-        h > 0 -> "${h}시간 ${m}분"
-        m > 0 -> "${m}분"
-        else -> "${total}초"
     }
 }

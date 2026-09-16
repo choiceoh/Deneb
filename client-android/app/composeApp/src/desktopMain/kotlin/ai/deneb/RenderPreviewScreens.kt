@@ -589,6 +589,18 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             }
         }
     },
+    // The engine page on a bad day: routing verdict, 24h strip with outages, today's
+    // share, totals, expandable days (newest open), internals, routing. Clock strings
+    // are pinned to KST so the golden matches on a UTC runner.
+    "engine" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.width(412.dp)) {
+                    ai.deneb.deneb.EngineStatusContent(sampleEngineStatus, zone = kotlinx.datetime.TimeZone.of("Asia/Seoul"))
+                }
+            }
+        }
+    },
     // Chat empty/welcome — muted sparkle glyph + personalized greeting (was a purple orb).
     "chat_empty" to { scheme ->
         MaterialTheme(colorScheme = scheme) {

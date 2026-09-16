@@ -191,6 +191,9 @@ data class History(
     val isThinking: Boolean = false,
     val isStatusMessage: Boolean = false,
     val fallbackServiceName: String? = null,
+    // Why the gateway fell back to that model ("engine_down", "circuit_open",
+    // "stall", "budget", "error"); null when unknown or when it did not.
+    val fallbackReason: String? = null,
     // Compact trail of the tools this answer's turn ran ("메일 확인 ×2 · 웹 검색"),
     // shown as a meta line under the bubble. Filled live by TurnProgress and on
     // transcript reload from the server's toolTrace — same builder, same format.

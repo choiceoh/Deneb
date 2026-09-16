@@ -58,6 +58,10 @@ export function ProactivePanel({ cfg }: { cfg: GatewayConfig }) {
 
   const intercept = useCallback(
     (ev: ProactiveEvent): ProactiveEvent | null => {
+      // Local serving engine readiness frames are state for the mobile engine
+      // screen (kind=engine, no body) — not a nudge. Drop them here rather than
+      // render an empty card each time the engine flaps.
+      if (ev.kind === "engine") return null;
       // Computer use (host OS mouse/keyboard/screen): execute through the Tauri
       // shell and report back; the nudge makes every action visible. A
       // malformed frame is still answered (ok=false) so the waiting tool call

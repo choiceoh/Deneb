@@ -15,9 +15,11 @@ import ai.deneb.DenebRsi
 import ai.deneb.DenebSearch
 import ai.deneb.DenebUsage
 import ai.deneb.data.AppSettings
+import ai.deneb.deneb.generated.EngineGlance
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.denebHint
 import ai.deneb.ui.icons.outlined.AccountTree
 import ai.deneb.ui.icons.outlined.Assignment
 import ai.deneb.ui.icons.outlined.Autorenew
@@ -40,6 +42,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -132,6 +135,9 @@ fun DenebMoreScreen(
     onBack: () -> Unit,
     onOpen: (Any) -> Unit,
     hiddenTiles: Set<String> = emptySet(),
+    // The engine tile's live line (miniapp.engine.glance): whether the gateway
+    // is routing to the local engine right now. Null hides the line.
+    engineGlance: EngineGlance? = null,
 ) {
     DenebScreenScaffold(title = "더보기", onBack = onBack) {
         Column(
@@ -145,11 +151,19 @@ fun DenebMoreScreen(
                 if (entries.isEmpty()) return@forEach
                 DenebGroup(label = label) {
                     entries.forEachIndexed { i, entry ->
+                        val tile = if (entry.key == "deneb_engine") engineTileStatus(engineGlance) else null
                         DenebListRow(
                             title = entry.label,
                             onClick = { onOpen(entry.dest) },
                             icon = entry.icon,
                             divider = i < entries.lastIndex,
+                            statusText = tile?.text,
+                            statusColor = when (tile?.up) {
+                                true -> MaterialTheme.colorScheme.primary
+                                false -> denebHint()
+                                null -> null
+                            },
+                            subtitle = tile?.subtitle,
                         )
                     }
                 }

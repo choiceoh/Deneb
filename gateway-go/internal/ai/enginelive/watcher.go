@@ -28,6 +28,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -70,17 +71,51 @@ const (
 	verdictSilent                  // no answer
 )
 
-// engineState is one endpoint's hysteresis. Touched only by the run goroutine.
+// engineState is one endpoint's hysteresis. Written only by the run
+// goroutine, under Watcher.mu so State can read a consistent picture.
 type engineState struct {
 	healthURL string
 	down      bool
 	downSince time.Time
+	upSince   time.Time
+	reason    string
 	silent    int
 	ready     int
+	probed    bool     // a verdict has been applied since this process started
 	models    []string // last set handed to the sink while down
 }
 
+// TransitionEvent is one readiness change, handed to the OnTransition
+// callback after the sink has been told. DownFor is set on an Up event.
+type TransitionEvent struct {
+	Endpoint string
+	Down     bool
+	At       time.Time
+	Reason   string
+	Models   []string
+	DownFor  time.Duration
+}
+
+// EngineState is a point-in-time reading of one engine for a caller outside
+// the probe loop (the engine RPC). Probed is false until the first verdict.
+type EngineState struct {
+	Endpoint  string
+	Down      bool
+	DownSince time.Time
+	UpSince   time.Time
+	Reason    string
+	Models    []string
+	Probed    bool
+}
+
 // Watcher probes each configured engine's /health and reports transitions.
+//
+// Lock hierarchy (acquire in this order; never reverse):
+//
+//	Watcher.mu  →  Ledger.mu   (ledger READS may run under mu)
+//
+// The sink (modelrole.Registry, its own lock), ledger writes and the
+// transition callback run after mu is released — see observe.
 type Watcher struct {
 	endpoints []string
 	engines   map[string]*engineState
@@ -90,6 +125,11 @@ type Watcher struct {
 	logger    *slog.Logger
 	interval  time.Duration
 	now       func() time.Time
+
+	mu           sync.Mutex
+	ledger       *Ledger
+	onTransition func(TransitionEvent)
+	startedAt    time.Time
 }
 
 // New returns nil when there is nothing to watch — no endpoints, no sink, or
@@ -131,6 +171,75 @@ func New(endpoints []string, models ModelsFunc, sink Sink, logger *slog.Logger) 
 	return w
 }
 
+// UseLedger persists transitions to l. Call before Start; nil-safe both ways.
+func (w *Watcher) UseLedger(l *Ledger) {
+	if w == nil {
+		return
+	}
+	w.ledger = l
+}
+
+// OnTransition registers a callback for every readiness change, invoked on
+// the probe goroutine after the sink has been updated. Call before Start.
+func (w *Watcher) OnTransition(fn func(TransitionEvent)) {
+	if w == nil {
+		return
+	}
+	w.onTransition = fn
+}
+
+// State reads one engine's current standing. ok is false for an endpoint the
+// watcher does not track (or a nil Watcher).
+func (w *Watcher) State(endpoint string) (EngineState, bool) {
+	if w == nil {
+		return EngineState{}, false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	st := w.engines[endpoint]
+	if st == nil {
+		return EngineState{}, false
+	}
+	return EngineState{
+		Endpoint:  endpoint,
+		Down:      st.down,
+		DownSince: st.downSince,
+		UpSince:   st.upSince,
+		Reason:    st.reason,
+		Models:    append([]string(nil), st.models...),
+		Probed:    st.probed,
+	}, true
+}
+
+// Transitions returns the ledger's transitions for endpoint since sinceMs
+// (see Ledger.Transitions). Nil without a ledger.
+func (w *Watcher) Transitions(endpoint string, sinceMs int64) []Transition {
+	if w == nil {
+		return nil
+	}
+	return w.ledger.Transitions(endpoint, sinceMs)
+}
+
+// TrackedSinceMs is the earliest moment anything is known about endpoint's
+// availability: the ledger's first entry, or this watcher's start when the
+// ledger has nothing older. ok is false before the watcher has started.
+func (w *Watcher) TrackedSinceMs(endpoint string) (int64, bool) {
+	if w == nil {
+		return 0, false
+	}
+	w.mu.Lock()
+	started := w.startedAt
+	w.mu.Unlock()
+	if started.IsZero() {
+		return 0, false
+	}
+	since := started.UnixMilli()
+	if first, ok := w.ledger.EarliestMs(endpoint); ok && first < since {
+		since = first
+	}
+	return since, true
+}
+
 // healthURL turns a configured engine URL into its /health URL, refusing any
 // host the deployment does not own.
 func healthURL(endpoint string) (string, bool) {
@@ -147,6 +256,9 @@ func (w *Watcher) Start(ctx context.Context) {
 	if w == nil {
 		return
 	}
+	w.mu.Lock()
+	w.startedAt = w.now()
+	w.mu.Unlock()
 	w.logger.Info("engine liveness watch started",
 		"endpoints", strings.Join(w.endpoints, ","), "interval", w.interval.String())
 	safego.GoWithSlog(w.logger, "engine-liveness-watch", func() {
@@ -181,35 +293,74 @@ func (w *Watcher) probeAll(ctx context.Context) {
 }
 
 // observe applies one verdict to an engine's hysteresis.
+//
+// State moves under w.mu; the sink, the ledger and the callback are told
+// afterwards, outside it.
 func (w *Watcher) observe(ep string, st *engineState, v verdict, reason string) {
+	w.mu.Lock()
+	first := !st.probed
+	st.probed = true
+	var effect func()
 	switch v {
 	case verdictReady:
 		st.silent = 0
-		if !st.down {
-			return
-		}
-		st.ready++
-		if st.ready >= readyToUp {
-			w.markUp(ep, st)
+		switch {
+		case st.down:
+			st.ready++
+			if st.ready >= readyToUp {
+				effect = w.markUpLocked(ep, st)
+			}
+		case first:
+			effect = w.foundReadyLocked(ep, st)
 		}
 	case verdictRefusing:
 		st.silent, st.ready = 0, 0
-		w.markDown(ep, st, reason)
+		effect = w.markDownLocked(ep, st, reason)
 	case verdictSilent:
 		st.ready = 0
 		st.silent++
 		if st.down || st.silent >= silentToDown {
-			w.markDown(ep, st, reason)
+			effect = w.markDownLocked(ep, st, reason)
 		}
+	}
+	w.mu.Unlock()
+	if effect != nil {
+		effect()
 	}
 }
 
-func (w *Watcher) markDown(ep string, st *engineState, reason string) {
+// foundReadyLocked handles the first verdict of this process being "ready":
+// nothing to change — unless the ledger's last word on this engine was a
+// down. Then the outage ended while no gateway was watching, and it is closed
+// now so it does not read as ongoing forever.
+func (w *Watcher) foundReadyLocked(ep string, st *engineState) func() {
+	now := w.now()
+	st.upSince = now
+	last, ok := w.ledger.Last(ep)
+	if !ok || !last.Down {
+		return nil
+	}
+	return func() {
+		w.ledger.Record(Transition{
+			Endpoint: ep, AtMs: now.UnixMilli(), Down: false,
+			Reason: "found ready when the gateway started",
+		})
+	}
+}
+
+func (w *Watcher) markDownLocked(ep string, st *engineState, reason string) func() {
 	models := normalizeModels(w.models(ep))
-	w.sink.SetEngineDown(ep, models)
+	var transition *Transition
 	switch {
 	case !st.down:
-		st.down, st.downSince = true, w.now()
+		now := w.now()
+		st.down, st.downSince, st.reason = true, now, reason
+		// A gateway restarted inside an outage finds the engine down again;
+		// the outage began when the ledger says it did, not now.
+		if last, ok := w.ledger.Last(ep); ok && last.Down {
+			st.downSince = time.UnixMilli(last.AtMs)
+		}
+		transition = &Transition{Endpoint: ep, AtMs: now.UnixMilli(), Down: true, Reason: reason, Models: models}
 		w.logger.Warn("local serving engine is refusing requests; its models go straight to fallback",
 			"endpoint", ep, "reason", reason, "models", strings.Join(models, ","))
 	case !slices.Equal(models, st.models):
@@ -217,14 +368,35 @@ func (w *Watcher) markDown(ep string, st *engineState, reason string) {
 			"endpoint", ep, "models", strings.Join(models, ","))
 	}
 	st.models = models
+	return func() {
+		w.sink.SetEngineDown(ep, models)
+		if transition != nil {
+			w.ledger.Record(*transition)
+			if w.onTransition != nil {
+				w.onTransition(TransitionEvent{
+					Endpoint: ep, Down: true, At: time.UnixMilli(transition.AtMs),
+					Reason: reason, Models: models,
+				})
+			}
+		}
+	}
 }
 
-func (w *Watcher) markUp(ep string, st *engineState) {
-	w.sink.SetEngineDown(ep, nil)
+func (w *Watcher) markUpLocked(ep string, st *engineState) func() {
+	now := w.now()
+	downFor := now.Sub(st.downSince).Round(time.Second)
+	models := st.models
 	w.logger.Info("local serving engine is accepting requests again; its models rejoin routing",
-		"endpoint", ep, "downFor", w.now().Sub(st.downSince).Round(time.Second).String(),
-		"models", strings.Join(st.models, ","))
-	st.down, st.ready, st.models = false, 0, nil
+		"endpoint", ep, "downFor", downFor.String(), "models", strings.Join(models, ","))
+	st.down, st.ready, st.models, st.reason = false, 0, nil, ""
+	st.upSince = now
+	return func() {
+		w.sink.SetEngineDown(ep, nil)
+		w.ledger.Record(Transition{Endpoint: ep, AtMs: now.UnixMilli(), Down: false, Models: models})
+		if w.onTransition != nil {
+			w.onTransition(TransitionEvent{Endpoint: ep, Down: false, At: now, Models: models, DownFor: downFor})
+		}
+	}
 }
 
 // probe reads one engine's readiness. Three answers:

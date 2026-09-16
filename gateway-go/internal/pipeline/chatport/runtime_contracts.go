@@ -94,6 +94,7 @@ type SyncResult struct {
 	Model           string
 	ProviderModel   string
 	FellBack        bool
+	FallbackReason  string
 	InputTokens     int
 	OutputTokens    int
 	Turns           int

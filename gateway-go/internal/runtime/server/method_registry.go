@@ -24,6 +24,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/routershare"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
@@ -506,7 +507,13 @@ func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities 
 			// The router's meter is the only place the local/cloud split exists —
 			// both answer under the same model name. Re-read per call so a
 			// hot-reloaded router config counts.
-			RouterMeter: func() (string, string, map[string]bool) { return configresolve.RouterMeter(s.logger) },
+			RouterMeter:   func() (string, string, map[string]bool) { return configresolve.RouterMeter(s.logger) },
+			RouterEntries: configresolve.RouterEntryNames,
+			// The liveness watcher is built in registerWorkflowSideEffects, after
+			// this early registration — resolve it per call. Its methods are
+			// nil-safe, so an absent watcher reads as "not tracked".
+			Liveness:    func() handlerminiapp.LivenessSource { return s.engineLiveness },
+			RouterShare: func() *routershare.Store { return s.modelMaintenance.RouterShare() },
 		}),
 		// miniapp.models.* is deliberately registered in registerLateMethods:
 		// the picker snapshots the model registry and chat handler at creation.

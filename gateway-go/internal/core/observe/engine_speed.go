@@ -52,9 +52,33 @@ const (
 	enginePromptTokensMetric = "vllm:prompt_tokens_total" //nolint:gosec // G101: a metric name, not a secret
 	engineGenTokensMetric    = "vllm:generation_tokens_total"
 
+	// Speculative decoding, TOKEN-valued: drafts proposed and drafts the
+	// target model accepted. Their ratio is how much of the decode work the
+	// drafter is actually saving.
+	engineSpecDraftMetric    = "vllm:spec_decode_num_draft_tokens_total"    //nolint:gosec // G101: a metric name, not a secret
+	engineSpecAcceptedMetric = "vllm:spec_decode_num_accepted_tokens_total" //nolint:gosec // G101: a metric name, not a secret
+
 	// Gauges — the occupancy right now, not a running total.
 	engineRunningMetric = "vllm:num_requests_running"
 	engineWaitingMetric = "vllm:num_requests_waiting"
+
+	// The engine's own gauges (st: prefix): where its prefix-cache budget and
+	// KV memory stand at the moment of the scrape. These explain a cache hit
+	// ratio — 96 resident snapshots with 0 free is why a 40K head re-prefills.
+	enginePrefixEntriesMetric       = "st:prefix_entries"
+	enginePrefixSnapshotsFreeMetric = "st:prefix_snapshots_free"
+	enginePrefixPinnedMetric        = "st:prefix_pinned_entries"
+	enginePrefixTierEntriesMetric   = "st:prefix_tier_entries"
+	engineKVBlocksTotalMetric       = "st:kv_blocks_total"
+	engineKVBlocksUsedMetric        = "st:kv_blocks_used"
+	engineKVBlocksCachedMetric      = "st:kv_blocks_cached"
+	engineParkedMetric              = "st:conversations_parked"
+	engineDeviceMemTotalMetric      = "st:device_memory_total_bytes"
+	engineDeviceMemFreeMetric       = "st:device_memory_free_bytes"
+	engineDeviceMemReservedMetric   = "st:device_memory_reserved_bytes"
+	engineHostMemAvailableMetric    = "st:host_memory_available_bytes"
+	engineHandingOverMetric         = "st:handing_over"
+	engineQuietMetric               = "st:quiet"
 )
 
 // engineCumulativeMetrics are the series that only ever grow (until the engine
@@ -65,10 +89,17 @@ var engineCumulativeMetrics = []string{
 	engineE2ESumMetric, engineE2ECountMetric, engineStepSumMetric,
 	enginePromptTokensMetric, engineGenTokensMetric,
 	enginePrefixQueriesMetric, enginePrefixHitsMetric,
+	engineSpecDraftMetric, engineSpecAcceptedMetric,
 }
 
 // engineGaugeMetrics are point-in-time and must never be differenced.
-var engineGaugeMetrics = []string{engineRunningMetric, engineWaitingMetric}
+var engineGaugeMetrics = []string{
+	engineRunningMetric, engineWaitingMetric,
+	enginePrefixEntriesMetric, enginePrefixSnapshotsFreeMetric, enginePrefixPinnedMetric, enginePrefixTierEntriesMetric,
+	engineKVBlocksTotalMetric, engineKVBlocksUsedMetric, engineKVBlocksCachedMetric, engineParkedMetric,
+	engineDeviceMemTotalMetric, engineDeviceMemFreeMetric, engineDeviceMemReservedMetric, engineHostMemAvailableMetric,
+	engineHandingOverMetric, engineQuietMetric,
+}
 
 // engineScrapeTimeout bounds one scrape. The endpoint is on the fleet's tailnet
 // and answers in milliseconds when healthy; a booting or dead engine must fail
@@ -107,6 +138,43 @@ type EngineCounters struct {
 	// Prefix-cache reuse in prompt TOKENS (not requests).
 	PrefixCacheQueries float64 `json:"prefixCacheQueries"`
 	PrefixCacheHits    float64 `json:"prefixCacheHits"`
+
+	// Speculative decoding in TOKENS: drafts proposed and drafts accepted.
+	// Cumulative, so a window's acceptance is the ratio of the two deltas.
+	SpecDraftTokens    float64 `json:"specDraftTokens"`
+	SpecAcceptedTokens float64 `json:"specAcceptedTokens"`
+
+	// Internals are the engine's own gauges at the moment of the scrape —
+	// never differenced. Zero-valued when the engine does not publish them.
+	Internals EngineInternals `json:"internals"`
+}
+
+// EngineInternals is what the engine says about its own memory and cache
+// budget right now. These are the numbers behind a cache hit ratio: a prefix
+// cache with no free snapshot slot cannot resume anything new, however large
+// the hit ratio's denominator looks.
+type EngineInternals struct {
+	PrefixEntries       int `json:"prefixEntries"`
+	PrefixSnapshotsFree int `json:"prefixSnapshotsFree"`
+	PrefixPinnedEntries int `json:"prefixPinnedEntries"`
+	PrefixTierEntries   int `json:"prefixTierEntries"`
+	KVBlocksTotal       int `json:"kvBlocksTotal"`
+	KVBlocksUsed        int `json:"kvBlocksUsed"`
+	KVBlocksCached      int `json:"kvBlocksCached"`
+	ConversationsParked int `json:"conversationsParked"`
+
+	DeviceMemoryTotalBytes    int64 `json:"deviceMemoryTotalBytes"`
+	DeviceMemoryFreeBytes     int64 `json:"deviceMemoryFreeBytes"`
+	DeviceMemoryReservedBytes int64 `json:"deviceMemoryReservedBytes"`
+	HostMemoryAvailableBytes  int64 `json:"hostMemoryAvailableBytes"`
+
+	// HandingOver is the engine draining for a successor process; Quiet is the
+	// engine idle with nothing admitted.
+	HandingOver bool `json:"handingOver"`
+	Quiet       bool `json:"quiet"`
+	// Published is false when the scrape carried none of the st: gauges — an
+	// engine that does not export them, not one with everything at zero.
+	Published bool `json:"published"`
 }
 
 // Concurrency is how many requests the engine held at the instant of this
@@ -178,9 +246,45 @@ func FetchEngineCounters(ctx context.Context, metricsURL string) (EngineCounters
 
 		PrefixCacheQueries: totals[enginePrefixQueriesMetric],
 		PrefixCacheHits:    totals[enginePrefixHitsMetric],
+		SpecDraftTokens:    totals[engineSpecDraftMetric],
+		SpecAcceptedTokens: totals[engineSpecAcceptedMetric],
+		Internals:          engineInternalsFrom(totals),
 	}
 	out.Model = fetchServedModel(ctx, client, metricsURL)
 	return out, true
+}
+
+// engineInternalsFrom reads the st: gauges out of one scrape's totals. Any of
+// them present marks the block published; the vLLM-only series an older
+// engine exposes leave it unpublished rather than reporting zero memory.
+func engineInternalsFrom(totals map[string]float64) EngineInternals {
+	published := false
+	for _, name := range engineGaugeMetrics {
+		if name == engineRunningMetric || name == engineWaitingMetric {
+			continue
+		}
+		if _, ok := totals[name]; ok {
+			published = true
+			break
+		}
+	}
+	return EngineInternals{
+		PrefixEntries:             int(totals[enginePrefixEntriesMetric]),
+		PrefixSnapshotsFree:       int(totals[enginePrefixSnapshotsFreeMetric]),
+		PrefixPinnedEntries:       int(totals[enginePrefixPinnedMetric]),
+		PrefixTierEntries:         int(totals[enginePrefixTierEntriesMetric]),
+		KVBlocksTotal:             int(totals[engineKVBlocksTotalMetric]),
+		KVBlocksUsed:              int(totals[engineKVBlocksUsedMetric]),
+		KVBlocksCached:            int(totals[engineKVBlocksCachedMetric]),
+		ConversationsParked:       int(totals[engineParkedMetric]),
+		DeviceMemoryTotalBytes:    int64(totals[engineDeviceMemTotalMetric]),
+		DeviceMemoryFreeBytes:     int64(totals[engineDeviceMemFreeMetric]),
+		DeviceMemoryReservedBytes: int64(totals[engineDeviceMemReservedMetric]),
+		HostMemoryAvailableBytes:  int64(totals[engineHostMemAvailableMetric]),
+		HandingOver:               totals[engineHandingOverMetric] > 0,
+		Quiet:                     totals[engineQuietMetric] > 0,
+		Published:                 published,
+	}
 }
 
 // EngineDelta is the growth of the cumulative series across one interval.
@@ -200,6 +304,9 @@ type EngineDelta struct {
 
 	PrefixCacheQueries float64
 	PrefixCacheHits    float64
+
+	SpecDraftTokens    float64
+	SpecAcceptedTokens float64
 }
 
 // EngineDeltaBetween is the growth from one scrape to the next.
@@ -215,7 +322,8 @@ func EngineDeltaBetween(from, to EngineCounters) (EngineDelta, bool) {
 		to.E2ESeconds < from.E2ESeconds || to.E2ECount < from.E2ECount ||
 		to.BusySeconds < from.BusySeconds ||
 		to.PromptTokens < from.PromptTokens || to.GenerationTokens < from.GenerationTokens ||
-		to.PrefixCacheQueries < from.PrefixCacheQueries || to.PrefixCacheHits < from.PrefixCacheHits {
+		to.PrefixCacheQueries < from.PrefixCacheQueries || to.PrefixCacheHits < from.PrefixCacheHits ||
+		to.SpecDraftTokens < from.SpecDraftTokens || to.SpecAcceptedTokens < from.SpecAcceptedTokens {
 		return EngineDelta{}, false
 	}
 	return EngineDelta{
@@ -232,6 +340,8 @@ func EngineDeltaBetween(from, to EngineCounters) (EngineDelta, bool) {
 
 		PrefixCacheQueries: to.PrefixCacheQueries - from.PrefixCacheQueries,
 		PrefixCacheHits:    to.PrefixCacheHits - from.PrefixCacheHits,
+		SpecDraftTokens:    to.SpecDraftTokens - from.SpecDraftTokens,
+		SpecAcceptedTokens: to.SpecAcceptedTokens - from.SpecAcceptedTokens,
 	}, true
 }
 
@@ -249,6 +359,8 @@ func (d EngineDelta) Add(o EngineDelta) EngineDelta {
 	d.GenerationTokens += o.GenerationTokens
 	d.PrefixCacheQueries += o.PrefixCacheQueries
 	d.PrefixCacheHits += o.PrefixCacheHits
+	d.SpecDraftTokens += o.SpecDraftTokens
+	d.SpecAcceptedTokens += o.SpecAcceptedTokens
 	return d
 }
 
@@ -280,6 +392,12 @@ type EngineRates struct {
 	// head costing 20 seconds and costing nothing.
 	PromptCacheHitRatio float64 `json:"promptCacheHitRatio,omitempty"`
 	CachedPromptTokens  int64   `json:"cachedPromptTokens,omitempty"`
+
+	// SpecAcceptRatio is the share of drafted tokens the target model kept.
+	// The drafter's whole contribution to decode speed is in this number;
+	// SpecDraftTokens is its sample mass.
+	SpecAcceptRatio float64 `json:"specAcceptRatio,omitempty"`
+	SpecDraftTokens int64   `json:"specDraftTokens,omitempty"`
 
 	// BusySeconds is how long the engine was stepping in this window. Against
 	// the window's wall time it is utilization; the window length is the
@@ -327,6 +445,10 @@ func (d EngineDelta) Rates() EngineRates {
 	if d.PrefixCacheQueries > 0 {
 		out.PromptCacheHitRatio = d.PrefixCacheHits / d.PrefixCacheQueries
 		out.CachedPromptTokens = int64(d.PrefixCacheHits)
+	}
+	if d.SpecDraftTokens > 0 {
+		out.SpecAcceptRatio = d.SpecAcceptedTokens / d.SpecDraftTokens
+		out.SpecDraftTokens = int64(d.SpecDraftTokens)
 	}
 	out.BusySeconds = d.BusySeconds
 	return out

@@ -153,6 +153,7 @@ func syncResultToPort(result *SyncResult) *chatport.SyncResult {
 		Model:           result.Model,
 		ProviderModel:   result.ProviderModel,
 		FellBack:        result.FellBack,
+		FallbackReason:  result.FallbackReason,
 		InputTokens:     result.InputTokens,
 		OutputTokens:    result.OutputTokens,
 		Turns:           result.Turns,

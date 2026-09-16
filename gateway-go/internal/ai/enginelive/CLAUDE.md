@@ -22,6 +22,13 @@
   + 엔진을 직접 가리키는 역할(`Registry.ModelsAt`).
 - ST 엔진의 `/health` 는 draining(핸드오버 중 새 요청 전부 503)도 503 으로
   말한다 — 웜홀의 `/v1/models` 프로브는 그 상태를 못 본다.
+- **전이 원장과 스냅샷**(`ledger.go`): 전이는 `Ledger`(`engine-liveness.json`, 30일)에
+  즉시 영속되고, `Watcher.State`/`Transitions`/`TrackedSinceMs` 가 엔진 RPC
+  (`miniapp.engine.status`)에 게이트웨이의 라우팅 판정·다운 시각·끊김 이력을 준다.
+  `Outages` 는 연속 다운을 한 구간으로 접고(게이트웨이 재시작이 다운을 다시 기록),
+  `DowntimeByDay` 는 자정에서 자른다. 재시작 시 원장의 마지막이 다운이면 `downSince`
+  를 원장에서 잇고, 첫 프로브가 준비면 열린 구간을 그 시각에 닫는다. `OnTransition`
+  콜백은 락 밖에서 호출된다(네이티브 푸시 `kind=engine`).
 
 ## 집중 검증
 
