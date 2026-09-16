@@ -35,6 +35,9 @@ type chatRunResult struct {
 	// role to a fallback role to get a successful turn. Surfaced to clients so
 	// the UI can show which model answered.
 	FellBack bool
+	// FallbackReason says why, when FellBack: one of the FallbackReason*
+	// constants ("engine_down", "circuit_open", "stall", "budget", "error").
+	FallbackReason string
 }
 
 // executeAgentRun performs the core agent execution: persist user msg, assemble context,
@@ -251,7 +254,7 @@ func executeAgentRun(
 
 	// Execute agent loop with model fallback chain.
 	agentStart := time.Now()
-	agentResult, actualModel, fellBack, err := runAgentWithFallback(ctx, cfg, messages, client, deps, providerID, initialRole, effortRt, hooks, logger, runLog)
+	agentResult, actualModel, fellBack, fallbackReason, err := runAgentWithFallbackDetailed(ctx, cfg, messages, client, deps, providerID, initialRole, effortRt, hooks, logger, runLog)
 	emitPhase(deps, params, "finalizing", time.Now())
 	logEffortRouteFailure(logger, effortDecision, effortRt, actualModel, err)
 	usageModel := actualModel
@@ -297,7 +300,7 @@ func executeAgentRun(
 		agentStart:     agentStart,
 	}, logger)
 
-	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack}, nil
+	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack, FallbackReason: fallbackReason}, nil
 }
 
 // emitRunStart emits the agent run.start event to gateway subscriptions.

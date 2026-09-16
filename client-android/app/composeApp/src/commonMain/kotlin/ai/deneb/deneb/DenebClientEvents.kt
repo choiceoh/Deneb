@@ -206,6 +206,12 @@ suspend fun DenebGatewayClient.subscribeEvents(onPush: (title: String, body: Str
                                                 }
                                             }
                                         }
+                                    } else if (p.kind == "engine") {
+                                        // A readiness change of the local serving engine: a
+                                        // state frame for the engine screen and the 더보기
+                                        // tile, never a notification (the engine flapped 22
+                                        // times on 2026-09-16; nobody wants 44 pings).
+                                        engineEvents.tryEmit(EnginePush.fromPushData(p.data))
                                     } else if (p.body.isNotBlank()) {
                                         syncNativeStateAsync()
                                         onPush(p.title.ifBlank { "Deneb" }, p.body)

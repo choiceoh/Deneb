@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelmaintenance"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rolehealth"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -551,6 +553,8 @@ func (s *Server) registerModelMaintenanceWorkflows() {
 		StateDir:  config.ResolveStateDir(),
 		Notify:    notify,
 		Logger:    s.logger,
+		// Re-read per poll so a hot-reloaded router config counts.
+		RouterMeter: func() (string, string, map[string]bool) { return configresolve.RouterMeter(s.logger) },
 	})
 	for _, task := range s.modelMaintenance.Tasks() {
 		s.autonomousSvc.RegisterTask(task)
@@ -623,5 +627,32 @@ func (s *Server) registerEngineLivenessWorkflow() {
 		reg,
 		s.logger,
 	)
+	// Transitions persist (the outage ledger behind the engine screen's
+	// downtime) and reach connected native clients as a state frame, so the
+	// screen refreshes the moment a turn's routing changes.
+	s.engineLiveness.UseLedger(enginelive.NewLedger(enginelive.DefaultLedgerPath()))
+	if hub := s.pushHub; hub != nil {
+		s.engineLiveness.OnTransition(func(ev enginelive.TransitionEvent) {
+			hub.Publish(nativepush.Event{Kind: nativepush.PushKindEngine, Data: engineTransitionData(ev)})
+		})
+	}
 	s.engineLiveness.Start(s.ShutdownCtx())
+}
+
+// engineTransitionData flattens a liveness transition into the push frame's
+// string map.
+func engineTransitionData(ev enginelive.TransitionEvent) map[string]string {
+	data := map[string]string{
+		"down":     strconv.FormatBool(ev.Down),
+		"endpoint": ev.Endpoint,
+		"sinceMs":  strconv.FormatInt(ev.At.UnixMilli(), 10),
+		"models":   strings.Join(ev.Models, ","),
+	}
+	if ev.Reason != "" {
+		data["reason"] = ev.Reason
+	}
+	if !ev.Down && ev.DownFor > 0 {
+		data["downForSec"] = strconv.FormatInt(int64(ev.DownFor.Seconds()), 10)
+	}
+	return data
 }

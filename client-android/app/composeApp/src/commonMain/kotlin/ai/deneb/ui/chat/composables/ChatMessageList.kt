@@ -86,6 +86,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.fallback_answered_by
+import deneb.composeapp.generated.resources.fallback_answered_by_reason
 import deneb.composeapp.generated.resources.fallback_service_failed
 import deneb.composeapp.generated.resources.fallback_trying_next
 import deneb.composeapp.generated.resources.scroll_to_bottom_content_description
@@ -695,8 +696,13 @@ internal fun ChatMessageList(
                                             )
                                         }
                                         if (history.fallbackServiceName != null) {
+                                            val reason = fallbackReasonLabel(history.fallbackReason)
                                             androidx.compose.material3.Text(
-                                                text = stringResource(Res.string.fallback_answered_by, history.fallbackServiceName),
+                                                text = if (reason != null) {
+                                                    stringResource(Res.string.fallback_answered_by_reason, history.fallbackServiceName, stringResource(reason))
+                                                } else {
+                                                    stringResource(Res.string.fallback_answered_by, history.fallbackServiceName)
+                                                },
                                                 style = DenebType.meta,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),

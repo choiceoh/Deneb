@@ -522,3 +522,113 @@ internal fun sampleSelfImprovementCodingQueue(now: Long) = SelfImprovementCoding
  * preview clock is frozen: 2026-08-30 09:00 KST.
  */
 internal const val PREVIEW_NOW_MS: Long = 1_787_270_400_000L
+
+// --- engine screen -------------------------------------------------------
+
+/**
+ * The engine page on a bad day, shaped after production 2026-09-16: the
+ * engine currently refused (turns on the fallback for 12 minutes), three
+ * outages in the last 24 hours, a day the engine was gone for entirely, a
+ * thin-sample day, the prefix budget exhausted, and a month meter that still
+ * carries a renamed entry. Every relative time is against PREVIEW_NOW_MS.
+ */
+internal val sampleEngineStatus: ai.deneb.deneb.generated.EngineStatusResult = run {
+    val h = 3_600_000L
+    val m = 60_000L
+    val now = PREVIEW_NOW_MS
+    ai.deneb.deneb.generated.EngineStatusResult(
+        nowMs = now,
+        configured = true,
+        endpoint = "http://100.125.220.117:8000/metrics",
+        reachable = false,
+        model = "glm-5.3-flash",
+        livenessTracked = true,
+        engineDown = true,
+        downSinceMs = now - 12 * m,
+        downReason = "connection refused",
+        downModels = listOf("glm-5.3-flash", "glm-5.3-flash-low"),
+        trackedSinceMs = now - 20 * h,
+        outages = listOf(
+            ai.deneb.deneb.generated.EngineOutage(sinceMs = now - 12 * m, untilMs = 0L, durationSec = 12 * 60.0, reason = "connection refused"),
+            ai.deneb.deneb.generated.EngineOutage(sinceMs = now - 5 * h, untilMs = now - 4 * h, durationSec = 3600.0, reason = "connection refused"),
+            ai.deneb.deneb.generated.EngineOutage(sinceMs = now - 9 * h - 30 * m, untilMs = now - 9 * h, durationSec = 1800.0, reason = "health 503 draining (handing over to campaign/b12x)"),
+            ai.deneb.deneb.generated.EngineOutage(sinceMs = now - 40 * h, untilMs = now - 16 * h, durationSec = 24 * 3600.0, reason = "connection refused"),
+        ),
+        internals = ai.deneb.deneb.generated.EngineInternals(
+            published = true,
+            prefixEntries = 96, prefixSnapshotsFree = 0, prefixPinnedEntries = 0, prefixTierEntries = 54,
+            kvBlocksTotal = 2987, kvBlocksUsed = 0, kvBlocksCached = 96, conversationsParked = 46,
+            deviceMemoryTotalBytes = 128_520_081_408L, deviceMemoryFreeBytes = 17_813_172_224L, deviceMemoryReservedBytes = 72_301_412_352L,
+            hostMemoryAvailableBytes = 16_106_307_584L,
+            fleetKnown = true, fleetOwner = "production/deploy/2011680", served = 166L, steps = 7107L,
+        ),
+        days = listOf(
+            ai.deneb.deneb.generated.EngineDay(
+                day = "2026-08-21", model = "glm-5.3-flash", measured = true,
+                decodeTokensPerSec = 54.4, prefillTokensPerSec = 3257.7, concurrencyWhileBusy = 1.48, peakConcurrency = 12, pollIntervalSec = 15,
+                requests = 2185, promptTokens = 10_082_802, generatedTokens = 717_939,
+                meanTtftSeconds = 2.128, meanQueueSeconds = 0.712, meanE2eSeconds = 8.191,
+                promptCacheHitRatio = 0.061, cachedPromptTokens = 615_051, specAcceptRatio = 0.282, specDraftTokens = 58_919,
+                busySeconds = 11_833.0, observedSeconds = 50_175.0, utilization = 0.236, restarts = 20,
+                livenessTracked = true, downSeconds = 5400.0, outages = 3,
+                routerMetered = true, routerLocalRequests = 1_618, routerRemoteRequests = 720, routerUnknownRequests = 0,
+            ),
+            ai.deneb.deneb.generated.EngineDay(
+                day = "2026-08-20",
+                measured = false,
+                livenessTracked = true,
+                downSeconds = 86_400.0,
+                outages = 0,
+                routerMetered = true,
+                routerLocalRequests = 0,
+                routerRemoteRequests = 1_402,
+            ),
+            ai.deneb.deneb.generated.EngineDay(
+                day = "2026-08-19", model = "glm-5.3-flash", measured = true,
+                decodeTokensPerSec = 56.5, prefillTokensPerSec = 4260.5, concurrencyWhileBusy = 1.36, peakConcurrency = 12, pollIntervalSec = 15,
+                requests = 904, promptTokens = 7_622_374, generatedTokens = 424_905,
+                meanTtftSeconds = 2.83, meanQueueSeconds = 0.851, meanE2eSeconds = 11.044,
+                promptCacheHitRatio = 0.099, cachedPromptTokens = 754_615, specAcceptRatio = 0.301, specDraftTokens = 40_120,
+                busySeconds = 7_170.0, observedSeconds = 18_225.0, utilization = 0.393, restarts = 7,
+                livenessTracked = true, downSeconds = 7_200.0, outages = 1,
+                routerMetered = true, routerLocalRequests = 838, routerRemoteRequests = 210,
+            ),
+            ai.deneb.deneb.generated.EngineDay(
+                day = "2026-08-18", model = "glm-5.3-flash", measured = true,
+                decodeTokensPerSec = 12.1, prefillTokensPerSec = 46.5, concurrencyWhileBusy = 1.45, peakConcurrency = 0, pollIntervalSec = 15,
+                requests = 2, promptTokens = 28, generatedTokens = 8,
+                meanTtftSeconds = 0.306, meanQueueSeconds = 0.005, busySeconds = 0.764, observedSeconds = 90.0, utilization = 0.008,
+                livenessTracked = false,
+            ),
+        ),
+        total = ai.deneb.deneb.generated.EngineTotals(
+            days = 4, requests = 3091, promptTokens = 17_705_204, generatedTokens = 1_142_852,
+            decodeTokensPerSec = 55.2, prefillTokensPerSec = 3624.6, meanTtftSeconds = 2.33, meanQueueSeconds = 0.75, meanE2eSeconds = 9.0,
+            promptCacheHitRatio = 0.072, specAcceptRatio = 0.29, specDraftTokens = 99_039,
+            busySeconds = 19_004.0, observedSeconds = 68_490.0, utilization = 0.277, restarts = 27,
+            downSeconds = 99_000.0, outages = 4,
+            routerLocalRequests = 2_456, routerRemoteRequests = 2_332, routerUnknownRequests = 0,
+        ),
+        routerAvailable = true,
+        routerWindow = "2026-08",
+        localRequests = 5_659, remoteRequests = 15_220, unknownRequests = 2_456,
+        routing = listOf(
+            ai.deneb.deneb.generated.EngineRoutingRow(model = "deepseek-v4-flash-api", local = false, known = true, requests = 5_378, inputTokens = 19_783_930, outputTokens = 1_643_836, circuitState = "closed", keyHealth = "ok"),
+            ai.deneb.deneb.generated.EngineRoutingRow(model = "glm-5.3-flash", local = true, known = true, requests = 5_324, inputTokens = 177_934_315, outputTokens = 5_322_199, circuitState = "open", retryAfterMs = 540_000),
+            ai.deneb.deneb.generated.EngineRoutingRow(model = "k3", local = false, known = true, requests = 3_767, inputTokens = 54_067_291, outputTokens = 1_687_880, circuitState = "closed", keyHealth = "ok"),
+            ai.deneb.deneb.generated.EngineRoutingRow(model = "glm-5.3", local = false, known = true, requests = 2_073, inputTokens = 65_738_011, outputTokens = 645_801, circuitState = "closed", keyHealth = "unreachable"),
+            ai.deneb.deneb.generated.EngineRoutingRow(model = "glm-5.3-flash-local-low", local = false, known = false, requests = 1_618, inputTokens = 2_611_888, outputTokens = 143_400),
+            ai.deneb.deneb.generated.EngineRoutingRow(model = "glm-5.3-flash-local", local = false, known = false, requests = 838, inputTokens = 20_372_153, outputTokens = 512_498),
+            ai.deneb.deneb.generated.EngineRoutingRow(model = "glm-5.3-flash-low", local = true, known = true, requests = 335, inputTokens = 237_050, outputTokens = 29_522, circuitState = "open", retryAfterMs = 540_000),
+        ),
+        routerStatusAvailable = true,
+        routerDay = "2026-08-21",
+        routerDayMetered = true,
+        todayLocalRequests = 1_618, todayRemoteRequests = 720, todayUnknownRequests = 0,
+        routingToday = listOf(
+            ai.deneb.deneb.generated.EngineRoutingRow(model = "glm-5.3-flash", local = true, known = true, requests = 1_402, inputTokens = 38_120_000, outputTokens = 1_204_000, circuitState = "open", retryAfterMs = 540_000),
+            ai.deneb.deneb.generated.EngineRoutingRow(model = "glm-5.3", local = false, known = true, requests = 720, inputTokens = 22_000_000, outputTokens = 210_000, circuitState = "closed", keyHealth = "unreachable"),
+            ai.deneb.deneb.generated.EngineRoutingRow(model = "glm-5.3-flash-low", local = true, known = true, requests = 216, inputTokens = 180_000, outputTokens = 20_000, circuitState = "open", retryAfterMs = 540_000),
+        ),
+    )
+}

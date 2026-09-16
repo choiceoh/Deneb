@@ -80,7 +80,7 @@ internal suspend fun sendGatewayChat(
     val envelope = response.body<RpcResponse>()
     val payload = envelope.payload
     return if (envelope.ok && payload != null) {
-        GatewayReply(text = payload.text, model = payload.model, fellBack = payload.fellBack)
+        GatewayReply(text = payload.text, model = payload.model, fellBack = payload.fellBack, fallbackReason = payload.fallbackReason)
     } else {
         GatewayReply("⚠️ 게이트웨이 오류", ok = false)
     }
@@ -197,6 +197,7 @@ internal suspend fun streamGatewayChat(
         text = done.text,
         model = done.model,
         fellBack = done.fellBack,
+        fallbackReason = done.fallbackReason,
         reasoning = done.reasoning.ifBlank { null },
     )
 }
@@ -425,6 +426,7 @@ internal data class SendPayload(
     val model: String = "",
     val sessionKey: String = "",
     val fellBack: Boolean = false,
+    val fallbackReason: String = "",
 )
 
 /** Result of one gateway chat turn. */
@@ -432,6 +434,9 @@ internal data class GatewayReply(
     val text: String,
     val model: String = "",
     val fellBack: Boolean = false,
+    // Why the gateway fell back ("engine_down", "circuit_open", "stall",
+    // "budget", "error"); blank when it did not.
+    val fallbackReason: String = "",
     val ok: Boolean = true,
     // Accumulated chain-of-thought for the turn, shown as the expandable reasoning
     // block. Null/blank when the model produced none.
@@ -452,6 +457,7 @@ private data class DoneEvent(
     val text: String = "",
     val model: String = "",
     val fellBack: Boolean = false,
+    val fallbackReason: String = "",
     val reasoning: String = "",
 )
 

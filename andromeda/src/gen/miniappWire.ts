@@ -103,34 +103,113 @@ export interface EngineDay {
   meanE2eSeconds?: number
   promptCacheHitRatio?: number
   cachedPromptTokens?: number
+  specAcceptRatio?: number
+  specDraftTokens?: number
   busySeconds?: number
   observedSeconds?: number
   utilization?: number
   restarts?: number
+  livenessTracked?: boolean
+  downSeconds?: number
+  outages?: number
+  routerMetered?: boolean
+  routerLocalRequests?: number
+  routerRemoteRequests?: number
+  routerUnknownRequests?: number
+}
+
+export interface EngineGlance {
+  nowMs?: number
+  configured?: boolean
+  livenessTracked?: boolean
+  engineDown?: boolean
+  sinceMs?: number
+  downReason?: string
+  model?: string
+  decodeTokensPerSec?: number
+  todayOutages?: number
+  todayDownSeconds?: number
+  todayLocalRequests?: number
+  todayRemoteRequests?: number
+}
+
+export interface EngineInternals {
+  published?: boolean
+  prefixEntries?: number
+  prefixSnapshotsFree?: number
+  prefixPinnedEntries?: number
+  prefixTierEntries?: number
+  kvBlocksTotal?: number
+  kvBlocksUsed?: number
+  kvBlocksCached?: number
+  conversationsParked?: number
+  deviceMemoryTotalBytes?: number
+  deviceMemoryFreeBytes?: number
+  deviceMemoryReservedBytes?: number
+  hostMemoryAvailableBytes?: number
+  handingOver?: boolean
+  quiet?: boolean
+  fleetKnown?: boolean
+  fleetOwner?: string
+  fleetDraining?: string
+  fleetHandedOver?: string
+  served?: number
+  steps?: number
+}
+
+export interface EngineOutage {
+  sinceMs?: number
+  untilMs?: number
+  durationSec?: number
+  reason?: string
 }
 
 export interface EngineRoutingRow {
   model?: string
   local?: boolean
+  known?: boolean
   requests?: number
   inputTokens?: number
   outputTokens?: number
+  circuitState?: string
+  circuitFailures?: number
+  retryAfterMs?: number
+  keyHealth?: string
+  upstreamMissing?: boolean
 }
 
 export interface EngineStatusResult {
+  nowMs?: number
   configured?: boolean
   endpoint?: string
   reachable?: boolean
   model?: string
   runningRequests?: number
   waitingRequests?: number
+  livenessTracked?: boolean
+  engineDown?: boolean
+  downSinceMs?: number
+  upSinceMs?: number
+  downReason?: string
+  downModels?: string[]
+  trackedSinceMs?: number
+  outages?: EngineOutage[]
+  internals?: EngineInternals
   days?: EngineDay[]
   total?: EngineTotals
   routerAvailable?: boolean
   routerWindow?: string
   localRequests?: number
   remoteRequests?: number
+  unknownRequests?: number
   routing?: EngineRoutingRow[]
+  routerStatusAvailable?: boolean
+  routerDay?: string
+  routerDayMetered?: boolean
+  todayLocalRequests?: number
+  todayRemoteRequests?: number
+  todayUnknownRequests?: number
+  routingToday?: EngineRoutingRow[]
 }
 
 export interface EngineTotals {
@@ -141,11 +220,20 @@ export interface EngineTotals {
   decodeTokensPerSec?: number
   prefillTokensPerSec?: number
   meanTtftSeconds?: number
+  meanQueueSeconds?: number
+  meanE2eSeconds?: number
   promptCacheHitRatio?: number
+  specAcceptRatio?: number
+  specDraftTokens?: number
   busySeconds?: number
   observedSeconds?: number
   utilization?: number
   restarts?: number
+  downSeconds?: number
+  outages?: number
+  routerLocalRequests?: number
+  routerRemoteRequests?: number
+  routerUnknownRequests?: number
 }
 
 export interface FilesEntryOut {

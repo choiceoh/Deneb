@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modeltuner"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/regressionwatch"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/routershare"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
@@ -53,6 +54,9 @@ type Deps struct {
 	StateDir  string
 	Notify    func(context.Context, string) error
 	Logger    *slog.Logger
+	// RouterMeter resolves the wormhole router's meter (base URL, gate token,
+	// local entries). Optional; nil disables the per-day router share.
+	RouterMeter routershare.Meter
 }
 
 // Suite is the cohesive set of model-quality background tasks. The compaction
@@ -62,6 +66,16 @@ type Suite struct {
 	tasks           []PeriodicTask
 	compactionTuner *compactuner.Task
 	engineSpeed     *enginespeed.Store
+	routerShare     *routershare.Store
+}
+
+// RouterShare returns the per-day router meter history, or nil when no local
+// engine is configured or the router meter cannot be resolved.
+func (s *Suite) RouterShare() *routershare.Store {
+	if s == nil {
+		return nil
+	}
+	return s.routerShare
 }
 
 // EngineSpeed returns the serving-engine speed history, or nil when no local
@@ -114,6 +128,15 @@ func New(deps Deps) *Suite {
 			suite.tasks = append(suite.tasks, task)
 			logger.Info("engine-speed: sampling local serving engines",
 				"endpoints", len(endpoints), "interval", enginespeed.PollInterval)
+		}
+		// The router's month meter is differenced into local days alongside
+		// the engine's counters, so "how much ran locally today" has an
+		// answer that belongs to today and to today's routing table.
+		if deps.RouterMeter != nil {
+			suite.routerShare = routershare.NewStore(routershare.DefaultStatePath())
+			if task := routershare.NewTask(suite.routerShare, deps.RouterMeter, logger); task != nil {
+				suite.tasks = append(suite.tasks, task)
+			}
 		}
 	}
 

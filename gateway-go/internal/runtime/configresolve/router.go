@@ -66,6 +66,40 @@ func RouterMeter(logger *slog.Logger) (baseURL, token string, localModels map[st
 	return routerBaseURL(cfg.Listen), os.ExpandEnv(cfg.Token), local
 }
 
+// RouterEntryNames lists every entry name in the router's current config —
+// what the meter can be reconciled against. A metered name absent from this
+// set belongs to an entry that was renamed or removed inside the month; it is
+// neither local nor remote now, and must not be counted as either.
+func RouterEntryNames() map[string]bool {
+	path := strings.TrimSpace(os.Getenv(routerConfigEnv))
+	if path == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil
+		}
+		path = filepath.Join(home, ".wormhole", "config.json")
+	}
+	raw, err := os.ReadFile(path) //nolint:gosec // operator-owned router config, path from env or $HOME
+	if err != nil {
+		return nil
+	}
+	var cfg struct {
+		Models []struct {
+			Name string `json:"name"`
+		} `json:"models"`
+	}
+	if json.Unmarshal(raw, &cfg) != nil {
+		return nil
+	}
+	out := make(map[string]bool, len(cfg.Models))
+	for _, m := range cfg.Models {
+		if name := strings.TrimSpace(m.Name); name != "" {
+			out[name] = true
+		}
+	}
+	return out
+}
+
 // routerBaseURL turns the router's listen address into a loopback base URL.
 // A router listening on all interfaces is still reached over loopback.
 func routerBaseURL(listen string) string {

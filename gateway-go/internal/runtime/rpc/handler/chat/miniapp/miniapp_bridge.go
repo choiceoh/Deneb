@@ -1140,10 +1140,11 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			// BestText so a tool wrap-up final turn (e.g. "위키에 기록했습니다"
 			// after writing the answer to the wiki) doesn't replace the real body.
-			"text":       res.BestText,
-			"model":      res.Model,
-			"fellBack":   res.FellBack,
-			"sessionKey": sessionKey,
+			"text":           res.BestText,
+			"model":          res.Model,
+			"fellBack":       res.FellBack,
+			"fallbackReason": res.FallbackReason,
+			"sessionKey":     sessionKey,
 			"usage": map[string]int{
 				"inputTokens":  res.InputTokens,
 				"outputTokens": res.OutputTokens,

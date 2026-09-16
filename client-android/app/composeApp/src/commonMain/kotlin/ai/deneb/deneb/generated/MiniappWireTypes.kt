@@ -128,10 +128,71 @@ data class EngineDay(
     val meanE2eSeconds: Double = 0.0,
     val promptCacheHitRatio: Double = 0.0,
     val cachedPromptTokens: Long = 0L,
+    val specAcceptRatio: Double = 0.0,
+    val specDraftTokens: Long = 0L,
     val busySeconds: Double = 0.0,
     val observedSeconds: Double = 0.0,
     val utilization: Double = 0.0,
     val restarts: Int = 0,
+    val livenessTracked: Boolean = false,
+    val downSeconds: Double = 0.0,
+    val outages: Int = 0,
+    val routerMetered: Boolean = false,
+    val routerLocalRequests: Long = 0L,
+    val routerRemoteRequests: Long = 0L,
+    val routerUnknownRequests: Long = 0L,
+)
+
+@Immutable
+@Serializable
+data class EngineGlance(
+    val nowMs: Long = 0L,
+    val configured: Boolean = false,
+    val livenessTracked: Boolean = false,
+    val engineDown: Boolean = false,
+    val sinceMs: Long = 0L,
+    val downReason: String = "",
+    val model: String = "",
+    val decodeTokensPerSec: Double = 0.0,
+    val todayOutages: Int = 0,
+    val todayDownSeconds: Double = 0.0,
+    val todayLocalRequests: Long = 0L,
+    val todayRemoteRequests: Long = 0L,
+)
+
+@Immutable
+@Serializable
+data class EngineInternals(
+    val published: Boolean = false,
+    val prefixEntries: Int = 0,
+    val prefixSnapshotsFree: Int = 0,
+    val prefixPinnedEntries: Int = 0,
+    val prefixTierEntries: Int = 0,
+    val kvBlocksTotal: Int = 0,
+    val kvBlocksUsed: Int = 0,
+    val kvBlocksCached: Int = 0,
+    val conversationsParked: Int = 0,
+    val deviceMemoryTotalBytes: Long = 0L,
+    val deviceMemoryFreeBytes: Long = 0L,
+    val deviceMemoryReservedBytes: Long = 0L,
+    val hostMemoryAvailableBytes: Long = 0L,
+    val handingOver: Boolean = false,
+    val quiet: Boolean = false,
+    val fleetKnown: Boolean = false,
+    val fleetOwner: String = "",
+    val fleetDraining: String = "",
+    val fleetHandedOver: String = "",
+    val served: Long = 0L,
+    val steps: Long = 0L,
+)
+
+@Immutable
+@Serializable
+data class EngineOutage(
+    val sinceMs: Long = 0L,
+    val untilMs: Long = 0L,
+    val durationSec: Double = 0.0,
+    val reason: String = "",
 )
 
 @Immutable
@@ -139,27 +200,51 @@ data class EngineDay(
 data class EngineRoutingRow(
     val model: String = "",
     val local: Boolean = false,
+    val known: Boolean = false,
     val requests: Long = 0L,
     val inputTokens: Long = 0L,
     val outputTokens: Long = 0L,
+    val circuitState: String = "",
+    val circuitFailures: Int = 0,
+    val retryAfterMs: Long = 0L,
+    val keyHealth: String = "",
+    val upstreamMissing: Boolean = false,
 )
 
 @Immutable
 @Serializable
 data class EngineStatusResult(
+    val nowMs: Long = 0L,
     val configured: Boolean = false,
     val endpoint: String = "",
     val reachable: Boolean = false,
     val model: String = "",
     val runningRequests: Int = 0,
     val waitingRequests: Int = 0,
+    val livenessTracked: Boolean = false,
+    val engineDown: Boolean = false,
+    val downSinceMs: Long = 0L,
+    val upSinceMs: Long = 0L,
+    val downReason: String = "",
+    val downModels: List<String> = emptyList(),
+    val trackedSinceMs: Long = 0L,
+    val outages: List<EngineOutage> = emptyList(),
+    val internals: EngineInternals = EngineInternals(),
     val days: List<EngineDay> = emptyList(),
     val total: EngineTotals = EngineTotals(),
     val routerAvailable: Boolean = false,
     val routerWindow: String = "",
     val localRequests: Long = 0L,
     val remoteRequests: Long = 0L,
+    val unknownRequests: Long = 0L,
     val routing: List<EngineRoutingRow> = emptyList(),
+    val routerStatusAvailable: Boolean = false,
+    val routerDay: String = "",
+    val routerDayMetered: Boolean = false,
+    val todayLocalRequests: Long = 0L,
+    val todayRemoteRequests: Long = 0L,
+    val todayUnknownRequests: Long = 0L,
+    val routingToday: List<EngineRoutingRow> = emptyList(),
 )
 
 @Immutable
@@ -172,11 +257,20 @@ data class EngineTotals(
     val decodeTokensPerSec: Double = 0.0,
     val prefillTokensPerSec: Double = 0.0,
     val meanTtftSeconds: Double = 0.0,
+    val meanQueueSeconds: Double = 0.0,
+    val meanE2eSeconds: Double = 0.0,
     val promptCacheHitRatio: Double = 0.0,
+    val specAcceptRatio: Double = 0.0,
+    val specDraftTokens: Long = 0L,
     val busySeconds: Double = 0.0,
     val observedSeconds: Double = 0.0,
     val utilization: Double = 0.0,
     val restarts: Int = 0,
+    val downSeconds: Double = 0.0,
+    val outages: Int = 0,
+    val routerLocalRequests: Long = 0L,
+    val routerRemoteRequests: Long = 0L,
+    val routerUnknownRequests: Long = 0L,
 )
 
 @Immutable

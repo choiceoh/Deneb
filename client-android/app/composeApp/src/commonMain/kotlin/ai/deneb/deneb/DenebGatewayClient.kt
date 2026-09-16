@@ -151,6 +151,10 @@ class DenebGatewayClient private constructor(
     // collectors re-subscribe (server-side subscriptions die with the socket).
     internal val eventsHello = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 4)
     internal val agentEvents = MutableSharedFlow<AgentEventFrame>(extraBufferCapacity = 64)
+
+    // Local serving engine readiness changes (events stream, kind=engine). The
+    // engine screen and the 더보기 tile refetch on each one.
+    internal val engineEvents = MutableSharedFlow<EnginePush>(extraBufferCapacity = 8)
     override val chatHistory: StateFlow<List<History>> = _chatHistory
 
     // Guards _chatHistory against a background transcript load clobbering an

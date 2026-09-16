@@ -76,6 +76,9 @@ type chatStreamResult struct {
 	Text     string
 	Model    string
 	FellBack bool
+	// FallbackReason is why the fallback fired ("engine_down", …); empty when
+	// it did not.
+	FallbackReason string
 	// Reasoning is the turn's accumulated chain-of-thought (empty when none),
 	// carried on the done frame so the client can show an expandable reasoning
 	// block for the just-completed answer without a transcript re-fetch.
@@ -225,7 +228,7 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 		// BestText (not res.Text) so a tool wrap-up final turn — e.g. the agent
 		// writing its answer to the wiki and closing with "위키에 기록했습니다" —
 		// doesn't replace the streamed body in the client's done frame.
-		return &chatStreamResult{Text: res.BestText, Model: res.Model, FellBack: res.FellBack, Reasoning: res.Thinking}, nil
+		return &chatStreamResult{Text: res.BestText, Model: res.Model, FellBack: res.FellBack, FallbackReason: res.FallbackReason, Reasoning: res.Thinking}, nil
 	}
 	writeChatStreamSSE(runCtx, r.Context(), w, sessionKey, runner, s.logger, s.translateThinking)
 }
@@ -438,6 +441,9 @@ func writeChatStreamSSE(
 			"model":     result.Model,
 			"fellBack":  result.FellBack,
 			"reasoning": settledReasoning,
+			// Why the fallback fired, so the answer can say "engine down"
+			// rather than only naming the substitute.
+			"fallbackReason": result.FallbackReason,
 		})
 	}
 }

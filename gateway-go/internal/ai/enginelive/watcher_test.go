@@ -294,3 +294,92 @@ func (s *notifyingSink) SetEngineDown(endpoint string, models []string) {
 	default:
 	}
 }
+
+// A gateway restarted in the middle of an outage marks the engine down again
+// on its first probe. The outage began when the ledger says it did — the
+// panel's "down for" must not reset to zero on every deploy — and the ledger
+// records a second down that Outages folds into the first.
+func TestMarkDownInheritsTheLedgersOutageStart(t *testing.T) {
+	w, _, _ := newTestWatcher(t, func(string) []string { return []string{"glm-flash"} })
+	l := NewLedger("")
+	began := time.Date(2026, 9, 16, 13, 17, 42, 0, time.UTC)
+	l.Record(Transition{Endpoint: ep, AtMs: began.UnixMilli(), Down: true, Reason: "connection refused"})
+	w.UseLedger(l)
+	now := began.Add(38 * time.Minute)
+	w.now = func() time.Time { return now }
+	var events []TransitionEvent
+	w.OnTransition(func(e TransitionEvent) { events = append(events, e) })
+
+	w.observe(ep, w.engines[ep], verdictRefusing, "connection refused")
+
+	st, ok := w.State(ep)
+	if !ok || !st.Down || !st.DownSince.Equal(began) || st.Reason != "connection refused" {
+		t.Fatalf("State = %+v, want down since the ledger's start", st)
+	}
+	if got := Outages(l.Transitions(ep, 0)); len(got) != 1 || got[0].UntilMs != 0 {
+		t.Fatalf("the restart's down must fold into the open outage: %+v", got)
+	}
+	if len(events) != 1 || !events[0].Down || events[0].Reason != "connection refused" {
+		t.Fatalf("one down event expected: %+v", events)
+	}
+
+	// Recovery: two ready probes close the outage, with the full duration.
+	now = began.Add(83 * time.Minute)
+	w.observe(ep, w.engines[ep], verdictReady, "")
+	w.observe(ep, w.engines[ep], verdictReady, "")
+	st, _ = w.State(ep)
+	if st.Down || !st.UpSince.Equal(now) {
+		t.Fatalf("State after recovery = %+v", st)
+	}
+	if len(events) != 2 || events[1].Down || events[1].DownFor != 83*time.Minute {
+		t.Fatalf("up event must carry the outage length from the ledger's start: %+v", events)
+	}
+	if got := Outages(l.Transitions(ep, 0)); len(got) != 1 || got[0].UntilMs != now.UnixMilli() {
+		t.Fatalf("outage must be closed at recovery: %+v", got)
+	}
+}
+
+// The engine recovered while no gateway was running: the ledger's last word
+// is a down, and the first probe finds the engine ready. That outage is
+// closed at gateway start rather than left open forever.
+func TestFirstReadyProbeClosesAnOutageLeftOpenInTheLedger(t *testing.T) {
+	w, sink, _ := newTestWatcher(t, func(string) []string { return []string{"glm-flash"} })
+	l := NewLedger("")
+	l.Record(Transition{Endpoint: ep, AtMs: 1_000, Down: true, Reason: "connection refused"})
+	w.UseLedger(l)
+	now := time.UnixMilli(5_000)
+	w.now = func() time.Time { return now }
+
+	w.observe(ep, w.engines[ep], verdictReady, "")
+
+	if got := Outages(l.Transitions(ep, 0)); len(got) != 1 || got[0].UntilMs != 5_000 {
+		t.Fatalf("outage must be closed at the first ready probe: %+v", got)
+	}
+	if len(sink.calls) != 0 {
+		t.Errorf("an engine found ready needs no sink update: %v", sink.calls)
+	}
+	st, _ := w.State(ep)
+	if st.Down || !st.Probed || !st.UpSince.Equal(now) {
+		t.Errorf("State = %+v", st)
+	}
+	// A second ready probe is not a first one: nothing more is recorded.
+	w.observe(ep, w.engines[ep], verdictReady, "")
+	if n := len(l.Transitions(ep, 0)); n != 2 {
+		t.Errorf("transitions = %d, want 2", n)
+	}
+}
+
+func TestStateAndTransitionsAreNilSafe(t *testing.T) {
+	var w *Watcher
+	if _, ok := w.State(ep); ok {
+		t.Error("nil watcher has no state")
+	}
+	if got := w.Transitions(ep, 0); got != nil {
+		t.Error("nil watcher has no transitions")
+	}
+	if _, ok := w.TrackedSinceMs(ep); ok {
+		t.Error("nil watcher tracks nothing")
+	}
+	w.UseLedger(nil)
+	w.OnTransition(nil)
+}

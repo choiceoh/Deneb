@@ -53,6 +53,11 @@ const (
 	// computer tool: screenshot/click/type on the host OS). Ref carries the
 	// dispatch id the desktop echoes back on miniapp.computer.result.
 	PushKindComputer = "computer"
+	// PushKindEngine is a local serving engine readiness change (Data carries
+	// down/endpoint/reason/sinceMs/models). Body is empty on purpose: it is a
+	// state frame the engine screen refreshes on, never a notification — the
+	// engine flapped 22 times on 2026-09-16 and nobody wants 44 pings.
+	PushKindEngine = "engine"
 )
 
 // ClientKind identifies the device class behind an events subscription.

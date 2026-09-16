@@ -170,6 +170,12 @@ type fallbackTurn struct {
 	// requested model and only changes if the fallback chain fires.
 	actualModel string
 	fellBack    bool
+	// initialFailure names why the requested model did not answer, fixed at
+	// the first failed attempt; fallbackReason carries it out once a fallback
+	// model did answer, so the client can say "engine down" rather than only
+	// "another model answered".
+	initialFailure string
+	fallbackReason string
 	// stalledResult holds the original empty timeout result when the main model
 	// stalled. If no fallback model recovers, we return this rather than the
 	// fallback's error — preserving the pre-fallback "stall = empty reply"
@@ -189,6 +195,8 @@ type fallbackTurn struct {
 
 // runAgentWithFallback executes the agent loop with mid-loop compaction retries
 // on context overflow, transient HTTP error retries, and model fallback chain.
+// runAgentWithFallback is runAgentWithFallbackDetailed without the fallback
+// reason — the shape every existing caller and test reads.
 func runAgentWithFallback(
 	ctx context.Context,
 	cfg agent.AgentConfig,
@@ -202,12 +210,29 @@ func runAgentWithFallback(
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
 ) (*agent.AgentResult, string, bool, error) {
+	res, model, fellBack, _, err := runAgentWithFallbackDetailed(ctx, cfg, messages, client, deps, providerID, initialRole, route, hooks, logger, runLog)
+	return res, model, fellBack, err
+}
+
+func runAgentWithFallbackDetailed(
+	ctx context.Context,
+	cfg agent.AgentConfig,
+	messages []llm.Message,
+	client *llm.Client,
+	deps runDeps,
+	providerID string,
+	initialRole modelrole.Role,
+	route *effortRoute,
+	hooks agent.StreamHooks,
+	logger *slog.Logger,
+	runLog *agentlog.RunLogger,
+) (*agent.AgentResult, string, bool, string, error) {
 	// Briefcase binds maxTurns and timeout as hard signed budgets. Production's
 	// retry/fallback ladder can execute a fresh Agent loop (and repeat tool side
 	// effects), so deterministic runs make exactly one attempt and fail closed.
 	if deps.briefcaseMode {
 		result, err := agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
-		return result, cfg.Model, false, err
+		return result, cfg.Model, false, "", err
 	}
 	t := &fallbackTurn{
 		deps:          deps,
@@ -246,20 +271,24 @@ func runAgentWithFallback(
 
 		retry, stuck := t.compactionRecovery(ctx, compactAttempt)
 		if stuck != nil {
-			return stuck, t.cfg.Model, false, nil
+			return stuck, t.cfg.Model, false, "", nil
 		}
 		if retry {
 			continue
 		}
 
+		if t.initialFailure == "" {
+			t.initialFailure = t.failureReason()
+		}
 		if aborted, err := t.retryTransient(ctx); aborted {
-			return nil, "", false, err
+			return nil, "", false, "", err
 		}
 		t.retryThinkingStrip(ctx)
 		t.walkFallbackChain(ctx)
 
 		if t.runErr != nil {
-			return t.finalizeFailure()
+			res, model, fellBack, err := t.finalizeFailure()
+			return res, model, fellBack, t.fallbackReason, err
 		}
 		break // success via transient retry or fallback
 	}
@@ -270,7 +299,33 @@ func runAgentWithFallback(
 	if deps.registry != nil {
 		deps.registry.RecordModelSuccess(t.actualModel)
 	}
-	return t.agentResult, t.actualModel, t.fellBack, nil
+	return t.agentResult, t.actualModel, t.fellBack, t.fallbackReason, nil
+}
+
+// Fallback reasons, as the client shows them. Stable strings: they cross the
+// native wire on the done frame.
+const (
+	FallbackReasonEngineDown  = "engine_down"
+	FallbackReasonCircuitOpen = "circuit_open"
+	FallbackReasonStall       = "stall"
+	FallbackReasonBudget      = "budget"
+	FallbackReasonError       = "error"
+)
+
+// failureReason classifies the pending t.runErr of the requested model.
+func (t *fallbackTurn) failureReason() string {
+	switch {
+	case t.skipInitial && t.skipErr != nil && errors.Is(t.skipErr, llm.ErrBackendDown):
+		return FallbackReasonEngineDown
+	case t.skipInitial:
+		return FallbackReasonCircuitOpen
+	case errors.Is(t.runErr, errModelStalled):
+		return FallbackReasonStall
+	case errors.Is(t.runErr, errRunBudgetExhausted):
+		return FallbackReasonBudget
+	default:
+		return FallbackReasonError
+	}
 }
 
 // synthStall converts a "no error but empty timeout result" outcome into
@@ -726,6 +781,7 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 			mergeCheckpointRecovery(t.budgetExhaustedResult, t.agentResult)
 			t.actualModel = fbCfg.Model
 			t.fellBack = true
+			t.fallbackReason = t.initialFailure
 			return
 		}
 		failedRole = fbRole
