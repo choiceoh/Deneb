@@ -505,6 +505,16 @@ class MiniappWireValueContractTest {
                     expectation = Expectation.Exact,
                 ),
                 fieldValue(
+                    name = "specAcceptRatio",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "specDraftTokens",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
                     name = "busySeconds",
                     value = JsonPrimitive(-12345.6789),
                     expectation = Expectation.Exact,
@@ -524,9 +534,253 @@ class MiniappWireValueContractTest {
                     value = JsonPrimitive(Int.MAX_VALUE),
                     expectation = Expectation.Exact,
                 ),
+                fieldValue(
+                    name = "livenessTracked",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "downSeconds",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "outages",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "routerMetered",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "routerLocalRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "routerRemoteRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "routerUnknownRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
             ),
             invalidField = "day",
             invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "EngineGlance",
+            serializer = EngineGlance.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "nowMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "configured",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "livenessTracked",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "engineDown",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "sinceMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "downReason",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "model",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "decodeTokensPerSec",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "todayOutages",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "todayDownSeconds",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "todayLocalRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "todayRemoteRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "nowMs",
+            invalidValue = JsonPrimitive("not-a-long"),
+        ),
+        wireContract(
+            name = "EngineInternals",
+            serializer = EngineInternals.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "published",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "prefixEntries",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "prefixSnapshotsFree",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "prefixPinnedEntries",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "prefixTierEntries",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "kvBlocksTotal",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "kvBlocksUsed",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "kvBlocksCached",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "conversationsParked",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "deviceMemoryTotalBytes",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "deviceMemoryFreeBytes",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "deviceMemoryReservedBytes",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "hostMemoryAvailableBytes",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "handingOver",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "quiet",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "fleetKnown",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "fleetOwner",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "fleetDraining",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "fleetHandedOver",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "served",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "steps",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "published",
+            invalidValue = JsonPrimitive(1),
+        ),
+        wireContract(
+            name = "EngineOutage",
+            serializer = EngineOutage.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "sinceMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "untilMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "durationSec",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "reason",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "sinceMs",
+            invalidValue = JsonPrimitive("not-a-long"),
         ),
         wireContract(
             name = "EngineRoutingRow",
@@ -539,6 +793,11 @@ class MiniappWireValueContractTest {
                 ),
                 fieldValue(
                     name = "local",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "known",
                     value = JsonPrimitive(true),
                     expectation = Expectation.Exact,
                 ),
@@ -557,6 +816,31 @@ class MiniappWireValueContractTest {
                     value = JsonPrimitive(Long.MAX_VALUE),
                     expectation = Expectation.Exact,
                 ),
+                fieldValue(
+                    name = "circuitState",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "circuitFailures",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "retryAfterMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "keyHealth",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "upstreamMissing",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
             ),
             invalidField = "model",
             invalidValue = JsonObject(emptyMap()),
@@ -565,6 +849,11 @@ class MiniappWireValueContractTest {
             name = "EngineStatusResult",
             serializer = EngineStatusResult.serializer(),
             fields = listOf(
+                fieldValue(
+                    name = "nowMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
                 fieldValue(
                     name = "configured",
                     value = JsonPrimitive(true),
@@ -594,6 +883,51 @@ class MiniappWireValueContractTest {
                     name = "waitingRequests",
                     value = JsonPrimitive(Int.MAX_VALUE),
                     expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "livenessTracked",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "engineDown",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "downSinceMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "upSinceMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "downReason",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "downModels",
+                    value = stringList,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "trackedSinceMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "outages",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "internals",
+                    value = JsonObject(emptyMap()),
+                    expectation = Expectation.Object,
                 ),
                 fieldValue(
                     name = "days",
@@ -626,13 +960,53 @@ class MiniappWireValueContractTest {
                     expectation = Expectation.Exact,
                 ),
                 fieldValue(
+                    name = "unknownRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
                     name = "routing",
                     value = objectList,
                     expectation = Expectation.ObjectList,
                 ),
+                fieldValue(
+                    name = "routerStatusAvailable",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "routerDay",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "routerDayMetered",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "todayLocalRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "todayRemoteRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "todayUnknownRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "routingToday",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
             ),
-            invalidField = "configured",
-            invalidValue = JsonPrimitive(1),
+            invalidField = "nowMs",
+            invalidValue = JsonPrimitive("not-a-long"),
         ),
         wireContract(
             name = "EngineTotals",
@@ -674,8 +1048,28 @@ class MiniappWireValueContractTest {
                     expectation = Expectation.Exact,
                 ),
                 fieldValue(
+                    name = "meanQueueSeconds",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "meanE2eSeconds",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
                     name = "promptCacheHitRatio",
                     value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "specAcceptRatio",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "specDraftTokens",
+                    value = JsonPrimitive(Long.MAX_VALUE),
                     expectation = Expectation.Exact,
                 ),
                 fieldValue(
@@ -696,6 +1090,31 @@ class MiniappWireValueContractTest {
                 fieldValue(
                     name = "restarts",
                     value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "downSeconds",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "outages",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "routerLocalRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "routerRemoteRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "routerUnknownRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
                     expectation = Expectation.Exact,
                 ),
             ),
