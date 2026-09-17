@@ -36,7 +36,8 @@ type (
 )
 
 var (
-	GmailAnalyzeMethods      = analyzebind.GmailAnalyzeMethods
-	PipelineFromMailAnalysis = analyzebind.PipelineFromMailAnalysis
-	ErrAnalyzeNoLLM          = analyzebind.ErrAnalyzeNoLLM
+	GmailAnalyzeMethods         = analyzebind.GmailAnalyzeMethods
+	PipelineFromMailAnalysis    = analyzebind.PipelineFromMailAnalysis
+	AttachMailAnalysisFallbacks = analyzebind.AttachMailAnalysisFallbacks
+	ErrAnalyzeNoLLM             = analyzebind.ErrAnalyzeNoLLM
 )

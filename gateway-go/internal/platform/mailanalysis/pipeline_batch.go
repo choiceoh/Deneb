@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
@@ -106,14 +105,16 @@ func synthesizeBatchReport(ctx context.Context, deps PipelineDeps, items []Batch
 	if len(items) == 0 {
 		return "", fmt.Errorf("no analyzed emails to synthesize")
 	}
-	if deps.LLMClient == nil {
-		return "", fmt.Errorf("analysis LLM client is required")
-	}
-	var sb strings.Builder
 	for i, it := range items {
 		if it.Msg == nil {
 			return "", fmt.Errorf("analyzed email %d has no message", i+1)
 		}
+	}
+	if !hasStage2LLM(deps) {
+		return "", fmt.Errorf("analysis LLM client is required")
+	}
+	var sb strings.Builder
+	for i, it := range items {
 		if i > 0 {
 			sb.WriteString("\n---\n\n")
 		}
@@ -128,26 +129,7 @@ func synthesizeBatchReport(ctx context.Context, deps PipelineDeps, items []Batch
 
 	userPrompt := fmt.Sprintf(batchAnalysisPrompt, analysisPrompt(deps), len(items), sb.String())
 
-	// Reasoning OFF. GLM-5.1 (Z.ai anthropic endpoint) defaults reasoning ON and
-	// streams its chain-of-thought into the answer body as ordinary text, which
-	// collectStreamText can't tell apart from real content. Sending
-	// {"type":"disabled"} (see anthropic.go) turns it off at the source;
-	// stripReasoningLeak below still scrubs any stray marker.
-	req := llm.ChatRequest{
-		Model:     deps.MainModel,
-		Messages:  []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:    llm.SystemString(batchAnalysisSystem),
-		MaxTokens: batchStage2Tokens,
-		Stream:    true,
-		Thinking:  &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: deps.ThinkingKwarg},
-	}
-
-	events, err := deps.LLMClient.StreamChat(ctx, req)
-	if err != nil {
-		return "", fmt.Errorf("batch analysis LLM call failed: %w", err)
-	}
-
-	report, err := collectStreamText(ctx, events)
+	report, err := completeSynthesis(ctx, deps, batchAnalysisSystem, userPrompt, batchStage2Tokens)
 	if err != nil {
 		return "", err
 	}

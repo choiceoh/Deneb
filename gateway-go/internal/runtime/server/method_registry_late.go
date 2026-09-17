@@ -258,9 +258,13 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				if err != nil {
 					return nil, err
 				}
-				return handlermail.PipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailStageOneFallbacks(), s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, chat.WithImageVision(toolbind.ExtractAttachmentText), func(domain string) []string {
+				pipe, err := handlermail.PipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailStageOneFallbacks(), s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, chat.WithImageVision(toolbind.ExtractAttachmentText), func(domain string) []string {
 					return s.cpProjects.Lookup(s.wikiStore, domain)
 				})
+				if err != nil {
+					return nil, err
+				}
+				return handlermail.AttachMailAnalysisFallbacks(pipe, s.mailAnalysisSynthesisEndpoints, s.mailAnalysisRecordFailure), nil
 			},
 			Cache:      handlermail.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
 			WorkState:  s.mailWorkStatePathStore(),

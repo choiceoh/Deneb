@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -283,27 +282,9 @@ func runFinalSynthesis(ctx context.Context, deps PipelineDeps, userPrompt string
 		if deps.Logger != nil {
 			deps.Logger.Warn("mail analysis: agent synthesis unavailable; falling back to single completion", "error", err)
 		}
+		return completeSynthesisChain(ctx, deps, finalAnalysisSystem, userPrompt, maxTok, skipPrimaryAfterAgent(ctx, err, out))
 	}
-	if deps.LLMClient == nil {
-		return "", fmt.Errorf("analysis LLM client is required")
-	}
-	thinking := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: deps.ThinkingKwarg}
-	if deps.DeepThinking {
-		thinking = analysisThinking(deps.LLMClient, maxTok)
-	}
-	req := llm.ChatRequest{
-		Model:     deps.MainModel,
-		Messages:  []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:    llm.SystemString(finalAnalysisSystem),
-		MaxTokens: maxTok,
-		Stream:    true,
-		Thinking:  thinking,
-	}
-	events, err := deps.LLMClient.StreamChat(ctx, req)
-	if err != nil {
-		return "", fmt.Errorf("final analysis LLM call failed: %w", err)
-	}
-	return collectStreamText(ctx, events)
+	return completeSynthesis(ctx, deps, finalAnalysisSystem, userPrompt, maxTok)
 }
 
 func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail, tc ThreadContext, mc MemoryContext, candidates []ProjectCandidate) (AnalysisResult, error) {

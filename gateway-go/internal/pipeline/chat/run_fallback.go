@@ -639,11 +639,11 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 	}
 
 	// Choose the context for fallback attempts. A hard error leaves the parent
-	// ctx alive (budget remains, so reuse it). A stall, however, only surfaces
-	// once the per-turn deadline is already spent waiting on the dead model —
-	// so give the fallback a fresh, bounded budget, otherwise the user gets
-	// silence instead of an answer from a healthy model. A user abort yields
-	// StopReason "aborted" (not "timeout"), so it never reaches this stall branch.
+	// ctx alive (budget remains, so reuse it). A stall or a spent parent
+	// deadline only surfaces after waiting on the dead model — give the
+	// fallback a fresh, bounded budget, otherwise the user gets silence
+	// instead of an answer from a healthy model. A user abort / shutdown
+	// yields context.Canceled (StopReason "aborted"), which we still respect.
 	fbCtx, fbCancel := ctx, context.CancelFunc(nil)
 	if errors.Is(t.runErr, errRunBudgetExhausted) {
 		// The original run consumed its hard budget. Grant only enough fresh
@@ -654,9 +654,9 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 			fallbackParent = context.WithoutCancel(ctx)
 		}
 		fbCtx, fbCancel = context.WithTimeout(fallbackParent, stallFallbackBudget)
-	} else if ctx.Err() != nil {
-		if !errors.Is(t.runErr, errModelStalled) {
-			return // parent canceled for another reason — respect it
+	} else if err := ctx.Err(); err != nil {
+		if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(t.runErr, errModelStalled) {
+			return
 		}
 		fbCtx, fbCancel = context.WithTimeout(context.WithoutCancel(ctx), stallFallbackBudget)
 	}

@@ -492,6 +492,31 @@ func TestPipelineFromMailAnalysisReturnsErrorWhenLLMClientNil(t *testing.T) {
 	}
 }
 
+func TestAttachMailAnalysisFallbacksSetsDeps(t *testing.T) {
+	p, err := PipelineFromMailAnalysis(nil, llm.NewClient("http://example.test", "k"), nil, "main", "", nil, "", nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	failed := ""
+	got := AttachMailAnalysisFallbacks(p, func() []mailanalysis.SynthesisEndpoint {
+		calls++
+		return []mailanalysis.SynthesisEndpoint{{Model: "fb"}}
+	}, func(model string) { failed = model })
+	g, ok := got.(*mailAnalysisPipeline)
+	if !ok || g == nil {
+		t.Fatalf("got %T", got)
+	}
+	eps := g.deps.SynthesisEndpointsFn()
+	if len(eps) != 1 || eps[0].Model != "fb" || calls != 1 {
+		t.Fatalf("endpoints = %#v calls=%d", eps, calls)
+	}
+	g.deps.RecordModelFailure("main")
+	if failed != "main" {
+		t.Fatalf("recorded %q", failed)
+	}
+}
+
 // analysis_cached returns a stored analysis (with its related projects)
 // without touching the pipeline. WikiStore is nil here, so projects fall
 // back to bare paths — which is exactly what the chip renders on enrichment

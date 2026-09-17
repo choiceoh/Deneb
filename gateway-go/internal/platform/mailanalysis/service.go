@@ -131,6 +131,14 @@ type Config struct {
 	// toolset so the analysis prompt's tool steps execute instead of leaking as
 	// <tool_call> text. Forwarded to PipelineDeps; nil = legacy tool-less synthesis.
 	AgentSynthesisFn func(ctx context.Context, prompt string) (string, error)
+
+	// SynthesisEndpointsFn rebuilds the tool-less stage-2 fallback chain
+	// (RoleMain's FallbackChain) at call time. Forwarded to PipelineDeps.
+	SynthesisEndpointsFn func() []SynthesisEndpoint
+
+	// RecordModelFailure feeds the modelrole circuit breaker when a tool-less
+	// stage-2 attempt fails. Forwarded to PipelineDeps.
+	RecordModelFailure func(model string)
 }
 
 // Compile-time interface compliance.
@@ -574,6 +582,8 @@ func (s *Service) pipelineDeps(gmailClient *gmail.Client) PipelineDeps {
 		ThinkingKwarg:          s.cfg.ThinkingKwarg,
 		ThreadSource:           s.cfg.ThreadSource,
 		AgentSynthesisFn:       s.cfg.AgentSynthesisFn,
+		SynthesisEndpointsFn:   s.cfg.SynthesisEndpointsFn,
+		RecordModelFailure:     s.cfg.RecordModelFailure,
 	}
 	// Poll path: the attachment gate fetches bytes lazily from Gmail. The LMTP
 	// path (IngestMessage) overrides this with a closure over the inline bytes,

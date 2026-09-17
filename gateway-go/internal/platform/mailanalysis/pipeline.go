@@ -141,6 +141,20 @@ type PipelineDeps struct {
 	// failure the synthesis falls back to the single-completion path so an analysis
 	// is never lost. nil = the legacy tool-less synthesis.
 	AgentSynthesisFn func(ctx context.Context, prompt string) (string, error)
+
+	// SynthesisEndpoints is an ordered tool-less stage-2 chain (main first).
+	// Tests pin this directly. Production prefers SynthesisEndpointsFn so
+	// unhealthy models can be skipped at call time.
+	SynthesisEndpoints []SynthesisEndpoint
+
+	// SynthesisEndpointsFn rebuilds the stage-2 chain on every completion
+	// (health-aware FallbackChain). When set it wins over SynthesisEndpoints
+	// and the single LLMClient+MainModel pair.
+	SynthesisEndpointsFn func() []SynthesisEndpoint
+
+	// RecordModelFailure feeds the modelrole circuit breaker when a tool-less
+	// stage-2 attempt fails. nil = tests / callers without a registry.
+	RecordModelFailure func(model string)
 }
 
 const (
@@ -324,7 +338,7 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 	if msg == nil {
 		return AnalysisResult{}, fmt.Errorf("email message is required")
 	}
-	if deps.LLMClient == nil && deps.AgentSynthesisFn == nil {
+	if !hasStage2LLM(deps) {
 		return AnalysisResult{}, fmt.Errorf("analysis LLM client is required")
 	}
 	candidates := deps.projectCandidates()
@@ -335,7 +349,14 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 		// prompt, so the manual Mini App path — which never wires LocalClient
 		// — still cites related projects.
 		prompt := analysisPrompt(deps) + projectSelectionSuffix(candidates) + importanceSuffix
-		text, err := AnalyzeEmail(ctx, deps.LLMClient, deps.MainModel, prompt, deps.ThinkingKwarg, deps.CounterpartyProjectsFn, msg)
+		userContent := prompt + "\n\n" + FormatEmailForAnalysis(msg)
+		if anchor := buildPartyAnchor(msg, ourAnchorDomains(), deps.CounterpartyProjectsFn); anchor != "" {
+			userContent += "\n\n" + anchor
+		}
+		if anchor := buildDateAnchor(msg, time.Now()); anchor != "" {
+			userContent += "\n\n" + anchor
+		}
+		text, err := completeSynthesis(ctx, deps, analysisSystemPrompt, userContent, llmMaxTokens)
 		if err != nil {
 			return AnalysisResult{}, err
 		}
