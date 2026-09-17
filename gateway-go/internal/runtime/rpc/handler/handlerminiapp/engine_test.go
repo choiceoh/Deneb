@@ -192,13 +192,16 @@ func TestEngineDayCarriesThePromptCacheRatio(t *testing.T) {
 	day := enginespeed.DayStat{
 		Day: "2026-09-13", Polls: 240, PollIntervalSec: 15,
 		Delta: observe.EngineDelta{
-			PrefixCacheQueries: 10_000, PrefixCacheHits: 7_500,
+			PrefixCacheQueries: 100, PrefixCacheHits: 10, CachePromptTokens: 10_000, CachedPromptTokens: 7_500,
 			Requests: 10, TTFTSeconds: 10, TPOTCount: 100, TPOTSeconds: 2,
 		},
 	}
 	got := engineDayFrom(day)
 	if diff := got.PromptCacheHitRatio - 0.75; diff > 1e-9 || diff < -1e-9 {
 		t.Errorf("PromptCacheHitRatio = %v, want 0.75", got.PromptCacheHitRatio)
+	}
+	if !got.PromptCacheMeasured || got.CachePromptTokens != 10000 || got.PrefixRequestHitRatio != 0.1 || got.PrefixHitRequests != 10 || got.PrefixLookupRequests != 100 {
+		t.Fatalf("token and request units crossed in RPC: %+v", got)
 	}
 	if got.CachedPromptTokens != 7500 {
 		t.Errorf("CachedPromptTokens = %d, want 7500", got.CachedPromptTokens)

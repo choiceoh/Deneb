@@ -59,7 +59,14 @@ type EngineDay struct {
 	// and did not prefill — the difference between a 40K head costing 20
 	// seconds and costing nothing.
 	PromptCacheHitRatio float64 `json:"promptCacheHitRatio,omitempty"`
-	CachedPromptTokens  int64   `json:"cachedPromptTokens,omitempty"`
+	// CachePromptTokens is the measured token window's denominator; older
+	// history has no token counters and is excluded from this window.
+	CachePromptTokens     int64   `json:"cachePromptTokens,omitempty"`
+	PromptCacheMeasured   bool    `json:"promptCacheMeasured"`
+	PrefixRequestHitRatio float64 `json:"prefixRequestHitRatio,omitempty"`
+	PrefixLookupRequests  int64   `json:"prefixLookupRequests,omitempty"`
+	PrefixHitRequests     int64   `json:"prefixHitRequests,omitempty"`
+	CachedPromptTokens    int64   `json:"cachedPromptTokens,omitempty"`
 
 	// SpecAcceptRatio is the share of drafted tokens the model kept — the
 	// drafter's whole contribution to decode speed. SpecDraftTokens is its
@@ -110,12 +117,20 @@ type EngineTotals struct {
 	MeanQueueSeconds    float64 `json:"meanQueueSeconds,omitempty"`
 	MeanE2eSeconds      float64 `json:"meanE2eSeconds,omitempty"`
 	PromptCacheHitRatio float64 `json:"promptCacheHitRatio,omitempty"`
-	SpecAcceptRatio     float64 `json:"specAcceptRatio,omitempty"`
-	SpecDraftTokens     int64   `json:"specDraftTokens,omitempty"`
-	BusySeconds         float64 `json:"busySeconds,omitempty"`
-	ObservedSeconds     float64 `json:"observedSeconds,omitempty"`
-	Utilization         float64 `json:"utilization,omitempty"`
-	Restarts            int     `json:"restarts"`
+	CachedPromptTokens  int64   `json:"cachedPromptTokens,omitempty"`
+	// CachePromptTokens is the measured token window's denominator; older
+	// history has no token counters and is excluded from this window.
+	CachePromptTokens     int64   `json:"cachePromptTokens,omitempty"`
+	PromptCacheMeasured   bool    `json:"promptCacheMeasured"`
+	PrefixRequestHitRatio float64 `json:"prefixRequestHitRatio,omitempty"`
+	PrefixLookupRequests  int64   `json:"prefixLookupRequests,omitempty"`
+	PrefixHitRequests     int64   `json:"prefixHitRequests,omitempty"`
+	SpecAcceptRatio       float64 `json:"specAcceptRatio,omitempty"`
+	SpecDraftTokens       int64   `json:"specDraftTokens,omitempty"`
+	BusySeconds           float64 `json:"busySeconds,omitempty"`
+	ObservedSeconds       float64 `json:"observedSeconds,omitempty"`
+	Utilization           float64 `json:"utilization,omitempty"`
+	Restarts              int     `json:"restarts"`
 
 	DownSeconds float64 `json:"downSeconds,omitempty"`
 	Outages     int     `json:"outages"`

@@ -35,13 +35,10 @@ const (
 	// "admission to the answer": the residency of a request, summed.
 	engineE2ESumMetric   = "vllm:e2e_request_latency_seconds_sum"
 	engineE2ECountMetric = "vllm:e2e_request_latency_seconds_count"
-	// Prefix-cache reuse, TOKEN-valued on this engine: queries is the prompt
-	// tokens that were looked up, hits the ones already resident. Their ratio is
-	// the share of prompt the engine did not have to prefill — the lever with
-	// the largest number attached to it (48.5M uncached prompt tokens in the
-	// week of 2026-09-06, about 6.6 hours of prefill).
-	enginePrefixQueriesMetric = "vllm:prefix_cache_queries_total" //nolint:gosec // G101: a metric name, not a secret
-	enginePrefixHitsMetric    = "vllm:prefix_cache_hits_total"    //nolint:gosec // G101: a metric name, not a secret
+	// ST publishes these vLLM-compatible counters in REQUESTS, not tokens.
+	enginePrefixQueriesMetric = "vllm:prefix_cache_queries_total" //nolint:gosec // G101: metric name
+	enginePrefixHitsMetric    = "vllm:prefix_cache_hits_total"    //nolint:gosec // G101: metric name
+	engineReusedTokensMetric  = "st:prefix_reused_tokens_total"   //nolint:gosec // G101: metric name
 	// "one model step, host-observed end to end", labeled by kind
 	// (prefill/decode). The engine only steps when it has work, so this sums to
 	// the time it was BUSY.
@@ -63,8 +60,8 @@ const (
 	engineWaitingMetric = "vllm:num_requests_waiting"
 
 	// The engine's own gauges (st: prefix): where its prefix-cache budget and
-	// KV memory stand at the moment of the scrape. These explain a cache hit
-	// ratio — 96 resident snapshots with 0 free is why a 40K head re-prefills.
+	// KV memory stand at the moment of the scrape. Full resident snapshots
+	// alone do not imply a miss: older boundaries can be restored from tiers.
 	enginePrefixEntriesMetric       = "st:prefix_entries"
 	enginePrefixSnapshotsFreeMetric = "st:prefix_snapshots_free"
 	enginePrefixPinnedMetric        = "st:prefix_pinned_entries"
@@ -88,7 +85,7 @@ var engineCumulativeMetrics = []string{
 	engineTPOTSumMetric, engineTPOTCountMetric,
 	engineE2ESumMetric, engineE2ECountMetric, engineStepSumMetric,
 	enginePromptTokensMetric, engineGenTokensMetric,
-	enginePrefixQueriesMetric, enginePrefixHitsMetric,
+	enginePrefixQueriesMetric, enginePrefixHitsMetric, engineReusedTokensMetric,
 	engineSpecDraftMetric, engineSpecAcceptedMetric,
 }
 
@@ -135,9 +132,13 @@ type EngineCounters struct {
 	RunningRequests float64 `json:"runningRequests"`
 	WaitingRequests float64 `json:"waitingRequests"`
 
-	// Prefix-cache reuse in prompt TOKENS (not requests).
+	// Prefix-cache lookups and hits in REQUESTS on ST.
 	PrefixCacheQueries float64 `json:"prefixCacheQueries"`
 	PrefixCacheHits    float64 `json:"prefixCacheHits"`
+
+	// Presence is separate from zero: old engines need not publish token reuse.
+	CachedPromptTokens float64 `json:"cachedPromptTokens"`
+	CacheTokensKnown   bool    `json:"cacheTokensKnown"`
 
 	// Speculative decoding in TOKENS: drafts proposed and drafts accepted.
 	// Cumulative, so a window's acceptance is the ratio of the two deltas.
@@ -150,9 +151,8 @@ type EngineCounters struct {
 }
 
 // EngineInternals is what the engine says about its own memory and cache
-// budget right now. These are the numbers behind a cache hit ratio: a prefix
-// cache with no free snapshot slot cannot resume anything new, however large
-// the hit ratio's denominator looks.
+// budget right now. Occupancy provides context for cache reuse, but full
+// resident snapshots do not rule out restoring a prefix from another tier.
 type EngineInternals struct {
 	PrefixEntries       int `json:"prefixEntries"`
 	PrefixSnapshotsFree int `json:"prefixSnapshotsFree"`
@@ -246,10 +246,14 @@ func FetchEngineCounters(ctx context.Context, metricsURL string) (EngineCounters
 
 		PrefixCacheQueries: totals[enginePrefixQueriesMetric],
 		PrefixCacheHits:    totals[enginePrefixHitsMetric],
+		CachedPromptTokens: totals[engineReusedTokensMetric],
 		SpecDraftTokens:    totals[engineSpecDraftMetric],
 		SpecAcceptedTokens: totals[engineSpecAcceptedMetric],
 		Internals:          engineInternalsFrom(totals),
 	}
+	_, reusedPresent := totals[engineReusedTokensMetric]
+	_, promptPresent := totals[enginePromptTokensMetric]
+	out.CacheTokensKnown = reusedPresent && promptPresent
 	out.Model = fetchServedModel(ctx, client, metricsURL)
 	return out, true
 }
@@ -305,6 +309,12 @@ type EngineDelta struct {
 	PrefixCacheQueries float64
 	PrefixCacheHits    float64
 
+	// Only intervals with token counters at BOTH ends contribute. In old
+	// persisted days these fields are absent, so their prompt totals cannot
+	// dilute the new token ratio when old and new history are summed.
+	CachePromptTokens  float64
+	CachedPromptTokens float64
+
 	SpecDraftTokens    float64
 	SpecAcceptedTokens float64
 }
@@ -326,7 +336,7 @@ func EngineDeltaBetween(from, to EngineCounters) (EngineDelta, bool) {
 		to.SpecDraftTokens < from.SpecDraftTokens || to.SpecAcceptedTokens < from.SpecAcceptedTokens {
 		return EngineDelta{}, false
 	}
-	return EngineDelta{
+	delta := EngineDelta{
 		TTFTSeconds:      to.TTFTSeconds - from.TTFTSeconds,
 		QueueSeconds:     to.QueueSeconds - from.QueueSeconds,
 		TPOTSeconds:      to.TPOTSeconds - from.TPOTSeconds,
@@ -342,7 +352,15 @@ func EngineDeltaBetween(from, to EngineCounters) (EngineDelta, bool) {
 		PrefixCacheHits:    to.PrefixCacheHits - from.PrefixCacheHits,
 		SpecDraftTokens:    to.SpecDraftTokens - from.SpecDraftTokens,
 		SpecAcceptedTokens: to.SpecAcceptedTokens - from.SpecAcceptedTokens,
-	}, true
+	}
+	if from.CacheTokensKnown && to.CacheTokensKnown {
+		if to.CachedPromptTokens < from.CachedPromptTokens {
+			return EngineDelta{}, false
+		}
+		delta.CachePromptTokens = to.PromptTokens - from.PromptTokens
+		delta.CachedPromptTokens = to.CachedPromptTokens - from.CachedPromptTokens
+	}
+	return delta, true
 }
 
 // Add folds another interval into this one.
@@ -359,6 +377,8 @@ func (d EngineDelta) Add(o EngineDelta) EngineDelta {
 	d.GenerationTokens += o.GenerationTokens
 	d.PrefixCacheQueries += o.PrefixCacheQueries
 	d.PrefixCacheHits += o.PrefixCacheHits
+	d.CachePromptTokens += o.CachePromptTokens
+	d.CachedPromptTokens += o.CachedPromptTokens
 	d.SpecDraftTokens += o.SpecDraftTokens
 	d.SpecAcceptedTokens += o.SpecAcceptedTokens
 	return d
@@ -390,8 +410,13 @@ type EngineRates struct {
 	// PromptCacheHitRatio is the share of PROMPT TOKENS the engine already had
 	// resident and did not prefill. It is the difference between a 40K-token
 	// head costing 20 seconds and costing nothing.
-	PromptCacheHitRatio float64 `json:"promptCacheHitRatio,omitempty"`
-	CachedPromptTokens  int64   `json:"cachedPromptTokens,omitempty"`
+	PromptCacheHitRatio   float64 `json:"promptCacheHitRatio,omitempty"`
+	CachedPromptTokens    int64   `json:"cachedPromptTokens,omitempty"`
+	CachePromptTokens     int64   `json:"cachePromptTokens,omitempty"`
+	PromptCacheMeasured   bool    `json:"promptCacheMeasured"`
+	PrefixRequestHitRatio float64 `json:"prefixRequestHitRatio,omitempty"`
+	PrefixLookupRequests  int64   `json:"prefixLookupRequests,omitempty"`
+	PrefixHitRequests     int64   `json:"prefixHitRequests,omitempty"`
 
 	// SpecAcceptRatio is the share of drafted tokens the target model kept.
 	// The drafter's whole contribution to decode speed is in this number;
@@ -443,8 +468,15 @@ func (d EngineDelta) Rates() EngineRates {
 		out.MeanE2ESeconds = d.E2ESeconds / d.E2ECount
 	}
 	if d.PrefixCacheQueries > 0 {
-		out.PromptCacheHitRatio = d.PrefixCacheHits / d.PrefixCacheQueries
-		out.CachedPromptTokens = int64(d.PrefixCacheHits)
+		out.PrefixRequestHitRatio = d.PrefixCacheHits / d.PrefixCacheQueries
+		out.PrefixLookupRequests = int64(d.PrefixCacheQueries)
+		out.PrefixHitRequests = int64(d.PrefixCacheHits)
+	}
+	if d.CachePromptTokens > 0 && d.CachedPromptTokens >= 0 && d.CachedPromptTokens <= d.CachePromptTokens {
+		out.PromptCacheMeasured = true
+		out.PromptCacheHitRatio = d.CachedPromptTokens / d.CachePromptTokens
+		out.CachedPromptTokens = int64(d.CachedPromptTokens)
+		out.CachePromptTokens = int64(d.CachePromptTokens)
 	}
 	if d.SpecDraftTokens > 0 {
 		out.SpecAcceptRatio = d.SpecAcceptedTokens / d.SpecDraftTokens

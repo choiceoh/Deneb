@@ -2,6 +2,7 @@ package enginespeed
 
 import (
 	"math"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -144,5 +145,35 @@ func TestStore_DayWindowCountsDaysNotRows(t *testing.T) {
 		if r.Day != "2026-09-14" {
 			t.Errorf("row from %s leaked past the 1-day window", r.Day)
 		}
+	}
+}
+
+// Old request-valued fields survive, but their prompt volume cannot dilute
+// the independently measured token window introduced by the unit correction.
+func TestStoreLegacyCacheHistoryDoesNotPolluteTokenDenominator(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "engine-speed.json")
+	legacy := `{"days":[{"day":"2026-09-17","endpoint":"e","delta":{"Requests":1000,"PromptTokens":10000000,"PrefixCacheQueries":130,"PrefixCacheHits":8}}]}`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := NewStore(path)
+	old := s.Days(0)[0].Rates()
+	if old.PromptCacheMeasured || old.CachedPromptTokens != 0 || old.PrefixHitRequests != 8 {
+		t.Fatalf("legacy units: %+v", old)
+	}
+	first := observe.EngineCounters{CacheTokensKnown: true, PromptTokens: 10000, CachedPromptTokens: 7000, PrefixCacheQueries: 10, PrefixCacheHits: 2}
+	next := first
+	next.PromptTokens += 4000
+	next.CachedPromptTokens += 3000
+	next.PrefixCacheQueries += 2
+	next.PrefixCacheHits++
+	s.Observe("e", at(17, 1), PollInterval, first)
+	s.Observe("e", at(17, 2), PollInterval, next)
+	if err := s.Flush(at(17, 3)); err != nil {
+		t.Fatal(err)
+	}
+	got := NewStore(path).Days(0)[0].Rates()
+	if !got.PromptCacheMeasured || got.PromptCacheHitRatio != 0.75 || got.CachePromptTokens != 4000 || got.CachedPromptTokens != 3000 || got.PromptTokens != 10004000 || got.PrefixLookupRequests != 132 || got.PrefixHitRequests != 9 {
+		t.Fatalf("roundtrip legacy + measured: %+v", got)
 	}
 }
