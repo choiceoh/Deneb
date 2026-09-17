@@ -402,6 +402,20 @@ func PipelineFromMailAnalysis(gmailClient *gmail.Client, llmClient, localClient 
 	}, nil
 }
 
+// AttachMailAnalysisFallbacks installs the tool-less stage-2 endpoint chain
+// (and optional circuit-breaker recorder) on a pipeline from
+// PipelineFromMailAnalysis. Mini App analyze used to pin a single MainModel
+// and miss the same failover the poller/LMTP paths now walk.
+func AttachMailAnalysisFallbacks(p AnalyzePipeline, endpointsFn func() []mailanalysis.SynthesisEndpoint, onFailure func(string)) AnalyzePipeline {
+	g, ok := p.(*mailAnalysisPipeline)
+	if !ok || g == nil {
+		return p
+	}
+	g.deps.SynthesisEndpointsFn = endpointsFn
+	g.deps.RecordModelFailure = onFailure
+	return g
+}
+
 type mailAnalysisPipeline struct {
 	deps mailanalysis.PipelineDeps
 }

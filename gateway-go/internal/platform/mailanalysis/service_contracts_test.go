@@ -109,6 +109,8 @@ func TestServicePipelineDepsForwardsConfigWithAndWithoutGmail(t *testing.T) {
 	extractCalls := 0
 	agentCalls := 0
 	sinkCalls := 0
+	endpointCalls := 0
+	failureCalls := 0
 
 	cfg := Config{
 		LLMClient:   mainClient,
@@ -145,6 +147,11 @@ func TestServicePipelineDepsForwardsConfigWithAndWithoutGmail(t *testing.T) {
 			agentCalls++
 			return "analysis", nil
 		},
+		SynthesisEndpointsFn: func() []SynthesisEndpoint {
+			endpointCalls++
+			return []SynthesisEndpoint{{Model: "fallback-model"}}
+		},
+		RecordModelFailure: func(string) { failureCalls++ },
 		MailStoreSink: func(mailarchive.ContextMessage) (bool, error) {
 			sinkCalls++
 			return true, nil
@@ -179,6 +186,13 @@ func TestServicePipelineDepsForwardsConfigWithAndWithoutGmail(t *testing.T) {
 	}
 	if got, err := withoutGmail.AgentSynthesisFn(context.Background(), "prompt"); err != nil || got != "analysis" || agentCalls != 1 {
 		t.Fatalf("agent synthesis = %q/%v calls=%d", got, err, agentCalls)
+	}
+	if eps := withoutGmail.SynthesisEndpointsFn(); len(eps) != 1 || eps[0].Model != "fallback-model" || endpointCalls != 1 {
+		t.Fatalf("synthesis endpoints forwarding failed, calls=%d eps=%#v", endpointCalls, eps)
+	}
+	withoutGmail.RecordModelFailure("main")
+	if failureCalls != 1 {
+		t.Fatalf("record failure calls=%d", failureCalls)
 	}
 	if _, err := cfg.MailStoreSink(mailarchive.ContextMessage{}); err != nil || sinkCalls != 1 {
 		t.Fatalf("mail sink calls=%d err=%v", sinkCalls, err)

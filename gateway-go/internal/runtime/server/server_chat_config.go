@@ -130,6 +130,8 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 	// Run the synthesis as a chat agent turn so the analysis prompt's tools
 	// (wiki, mail_archive) execute instead of leaking as <tool_call> text.
 	cfg.AgentSynthesisFn = s.mailAnalysisAgentSynthesis
+	cfg.SynthesisEndpointsFn = s.mailAnalysisSynthesisEndpoints
+	cfg.RecordModelFailure = s.mailAnalysisRecordFailure
 	if pollCfg.Silent == nil || !*pollCfg.Silent {
 		cfg.OnDelivered = s.makeMailFeedDeliverySink()
 	}
@@ -205,9 +207,19 @@ func (s *Server) mailAnalysisAgentSynthesis(ctx context.Context, prompt string) 
 	if s.chatHandler == nil {
 		return "", fmt.Errorf("chat handler unavailable")
 	}
+	if s.mailAnalysisShouldSkipAgent() {
+		s.logger.Warn("mail analysis: skipping agent synthesis; main model circuit open")
+		return "", fmt.Errorf("agent synthesis incomplete: timeout")
+	}
 	result, err := s.chatHandler.SendSync(ctx, "system:mailpoll", prompt, s.mailAnalysisAgentModel(), mailAnalysisAgentSyncOptions())
 	if err != nil {
 		return "", err
+	}
+	// Timeout/error notices are filled into BestText so interactive chat is
+	// never blank. Treating them as a successful analysis skips the tool-less
+	// model chain and ships "시간 초과" as the mail report.
+	if incompleteMailAgentSynthesis(result) {
+		return "", incompleteMailAgentError(result)
 	}
 	return result.BestText(), nil
 }
@@ -327,6 +339,8 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	// Run the synthesis as a chat agent turn so the analysis prompt's tools
 	// (wiki, mail_archive) execute instead of leaking as <tool_call> text.
 	cfg.AgentSynthesisFn = s.mailAnalysisAgentSynthesis
+	cfg.SynthesisEndpointsFn = s.mailAnalysisSynthesisEndpoints
+	cfg.RecordModelFailure = s.mailAnalysisRecordFailure
 	svc := mailanalysis.NewService(cfg, s.logger)
 	s.mailBackfillAnalyzer = svc
 	svc.SetNotifier(s.proactiveRelay.MailNotifierForSession(proactive.NativeWorkSessionKey))

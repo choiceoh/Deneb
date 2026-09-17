@@ -783,3 +783,70 @@ func TestEmptyFinalResultRanToolsTracksRoundCount(t *testing.T) {
 		t.Error("nil result must not claim tool activity")
 	}
 }
+
+// A spent parent deadline used to abort walkFallbackChain unless runErr was
+// the synthetic stall sentinel. Production mail/chat hangs surface as
+// context.DeadlineExceeded — recover with a bounded budget so a healthy
+// fallback can still answer.
+func TestWalkFallbackChainRecoversParentDeadline(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(sseResponse("ok", "end_turn")))
+	}))
+	defer server.Close()
+
+	reg := modelrole.NewRegistryWithOptions(discardLogger(), modelrole.RegistryOptions{
+		MainModel:        "test/m-main",
+		LightweightModel: "test/m-main",
+		FallbackModel:    "test/m-fb",
+		Providers: map[string]modelrole.ProviderResolved{
+			"test": {BaseURL: server.URL, APIKey: "k"},
+		},
+	})
+	logger := discardLogger()
+	tr := &fallbackTurn{
+		logger:      logger,
+		deps:        runDeps{registry: reg, logger: logger},
+		cfg:         agent.AgentConfig{Model: "m-main", MaxTurns: 2, Timeout: 5 * time.Second, MaxTokens: 128},
+		client:      llm.NewClient(server.URL, "k"),
+		providerID:  "test",
+		messages:    []llm.Message{llm.NewTextMessage("user", "hello")},
+		initialRole: modelrole.RoleMain,
+		runErr:      context.DeadlineExceeded,
+		runLog:      agentlog.NewRunLogger(nil, "s", "r"),
+		actualModel: "m-main",
+	}
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	tr.walkFallbackChain(ctx)
+	if tr.runErr != nil || !tr.fellBack {
+		t.Fatalf("fellBack=%v err=%v result=%+v", tr.fellBack, tr.runErr, tr.agentResult)
+	}
+	if tr.actualModel != "m-fb" {
+		t.Errorf("actualModel = %q, want m-fb", tr.actualModel)
+	}
+}
+
+func TestWalkFallbackChainRespectsCancel(t *testing.T) {
+	reg := modelrole.NewRegistryWithOptions(discardLogger(), modelrole.RegistryOptions{
+		MainModel:     "test/m-main",
+		FallbackModel: "test/m-fb",
+	})
+	tr := &fallbackTurn{
+		logger:      discardLogger(),
+		deps:        runDeps{registry: reg},
+		cfg:         agent.AgentConfig{Model: "m-main"},
+		initialRole: modelrole.RoleMain,
+		runErr:      context.Canceled,
+		actualModel: "m-main",
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	tr.walkFallbackChain(ctx)
+	if tr.fellBack {
+		t.Fatal("canceled parent must not walk the fallback chain")
+	}
+	if !errors.Is(tr.runErr, context.Canceled) {
+		t.Fatalf("runErr = %v", tr.runErr)
+	}
+}
