@@ -38,7 +38,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.TimeZone
 
 /**
@@ -71,24 +79,34 @@ fun DenebEngineScreen(
     var refreshing by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
+    val loadMutex = remember { Mutex() }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     suspend fun load() {
-        val fetched = client.fetchEngineStatus()
-        if (fetched == null) {
-            loadOk = false
-        } else {
-            status = fetched
-            loadOk = true
+        loadMutex.withLock {
+            val fetched = client.fetchEngineStatus()
+            if (fetched == null) {
+                loadOk = false
+            } else {
+                status = fetched
+                loadOk = true
+            }
         }
-    }
-    LaunchedEffect(Unit) {
-        loadOk = null
-        load()
     }
     // The gateway pushes every readiness change; the screen follows it so the
     // state line flips the moment routing does, not on the next pull.
-    LaunchedEffect(client) {
-        client.engineEvents.collect { load() }
+    LaunchedEffect(client, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            coroutineScope {
+                launch {
+                    while (isActive) {
+                        load()
+                        delay(15_000)
+                    }
+                }
+                launch { client.engineEvents.collect { load() } }
+            }
+        }
     }
 
     DenebScreenScaffold(title = "엔진", onBack = onBack, tabBar = navigationTabBar) {
@@ -123,7 +141,17 @@ fun DenebEngineScreen(
 
                     !s.configured -> DenebEmpty("로컬 서빙 엔진이 설정되어 있지 않습니다.")
 
-                    else -> EngineStatusContent(s)
+                    else -> {
+                        if (loadOk == false) {
+                            Text(
+                                "갱신 실패 · 이전에 받은 통계입니다.",
+                                style = DenebType.meta,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(16.dp),
+                            )
+                        }
+                        EngineStatusContent(s)
+                    }
                 }
                 Spacer(Modifier.height(24.dp))
             }
@@ -144,6 +172,8 @@ fun DenebEngineScreen(
 internal fun EngineStatusContent(status: EngineStatusResult, zone: TimeZone = TimeZone.currentSystemDefault()) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         EngineStateLine(status)
+        Spacer(Modifier.height(14.dp))
+        EngineDiagnosticsSection(status, zone)
         Spacer(Modifier.height(14.dp))
         EngineAvailabilitySection(status, zone)
         Spacer(Modifier.height(18.dp))

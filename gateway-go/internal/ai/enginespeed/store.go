@@ -67,16 +67,19 @@ func (d DayStat) Rates() observe.EngineRates { return d.Delta.Rates() }
 
 // Store accumulates scrapes into per-day totals and persists them.
 type Store struct {
-	mu        sync.Mutex
-	path      string
-	days      map[string]*DayStat
-	previous  map[string]observe.EngineCounters // endpoint → last scrape
-	dirty     bool
-	lastFlush time.Time
+	diagnostics        []DiagnosticInterval
+	diagnosticPrevious map[string]diagnosticPrevious
+	mu                 sync.Mutex
+	path               string
+	days               map[string]*DayStat
+	previous           map[string]observe.EngineCounters // endpoint → last scrape
+	dirty              bool
+	lastFlush          time.Time
 }
 
 type persisted struct {
-	Days []DayStat `json:"days"`
+	Days        []DayStat            `json:"days"`
+	Diagnostics []DiagnosticInterval `json:"diagnostics,omitempty"`
 }
 
 // NewStore loads whatever history is on disk. A missing or unreadable file
@@ -100,6 +103,7 @@ func NewStore(path string) *Store {
 		d := p.Days[i]
 		s.days[dayKey(d.Day, d.Endpoint)] = &d
 	}
+	s.diagnostics = p.Diagnostics
 	return s
 }
 
@@ -114,6 +118,7 @@ func dayKey(day, endpoint string) string { return day + "\x00" + endpoint }
 func (s *Store) Observe(endpoint string, at time.Time, pollInterval time.Duration, c observe.EngineCounters) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.observeDiagnosticsLocked(endpoint, at, pollInterval, c)
 
 	day := at.Format("2006-01-02")
 	key := dayKey(day, endpoint)
@@ -193,6 +198,8 @@ func (s *Store) MaybeFlush(now time.Time) error {
 func (s *Store) Flush(now time.Time) error {
 	s.mu.Lock()
 	s.prune(now)
+	s.pruneDiagnosticsLocked(now)
+	diagnostics := copyDiagnosticIntervals(s.diagnostics)
 	rows := make([]DayStat, 0, len(s.days))
 	for _, d := range s.days {
 		rows = append(rows, *d)
@@ -211,7 +218,7 @@ func (s *Store) Flush(now time.Time) error {
 		}
 		return rows[i].Endpoint < rows[j].Endpoint
 	})
-	raw, err := json.MarshalIndent(persisted{Days: rows}, "", "  ")
+	raw, err := json.MarshalIndent(persisted{Days: rows, Diagnostics: diagnostics}, "", "  ")
 	if err != nil {
 		return err
 	}

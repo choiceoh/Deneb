@@ -42,12 +42,18 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun EngineSummarySection(total: EngineTotals) {
     DenebGroup(label = "최근 ${total.days}일 합계") {
+        Text(
+            "여러 실행·요청 조건을 합친 일별 통계입니다. 체감 프리필은 캐시 효과를 포함합니다.",
+            style = DenebType.meta,
+            color = denebHint(),
+            modifier = Modifier.padding(16.dp),
+        )
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 14.dp)) {
             EngineStatLine("요청", "${total.requests}회")
             EngineStatLine("토큰", "입력 ${formatTokenCount(total.promptTokens)} · 출력 ${formatTokenCount(total.generatedTokens)}")
             EngineStatLine(
                 "속도",
-                "디코드 ${formatRate(total.decodeTokensPerSec)} · 프리필 ${formatRate(total.prefillTokensPerSec)}" +
+                "디코드 ${formatRate(total.decodeTokensPerSec)} · 체감 프리필 ${formatRate(total.prefillTokensPerSec)}" +
                     (if (total.sampleIsThin()) " (표본 부족)" else ""),
             )
             EngineStatLine(
@@ -147,7 +153,7 @@ private fun EngineDayRow(day: EngineDay, fastestDecode: Double, expanded: Boolea
             )
             Text(
                 text = when {
-                    day.measured -> "디코드 ${formatRate(day.decodeTokensPerSec)} · 프리필 ${formatRate(day.prefillTokensPerSec)}"
+                    day.measured -> "디코드 ${formatRate(day.decodeTokensPerSec)} · 체감 프리필 ${formatRate(day.prefillTokensPerSec)}"
                     day.downSeconds > 0.0 -> "측정 없음 · 끊김 ${formatDuration(day.downSeconds)}"
                     else -> "측정 없음"
                 },

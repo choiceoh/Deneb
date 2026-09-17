@@ -592,6 +592,15 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
     // The engine page on a bad day: routing verdict, 24h strip with outages, today's
     // share, totals, expandable days (newest open), internals, routing. Clock strings
     // are pinned to KST so the golden matches on a UTC runner.
+    "engine_statistics" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.width(412.dp)) {
+                    ai.deneb.deneb.EngineDiagnosticsSection(sampleEngineStatus, kotlinx.datetime.TimeZone.of("Asia/Seoul"))
+                }
+            }
+        }
+    },
     "engine" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {

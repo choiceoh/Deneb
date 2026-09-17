@@ -1,0 +1,44 @@
+make ci — CI gate mirror  (18 gates, selected lanes run in parallel)
+
+  ✓ runtime-health-test 0.1s
+  ✓ generate-check   0.3s
+  ✓ health-v2-test   0.9s
+  ✓ cache-cost-audit-test 0.0s
+  ✓ doc-ref-lint     0.2s
+  ✓ go-fmt           1.2s
+  ✓ kotlin-spotless  1.8s
+  ✓ go-vet           2.4s
+  ✓ kotlin-detekt    6.2s
+  ✓ kotlin-desktop-smoke-test 27.8s
+  ✓ go-lint          41.4s
+  ✓ python-test      46.1s
+  ✓ shell-behavior-test 5.2s
+  ✓ shell-lint       0.0s
+  ✓ kotlin-android-compile 35.9s
+  ✓ render-golden-check 40.1s
+  ✓ design-lint      0.0s
+  ✓ go-test          81.0s
+
+Summary
+  generate-check   PASS  0.3s
+  go-fmt           PASS  1.2s
+  go-vet           PASS  2.4s
+  go-lint          PASS  41.4s
+  go-test          PASS  81.0s
+  kotlin-spotless  PASS  1.8s
+  kotlin-detekt    PASS  6.2s
+  kotlin-desktop-smoke-test PASS  27.8s
+  kotlin-android-compile PASS  35.9s
+  render-golden-check PASS  40.1s
+  design-lint      PASS  0.0s
+  runtime-health-test PASS  0.1s
+  health-v2-test   PASS  0.9s
+  cache-cost-audit-test PASS  0.0s
+  doc-ref-lint     PASS  0.2s
+  python-test      PASS  46.1s
+  shell-behavior-test PASS  5.2s
+  shell-lint       PASS  0.0s
+  --------------------------------------
+  18 passed, 0 failed  ·  wall 126.7s
+
+make ci PASSED — all gates green; safe to push.

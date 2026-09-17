@@ -213,6 +213,7 @@ type EngineInternals struct {
 //
 //deneb:wire
 type EngineStatusResult struct {
+	Diagnostics EngineDiagnosticsReport `json:"diagnostics"`
 	// NowMs is the gateway's clock at assembly; every relative time the app
 	// shows ("down for 12 min") is measured against it, not the phone's.
 	NowMs int64 `json:"nowMs"`
@@ -372,10 +373,12 @@ func engineStatus(deps EngineDeps) rpcutil.HandlerFunc {
 		}
 
 		endpoint := deps.endpoint()
+		currentRuntime := ""
 		if endpoint != "" {
 			out.Configured = true
 			out.Endpoint = endpoint
 			if c, ok := observe.FetchEngineCounters(ctx, endpoint); ok {
+				currentRuntime = c.Model + " " + c.Diagnostics.Identity
 				out.Reachable = true
 				out.Model = c.Model
 				out.RunningRequests = int(c.RunningRequests)
@@ -414,6 +417,7 @@ func engineStatus(deps EngineDeps) rpcutil.HandlerFunc {
 		if deps.Speed != nil {
 			if store := deps.Speed(); store != nil {
 				speedRows = store.Days(engineHistoryDays)
+				out.Diagnostics = engineDiagnostics(store.Diagnostics(endpoint), now, currentRuntime)
 			}
 		}
 		var local, known map[string]bool
