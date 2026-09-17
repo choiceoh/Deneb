@@ -148,6 +148,12 @@ func engineTotalsFrom(base EngineTotals, days int, observed float64, summed obse
 	base.MeanQueueSeconds = r.MeanQueueSeconds
 	base.MeanE2eSeconds = r.MeanE2ESeconds
 	base.PromptCacheHitRatio = r.PromptCacheHitRatio
+	base.CachedPromptTokens = r.CachedPromptTokens
+	base.CachePromptTokens = r.CachePromptTokens
+	base.PromptCacheMeasured = r.PromptCacheMeasured
+	base.PrefixRequestHitRatio = r.PrefixRequestHitRatio
+	base.PrefixLookupRequests = r.PrefixLookupRequests
+	base.PrefixHitRequests = r.PrefixHitRequests
 	base.SpecAcceptRatio = r.SpecAcceptRatio
 	base.SpecDraftTokens = r.SpecDraftTokens
 	base.BusySeconds = r.BusySeconds
@@ -166,28 +172,33 @@ func engineDayFrom(d enginespeed.DayStat) EngineDay {
 		util = r.BusySeconds / observed
 	}
 	return EngineDay{
-		Day:                  d.Day,
-		Model:                d.Model,
-		Measured:             r.Measured(),
-		DecodeTokensPerSec:   r.DecodeTokensPerSec,
-		PrefillTokensPerSec:  r.PrefillTokensPerSec,
-		ConcurrencyWhileBusy: r.ConcurrencyWhileBusy,
-		PeakConcurrency:      d.PeakConcurrency,
-		PollIntervalSec:      d.PollIntervalSec,
-		Requests:             int64(r.Requests),
-		PromptTokens:         int64(r.PromptTokens),
-		GeneratedTokens:      int64(r.GeneratedTokens),
-		MeanTtftSeconds:      r.MeanTTFTSeconds,
-		MeanQueueSeconds:     r.MeanQueueSeconds,
-		MeanE2eSeconds:       r.MeanE2ESeconds,
-		PromptCacheHitRatio:  r.PromptCacheHitRatio,
-		CachedPromptTokens:   r.CachedPromptTokens,
-		SpecAcceptRatio:      r.SpecAcceptRatio,
-		SpecDraftTokens:      r.SpecDraftTokens,
-		BusySeconds:          r.BusySeconds,
-		ObservedSeconds:      observed,
-		Utilization:          util,
-		Restarts:             d.Restarts,
+		Day:                   d.Day,
+		Model:                 d.Model,
+		Measured:              r.Measured(),
+		DecodeTokensPerSec:    r.DecodeTokensPerSec,
+		PrefillTokensPerSec:   r.PrefillTokensPerSec,
+		ConcurrencyWhileBusy:  r.ConcurrencyWhileBusy,
+		PeakConcurrency:       d.PeakConcurrency,
+		PollIntervalSec:       d.PollIntervalSec,
+		Requests:              int64(r.Requests),
+		PromptTokens:          int64(r.PromptTokens),
+		GeneratedTokens:       int64(r.GeneratedTokens),
+		MeanTtftSeconds:       r.MeanTTFTSeconds,
+		MeanQueueSeconds:      r.MeanQueueSeconds,
+		MeanE2eSeconds:        r.MeanE2ESeconds,
+		PromptCacheHitRatio:   r.PromptCacheHitRatio,
+		CachePromptTokens:     r.CachePromptTokens,
+		PromptCacheMeasured:   r.PromptCacheMeasured,
+		PrefixRequestHitRatio: r.PrefixRequestHitRatio,
+		PrefixLookupRequests:  r.PrefixLookupRequests,
+		PrefixHitRequests:     r.PrefixHitRequests,
+		CachedPromptTokens:    r.CachedPromptTokens,
+		SpecAcceptRatio:       r.SpecAcceptRatio,
+		SpecDraftTokens:       r.SpecDraftTokens,
+		BusySeconds:           r.BusySeconds,
+		ObservedSeconds:       observed,
+		Utilization:           util,
+		Restarts:              d.Restarts,
 	}
 }
 

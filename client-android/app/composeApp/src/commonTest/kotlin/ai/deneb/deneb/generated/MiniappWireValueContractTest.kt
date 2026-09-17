@@ -500,6 +500,31 @@ class MiniappWireValueContractTest {
                     expectation = Expectation.Exact,
                 ),
                 fieldValue(
+                    name = "cachePromptTokens",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "promptCacheMeasured",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "prefixRequestHitRatio",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "prefixLookupRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "prefixHitRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
                     name = "cachedPromptTokens",
                     value = JsonPrimitive(Long.MAX_VALUE),
                     expectation = Expectation.Exact,
@@ -1060,6 +1085,36 @@ class MiniappWireValueContractTest {
                 fieldValue(
                     name = "promptCacheHitRatio",
                     value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "cachedPromptTokens",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "cachePromptTokens",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "promptCacheMeasured",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "prefixRequestHitRatio",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "prefixLookupRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "prefixHitRequests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
                     expectation = Expectation.Exact,
                 ),
                 fieldValue(

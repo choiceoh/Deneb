@@ -112,7 +112,7 @@ class MiniappWireDescriptorContractTest {
             name = "EngineDay",
             serializer = EngineDay.serializer(),
             empty = EngineDay(),
-            fields = listOf("day", "model", "measured", "decodeTokensPerSec", "prefillTokensPerSec", "concurrencyWhileBusy", "peakConcurrency", "pollIntervalSec", "requests", "promptTokens", "generatedTokens", "meanTtftSeconds", "meanQueueSeconds", "meanE2eSeconds", "promptCacheHitRatio", "cachedPromptTokens", "specAcceptRatio", "specDraftTokens", "busySeconds", "observedSeconds", "utilization", "restarts", "livenessTracked", "downSeconds", "outages", "routerMetered", "routerLocalRequests", "routerRemoteRequests", "routerUnknownRequests"),
+            fields = listOf("day", "model", "measured", "decodeTokensPerSec", "prefillTokensPerSec", "concurrencyWhileBusy", "peakConcurrency", "pollIntervalSec", "requests", "promptTokens", "generatedTokens", "meanTtftSeconds", "meanQueueSeconds", "meanE2eSeconds", "promptCacheHitRatio", "cachePromptTokens", "promptCacheMeasured", "prefixRequestHitRatio", "prefixLookupRequests", "prefixHitRequests", "cachedPromptTokens", "specAcceptRatio", "specDraftTokens", "busySeconds", "observedSeconds", "utilization", "restarts", "livenessTracked", "downSeconds", "outages", "routerMetered", "routerLocalRequests", "routerRemoteRequests", "routerUnknownRequests"),
         ),
         contract(
             name = "EngineGlance",
@@ -148,7 +148,7 @@ class MiniappWireDescriptorContractTest {
             name = "EngineTotals",
             serializer = EngineTotals.serializer(),
             empty = EngineTotals(),
-            fields = listOf("days", "requests", "promptTokens", "generatedTokens", "decodeTokensPerSec", "prefillTokensPerSec", "meanTtftSeconds", "meanQueueSeconds", "meanE2eSeconds", "promptCacheHitRatio", "specAcceptRatio", "specDraftTokens", "busySeconds", "observedSeconds", "utilization", "restarts", "downSeconds", "outages", "routerLocalRequests", "routerRemoteRequests", "routerUnknownRequests"),
+            fields = listOf("days", "requests", "promptTokens", "generatedTokens", "decodeTokensPerSec", "prefillTokensPerSec", "meanTtftSeconds", "meanQueueSeconds", "meanE2eSeconds", "promptCacheHitRatio", "cachedPromptTokens", "cachePromptTokens", "promptCacheMeasured", "prefixRequestHitRatio", "prefixLookupRequests", "prefixHitRequests", "specAcceptRatio", "specDraftTokens", "busySeconds", "observedSeconds", "utilization", "restarts", "downSeconds", "outages", "routerLocalRequests", "routerRemoteRequests", "routerUnknownRequests"),
         ),
         contract(
             name = "FilesEntryOut",

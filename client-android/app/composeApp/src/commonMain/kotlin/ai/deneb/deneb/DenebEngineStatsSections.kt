@@ -56,7 +56,10 @@ internal fun EngineSummarySection(total: EngineTotals) {
                     (if (total.meanQueueSeconds > 0.0) " (대기 ${formatSeconds(total.meanQueueSeconds)})" else ""),
             )
             if (total.meanE2eSeconds > 0.0) EngineStatLine("응답", formatSeconds(total.meanE2eSeconds))
-            EngineStatLine("프롬프트 캐시", formatPercent(total.promptCacheHitRatio * 100))
+            EngineStatLine("토큰 재사용", engineTokenCacheText(total.promptCacheMeasured, total.promptCacheHitRatio, total.cachedPromptTokens, total.cachePromptTokens))
+            if (total.prefixLookupRequests > 0) {
+                EngineStatLine("캐시 적중 요청", engineRequestCacheText(total.prefixRequestHitRatio, total.prefixHitRequests, total.prefixLookupRequests))
+            }
             if (total.specDraftTokens > 0) {
                 EngineStatLine("드래프트 수락", "${formatPercent(total.specAcceptRatio * 100)} · ${formatTokenCount(total.specDraftTokens)} 제안")
             }
@@ -188,9 +191,12 @@ private fun EngineDayDetail(day: EngineDay) {
             EngineStatLine("응답", formatSeconds(day.meanE2eSeconds))
             EngineStatLine("동시성", "${formatConcurrency(day.concurrencyWhileBusy)} · 최대 ${day.peakConcurrency}")
             EngineStatLine(
-                "프롬프트 캐시",
-                "${formatPercent(day.promptCacheHitRatio * 100)}" + (if (day.cachedPromptTokens > 0) " · ${formatTokenCount(day.cachedPromptTokens)} 재사용" else ""),
+                "토큰 재사용",
+                engineTokenCacheText(day.promptCacheMeasured, day.promptCacheHitRatio, day.cachedPromptTokens, day.cachePromptTokens),
             )
+            if (day.prefixLookupRequests > 0) {
+                EngineStatLine("캐시 적중 요청", engineRequestCacheText(day.prefixRequestHitRatio, day.prefixHitRequests, day.prefixLookupRequests))
+            }
             if (day.specDraftTokens > 0) {
                 EngineStatLine("드래프트 수락", "${formatPercent(day.specAcceptRatio * 100)} · ${formatTokenCount(day.specDraftTokens)} 제안")
             }
@@ -265,7 +271,7 @@ internal fun EngineInternalsSection(status: EngineStatusResult) {
                 }
                 if (i.prefixSnapshotsFree == 0 && i.prefixEntries > 0) {
                     Text(
-                        text = "스냅샷 여유가 0이면 새 대화 머리는 즉시 재개되지 못하고 다시 프리필됩니다 — 캐시 적중률이 낮은 이유입니다.",
+                        text = "스냅샷 여유가 0이면 메모리 캐시가 가득 찬 상태입니다. 이전 경계는 압축 캐시나 저장 장치에서 복구될 수 있습니다.",
                         style = DenebType.meta,
                         color = denebHint(),
                         modifier = Modifier.padding(top = 4.dp),

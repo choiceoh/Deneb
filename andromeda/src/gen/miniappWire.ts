@@ -102,6 +102,11 @@ export interface EngineDay {
   meanQueueSeconds?: number
   meanE2eSeconds?: number
   promptCacheHitRatio?: number
+  cachePromptTokens?: number
+  promptCacheMeasured?: boolean
+  prefixRequestHitRatio?: number
+  prefixLookupRequests?: number
+  prefixHitRequests?: number
   cachedPromptTokens?: number
   specAcceptRatio?: number
   specDraftTokens?: number
@@ -223,6 +228,12 @@ export interface EngineTotals {
   meanQueueSeconds?: number
   meanE2eSeconds?: number
   promptCacheHitRatio?: number
+  cachedPromptTokens?: number
+  cachePromptTokens?: number
+  promptCacheMeasured?: boolean
+  prefixRequestHitRatio?: number
+  prefixLookupRequests?: number
+  prefixHitRequests?: number
   specAcceptRatio?: number
   specDraftTokens?: number
   busySeconds?: number

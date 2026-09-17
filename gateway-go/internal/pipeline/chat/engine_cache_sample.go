@@ -6,7 +6,8 @@
 // usage payload, so run.end's CacheReadTokens stays 0 on the vLLM path and
 // the gateway is blind to how well the APC prefix survives our prompt
 // assembly. The engine's /metrics endpoint exposes cumulative token-level
-// counters (vllm:prefix_cache_{hits,queries}_total); the delta between
+// counters (vllm:prefix_cache_{hits,queries}_total on vLLM,
+// st:prefix_reused_tokens_total / vllm:prompt_tokens_total on ST); the delta between
 // consecutive samples taken by this gateway attributes tokens to "whatever
 // ran since the previous sample" — exact under the single-user, mostly-serial
 // workload, smeared when runs overlap. This is the measurement that verifies
@@ -39,6 +40,8 @@ const (
 	engineCacheSampleTimeout = 2 * time.Second
 	metricPrefixCacheQueries = "vllm:prefix_cache_queries_total"
 	metricPrefixCacheHits    = "vllm:prefix_cache_hits_total"
+	metricSTReusedTokens     = "st:prefix_reused_tokens_total" //nolint:gosec // G101: metric name
+	metricPromptTokens       = "vllm:prompt_tokens_total"      //nolint:gosec // G101: metric name
 )
 
 var engineCacheHTTP = httputil.NewClient(engineCacheSampleTimeout)
@@ -47,10 +50,15 @@ var engineCacheHTTP = httputil.NewClient(engineCacheSampleTimeout)
 // sample can report a delta. In-memory only: the first sample after a gateway
 // restart (or an engine restart, which resets the counters) just establishes
 // a baseline and logs nothing.
+type engineCacheSample struct {
+	hits, queries float64
+	st            bool
+}
+
 var engineCacheState = struct {
 	mu   sync.Mutex
-	last map[string][2]float64 // metricsURL → {hits, queries}
-}{last: make(map[string][2]float64)}
+	last map[string]engineCacheSample // metricsURL → token counters and source
+}{last: make(map[string]engineCacheSample)}
 
 // logEngineCacheAsync samples the engine serving this run and emits a
 // run.cache event. Fire-and-forget: never blocks the reply path. Skipped for
@@ -192,12 +200,15 @@ func sampleEngineCacheDelta(ctx context.Context, metricsURL string) (hitDelta, q
 		return 0, 0, false
 	}
 
-	var hits, queries float64
-	var sawHits, sawQueries bool
+	var hits, queries, reused, prompt float64
+	var sawHits, sawQueries, sawReused, sawPrompt, isST bool
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 256*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
+		if strings.HasPrefix(line, "st:") || strings.Contains(line, `engine="st"`) {
+			isST = true
+		}
 		// Counters may appear once per engine label set; sum them.
 		if v, matched := metricValue(line, metricPrefixCacheHits); matched {
 			hits += v
@@ -205,7 +216,18 @@ func sampleEngineCacheDelta(ctx context.Context, metricsURL string) (hitDelta, q
 		} else if v, matched := metricValue(line, metricPrefixCacheQueries); matched {
 			queries += v
 			sawQueries = true
+		} else if v, matched := metricValue(line, metricSTReusedTokens); matched {
+			reused += v
+			sawReused = true
+		} else if v, matched := metricValue(line, metricPromptTokens); matched {
+			prompt += v
+			sawPrompt = true
 		}
+	}
+	// ST exports prefix hits/queries as REQUESTS. Never log those as tokens.
+	if isST {
+		hits, queries = reused, prompt
+		sawHits, sawQueries = sawReused, sawPrompt
 	}
 	if scanner.Err() != nil || !sawHits || !sawQueries {
 		return 0, 0, false
@@ -214,11 +236,11 @@ func sampleEngineCacheDelta(ctx context.Context, metricsURL string) (hitDelta, q
 	engineCacheState.mu.Lock()
 	defer engineCacheState.mu.Unlock()
 	prev, hadPrev := engineCacheState.last[metricsURL]
-	engineCacheState.last[metricsURL] = [2]float64{hits, queries}
-	if !hadPrev || hits < prev[0] || queries < prev[1] {
+	engineCacheState.last[metricsURL] = engineCacheSample{hits: hits, queries: queries, st: isST}
+	if !hadPrev || prev.st != isST || hits < prev.hits || queries < prev.queries {
 		return 0, 0, false // baseline or engine restart
 	}
-	return int64(hits - prev[0]), int64(queries - prev[1]), true
+	return int64(hits - prev.hits), int64(queries - prev.queries), true
 }
 
 // metricValue parses a Prometheus text-format sample line for the given
