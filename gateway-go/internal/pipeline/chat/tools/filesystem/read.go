@@ -378,15 +378,23 @@ func storeReadCache(fc *agent.FileCache, path, output string, data []byte) {
 // parameter do not behave that way — wiki read, which took `paths`, folds at
 // 3.5% — so the gap was the missing parameter, not the guidance.
 func ToolRead(defaultDir string, extraReadRoots ...string) toolport.ToolFunc {
+	return ToolReadWithSkillRoots(defaultDir, extraReadRoots, extraReadRoots...)
+}
+
+// ToolReadWithSkillRoots keeps general read-only roots reachable without
+// treating them as skill catalogs during SKILL.md fallback discovery. The
+// distinction matters for large roots such as the memory store: scanning them
+// as skill layouts made a missing skill read needlessly walk unrelated trees.
+func ToolReadWithSkillRoots(defaultDir string, skillRoots []string, extraReadRoots ...string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		p, err := parseReadParams(ctx, input)
 		if err != nil {
 			return "", err
 		}
 		if len(p.FilePaths) > 0 {
-			return readBatch(ctx, p, defaultDir, extraReadRoots)
+			return readBatch(ctx, p, defaultDir, extraReadRoots, skillRoots)
 		}
-		return readOne(ctx, p, defaultDir, extraReadRoots)
+		return readOne(ctx, p, defaultDir, extraReadRoots, skillRoots)
 	}
 }
 
@@ -395,7 +403,7 @@ func ToolRead(defaultDir string, extraReadRoots ...string) toolport.ToolFunc {
 // resolution, same protected-path guard, same dedup cache, and the same
 // RecordReadEvidence staleness baseline that edit's modified-since-read guard
 // depends on.
-func readOne(ctx context.Context, p readParams, defaultDir string, extraReadRoots []string) (string, error) {
+func readOne(ctx context.Context, p readParams, defaultDir string, extraReadRoots, skillRoots []string) (string, error) {
 	dir := defaultDir
 	path, clamped := artifact.ResolvePathWithRootsContained(p.FilePath, dir, extraReadRoots)
 	// Outside the jail the resolver hands back the workspace ROOT, and the
@@ -420,7 +428,7 @@ func readOne(ctx context.Context, p readParams, defaultDir string, extraReadRoot
 		}
 	}
 
-	path, data, dirListing, err := readFileWithFallbacks(path, p.FilePath, extraReadRoots)
+	path, data, dirListing, err := readFileWithFallbacks(path, p.FilePath, skillRoots)
 	if err != nil {
 		return "", err
 	}
@@ -460,7 +468,7 @@ func readOne(ctx context.Context, p readParams, defaultDir string, extraReadRoot
 // Batch mode is whole-file only: offset/limit/function/hashes describe ONE
 // file's interior and mean nothing spread across several, so they are refused
 // rather than silently ignored.
-func readBatch(ctx context.Context, p readParams, defaultDir string, extraReadRoots []string) (string, error) {
+func readBatch(ctx context.Context, p readParams, defaultDir string, extraReadRoots, skillRoots []string) (string, error) {
 	if p.Offset > 0 || p.Limit > 0 || p.Function != "" || p.Hashes {
 		return "file_paths(배치)는 파일 전체 읽기 전용입니다 — offset/limit/function/hashes는 file_path 단건 읽기에 쓰세요.", nil
 	}
@@ -492,7 +500,7 @@ func readBatch(ctx context.Context, p readParams, defaultDir string, extraReadRo
 		one := p
 		one.FilePath = display
 		one.FilePaths = nil
-		out, err := readOne(ctx, one, defaultDir, extraReadRoots)
+		out, err := readOne(ctx, one, defaultDir, extraReadRoots, skillRoots)
 		if err != nil {
 			fmt.Fprintf(&b, "읽기 실패: %v", err)
 			continue
