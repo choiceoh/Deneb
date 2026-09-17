@@ -49,6 +49,13 @@ class RoleModelTests(unittest.TestCase):
 
         self.assertEqual(role_model("tiny", "fb", path), "fb")
 
+    def test_tiny_fallback_roles_resolve_their_own_optional_config(self) -> None:
+        path = self.config({"agents": {"tinyFallbackModel": "wormhole/free-tiny",
+                                      "tinyFallbackPaidModel": "wormhole/paid-tiny"}})
+        self.assertEqual(role_model("tinyfallback", "fb", path), "free-tiny")
+        self.assertEqual(role_model("tinyfallbackpaid", "fb", path), "paid-tiny")
+        self.assertEqual(role_model("tiny", "fb", path), "fb")
+
     def test_unknown_role_yields_the_fallback(self) -> None:
         path = self.config({"agents": {"tinyModel": "wormhole/dsv4-nothink"}})
 

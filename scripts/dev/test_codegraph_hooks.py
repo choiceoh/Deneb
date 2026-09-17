@@ -158,12 +158,19 @@ class NudgeMainTests(unittest.TestCase):
         self.markers.mkdir()
 
     def invoke(self, payload):
-        with mock.patch.object(nudge.tempfile, "gettempdir", return_value=str(self.markers)):
-            return invoke_main(
+        # The indexer's spawn/lock behavior has its own tests. Hook tests
+        # verify the call without launching a real index on the developer's cwd.
+        with (
+            mock.patch.object(nudge.tempfile, "gettempdir", return_value=str(self.markers)),
+            mock.patch.object(nudge, "ensure_index") as ensure,
+        ):
+            result = invoke_main(
                 nudge,
                 stdin=json.dumps(payload),
                 env={"CLAUDE_PROJECT_DIR": str(self.root)},
             )
+        ensure.assert_called_once_with(payload.get("cwd") or os.getcwd())
+        return result
 
     def test_when_known_symbol_blocks_once_per_sanitized_session_and_pattern(self) -> None:
         payload = {
@@ -342,12 +349,19 @@ class ReminderTests(unittest.TestCase):
         self.markers.mkdir()
 
     def invoke(self, payload):
-        with mock.patch.object(remind.tempfile, "gettempdir", return_value=str(self.markers)):
-            return invoke_main(
+        # The indexer's spawn/lock behavior has its own tests. Hook tests
+        # verify the call without launching a real index on the developer's cwd.
+        with (
+            mock.patch.object(remind.tempfile, "gettempdir", return_value=str(self.markers)),
+            mock.patch.object(remind, "ensure_index") as ensure,
+        ):
+            result = invoke_main(
                 remind,
                 stdin=json.dumps(payload),
                 env={"CLAUDE_PROJECT_DIR": str(self.root)},
             )
+        ensure.assert_called_once_with(payload.get("cwd") or os.getcwd())
+        return result
 
     def test_first_source_file_emits_exact_allow_contract_then_suppresses(self) -> None:
         payload = {

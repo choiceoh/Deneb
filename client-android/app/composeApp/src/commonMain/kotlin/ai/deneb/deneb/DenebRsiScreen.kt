@@ -28,11 +28,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -300,11 +305,12 @@ private fun RsiLayerCard(
             )
             RsiStateBadge(layer.state)
             if (hasDetail) {
-                Text(
-                    text = if (expanded) "⌃" else "⌄",
-                    style = DenebType.meta,
-                    color = denebHint(),
-                    modifier = Modifier.padding(start = 8.dp),
+                // A vector keeps the disclosure width independent of the host's fallback font.
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = denebHint(),
+                    modifier = Modifier.padding(start = 8.dp).size(16.dp),
                 )
             }
         }
