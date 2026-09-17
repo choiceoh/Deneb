@@ -14,11 +14,15 @@ import (
 // catalogs, the memory root) honored by read and grep; write/edit stay
 // workspace-jailed.
 func RegisterFileTools(registry toolport.ToolRegistrar, workspaceDir string, extraReadRoots ...string) {
+	registerFileTools(registry, workspaceDir, extraReadRoots, extraReadRoots...)
+}
+
+func registerFileTools(registry toolport.ToolRegistrar, workspaceDir string, skillRoots []string, extraReadRoots ...string) {
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "read",
 		Description: "Read workspace file contents with line numbers. Pass exactly one mode: file_path (one absolute path; optionally offset/limit/function/force/hashes) or file_paths (1-8 absolute paths for whole-file batch reads; no single-file options). Default single-file limit: 2000 lines. Use read for inspecting existing files; use grep to find text and edit/write to change files.",
 		InputSchema: schema.ReadToolSchema(),
-		Fn:          filesystem.ToolRead(workspaceDir, extraReadRoots...),
+		Fn:          filesystem.ToolReadWithSkillRoots(workspaceDir, skillRoots, extraReadRoots...),
 	})
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "write",
@@ -139,7 +143,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	if deps.MemoryDir != "" {
 		extraReadRoots = append(append([]string(nil), extraReadRoots...), deps.MemoryDir)
 	}
-	RegisterFileTools(registry, deps.WorkspaceDir, extraReadRoots...)
+	registerFileTools(registry, deps.WorkspaceDir, deps.SkillsCatalogDirs, extraReadRoots...)
 	RegisterGraphTool(registry, deps.WorkspaceDir)
 	RegisterCodeSearchTool(registry, deps.WorkspaceDir)
 	RegisterOfficeTool(registry, deps.WorkspaceDir)

@@ -96,3 +96,34 @@ func TestToolRead_MissingSkillGetsCurationHint(t *testing.T) {
 		t.Errorf("non-skill miss should not carry the curation hint: %v", err)
 	}
 }
+
+func TestToolReadWithSkillRootsDoesNotSearchGeneralReadRootsAsCatalogs(t *testing.T) {
+	workspace := t.TempDir()
+	skillRoot := t.TempDir()
+	memoryRoot := t.TempDir()
+
+	// This resembles a skill layout but lives in the general memory root. It
+	// must remain readable by exact path without becoming a fallback candidate.
+	memorySkill := filepath.Join(memoryRoot, "archive", "stale-skill", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(memorySkill), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(memorySkill, []byte("memory copy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	read := ToolReadWithSkillRoots(workspace, []string{skillRoot}, skillRoot, memoryRoot)
+	missing := []byte(`{"file_path":"` + filepath.Join(skillRoot, "stale-skill", "SKILL.md") + `"}`)
+	if _, err := read(context.Background(), missing); err == nil {
+		t.Fatal("missing catalog skill unexpectedly resolved from the general memory root")
+	}
+
+	exact := []byte(`{"file_path":"` + memorySkill + `"}`)
+	out, err := read(context.Background(), exact)
+	if err != nil {
+		t.Fatalf("exact read from general root failed: %v", err)
+	}
+	if !strings.Contains(out, "memory copy") {
+		t.Fatalf("exact read returned wrong content: %q", out)
+	}
+}
