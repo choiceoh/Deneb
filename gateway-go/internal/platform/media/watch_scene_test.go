@@ -160,7 +160,9 @@ func TestWatchVideoReturnsFramesAlignedWithSceneCuts(t *testing.T) {
 	}
 	video := synthCutsVideo(t, colors, 1)
 
-	res, err := WatchVideo(context.Background(), video, WatchOptions{MaxFrames: 6})
+	// The fixture duration is known. Bound the window explicitly so this
+	// scene-selection contract does not depend on an optional ffprobe binary.
+	res, err := WatchVideo(context.Background(), video, WatchOptions{MaxFrames: 6, EndSec: float64(len(colors))})
 	if err != nil {
 		t.Fatalf("WatchVideo: %v", err)
 	}

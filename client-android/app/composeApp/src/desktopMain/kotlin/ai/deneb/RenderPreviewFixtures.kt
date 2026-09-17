@@ -537,6 +537,7 @@ internal val sampleEngineStatus: ai.deneb.deneb.generated.EngineStatusResult = r
     val m = 60_000L
     val now = PREVIEW_NOW_MS
     ai.deneb.deneb.generated.EngineStatusResult(
+        diagnostics = sampleEngineDiagnostics,
         nowMs = now,
         configured = true,
         endpoint = "http://100.125.220.117:8000/metrics",

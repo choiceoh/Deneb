@@ -1,0 +1,440 @@
+{
+  "scope": "synthetic functional contract; no GPU performance measurement",
+  "status": "PASS",
+  "diagnostics": {
+    "lastSampleMs": 1789629348234,
+    "stale": false,
+    "windows": [
+      {
+        "minutes": 30,
+        "runtime": "synthetic-engine st:runtime_info|boot=fixture|build=synthetic|k=7|precision=w4",
+        "observedSeconds": 15.012137268,
+        "metrics": [
+          {
+            "key": "steps",
+            "label": "\ud638\uc2a4\ud2b8 \ub514\ucf54\ub4dc \ud68c\ucc28",
+            "value": 20,
+            "unit": "step/s",
+            "available": true,
+            "samples": 300
+          },
+          {
+            "key": "tokens_step",
+            "label": "\uc644\ub8cc \uc2a4\ud15d\ub2f9 \ucd9c\ub825",
+            "value": 3,
+            "unit": "tok/step",
+            "available": true,
+            "samples": 300
+          },
+          {
+            "key": "decode",
+            "label": "\uc694\uccad \ub514\ucf54\ub4dc",
+            "value": 60,
+            "unit": "tok/s",
+            "available": true,
+            "samples": 900
+          },
+          {
+            "key": "acceptance",
+            "label": "\ub4dc\ub798\ud504\ud2b8 \uc218\uc6a9\ub960",
+            "value": 28.571428571428573,
+            "unit": "%",
+            "available": true,
+            "samples": 2100
+          },
+          {
+            "key": "throughput",
+            "label": "\uad6c\uac04 \ud569\uc0b0 \ucc98\ub9ac\ub7c9",
+            "value": 59.95149017977924,
+            "unit": "tok/s",
+            "available": true,
+            "samples": 900
+          },
+          {
+            "key": "prefill",
+            "label": "\uc2e4\uc81c \ud504\ub9ac\ud544",
+            "value": 1000,
+            "unit": "tok/s",
+            "available": true,
+            "samples": 15000
+          }
+        ],
+        "stages": [
+          {
+            "key": "propose",
+            "label": "propose",
+            "value": 100,
+            "unit": "ms/step",
+            "available": true,
+            "samples": 15
+          }
+        ],
+        "acceptance": [
+          {
+            "key": "2",
+            "label": "2\uac1c \uc218\uc6a9",
+            "value": 100,
+            "unit": "%",
+            "available": true,
+            "samples": 300
+          }
+        ],
+        "latency": [
+          {
+            "key": "vllm:time_to_first_token_seconds_0.5",
+            "label": "\uccab \ud1a0\ud070 P50",
+            "value": 550,
+            "unit": "ms",
+            "available": true,
+            "samples": 15
+          },
+          {
+            "key": "vllm:time_to_first_token_seconds_0.95",
+            "label": "\uccab \ud1a0\ud070 P95",
+            "value": 955.0000000000001,
+            "unit": "ms",
+            "available": true,
+            "samples": 15
+          },
+          {
+            "key": "vllm:request_queue_time_seconds_0.5",
+            "label": "\ub300\uae30 P50",
+            "value": 550,
+            "unit": "ms",
+            "available": true,
+            "samples": 15
+          },
+          {
+            "key": "vllm:request_queue_time_seconds_0.95",
+            "label": "\ub300\uae30 P95",
+            "value": 955.0000000000001,
+            "unit": "ms",
+            "available": true,
+            "samples": 15
+          },
+          {
+            "key": "vllm:e2e_request_latency_seconds_0.5",
+            "label": "\uc804\uccb4 \uc751\ub2f5 P50",
+            "value": 550,
+            "unit": "ms",
+            "available": true,
+            "samples": 15
+          },
+          {
+            "key": "vllm:e2e_request_latency_seconds_0.95",
+            "label": "\uc804\uccb4 \uc751\ub2f5 P95",
+            "value": 955.0000000000001,
+            "unit": "ms",
+            "available": true,
+            "samples": 15
+          }
+        ],
+        "lengths": [
+          {
+            "key": "reasoning",
+            "label": "\ucd94\ub860 \ud3c9\uade0 \uae38\uc774",
+            "value": 1024,
+            "unit": "tok",
+            "available": true,
+            "samples": 15
+          },
+          {
+            "key": "reasoning_0.5",
+            "label": "\ucd94\ub860 P50",
+            "value": 0,
+            "unit": "tok",
+            "available": false,
+            "samples": 15
+          },
+          {
+            "key": "reasoning_0.95",
+            "label": "\ucd94\ub860 P95",
+            "value": 0,
+            "unit": "tok",
+            "available": false,
+            "samples": 15
+          },
+          {
+            "key": "answer",
+            "label": "\ub2f5\ubcc0 \ud3c9\uade0 \uae38\uc774",
+            "value": 0,
+            "unit": "tok",
+            "available": false,
+            "samples": 0
+          },
+          {
+            "key": "answer_0.5",
+            "label": "\ub2f5\ubcc0 P50",
+            "value": 0,
+            "unit": "tok",
+            "available": false,
+            "samples": 0
+          },
+          {
+            "key": "answer_0.95",
+            "label": "\ub2f5\ubcc0 P95",
+            "value": 0,
+            "unit": "tok",
+            "available": false,
+            "samples": 0
+          },
+          {
+            "key": "length_limit",
+            "label": "\ud1a0\ud070 \uc81c\ud55c \uc885\ub8cc",
+            "value": 100,
+            "unit": "%",
+            "available": true,
+            "samples": 15
+          }
+        ],
+        "conditions": [
+          {
+            "timing": "sync_wall",
+            "sequences": "1",
+            "context": "8192",
+            "cache": "cold",
+            "steps": 300,
+            "stepRate": 20,
+            "tokensPerStep": 3,
+            "acceptance": 28.571428571428573,
+            "draftTokens": 2100
+          }
+        ],
+        "points": [
+          {
+            "sinceMs": 1789629333222,
+            "untilMs": 1789629348234,
+            "runtime": "synthetic-engine st:runtime_info|boot=fixture|build=synthetic|k=7|precision=w4",
+            "stepRate": 20,
+            "decodeRate": 60,
+            "acceptance": 28.571428571428573,
+            "hasStep": true,
+            "hasDecode": true,
+            "hasAcceptance": true
+          }
+        ],
+        "events": [
+          {
+            "atMs": 1789629333222,
+            "kind": "baseline"
+          }
+        ]
+      },
+      {
+        "minutes": 1440,
+        "runtime": "synthetic-engine st:runtime_info|boot=fixture|build=synthetic|k=7|precision=w4",
+        "observedSeconds": 15.012137268,
+        "metrics": [
+          {
+            "key": "steps",
+            "label": "\ud638\uc2a4\ud2b8 \ub514\ucf54\ub4dc \ud68c\ucc28",
+            "value": 20,
+            "unit": "step/s",
+            "available": true,
+            "samples": 300
+          },
+          {
+            "key": "tokens_step",
+            "label": "\uc644\ub8cc \uc2a4\ud15d\ub2f9 \ucd9c\ub825",
+            "value": 3,
+            "unit": "tok/step",
+            "available": true,
+            "samples": 300
+          },
+          {
+            "key": "decode",
+            "label": "\uc694\uccad \ub514\ucf54\ub4dc",
+            "value": 60,
+            "unit": "tok/s",
+            "available": true,
+            "samples": 900
+          },
+          {
+            "key": "acceptance",
+            "label": "\ub4dc\ub798\ud504\ud2b8 \uc218\uc6a9\ub960",
+            "value": 28.571428571428573,
+            "unit": "%",
+            "available": true,
+            "samples": 2100
+          },
+          {
+            "key": "throughput",
+            "label": "\uad6c\uac04 \ud569\uc0b0 \ucc98\ub9ac\ub7c9",
+            "value": 59.95149017977924,
+            "unit": "tok/s",
+            "available": true,
+            "samples": 900
+          },
+          {
+            "key": "prefill",
+            "label": "\uc2e4\uc81c \ud504\ub9ac\ud544",
+            "value": 1000,
+            "unit": "tok/s",
+            "available": true,
+            "samples": 15000
+          }
+        ],
+        "stages": [
+          {
+            "key": "propose",
+            "label": "propose",
+            "value": 100,
+            "unit": "ms/step",
+            "available": true,
+            "samples": 15
+          }
+        ],
+        "acceptance": [
+          {
+            "key": "2",
+            "label": "2\uac1c \uc218\uc6a9",
+            "value": 100,
+            "unit": "%",
+            "available": true,
+            "samples": 300
+          }
+        ],
+        "latency": [
+          {
+            "key": "vllm:time_to_first_token_seconds_0.5",
+            "label": "\uccab \ud1a0\ud070 P50",
+            "value": 550,
+            "unit": "ms",
+            "available": true,
+            "samples": 15
+          },
+          {
+            "key": "vllm:time_to_first_token_seconds_0.95",
+            "label": "\uccab \ud1a0\ud070 P95",
+            "value": 955.0000000000001,
+            "unit": "ms",
+            "available": true,
+            "samples": 15
+          },
+          {
+            "key": "vllm:request_queue_time_seconds_0.5",
+            "label": "\ub300\uae30 P50",
+            "value": 550,
+            "unit": "ms",
+            "available": true,
+            "samples": 15
+          },
+          {
+            "key": "vllm:request_queue_time_seconds_0.95",
+            "label": "\ub300\uae30 P95",
+            "value": 955.0000000000001,
+            "unit": "ms",
+            "available": true,
+            "samples": 15
+          },
+          {
+            "key": "vllm:e2e_request_latency_seconds_0.5",
+            "label": "\uc804\uccb4 \uc751\ub2f5 P50",
+            "value": 550,
+            "unit": "ms",
+            "available": true,
+            "samples": 15
+          },
+          {
+            "key": "vllm:e2e_request_latency_seconds_0.95",
+            "label": "\uc804\uccb4 \uc751\ub2f5 P95",
+            "value": 955.0000000000001,
+            "unit": "ms",
+            "available": true,
+            "samples": 15
+          }
+        ],
+        "lengths": [
+          {
+            "key": "reasoning",
+            "label": "\ucd94\ub860 \ud3c9\uade0 \uae38\uc774",
+            "value": 1024,
+            "unit": "tok",
+            "available": true,
+            "samples": 15
+          },
+          {
+            "key": "reasoning_0.5",
+            "label": "\ucd94\ub860 P50",
+            "value": 0,
+            "unit": "tok",
+            "available": false,
+            "samples": 15
+          },
+          {
+            "key": "reasoning_0.95",
+            "label": "\ucd94\ub860 P95",
+            "value": 0,
+            "unit": "tok",
+            "available": false,
+            "samples": 15
+          },
+          {
+            "key": "answer",
+            "label": "\ub2f5\ubcc0 \ud3c9\uade0 \uae38\uc774",
+            "value": 0,
+            "unit": "tok",
+            "available": false,
+            "samples": 0
+          },
+          {
+            "key": "answer_0.5",
+            "label": "\ub2f5\ubcc0 P50",
+            "value": 0,
+            "unit": "tok",
+            "available": false,
+            "samples": 0
+          },
+          {
+            "key": "answer_0.95",
+            "label": "\ub2f5\ubcc0 P95",
+            "value": 0,
+            "unit": "tok",
+            "available": false,
+            "samples": 0
+          },
+          {
+            "key": "length_limit",
+            "label": "\ud1a0\ud070 \uc81c\ud55c \uc885\ub8cc",
+            "value": 100,
+            "unit": "%",
+            "available": true,
+            "samples": 15
+          }
+        ],
+        "conditions": [
+          {
+            "timing": "sync_wall",
+            "sequences": "1",
+            "context": "8192",
+            "cache": "cold",
+            "steps": 300,
+            "stepRate": 20,
+            "tokensPerStep": 3,
+            "acceptance": 28.571428571428573,
+            "draftTokens": 2100
+          }
+        ],
+        "points": [
+          {
+            "sinceMs": 1789629333222,
+            "untilMs": 1789629348234,
+            "runtime": "synthetic-engine st:runtime_info|boot=fixture|build=synthetic|k=7|precision=w4",
+            "stepRate": 20,
+            "decodeRate": 60,
+            "acceptance": 28.571428571428573,
+            "hasStep": true,
+            "hasDecode": true,
+            "hasAcceptance": true
+          }
+        ],
+        "events": [
+          {
+            "atMs": 1789629333222,
+            "kind": "baseline"
+          }
+        ]
+      }
+    ]
+  }
+}

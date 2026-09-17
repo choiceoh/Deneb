@@ -255,6 +255,7 @@ fun main() {
     renderScreen("chat_empty.png", "chat_empty", OledColorScheme, 824, 720)
     // Engine page (the whole statistics stack, newest day expanded).
     renderScreen("engine.png", "engine", OledColorScheme, 824, 3400)
+    renderScreen("engine_statistics.png", "engine_statistics", OledColorScheme, 824, 10000)
     renderDesignSample("design.png", OledColorScheme)
     renderScreen("calendar_event.png", "calendar_event", OledColorScheme, 760, 1100)
     renderScreen("calendar_event_multiday.png", "calendar_event_multiday", OledColorScheme, 760, 1100)

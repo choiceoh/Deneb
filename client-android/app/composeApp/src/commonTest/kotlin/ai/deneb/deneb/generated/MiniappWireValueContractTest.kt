@@ -421,6 +421,59 @@ class MiniappWireValueContractTest {
             invalidValue = JsonObject(mapOf("not" to JsonPrimitive("a-list"))),
         ),
         wireContract(
+            name = "EngineCondition",
+            serializer = EngineCondition.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "timing",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "sequences",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "context",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "cache",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "steps",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "stepRate",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "tokensPerStep",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "acceptance",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "draftTokens",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "timing",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
             name = "EngineDay",
             serializer = EngineDay.serializer(),
             fields = listOf(
@@ -597,6 +650,110 @@ class MiniappWireValueContractTest {
             ),
             invalidField = "day",
             invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "EngineDiagnosticEvent",
+            serializer = EngineDiagnosticEvent.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "atMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "kind",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "atMs",
+            invalidValue = JsonPrimitive("not-a-long"),
+        ),
+        wireContract(
+            name = "EngineDiagnosticWindow",
+            serializer = EngineDiagnosticWindow.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "minutes",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "runtime",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "observedSeconds",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "metrics",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "stages",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "acceptance",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "latency",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "lengths",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "conditions",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "points",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "events",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+            ),
+            invalidField = "minutes",
+            invalidValue = JsonPrimitive("not-an-int"),
+        ),
+        wireContract(
+            name = "EngineDiagnosticsReport",
+            serializer = EngineDiagnosticsReport.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "lastSampleMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "stale",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "windows",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+            ),
+            invalidField = "lastSampleMs",
+            invalidValue = JsonPrimitive("not-a-long"),
         ),
         wireContract(
             name = "EngineGlance",
@@ -780,6 +937,44 @@ class MiniappWireValueContractTest {
             invalidValue = JsonPrimitive(1),
         ),
         wireContract(
+            name = "EngineMeasure",
+            serializer = EngineMeasure.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "key",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "label",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "value",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "unit",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "available",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "samples",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "key",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
             name = "EngineOutage",
             serializer = EngineOutage.serializer(),
             fields = listOf(
@@ -874,6 +1069,11 @@ class MiniappWireValueContractTest {
             name = "EngineStatusResult",
             serializer = EngineStatusResult.serializer(),
             fields = listOf(
+                fieldValue(
+                    name = "diagnostics",
+                    value = JsonObject(emptyMap()),
+                    expectation = Expectation.Object,
+                ),
                 fieldValue(
                     name = "nowMs",
                     value = JsonPrimitive(Long.MAX_VALUE),
@@ -1030,8 +1230,8 @@ class MiniappWireValueContractTest {
                     expectation = Expectation.ObjectList,
                 ),
             ),
-            invalidField = "nowMs",
-            invalidValue = JsonPrimitive("not-a-long"),
+            invalidField = "diagnostics",
+            invalidValue = JsonPrimitive("not-an-object"),
         ),
         wireContract(
             name = "EngineTotals",
@@ -1175,6 +1375,59 @@ class MiniappWireValueContractTest {
             ),
             invalidField = "days",
             invalidValue = JsonPrimitive("not-an-int"),
+        ),
+        wireContract(
+            name = "EngineTrendPoint",
+            serializer = EngineTrendPoint.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "sinceMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "untilMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "runtime",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "stepRate",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "decodeRate",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "acceptance",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "hasStep",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "hasDecode",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "hasAcceptance",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "sinceMs",
+            invalidValue = JsonPrimitive("not-a-long"),
         ),
         wireContract(
             name = "FilesEntryOut",

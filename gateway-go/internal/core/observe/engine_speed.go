@@ -110,6 +110,7 @@ const engineScrapeTimeout = 3 * time.Second
 // ENDPOINT and is read from its /v1/models. A second local model means a second
 // endpoint.
 type EngineCounters struct {
+	Diagnostics EngineDiagnostics `json:"diagnostics,omitempty"`
 	// Model is what the engine says it serves; "" when /v1/models was
 	// unreadable (the counters still stand, just unlabeled).
 	Model string `json:"model,omitempty"`
@@ -213,6 +214,7 @@ func FetchEngineCounters(ctx context.Context, metricsURL string) (EngineCounters
 	sc.Buffer(make([]byte, 64*1024), 256*1024)
 	for sc.Scan() {
 		line := sc.Text()
+		readDiagnostic(line, &out.Diagnostics)
 		for _, name := range engineCumulativeMetrics {
 			if _, v, matched := parseVllmCounter(line, name); matched {
 				totals[name] += v
@@ -231,6 +233,7 @@ func FetchEngineCounters(ctx context.Context, metricsURL string) (EngineCounters
 	}
 
 	out = EngineCounters{
+		Diagnostics:      out.Diagnostics,
 		TTFTSeconds:      totals[engineTTFTSumMetric],
 		TTFTCount:        totals[engineTTFTCountMetric],
 		QueueSeconds:     totals[engineQueueSumMetric],

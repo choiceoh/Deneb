@@ -109,10 +109,34 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("lanes"),
         ),
         contract(
+            name = "EngineCondition",
+            serializer = EngineCondition.serializer(),
+            empty = EngineCondition(),
+            fields = listOf("timing", "sequences", "context", "cache", "steps", "stepRate", "tokensPerStep", "acceptance", "draftTokens"),
+        ),
+        contract(
             name = "EngineDay",
             serializer = EngineDay.serializer(),
             empty = EngineDay(),
             fields = listOf("day", "model", "measured", "decodeTokensPerSec", "prefillTokensPerSec", "concurrencyWhileBusy", "peakConcurrency", "pollIntervalSec", "requests", "promptTokens", "generatedTokens", "meanTtftSeconds", "meanQueueSeconds", "meanE2eSeconds", "promptCacheHitRatio", "cachePromptTokens", "promptCacheMeasured", "prefixRequestHitRatio", "prefixLookupRequests", "prefixHitRequests", "cachedPromptTokens", "specAcceptRatio", "specDraftTokens", "busySeconds", "observedSeconds", "utilization", "restarts", "livenessTracked", "downSeconds", "outages", "routerMetered", "routerLocalRequests", "routerRemoteRequests", "routerUnknownRequests"),
+        ),
+        contract(
+            name = "EngineDiagnosticEvent",
+            serializer = EngineDiagnosticEvent.serializer(),
+            empty = EngineDiagnosticEvent(),
+            fields = listOf("atMs", "kind"),
+        ),
+        contract(
+            name = "EngineDiagnosticWindow",
+            serializer = EngineDiagnosticWindow.serializer(),
+            empty = EngineDiagnosticWindow(),
+            fields = listOf("minutes", "runtime", "observedSeconds", "metrics", "stages", "acceptance", "latency", "lengths", "conditions", "points", "events"),
+        ),
+        contract(
+            name = "EngineDiagnosticsReport",
+            serializer = EngineDiagnosticsReport.serializer(),
+            empty = EngineDiagnosticsReport(),
+            fields = listOf("lastSampleMs", "stale", "windows"),
         ),
         contract(
             name = "EngineGlance",
@@ -125,6 +149,12 @@ class MiniappWireDescriptorContractTest {
             serializer = EngineInternals.serializer(),
             empty = EngineInternals(),
             fields = listOf("published", "prefixEntries", "prefixSnapshotsFree", "prefixPinnedEntries", "prefixTierEntries", "kvBlocksTotal", "kvBlocksUsed", "kvBlocksCached", "conversationsParked", "deviceMemoryTotalBytes", "deviceMemoryFreeBytes", "deviceMemoryReservedBytes", "hostMemoryAvailableBytes", "handingOver", "quiet", "fleetKnown", "fleetOwner", "fleetDraining", "fleetHandedOver", "served", "steps"),
+        ),
+        contract(
+            name = "EngineMeasure",
+            serializer = EngineMeasure.serializer(),
+            empty = EngineMeasure(),
+            fields = listOf("key", "label", "value", "unit", "available", "samples"),
         ),
         contract(
             name = "EngineOutage",
@@ -142,13 +172,19 @@ class MiniappWireDescriptorContractTest {
             name = "EngineStatusResult",
             serializer = EngineStatusResult.serializer(),
             empty = EngineStatusResult(),
-            fields = listOf("nowMs", "configured", "endpoint", "reachable", "model", "runningRequests", "waitingRequests", "livenessTracked", "engineDown", "downSinceMs", "upSinceMs", "downReason", "downModels", "trackedSinceMs", "outages", "internals", "days", "total", "routerAvailable", "routerWindow", "localRequests", "remoteRequests", "unknownRequests", "routing", "routerStatusAvailable", "routerDay", "routerDayMetered", "todayLocalRequests", "todayRemoteRequests", "todayUnknownRequests", "routingToday"),
+            fields = listOf("diagnostics", "nowMs", "configured", "endpoint", "reachable", "model", "runningRequests", "waitingRequests", "livenessTracked", "engineDown", "downSinceMs", "upSinceMs", "downReason", "downModels", "trackedSinceMs", "outages", "internals", "days", "total", "routerAvailable", "routerWindow", "localRequests", "remoteRequests", "unknownRequests", "routing", "routerStatusAvailable", "routerDay", "routerDayMetered", "todayLocalRequests", "todayRemoteRequests", "todayUnknownRequests", "routingToday"),
         ),
         contract(
             name = "EngineTotals",
             serializer = EngineTotals.serializer(),
             empty = EngineTotals(),
             fields = listOf("days", "requests", "promptTokens", "generatedTokens", "decodeTokensPerSec", "prefillTokensPerSec", "meanTtftSeconds", "meanQueueSeconds", "meanE2eSeconds", "promptCacheHitRatio", "cachedPromptTokens", "cachePromptTokens", "promptCacheMeasured", "prefixRequestHitRatio", "prefixLookupRequests", "prefixHitRequests", "specAcceptRatio", "specDraftTokens", "busySeconds", "observedSeconds", "utilization", "restarts", "downSeconds", "outages", "routerLocalRequests", "routerRemoteRequests", "routerUnknownRequests"),
+        ),
+        contract(
+            name = "EngineTrendPoint",
+            serializer = EngineTrendPoint.serializer(),
+            empty = EngineTrendPoint(),
+            fields = listOf("sinceMs", "untilMs", "runtime", "stepRate", "decodeRate", "acceptance", "hasStep", "hasDecode", "hasAcceptance"),
         ),
         contract(
             name = "FilesEntryOut",

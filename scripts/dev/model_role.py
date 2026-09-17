@@ -50,6 +50,8 @@ ROLE_KEYS = {
     "main2": "main2Model",
     "submain": "submainModel",
     "tiny": "tinyModel",
+    "tinyfallback": "tinyFallbackModel",
+    "tinyfallbackpaid": "tinyFallbackPaidModel",
     "vision": "visionModel",
 }
 

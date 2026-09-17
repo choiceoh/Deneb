@@ -111,6 +111,20 @@ data class DashboardOut(
 
 @Immutable
 @Serializable
+data class EngineCondition(
+    val timing: String = "",
+    val sequences: String = "",
+    val context: String = "",
+    val cache: String = "",
+    val steps: Double = 0.0,
+    val stepRate: Double = 0.0,
+    val tokensPerStep: Double = 0.0,
+    val acceptance: Double = 0.0,
+    val draftTokens: Double = 0.0,
+)
+
+@Immutable
+@Serializable
 data class EngineDay(
     val day: String = "",
     val model: String = "",
@@ -146,6 +160,37 @@ data class EngineDay(
     val routerLocalRequests: Long = 0L,
     val routerRemoteRequests: Long = 0L,
     val routerUnknownRequests: Long = 0L,
+)
+
+@Immutable
+@Serializable
+data class EngineDiagnosticEvent(
+    val atMs: Long = 0L,
+    val kind: String = "",
+)
+
+@Immutable
+@Serializable
+data class EngineDiagnosticWindow(
+    val minutes: Int = 0,
+    val runtime: String = "",
+    val observedSeconds: Double = 0.0,
+    val metrics: List<EngineMeasure> = emptyList(),
+    val stages: List<EngineMeasure> = emptyList(),
+    val acceptance: List<EngineMeasure> = emptyList(),
+    val latency: List<EngineMeasure> = emptyList(),
+    val lengths: List<EngineMeasure> = emptyList(),
+    val conditions: List<EngineCondition> = emptyList(),
+    val points: List<EngineTrendPoint> = emptyList(),
+    val events: List<EngineDiagnosticEvent> = emptyList(),
+)
+
+@Immutable
+@Serializable
+data class EngineDiagnosticsReport(
+    val lastSampleMs: Long = 0L,
+    val stale: Boolean = false,
+    val windows: List<EngineDiagnosticWindow> = emptyList(),
 )
 
 @Immutable
@@ -193,6 +238,17 @@ data class EngineInternals(
 
 @Immutable
 @Serializable
+data class EngineMeasure(
+    val key: String = "",
+    val label: String = "",
+    val value: Double = 0.0,
+    val unit: String = "",
+    val available: Boolean = false,
+    val samples: Double = 0.0,
+)
+
+@Immutable
+@Serializable
 data class EngineOutage(
     val sinceMs: Long = 0L,
     val untilMs: Long = 0L,
@@ -219,6 +275,7 @@ data class EngineRoutingRow(
 @Immutable
 @Serializable
 data class EngineStatusResult(
+    val diagnostics: EngineDiagnosticsReport = EngineDiagnosticsReport(),
     val nowMs: Long = 0L,
     val configured: Boolean = false,
     val endpoint: String = "",
@@ -282,6 +339,20 @@ data class EngineTotals(
     val routerLocalRequests: Long = 0L,
     val routerRemoteRequests: Long = 0L,
     val routerUnknownRequests: Long = 0L,
+)
+
+@Immutable
+@Serializable
+data class EngineTrendPoint(
+    val sinceMs: Long = 0L,
+    val untilMs: Long = 0L,
+    val runtime: String = "",
+    val stepRate: Double = 0.0,
+    val decodeRate: Double = 0.0,
+    val acceptance: Double = 0.0,
+    val hasStep: Boolean = false,
+    val hasDecode: Boolean = false,
+    val hasAcceptance: Boolean = false,
 )
 
 @Immutable

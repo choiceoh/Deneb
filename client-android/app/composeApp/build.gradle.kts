@@ -328,6 +328,9 @@ tasks.register<JavaExec>("renderPreviews") {
     dependsOn(desktopMain.compileTaskProvider)
     classpath = files(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
     mainClass.set("ai.deneb.RenderPreviewKt")
+    // Goldens and semantics fixtures are Korean; do not inherit the host locale.
+    systemProperty("user.language", "ko")
+    systemProperty("user.country", "KR")
     systemProperty("java.awt.headless", "true")
     // The desktop target is a mobile-UI verifier now: render the real mobile branch
     // (Mobile.Android — bottom bar, mobile keyboard, system-back hides the in-app ←)
@@ -365,6 +368,9 @@ tasks.register<JavaExec>("previewInspect") {
     dependsOn(desktopMain.compileTaskProvider)
     classpath = files(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
     mainClass.set("ai.deneb.PreviewInspectKt")
+    // Goldens and semantics fixtures are Korean; do not inherit the host locale.
+    systemProperty("user.language", "ko")
+    systemProperty("user.country", "KR")
     systemProperty("java.awt.headless", "true")
     systemProperty("deneb.platform", "phone")
     systemProperty("deneb.screen", (project.findProperty("screen") as? String) ?: "")

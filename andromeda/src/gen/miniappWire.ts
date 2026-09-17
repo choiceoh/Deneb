@@ -86,6 +86,18 @@ export interface DashboardOut {
   lanes?: LaneOut[]
 }
 
+export interface EngineCondition {
+  timing?: string
+  sequences?: string
+  context?: string
+  cache?: string
+  steps?: number
+  stepRate?: number
+  tokensPerStep?: number
+  acceptance?: number
+  draftTokens?: number
+}
+
 export interface EngineDay {
   day?: string
   model?: string
@@ -121,6 +133,31 @@ export interface EngineDay {
   routerLocalRequests?: number
   routerRemoteRequests?: number
   routerUnknownRequests?: number
+}
+
+export interface EngineDiagnosticEvent {
+  atMs?: number
+  kind?: string
+}
+
+export interface EngineDiagnosticWindow {
+  minutes?: number
+  runtime?: string
+  observedSeconds?: number
+  metrics?: EngineMeasure[]
+  stages?: EngineMeasure[]
+  acceptance?: EngineMeasure[]
+  latency?: EngineMeasure[]
+  lengths?: EngineMeasure[]
+  conditions?: EngineCondition[]
+  points?: EngineTrendPoint[]
+  events?: EngineDiagnosticEvent[]
+}
+
+export interface EngineDiagnosticsReport {
+  lastSampleMs?: number
+  stale?: boolean
+  windows?: EngineDiagnosticWindow[]
 }
 
 export interface EngineGlance {
@@ -162,6 +199,15 @@ export interface EngineInternals {
   steps?: number
 }
 
+export interface EngineMeasure {
+  key?: string
+  label?: string
+  value?: number
+  unit?: string
+  available?: boolean
+  samples?: number
+}
+
 export interface EngineOutage {
   sinceMs?: number
   untilMs?: number
@@ -184,6 +230,7 @@ export interface EngineRoutingRow {
 }
 
 export interface EngineStatusResult {
+  diagnostics?: EngineDiagnosticsReport
   nowMs?: number
   configured?: boolean
   endpoint?: string
@@ -245,6 +292,18 @@ export interface EngineTotals {
   routerLocalRequests?: number
   routerRemoteRequests?: number
   routerUnknownRequests?: number
+}
+
+export interface EngineTrendPoint {
+  sinceMs?: number
+  untilMs?: number
+  runtime?: string
+  stepRate?: number
+  decodeRate?: number
+  acceptance?: number
+  hasStep?: boolean
+  hasDecode?: boolean
+  hasAcceptance?: boolean
 }
 
 export interface FilesEntryOut {
