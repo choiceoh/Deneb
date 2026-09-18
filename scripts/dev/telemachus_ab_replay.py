@@ -187,8 +187,8 @@ def decode(arm, args, salt: str | None) -> dict:
 def score(text: str, tokens: list[str]) -> dict:
     first8 = [t.strip() for t in tokens[:8]]
     forbidden = [t for t in first8 if t and t.lower().lstrip("#*-_ ").startswith(FORBIDDEN_FIRST8)]
-    h, l = len(HANGUL.findall(text)), len(LATIN.findall(text))
-    ratio = round(h / (h + l), 3) if (h + l) else None
+    hangul, latin = len(HANGUL.findall(text)), len(LATIN.findall(text))
+    ratio = round(hangul / (hangul + latin), 3) if (hangul + latin) else None
     collapse_at = -1
     seen_korean = False
     for i in range(0, max(len(text) - 200, 0) + 1, 50):
