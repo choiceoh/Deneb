@@ -124,3 +124,17 @@ func TestOpenRouterPaid(t *testing.T) {
 		}
 	}
 }
+
+// The mid-run anchor is a per-model property with an all-on builtin policy;
+// the zero Capability (unknown model) keeps the anchor, like every other
+// "zero = keep current behavior" field.
+func TestMidRunAnchorOnByDefault(t *testing.T) {
+	for _, tc := range [][2]string{{"kimi", "k3"}, {"wormhole", "glm-5.3-flash"}, {"anthropic", "claude-opus-5"}, {"", ""}} {
+		if !MidRunAnchorByDefault(tc[0], tc[1]) || Builtin(tc[0], tc[1]).NoMidRunAnchor {
+			t.Errorf("%s/%s: anchor must be on by default", tc[0], tc[1])
+		}
+	}
+	if (Capability{}).NoMidRunAnchor {
+		t.Error("zero capability must keep the anchor")
+	}
+}

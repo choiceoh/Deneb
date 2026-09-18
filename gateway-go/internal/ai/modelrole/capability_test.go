@@ -194,3 +194,29 @@ func TestRefreshVllmRoleUpdatesServedModel(t *testing.T) {
 		}
 	})
 }
+
+// midRunAnchor is a per-model switch: the builtin policy keeps the anchor on
+// for every model, a provider entry's `midRunAnchor: false` turns it off for
+// that provider's models only, and an explicit true is a no-op on the default.
+func TestCapabilityForModelMidRunAnchorOverride(t *testing.T) {
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		MainModel: "kimi/k3",
+		Providers: map[string]ProviderResolved{
+			"kimi":     {BaseURL: "https://api.kimi.example/coding"},
+			"quiet":    {BaseURL: "https://quiet.example/v1", MidRunAnchor: boolPtr(false)},
+			"explicit": {BaseURL: "https://explicit.example/v1", MidRunAnchor: boolPtr(true)},
+		},
+	})
+	if reg.CapabilityForModel("kimi", "k3").NoMidRunAnchor {
+		t.Error("kimi/k3 without an override must keep the anchor (builtin policy)")
+	}
+	if !reg.CapabilityForModel("quiet", "some-model").NoMidRunAnchor {
+		t.Error("midRunAnchor:false must turn the anchor off for that provider's models")
+	}
+	if reg.CapabilityForModel("explicit", "some-model").NoMidRunAnchor {
+		t.Error("midRunAnchor:true must keep the anchor")
+	}
+	if reg.CapabilityForModel("unknown", "x").NoMidRunAnchor {
+		t.Error("an unconfigured provider keeps the builtin default (anchor on)")
+	}
+}

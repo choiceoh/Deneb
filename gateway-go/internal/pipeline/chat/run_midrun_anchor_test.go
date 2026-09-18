@@ -6,6 +6,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 )
 
 func toolResultsMsg(extraText ...string) llm.Message {
@@ -76,20 +77,26 @@ func TestAppendMidRunAnchorLeavesOtherTailsAlone(t *testing.T) {
 	}
 }
 
-// Gating: ephemeral turns get no hook at all; the env kill switch turns it off
-// for everyone else. Content-prefix providers (kimi — main since 2026-09-18)
-// are NOT excluded: the per-request block is not a history mutation.
+// Gating is a property of the MODEL: ephemeral turns get no hook at all, a
+// capability that opts out (builtin policy or deneb.json midRunAnchor:false)
+// gets none, and everything else — kimi's content-prefix cache included, since
+// the per-request block is not a history mutation — carries it.
 func TestBuildMidRunAnchorHookGates(t *testing.T) {
-	if buildMidRunAnchorHook(RunParams{EphemeralUser: true}, nil) != nil {
+	on := leafbind.Capability{}
+	if buildMidRunAnchorHook(RunParams{EphemeralUser: true}, on, nil) != nil {
 		t.Error("ephemeral turn must not carry the mid-run anchor")
 	}
-	t.Setenv(midRunAnchorEnv, "off")
-	if buildMidRunAnchorHook(RunParams{}, nil) != nil {
-		t.Error("DENEB_MIDRUN_ANCHOR=off must disable the hook")
+	if buildMidRunAnchorHook(RunParams{}, leafbind.Capability{NoMidRunAnchor: true}, nil) != nil {
+		t.Error("a model that opts out must not carry the hook")
 	}
-	t.Setenv(midRunAnchorEnv, "")
-	if buildMidRunAnchorHook(RunParams{}, nil) == nil {
-		t.Error("interactive turn must carry the hook")
+	if buildMidRunAnchorHook(RunParams{}, leafbind.Capability{ContentPrefixCache: true}, nil) == nil {
+		t.Error("a content-prefix provider whose model does not opt out must carry the hook")
+	}
+	if buildMidRunAnchorHook(RunParams{}, leafbind.Builtin("kimi", "k3"), nil) == nil {
+		t.Error("builtin policy: kimi/k3 carries the anchor")
+	}
+	if buildMidRunAnchorHook(RunParams{}, leafbind.Builtin("wormhole", "glm-5.3-flash"), nil) == nil {
+		t.Error("builtin policy: the incident model carries the anchor")
 	}
 }
 
@@ -105,7 +112,7 @@ func TestMidRunAnchorRunsAfterTrailingCacheMarker(t *testing.T) {
 	}
 	var chain agent.BeforeAPICallChain
 	chain.Add("trailing-cache", agent.HookStagePost, buildTrailingCacheHook("anthropic"))
-	chain.Add("midrun-anchor", agent.HookStagePost, buildMidRunAnchorHook(RunParams{}, nil), "trailing-cache")
+	chain.Add("midrun-anchor", agent.HookStagePost, buildMidRunAnchorHook(RunParams{}, leafbind.Capability{}, nil), "trailing-cache")
 	out := chain.Build(nil)(in)
 	blocks := blocksOf(t, out[2])
 	if len(blocks) != 2 || blocks[1].Text != responseLanguageAnchor {

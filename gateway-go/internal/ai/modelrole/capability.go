@@ -64,6 +64,9 @@ func (r *Registry) CapabilityForModel(providerID, model string) modelcaps.Capabi
 		if p.PromptCache != nil {
 			caps.RejectsCacheControl = !*p.PromptCache
 		}
+		if p.MidRunAnchor != nil {
+			caps.NoMidRunAnchor = !*p.MidRunAnchor
+		}
 	}
 
 	// vLLM discovery wins for ContextWindow: track the server's live

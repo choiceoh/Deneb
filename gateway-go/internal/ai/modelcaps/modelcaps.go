@@ -13,7 +13,8 @@
 //  1. Builtin() — the heuristics in this file.
 //  2. vLLM /models discovery (max_model_len) — overlaid by modelrole.Registry.
 //  3. deneb.json models.providers.<id> capability overrides (contextWindow,
-//     reasoning, vision, promptCache) — overlaid by modelrole.Registry.
+//     reasoning, vision, promptCache, midRunAnchor) — overlaid by
+//     modelrole.Registry.
 //
 // Zero values always mean "unknown — keep current behavior": ContextWindow 0
 // performs no budget clamping, NoVision false sends image blocks as-is.
@@ -54,6 +55,16 @@ type Capability struct {
 	// optional mid-run history mutations that marker-based caches tolerate.
 	ContentPrefixCache bool
 
+	// NoMidRunAnchor turns off the per-request language/mode anchor that the
+	// chat pipeline appends to tool-step requests (chat/run_midrun_anchor.go)
+	// for this provider/model. False (default) means the anchor rides: it is
+	// wire-only, never persisted, and costs ~60 tokens per tool step. Set per
+	// model where the trailing user-role note measurably hurts (a model that
+	// answers the note instead of continuing its tool loop) via the builtin
+	// heuristic below or `midRunAnchor: false` on the provider's deneb.json
+	// entry — the operator's per-model switch, instead of a global toggle.
+	NoMidRunAnchor bool
+
 	// ThinkingToggleKwarg names the vLLM chat_template_kwargs boolean that
 	// disables the model's thinking phase per request ("" = no template
 	// toggle). DeepSeek V4 templates use "thinking"; Qwen3-family templates
@@ -73,8 +84,22 @@ func Builtin(providerID, model string) Capability {
 		Reasoning:           IsOpenAIReasoningModel(model),
 		RejectsCacheControl: RejectsCacheControl(providerID),
 		ContentPrefixCache:  HasContentPrefixCache(providerID),
+		NoMidRunAnchor:      !MidRunAnchorByDefault(providerID, model),
 		ThinkingToggleKwarg: ThinkingToggleKwarg(providerID, model),
 	}
+}
+
+// MidRunAnchorByDefault is the builtin per-model policy for the mid-run
+// language/mode anchor (Capability.NoMidRunAnchor). Every provider/model
+// carries it today: the 2026-09-18 live check on kimi k3 (Anthropic wire,
+// content-prefix cache) showed the tool loop and the cache both unaffected,
+// and the incident model (glm-5.3-flash) is exactly the one that needed it.
+// Add a model here when a live A/B shows the trailing note derailing it; the
+// operator can flip any single provider without a code change through
+// `midRunAnchor: false` in deneb.json.
+func MidRunAnchorByDefault(providerID, model string) bool {
+	_, _ = providerID, model
+	return true
 }
 
 // HasContentPrefixCache reports whether a provider's serving layer does

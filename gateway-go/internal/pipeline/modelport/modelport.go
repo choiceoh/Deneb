@@ -15,6 +15,7 @@ type ProviderConfig struct {
 	Reasoning     *bool             `json:"reasoning,omitempty"`
 	Vision        *bool             `json:"vision,omitempty"`
 	PromptCache   *bool             `json:"promptCache,omitempty"`
+	MidRunAnchor  *bool             `json:"midRunAnchor,omitempty"`
 	Temperature   *float64          `json:"temperature,omitempty"`
 	TopP          *float64          `json:"topP,omitempty"`
 	TopK          *int              `json:"topK,omitempty"`
