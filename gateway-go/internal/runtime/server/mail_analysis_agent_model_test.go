@@ -32,6 +32,35 @@ func TestMailAnalysisAgentModelFallsBackToDefaultMain(t *testing.T) {
 
 // Stage-1 gets tiny's unmetered chain, each rung tagged with the provider it is
 // reached through so its usage is not booked to the stage-1 model's provider.
+func TestMailAnalysisSynthesisEndpointsSkipBilledRungs(t *testing.T) {
+	reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
+		MainModel:        "wormhole/main-model",
+		Main2Model:       "wormhole/main2-model",
+		LightweightModel: "wormhole/deepseek-v4-flash-api",
+		FallbackModel:    "wormhole/glm-5.3",
+		Providers: map[string]modelrole.ProviderResolved{
+			"wormhole": {BaseURL: "http://127.0.0.1:1/v1", APIKey: "k"},
+		},
+		MeteredModels: map[string]bool{"deepseek-v4-flash-api": true},
+	})
+	s := &Server{ChatManager: &ChatManager{modelRegistry: reg}}
+
+	got := s.mailAnalysisSynthesisEndpoints()
+	var models []string
+	for _, ep := range got {
+		models = append(models, ep.Model)
+	}
+	want := []string{"main-model", "main2-model", "glm-5.3"}
+	if len(models) != len(want) {
+		t.Fatalf("endpoints = %v, want %v (metered lightweight must be skipped)", models, want)
+	}
+	for i := range want {
+		if models[i] != want[i] {
+			t.Fatalf("endpoints = %v, want %v", models, want)
+		}
+	}
+}
+
 func TestMailStageOneFallbacksCarryTheirProviderAndSkipBilledRungs(t *testing.T) {
 	reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
 		MainModel:             "wormhole/main-model",

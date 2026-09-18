@@ -21,6 +21,11 @@ func (s *Server) mailAnalysisSynthesisEndpoints() []mailanalysis.SynthesisEndpoi
 	out := make([]mailanalysis.SynthesisEndpoint, 0, len(chain))
 	seen := map[string]bool{}
 	for i, role := range chain {
+		// Main is deliberately configured for stage-2; later rungs follow the
+		// same billed-fallback rule as chat's walkFallbackChain (dogma #7).
+		if i > 0 && s.modelRegistry.SkipBilledFallback(role) {
+			continue
+		}
 		cfg := s.modelRegistry.RefreshVllmRole(role)
 		client := s.modelRegistry.Client(role)
 		if client == nil || cfg.Model == "" || seen[cfg.Model] {
@@ -46,6 +51,9 @@ func (s *Server) mailAnalysisHasHealthyEndpoint(rest []modelrole.Role, seen map[
 		return false
 	}
 	for _, role := range rest {
+		if s.modelRegistry.SkipBilledFallback(role) {
+			continue
+		}
 		cfg := s.modelRegistry.Config(role)
 		if cfg.Model == "" || cfg.Model == skipModel || seen[cfg.Model] {
 			continue
