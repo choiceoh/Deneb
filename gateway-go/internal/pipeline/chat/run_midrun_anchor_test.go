@@ -76,22 +76,20 @@ func TestAppendMidRunAnchorLeavesOtherTailsAlone(t *testing.T) {
 	}
 }
 
-// Gating: ephemeral turns and content-prefix providers get no hook at all;
-// the env kill switch turns it off for everyone else.
+// Gating: ephemeral turns get no hook at all; the env kill switch turns it off
+// for everyone else. Content-prefix providers (kimi — main since 2026-09-18)
+// are NOT excluded: the per-request block is not a history mutation.
 func TestBuildMidRunAnchorHookGates(t *testing.T) {
-	if buildMidRunAnchorHook(RunParams{EphemeralUser: true}, false, nil) != nil {
+	if buildMidRunAnchorHook(RunParams{EphemeralUser: true}, nil) != nil {
 		t.Error("ephemeral turn must not carry the mid-run anchor")
 	}
-	if buildMidRunAnchorHook(RunParams{}, true, nil) != nil {
-		t.Error("content-prefix cache provider must not carry the mid-run anchor")
-	}
 	t.Setenv(midRunAnchorEnv, "off")
-	if buildMidRunAnchorHook(RunParams{}, false, nil) != nil {
+	if buildMidRunAnchorHook(RunParams{}, nil) != nil {
 		t.Error("DENEB_MIDRUN_ANCHOR=off must disable the hook")
 	}
 	t.Setenv(midRunAnchorEnv, "")
-	if buildMidRunAnchorHook(RunParams{}, false, nil) == nil {
-		t.Error("interactive turn on a normal provider must carry the hook")
+	if buildMidRunAnchorHook(RunParams{}, nil) == nil {
+		t.Error("interactive turn must carry the hook")
 	}
 }
 
@@ -107,7 +105,7 @@ func TestMidRunAnchorRunsAfterTrailingCacheMarker(t *testing.T) {
 	}
 	var chain agent.BeforeAPICallChain
 	chain.Add("trailing-cache", agent.HookStagePost, buildTrailingCacheHook("anthropic"))
-	chain.Add("midrun-anchor", agent.HookStagePost, buildMidRunAnchorHook(RunParams{}, false, nil), "trailing-cache")
+	chain.Add("midrun-anchor", agent.HookStagePost, buildMidRunAnchorHook(RunParams{}, nil), "trailing-cache")
 	out := chain.Build(nil)(in)
 	blocks := blocksOf(t, out[2])
 	if len(blocks) != 2 || blocks[1].Text != responseLanguageAnchor {

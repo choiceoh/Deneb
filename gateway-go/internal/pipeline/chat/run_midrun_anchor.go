@@ -19,13 +19,21 @@
 // cache_control marker stays on the clean block and the anchor block carries
 // none (the 4-marker budget is untouched).
 //
+// Content-prefix cache providers (kimi, prompt-cache.md §1.6) carry it too.
+// What §1.6 forbids is MUTATING history mid-run — every byte after the
+// mutation goes cold. A per-request trailing block mutates nothing: the next
+// request reproduces every persisted message byte-for-byte, and the only loss
+// is the one 256-token chunk that held the previous step's anchor — the same
+// bounded cost the moving trailing cache_control marker already pays on
+// Anthropic. main moved to kimi on 2026-09-18, so excluding it would have left
+// the main chat path without the anchor at all.
+//
 // Where it does NOT run: ephemeral autonomous turns (heartbeat / self-triggers
-// keep their own NO_REPLY contract, exactly like the tail anchor) and
-// content-prefix cache providers (kimi: a moving trailing block would cost the
-// last cached chunk on every step — prompt-cache.md §1.6 keeps mid-run requests
-// append-only there). DENEB_MIDRUN_ANCHOR=off is the operational kill switch
-// while the model's reaction to a trailing user-role note on tool steps is
-// still being observed live.
+// keep their own NO_REPLY contract, exactly like the tail anchor).
+// DENEB_MIDRUN_ANCHOR=off is the operational kill switch while the model's
+// reaction to a trailing user-role note on tool steps is still being observed
+// live; the first application per run is logged at Info ("midrun anchor
+// active") so a live turn can be checked from the log.
 package chat
 
 import (
@@ -50,12 +58,20 @@ func midRunAnchorDisabledByEnv() bool {
 
 // buildMidRunAnchorHook returns the BeforeAPICall hook, or nil when the run
 // must not carry it (see the file comment).
-func buildMidRunAnchorHook(params RunParams, contentPrefixCache bool, logger *slog.Logger) func(messages []llm.Message) []llm.Message {
-	if params.EphemeralUser || contentPrefixCache || midRunAnchorDisabledByEnv() {
+func buildMidRunAnchorHook(params RunParams, logger *slog.Logger) func(messages []llm.Message) []llm.Message {
+	if params.EphemeralUser || midRunAnchorDisabledByEnv() {
 		return nil
 	}
+	announced := false
 	return func(messages []llm.Message) []llm.Message {
-		return appendMidRunAnchor(messages, responseLanguageAnchor)
+		out := appendMidRunAnchor(messages, responseLanguageAnchor)
+		if !announced && len(out) > 0 && len(messages) > 0 && &out[0] != &messages[0] {
+			announced = true
+			if logger != nil {
+				logger.Info("midrun anchor active", "session", params.SessionKey, "messages", len(out))
+			}
+		}
+		return out
 	}
 }
 
