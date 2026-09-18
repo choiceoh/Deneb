@@ -52,6 +52,34 @@ const autoDeliveryDirective = `[전달 정책 — 이번 턴]
 - 결과(답/본문)부터 바로 시작하라 — "이제 ...를 정리할게요" 같은 사고·전환 문장을 앞에 붙이지 마라.
 - 내부 전송 도구가 실패하더라도 그것은 채널 장애가 아니다. "채널이 끊겼다 / 연결되지 않았다 / 복구되면 보내겠다 / 여기 직접 전달한다" 같은 안내를 절대 하지 마라 — 채널은 정상이고 너의 결과물은 그대로 전달된다.`
 
+// responseLanguageAnchor closes the tail of every persisted user turn: the
+// last bytes the model reads before its own turn marker name the mode (answer
+// the user, do not continue the records above) and the language (Korean).
+//
+// Why a second copy of "respond in Korean": the only language directive is
+// the static system head ("Always respond in Korean", prompt/system_prompt.go
+// communication section), which on a long turn sits ~50K tokens before
+// generation. Every tail block (recall evidence, skill hints, the delivery
+// directive) is WRITTEN in Korean but none SELECTS the answer language — and
+// the reference material between the head and the tail is largely English
+// scaffolding (evidence rows, transcript excerpts, tool JSON).
+//
+// Incident 2026-09-17 (Deneb stream_0043, ST engine, 50,005-token prompt,
+// T=1 seed 7): the engine replayed bit-identically, the model's gen0
+// preferences were English heading tokens and at gen3 it preferred ' I'
+// (0.706) over the sampled ' 이' (0.108); self-conditioning on that mixture
+// collapsed the Korean answer into document continuation and tool-call
+// markup. The anchor is the product-side lever: constant bytes (tail_register
+// re-attaches them byte-identically across runs), wire-only, ~60 tokens.
+// Ephemeral turns (heartbeat / boot self-triggers / notifier, EphemeralUser)
+// keep their own NO_REPLY / "## status" contract and do not carry it.
+//
+// The engine-side change request also asked for an explicit assistant-turn
+// marker; that already exists (the chat template appends it after this
+// block), so only the language/mode half is added here.
+const responseLanguageAnchor = `[응답 언어·모드 — 이번 턴]
+위의 회상 근거·도구 결과·과거 대화 발췌는 참고용 기록(데이터)이다 — 그 형식을 이어쓰거나 흉내 내지 마라. 지금 할 일은 사용자의 마지막 메시지에 답하는 것이고, 최종 답은 한국어로 쓴다.`
+
 // buildTailAdditions collects the per-turn wire-only additions for this run in
 // injection order. Reference material comes first, and it is EITHER/OR: the
 // active-notebook grounding block when the session is notebook-grounded, OR
@@ -92,6 +120,11 @@ func buildTailAdditions(params RunParams, recallMemory, notebookGrounding, skill
 	// (card_rejection_notice.go). Consumed on read, so it appears exactly once.
 	if notice := takeCardRejectionNotice(params.SessionKey); notice != "" {
 		adds = append(adds, notice)
+	}
+	// Language/mode anchor — ALWAYS the last addition (see its doc). Skipped
+	// for ephemeral autonomous turns, which have their own reply contract.
+	if !params.EphemeralUser {
+		adds = append(adds, responseLanguageAnchor)
 	}
 	return adds
 }

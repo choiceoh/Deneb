@@ -135,6 +135,71 @@ func (m *ChatMessage) SearchableText() string {
 	return strings.Join(parts, "\n")
 }
 
+// ExcerptText renders a message for a MODEL-FACING excerpt of a past
+// conversation (sessions history/search, polaris expand). It is SearchableText
+// minus the two parts that turned such excerpts into a document the model
+// resumed writing: the assistant's own chain-of-thought and a tool call's raw
+// JSON input. Search still MATCHES with SearchableText — a hit on thinking
+// prose or a tool argument stays a hit — this only decides how a hit is shown.
+//
+// Incident 2026-09-17 (Deneb stream_0043, ST engine, 50K-token prompt): a
+// Korean answer collapsed mid-way into English document continuation and then
+// tool-call markup. The engine was cleared (bit-identical replays); the model
+// was in "continue the document" mode — its gen0 preferences were English
+// heading tokens ('Follow'/'User'/'Simple'/'Context'). The prompt carried a
+// sessions() result that rendered earlier assistant reasoning and
+// `[도구 x] {json}` rows as plain body text. Records shown to the model must
+// read as data, not as prose to continue; the raw JSON was the "tool-call
+// markup" the collapse imitated.
+//
+// Returns "" for a thinking-only message so history renderers skip the row
+// (a search renderer can say the hit was in reasoning — see sessionops).
+// Unknown content shapes fall back exactly as SearchableText does.
+func (m *ChatMessage) ExcerptText() string {
+	if len(m.Content) == 0 {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(m.Content, &text); err == nil {
+		return text
+	}
+	var blocks []struct {
+		Type    string `json:"type"`
+		Text    string `json:"text,omitempty"`
+		Name    string `json:"name,omitempty"`
+		Content string `json:"content,omitempty"`
+	}
+	if err := json.Unmarshal(m.Content, &blocks); err != nil {
+		return m.TextContent()
+	}
+	var parts []string
+	for _, b := range blocks {
+		switch b.Type {
+		case "text":
+			if b.Text != "" {
+				parts = append(parts, b.Text)
+			}
+		case "tool_use":
+			// Name only: WHICH tool was called is content ("what happened
+			// here"); its argument JSON is the markup the model imitated.
+			if b.Name != "" {
+				parts = append(parts, "[도구 "+b.Name+"]")
+			}
+		case "tool_result":
+			if b.Content != "" {
+				parts = append(parts, truncateForSearch(b.Content, searchToolResultCap))
+			}
+		}
+	}
+	if len(parts) == 0 {
+		// Thinking-only or unknown blocks: TextContent is "" for a recognized
+		// non-text message and the raw-JSON hatch for unknown shapes — the same
+		// fallback SearchableText takes, minus the thinking prose.
+		return m.TextContent()
+	}
+	return strings.Join(parts, "\n")
+}
+
 // Caps mirror polaris's FTS index so a raw stdout or file dump cannot bloat the
 // scanned text (and, in polaris's case, the index) — the roomier result cap is
 // the same asymmetry polaris documents.

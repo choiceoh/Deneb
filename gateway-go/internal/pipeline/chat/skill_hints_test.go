@@ -160,12 +160,13 @@ func TestSkillHintSummaryTruncatesAtSeparatorAndCap(t *testing.T) {
 // (skill context is orthogonal to reference material, so unlike
 // recall/feed it is NOT suppressed by notebook grounding).
 func TestBuildTailAdditionsPreservesHintPosition(t *testing.T) {
+	// (The language/mode anchor always closes the list — run_tail_inject.go.)
 	adds := buildTailAdditions(RunParams{AutoDeliveredOutput: true}, "recall", "", "힌트", "")
-	if len(adds) != 3 || adds[0] != "recall" || adds[1] != "힌트" {
+	if len(adds) != 4 || adds[0] != "recall" || adds[1] != "힌트" || adds[3] != responseLanguageAnchor {
 		t.Fatalf("recall branch adds = %#v", adds)
 	}
 	adds = buildTailAdditions(RunParams{}, "", "노트북", "힌트", "")
-	if len(adds) != 2 || adds[0] != "노트북" || adds[1] != "힌트" {
+	if len(adds) != 3 || adds[0] != "노트북" || adds[1] != "힌트" || adds[2] != responseLanguageAnchor {
 		t.Fatalf("notebook branch adds = %#v", adds)
 	}
 }

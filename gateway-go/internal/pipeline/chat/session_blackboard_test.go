@@ -78,7 +78,8 @@ func TestSessionBoardTailRendersOnlyWhenStateExists(t *testing.T) {
 	if !strings.Contains(got, "세션 blackboard") || !strings.Contains(got, "step") {
 		t.Errorf("tail missing header or state: %q", got)
 	}
-	if got2 := buildTailAdditions(RunParams{}, "", "", "", got); len(got2) != 1 || got2[0] != got {
+	// The board rides as reference material; the language/mode anchor closes.
+	if got2 := buildTailAdditions(RunParams{}, "", "", "", got); len(got2) != 2 || got2[0] != got || got2[1] != responseLanguageAnchor {
 		t.Errorf("board tail not carried into tail additions: %v", got2)
 	}
 }
