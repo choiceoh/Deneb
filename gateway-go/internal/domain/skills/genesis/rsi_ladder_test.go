@@ -377,10 +377,11 @@ func TestNextGraduationDispatchCap(t *testing.T) {
 	}
 }
 
-// Incremental health-finding kinds are permanently non-dispatchable: once they
-// are the only staged supply left, the row must report DONE (manual-review
-// backlog), not a READY that can never auto-resolve.
-func TestLadderStagedSourcesIncrementalBacklog(t *testing.T) {
+// The manual-only health-finding sublanes are permanently non-dispatchable:
+// once they are the only staged supply left, the row must report DONE
+// (manual-review backlog), not a READY that can never auto-resolve. Both
+// families count — incremental kinds and runtime standing weaknesses.
+func TestLadderStagedSourcesManualOnlyBacklog(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr := newTestTracker(t)
@@ -390,9 +391,15 @@ func TestLadderStagedSourcesIncrementalBacklog(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "sk",
+		Title: "런타임 상시 취약 지점: latency", Source: "health-finding:runtime-latency",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	row := tr.ladderStagedSourcesRow()
-	if row.State != ladderStateDone || !strings.Contains(row.Detail, "증분형 health-finding 1건") {
-		t.Fatalf("incremental-only staged row = %+v, want DONE with manual backlog note", row)
+	if row.State != ladderStateDone || !strings.Contains(row.Detail, "수동 전용 health-finding 2건") {
+		t.Fatalf("manual-only staged row = %+v, want DONE with manual backlog note", row)
 	}
 	// A genuinely novel source on top flips the row back to READY and still
 	// carries the manual-backlog note.
@@ -404,7 +411,7 @@ func TestLadderStagedSourcesIncrementalBacklog(t *testing.T) {
 	}
 	row = tr.ladderStagedSourcesRow()
 	if row.State != ladderStateReady || !strings.Contains(row.Detail, "novel-miner 1건") ||
-		!strings.Contains(row.Detail, "증분형 health-finding 1건") {
+		!strings.Contains(row.Detail, "수동 전용 health-finding 2건") {
 		t.Fatalf("mixed staged row = %+v, want READY naming novel supply + manual backlog", row)
 	}
 }

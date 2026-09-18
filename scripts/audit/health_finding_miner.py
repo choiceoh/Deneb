@@ -81,6 +81,17 @@ RUNTIME_WEAK_SCORE = 60.0
 MAX_RUNTIME_PER_RUN = 1
 RUNTIME_IMPACT_WINDOW_MS = 24 * 60 * 60 * 1000
 
+# This lane is MANUAL-ONLY: it files, it never auto-dispatches. Its contract
+# metric runtime.health.score:<dim> is a rolling 7d window over LIVE traffic, so
+# it moves with model/serving availability rather than with the landed diff — an
+# unattended session is judged on something it does not control. Measured over
+# the lane's whole history: 8 landings, 1 verified, 6 no_effect or regressed, the
+# only L4 supplier with a net-negative record (the structural sublane of this
+# same miner stays healthy, which is why the withhold is scoped to this prefix).
+# Keep in lockstep with genesis rsiHealthFindingRuntimeStanding — Go owns the
+# withhold; dropping the prefix here silently re-opens it.
+RUNTIME_SOURCE_PREFIX = f"{SOURCE_PREFIX}:runtime-"
+
 # Mirrors genesis selfCorrectionReopenCooldown (2 × the 7d evolution-health
 # window): an applied fix gets this long to prove itself before the same
 # finding may re-file.
@@ -264,6 +275,10 @@ def structural_candidates(report: dict[str, Any]) -> list[dict[str, Any]]:
 def runtime_candidates(runtime: dict[str, Any] | None) -> list[dict[str, Any]]:
     """Standing runtime weaknesses: dims under the bar, weakest first, capped.
 
+    These file for MANUAL review only — genesis withholds this whole prefix from
+    auto-dispatch (see ``RUNTIME_SOURCE_PREFIX``). The impact contract stays on
+    the candidate so an operator-aimed landing is still measured.
+
     The runtime report is a rolling 7d window, so the synthetic finding id is
     the dimension name (``runtime-latency``) — stable across runs, which is
     what makes the reopen semantics meaningful.
@@ -314,7 +329,7 @@ def runtime_candidates(runtime: dict[str, Any] | None) -> list[dict[str, Any]]:
                 f"runtime-health의 정직한 결함 회계가 계약이다."
             ),
             "risk": _RISK_NOTE,
-            "source": f"{SOURCE_PREFIX}:runtime-{name}",
+            "source": f"{RUNTIME_SOURCE_PREFIX}{name}",
             "impactContract": {
                 "metric": f"runtime.health.score:{name}",
                 "direction": "increase",

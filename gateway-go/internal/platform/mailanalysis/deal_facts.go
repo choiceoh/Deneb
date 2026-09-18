@@ -115,7 +115,7 @@ func verifyDealFacts(facts *DealFacts, source string, logger *slog.Logger) *Deal
 	}
 	normSource := stripSpaces(source)
 	check := func(name string, f *QuotedFact) {
-		verifyQuotedFact("mail→deal: 거래 조건 인용 검증 실패로 드롭", name, f, normSource, logger)
+		verifyQuotedFact("mail→deal: 거래 조건 인용 검증 실패로 드롭 (advisory)", name, f, normSource, logger)
 	}
 	check("capacityMW", &facts.CapacityMW)
 	check("unitPrice", &facts.UnitPrice)

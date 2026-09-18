@@ -234,12 +234,12 @@ func (t *Tracker) ladderDispatchCapRow() ladderRow {
 // ladderStagedSourcesRow: novel L4 sources auto-graduate on candidate supply
 // (no human first-batch review). Any still-staged open code candidates mean
 // the watch can unlock on its next tick — surface READY so the dashboard
-// shows actionable supply before the unlock lands. Incremental health-finding
-// kinds are the exception: they are permanently non-dispatchable (one
-// unattended session cannot land a multi-hundred-commit refactor), so once
-// every novel namespace has graduated they are a manual-review backlog, not
-// pending graduation supply — the row reports DONE with their count instead
-// of a READY that can never auto-resolve.
+// shows actionable supply before the unlock lands. The manual-only
+// health-finding sublanes are the exception: they are permanently
+// non-dispatchable (rsiHealthFindingManualOnly), so once every novel namespace
+// has graduated they are a manual-review backlog, not pending graduation
+// supply — the row reports DONE with their count instead of a READY that can
+// never auto-resolve.
 func (t *Tracker) ladderStagedSourcesRow() ladderRow {
 	cands, err := t.RecentSelfCorrectionCandidates("", "", 300)
 	if err != nil {
@@ -255,7 +255,7 @@ func (t *Tracker) ladderStagedSourcesRow() ladderRow {
 		if rsiSourceDispatchable(c.Source) {
 			continue
 		}
-		if rsiHealthFindingIncremental(c.Source) {
+		if rsiHealthFindingManualOnly(c.Source) {
 			manualN++
 			continue
 		}
@@ -267,7 +267,7 @@ func (t *Tracker) ladderStagedSourcesRow() ladderRow {
 	}
 	manualNote := ""
 	if manualN > 0 {
-		manualNote = fmt.Sprintf(" · 증분형 health-finding %d건 수동 검토 대기", manualN)
+		manualNote = fmt.Sprintf(" · 수동 전용 health-finding %d건 검토 대기", manualN)
 	}
 	if len(bySource) == 0 {
 		if manualN > 0 {

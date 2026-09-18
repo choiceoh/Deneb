@@ -420,7 +420,7 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	// days because nothing named the arrangement out loud.
 	for _, role := range []Role{RoleFallback, RoleMain2, RoleLightweight, RoleTiny} {
 		if cfg, ok := models[role]; ok && r.billsPerToken(cfg) {
-			logger.Warn("role points at a metered model; fallback chains will skip it and may end without a candidate",
+			logger.Warn("role points at a metered model; fallback chains will skip it and may end without a candidate (advisory)",
 				"role", string(role), "model", cfg.Model)
 		}
 	}

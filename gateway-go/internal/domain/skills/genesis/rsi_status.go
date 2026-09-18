@@ -1134,7 +1134,7 @@ func rsiSourceDispatchable(source string) bool {
 	// pick it — a false dashboard signal (Codex review of RSI eval M7).
 	for _, s := range rsiDispatchSources {
 		if rsiSourceMatchesNamespace(source, s) {
-			return !rsiHealthFindingIncremental(source)
+			return !rsiHealthFindingManualOnly(source)
 		}
 	}
 	// Executed graduation-ladder unlocks admit staged sources at runtime
@@ -1153,6 +1153,34 @@ func rsiSourceDispatchable(source string) bool {
 // selfCorrectionSourceMatches).
 func rsiSourceMatchesNamespace(source, ns string) bool {
 	return source == ns || strings.HasPrefix(source, ns+":")
+}
+
+// rsiHealthFindingManualOnly reports a health-finding sublane that never
+// auto-dispatches and is a manual-review backlog instead. Two families qualify,
+// for the same underlying reason — an unattended session cannot move the thing
+// the candidate is judged on:
+//
+//   - incremental kinds (rsiIncrementalHealthKinds): the finding stays present
+//     after any one bounded step.
+//   - runtime standing weaknesses (health-finding:runtime-<dim>): the contract
+//     metric runtime.health.score:<dim> is a rolling 7d window over LIVE
+//     traffic, so it tracks model/serving availability, not our diff. Measured
+//     over the whole lane's history: 8 landings, 1 verified, 6 no_effect or
+//     regressed — the only L4 supplier with a net-negative measured record,
+//     while the structural sublane of the same miner stays healthy. The
+//     findings are still filed; they just wait for a human to aim them.
+func rsiHealthFindingManualOnly(source string) bool {
+	return rsiHealthFindingIncremental(source) || rsiHealthFindingRuntimeStanding(source)
+}
+
+// rsiHealthFindingRuntimeStanding reports the runtime standing-weakness
+// sublane. Source shape is health-finding:runtime-<dimension> (mirrors
+// scripts/audit/health_finding_miner.py runtime_candidates).
+func rsiHealthFindingRuntimeStanding(source string) bool {
+	if !rsiSourceMatchesNamespace(source, "health-finding") {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimPrefix(source, "health-finding:"), "runtime-")
 }
 
 // rsiHealthFindingIncremental reports a health-finding whose rule id is in
