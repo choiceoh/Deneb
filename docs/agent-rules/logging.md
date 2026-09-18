@@ -61,6 +61,22 @@ defer func() {
 - 에러: `error` (기본)
 - ID: `runId`, `jobId`, `messageId` (camelCase 유지)
 
+### 7. 의도된 열화를 찍는 `Warn`은 `(advisory)` 마커를 단다
+
+가드가 **설계대로 동작해서** 찍히는 `Warn`(과금 후보 건너뜀·불건강 모델 우회·
+예산 안에서의 축소·인용 검증 실패 드롭 등)은 메시지 끝에 `(advisory)`를 붙인다.
+`internal/core/observe`의 `IsAdvisory`가 이 마커를 읽어 genesis 런타임 오류
+채굴과 anomaly digest에서 제외한다. 마커가 없으면 자가개선 루프가 이 줄을 코드
+결함으로 착각해 하루치 배차 슬롯을 태우고 "이것은 의도된 동작"으로 기각당한다
+(2026-08~09 runtime-error 기각 28건 중 11건이 이 경로).
+
+판정은 **작성자가 쓴 마커**로만 한다. 메시지 모양으로 추론하지 말 것 — graceful
+degradation은 진짜 결함을 정확히 이 문장 모양으로 강등시키므로, 추론을 넓히면
+warn 레인 전체가 죽는다. 같은 가드의 **의도되지 않은** 갈래(폴백이 못 쓰는
+체크포인트, 블록 통째 누락)는 마커 없이 두어 채굴 대상으로 남긴다.
+
+마커는 `error` 속성이 아니라 메시지에 단다 — 에러 문자열 안의 "advisory"는 우연이다.
+
 ## 금지
 
 - ❌ `log.Printf` / `fmt.Printf` — 구조화 안 됨, `slog` 사용
@@ -73,3 +89,4 @@ defer func() {
 - [ ] 재시도 성공 케이스는 `Warn`, 최종 실패는 `Error`인가
 - [ ] delivery/persistence 실패는 broadcast 병행되는가
 - [ ] 새 `Warn`/`Error`가 정말 의미 있는 이벤트인가 (스팸 금지)
+- [ ] 의도된 열화 `Warn`에 `(advisory)` 마커가 있고, 같은 가드의 의도되지 않은 갈래는 마커 없이 남겼는가

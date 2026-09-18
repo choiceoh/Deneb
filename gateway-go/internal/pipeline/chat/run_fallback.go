@@ -371,7 +371,7 @@ func (t *fallbackTurn) runInitialAttempt(ctx context.Context) {
 				"model", t.cfg.Model, "turns", t.agentResult.Turns)
 			break
 		}
-		t.logger.Warn("run budget exhausted mid-work; resuming no-tools fallback from checkpoint",
+		t.logger.Warn("run budget exhausted mid-work; resuming no-tools fallback from checkpoint (advisory)",
 			"model", t.cfg.Model, "turns", t.agentResult.Turns)
 		t.runErr = errRunBudgetExhausted
 		t.budgetExhaustedResult = t.agentResult
@@ -714,7 +714,7 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 		// engine moves the failover decision here, where that rule had no
 		// counterpart. A local outage that silently bills is the 2026-08 leak.
 		if t.deps.registry.SkipBilledFallback(fbRole) {
-			t.logger.Warn("skipping metered fallback candidate",
+			t.logger.Warn("skipping metered fallback candidate (advisory)",
 				"failedRole", string(failedRole), "skippedRole", string(fbRole), "model", fbCfg.Model)
 			continue
 		}

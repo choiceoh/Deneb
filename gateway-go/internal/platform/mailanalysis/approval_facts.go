@@ -113,7 +113,7 @@ func verifyApprovalCostFacts(facts *ApprovalCostFacts, source string, logger *sl
 	normSource := stripSpaces(source)
 
 	amount := facts.Amount
-	verifyQuotedFact("결재→원장: 비용 인용 검증 실패로 드롭", "amount", &amount, normSource, logger)
+	verifyQuotedFact("결재→원장: 비용 인용 검증 실패로 드롭 (advisory)", "amount", &amount, normSource, logger)
 	facts.Amount = amount
 
 	kept := facts.LineItems[:0]
@@ -139,7 +139,7 @@ func verifyApprovalCostFacts(facts *ApprovalCostFacts, source string, logger *sl
 		}
 		if reason != "" {
 			if logger != nil {
-				logger.Warn("결재→원장: 품목 행 인용 검증 실패로 드롭",
+				logger.Warn("결재→원장: 품목 행 인용 검증 실패로 드롭 (advisory)",
 					"name", li.Name, "unitPrice", li.UnitPrice, "reason", reason)
 			}
 			continue

@@ -1,9 +1,13 @@
 package chat
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 )
 
 // TestFinalizePromptSeparatesAbsentFromDiscarded is the whole point of the
@@ -45,6 +49,36 @@ func TestFinalizePromptReportsIntactAdmission(t *testing.T) {
 	}
 	if !strings.Contains(string(prompt), "기억 블록") {
 		t.Error("the admitted block must actually be in the prompt")
+	}
+}
+
+// TestLogPromptShapeMarksOnlyTheShrinkAdvisory: the two verdicts route to
+// different readers. A bounded shrink is the budget guard working, so it
+// carries the author marker that keeps genesis' runtime-error miner from
+// filing it as a code defect; a full drop is a degraded answer and must stay
+// mineable. Asserted through observe.IsAdvisory — the same predicate the miner
+// runs — so rewording the line without the marker fails here.
+func TestLogPromptShapeMarksOnlyTheShrinkAdvisory(t *testing.T) {
+	capture := func(o promptBudgetOutcome) string {
+		var buf bytes.Buffer
+		logPromptShape(slog.New(slog.NewTextHandler(&buf, nil)), o, "s1")
+		return buf.String()
+	}
+
+	shrunk := capture(promptBudgetOutcome{Tier1RequestedTokens: 10, Tier1AdmittedTokens: 5})
+	if !strings.Contains(shrunk, "축소") {
+		t.Fatalf("shrink must be logged: %q", shrunk)
+	}
+	if !observe.IsAdvisory(observe.LogLine{Msg: shrunk}) {
+		t.Errorf("a bounded shrink must carry the advisory marker: %q", shrunk)
+	}
+
+	dropped := capture(promptBudgetOutcome{Tier1RequestedTokens: 10})
+	if !strings.Contains(dropped, "누락") {
+		t.Fatalf("drop must be logged: %q", dropped)
+	}
+	if observe.IsAdvisory(observe.LogLine{Msg: dropped}) {
+		t.Errorf("a dropped block is a real loss and must stay mineable: %q", dropped)
 	}
 }
 

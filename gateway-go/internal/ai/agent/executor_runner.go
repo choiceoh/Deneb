@@ -243,7 +243,7 @@ func (r *agentRunner) maybeEnterSoftDeadlineFinalMode() {
 	if r.cfg.OnSoftDeadline != nil {
 		r.cfg.OnSoftDeadline()
 	}
-	r.logger.Warn("agent soft deadline reached; forcing no-tools wrap-up",
+	r.logger.Warn("agent soft deadline reached; forcing no-tools wrap-up (advisory)",
 		"softDeadline", r.cfg.SoftDeadline,
 		"turn", r.result.Turns+1)
 }

@@ -27,7 +27,7 @@ func (s *Server) mailAnalysisSynthesisEndpoints() []mailanalysis.SynthesisEndpoi
 			continue
 		}
 		if s.modelRegistry.ModelUnhealthy(cfg.Model) && s.mailAnalysisHasHealthyEndpoint(chain[i+1:], seen, cfg.Model) {
-			s.logger.Warn("mail analysis: skipping unhealthy stage-2 model", "role", string(role), "model", cfg.Model)
+			s.logger.Warn("mail analysis: skipping unhealthy stage-2 model (advisory)", "role", string(role), "model", cfg.Model)
 			continue
 		}
 		seen[cfg.Model] = true

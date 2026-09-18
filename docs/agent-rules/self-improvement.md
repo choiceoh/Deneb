@@ -281,7 +281,16 @@ acceptance machinery stays forbidden at record time.
   direct operator directive ahead of a reviewed batch — narrow description/perf
   candidates, previewable via the tool-quality-dryrun workflow). **Staged** (file
   for review, no auto-dispatch): `runtime-error`, `deadcode-finding`,
-  `sop-mining`, `branch-rot` (2026-07-20). **Graduation execution is DELEGATED to the loop (operator
+  `sop-mining`, `branch-rot` (2026-07-20). Two `health-finding` sublanes are
+  **manual-only** — they keep filing but never auto-dispatch, because an
+  unattended session cannot move the thing the candidate is judged on: the
+  incremental kinds (the finding survives any one bounded step) and the runtime
+  standing weaknesses `health-finding:runtime-<dim>` (2026-09-17 — the contract
+  metric is a rolling 7d window over live traffic, so it tracks model/serving
+  availability rather than the landed diff; measured over the lane's history: 8
+  landings, 1 verified, 6 no_effect or regressed, the only L4 supplier with a
+  net-negative record, while the structural sublane of the same miner stays
+  healthy). Go owns the withhold; the miner mirrors the prefix in a comment. **Graduation execution is DELEGATED to the loop (operator
   directive 2026-07-14)**: `LadderWatchTask` unlocks a staged source once the
   review lane endorses it (accepted≥2, rejected=0 — a rejection is a standing
   veto) by writing the shared graduation state

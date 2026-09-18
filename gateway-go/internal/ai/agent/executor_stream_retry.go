@@ -131,7 +131,7 @@ func runStreamingTurnWithPolicy(
 		}
 	}
 
-	logger.Warn("stream interrupted, retrying turn on same model",
+	logger.Warn("stream interrupted, retrying turn on same model (advisory)",
 		"turn", turn,
 		"error", err,
 		"retryReason", outcome.retryReason,

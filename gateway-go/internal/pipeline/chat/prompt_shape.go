@@ -83,7 +83,10 @@ func logPromptShape(logger *slog.Logger, o promptBudgetOutcome, sessionKey strin
 	if !o.tier1Dropped() && !o.tier1Shrunk() {
 		return
 	}
-	verdict := "축소"
+	// A bounded shrink is the budget guard doing its job, so it carries the
+	// advisory marker (observe.IsAdvisory) and stays out of defect mining. A
+	// full drop is a degraded answer and keeps mining it.
+	verdict := "축소 (advisory)"
 	if o.tier1Dropped() {
 		verdict = "누락"
 	}

@@ -70,8 +70,37 @@ func TestSourceAutoDispatchesReturnsTrueForGraduatedFalseForStagedSources(t *tes
 	if !SourceAutoDispatches("health-finding:structure:volatile-hub:9f42") {
 		t.Fatal("clearable volatile-hub must stay auto-dispatch")
 	}
-	if !SourceAutoDispatches("health-finding:runtime-latency") {
-		t.Fatal("runtime standing weakness must stay auto-dispatch")
+	// Runtime standing weaknesses are judged on runtime.health.score:<dim> — a
+	// rolling 7d window over live traffic, which an unattended session does not
+	// control. Measured over the lane's history: 8 landings, 1 verified, 6
+	// no_effect or regressed. They keep filing; they wait for a human to aim them.
+	runtime := []string{
+		"health-finding:runtime-latency",
+		"health-finding:runtime-tool-reliability",
+		"health-finding:runtime-llm-serving",
+	}
+	for _, s := range runtime {
+		if SourceAutoDispatches(s) {
+			t.Fatalf("%q is a runtime standing weakness and must stay staged", s)
+		}
+	}
+}
+
+// The withhold is scoped to the runtime sublane on purpose: the structural
+// sublane of the same miner is the healthy half of its supply, so a whole-miner
+// stop would destroy working L4 input. Named "runtime-*" and nothing wider.
+func TestRuntimeWithholdDoesNotCatchStructuralHealthFindings(t *testing.T) {
+	if rsiHealthFindingRuntimeStanding("health-finding:structure:volatile-hub:9f42") {
+		t.Error("structural sublane must not be caught by the runtime withhold")
+	}
+	if rsiHealthFindingRuntimeStanding("tool-quality:runtime-latency") {
+		t.Error("the withhold must be anchored to the health-finding namespace")
+	}
+	if !rsiHealthFindingRuntimeStanding("health-finding:runtime-latency") {
+		t.Error("runtime-<dim> must be recognised")
+	}
+	if !rsiHealthFindingManualOnly("health-finding:responsibility-cochange:abcd") {
+		t.Error("manual-only must still cover the incremental kinds")
 	}
 }
 

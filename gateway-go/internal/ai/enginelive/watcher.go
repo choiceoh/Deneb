@@ -361,7 +361,7 @@ func (w *Watcher) markDownLocked(ep string, st *engineState, reason string) func
 			st.downSince = time.UnixMilli(last.AtMs)
 		}
 		transition = &Transition{Endpoint: ep, AtMs: now.UnixMilli(), Down: true, Reason: reason, Models: models}
-		w.logger.Warn("local serving engine is refusing requests; its models go straight to fallback",
+		w.logger.Warn("local serving engine is refusing requests; its models go straight to fallback (advisory)",
 			"endpoint", ep, "reason", reason, "models", strings.Join(models, ","))
 	case !slices.Equal(models, st.models):
 		w.logger.Info("engine liveness: models served by the down engine changed",
