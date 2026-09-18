@@ -84,7 +84,9 @@ func toolPolarisSearch(store *polaris.Store) toolport.ToolFunc {
 			sb.WriteString(toolport.RecallRow(i+1, ref, meta, h.Snippet))
 		}
 		sb.WriteString("원문 복원: `polaris(action=\"describe\")` 로 요약 ID 확인 후 `expand`.")
-		return sb.String(), nil
+		// Same data envelope as sessions(): these rows are past-conversation
+		// records, not instructions and not prose to continue.
+		return toolport.WrapTranscriptExcerpt("polaris", sb.String()), nil
 	}
 }
 
@@ -216,7 +218,9 @@ func toolPolarisExpand(store *polaris.Store, localAI LocalAIFunc) toolport.ToolF
 			sb.WriteString(strings.TrimPrefix(note, "\n") + "\n")
 		}
 		sb.WriteString(serialized)
-		return sb.String(), nil
+		// Raw past-conversation rows: same data envelope as sessions() and
+		// polaris search, so the model reads them as records, not as prose.
+		return toolport.WrapTranscriptExcerpt("polaris", sb.String()), nil
 	}
 }
 

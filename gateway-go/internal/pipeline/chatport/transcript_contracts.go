@@ -85,10 +85,13 @@ func (m *ChatMessage) TextContent() string {
 // inside a thinking block's base64 signature, so a short query hit noise. This
 // restores the signal without the noise.
 //
-// Mirrors the block rendering polaris already uses for its FTS index
+// Mirrors the block rendering polaris uses for its FTS index
 // (pipeline/polaris/store.go): same caps, same shape, so the two search paths
-// cannot disagree about what a transcript contains. The signature is never
-// included — it is provider bookkeeping, not content.
+// cannot disagree about what a transcript contains — polaris indexes the
+// thinking prose as a HIDDEN field (matchable, never excerpted), and the
+// sessions renderer shows a reasoning-only hit as a note rather than the
+// prose (ExcerptText). The signature is never included — it is provider
+// bookkeeping, not content.
 func (m *ChatMessage) SearchableText() string {
 	if len(m.Content) == 0 {
 		return ""
