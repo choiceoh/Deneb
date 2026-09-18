@@ -108,6 +108,7 @@ type ProviderResolved struct {
 	Reasoning     *bool // genuine reasoning-endpoint model
 	Vision        *bool // false → image blocks are stripped before sending
 	PromptCache   *bool // false → cache_control markers are stripped
+	MidRunAnchor  *bool // false → no per-request language/mode anchor on tool steps
 
 	// Sampling overrides layered over the builtin ProfileFor table by
 	// ProfileForModel. Nil means "no override".

@@ -29,37 +29,28 @@
 // the main chat path without the anchor at all.
 //
 // Where it does NOT run: ephemeral autonomous turns (heartbeat / self-triggers
-// keep their own NO_REPLY contract, exactly like the tail anchor).
-// DENEB_MIDRUN_ANCHOR=off is the operational kill switch while the model's
-// reaction to a trailing user-role note on tool steps is still being observed
-// live; the first application per run is logged at Info ("midrun anchor
-// active") so a live turn can be checked from the log.
+// keep their own NO_REPLY contract, exactly like the tail anchor), and any
+// provider/model whose capability says NoMidRunAnchor — the builtin policy is
+// modelcaps.MidRunAnchorByDefault, the operator's per-model switch is
+// `midRunAnchor: false` on the provider's deneb.json entry. Whether the anchor
+// rides is therefore a property of the MODEL, not a global toggle. The first
+// application per run is logged at Info ("midrun anchor active") so a live
+// turn can be checked from the log.
 package chat
 
 import (
 	"encoding/json"
 	"log/slog"
-	"os"
-	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 )
 
-// midRunAnchorEnv disables the mid-run anchor when set to off/0/false.
-const midRunAnchorEnv = "DENEB_MIDRUN_ANCHOR"
-
-func midRunAnchorDisabledByEnv() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(midRunAnchorEnv))) {
-	case "off", "0", "false", "no":
-		return true
-	}
-	return false
-}
-
 // buildMidRunAnchorHook returns the BeforeAPICall hook, or nil when the run
-// must not carry it (see the file comment).
-func buildMidRunAnchorHook(params RunParams, logger *slog.Logger) func(messages []llm.Message) []llm.Message {
-	if params.EphemeralUser || midRunAnchorDisabledByEnv() {
+// must not carry it: ephemeral turns, or a model whose capability opts out
+// (see the file comment).
+func buildMidRunAnchorHook(params RunParams, caps leafbind.Capability, logger *slog.Logger) func(messages []llm.Message) []llm.Message {
+	if params.EphemeralUser || caps.NoMidRunAnchor {
 		return nil
 	}
 	announced := false

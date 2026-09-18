@@ -64,6 +64,7 @@ func ProviderCatalog(logger *slog.Logger) map[string]modelrole.ProviderResolved 
 			Reasoning:     p.Reasoning,
 			Vision:        p.Vision,
 			PromptCache:   p.PromptCache,
+			MidRunAnchor:  p.MidRunAnchor,
 			Temperature:   p.Temperature,
 			TopP:          p.TopP,
 			TopK:          p.TopK,

@@ -872,9 +872,10 @@ func wireBeforeAPICall(cfg *agent.AgentConfig, deps runDeps, params RunParams, p
 	apc.Add("trailing-cache", agent.HookStagePost, trailingCache)
 	// Mid-run language/mode anchor on tool steps (run_midrun_anchor.go): a
 	// per-request trailing text block after the cache marker, so the marker
-	// stays on the clean block. Off for ephemeral turns and via
-	// DENEB_MIDRUN_ANCHOR=off.
-	apc.Add("midrun-anchor", agent.HookStagePost, buildMidRunAnchorHook(params, logger), "trailing-cache")
+	// stays on the clean block. Off for ephemeral turns and for models whose
+	// capability opts out (modelcaps.NoMidRunAnchor ← deneb.json midRunAnchor).
+	apc.Add("midrun-anchor", agent.HookStagePost,
+		buildMidRunAnchorHook(params, modelCapability(deps, providerID, model), logger), "trailing-cache")
 	cfg.BeforeAPICall = apc.Build(logger)
 	return apiMode
 }
