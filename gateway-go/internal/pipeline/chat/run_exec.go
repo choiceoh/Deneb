@@ -255,6 +255,13 @@ func executeAgentRun(
 	// Execute agent loop with model fallback chain.
 	agentStart := time.Now()
 	agentResult, actualModel, fellBack, fallbackReason, err := runAgentWithFallbackDetailed(ctx, cfg, messages, client, deps, providerID, initialRole, effortRt, hooks, logger, runLog)
+	if err == nil {
+		// Delivery-boundary guard for the 2026-09-17 contamination class: cut a
+		// document-continuation tail out of the final answer ONCE, before the
+		// channel reply, the transcript and the complete event read it
+		// (response_contamination.go).
+		salvageContaminatedResult(agentResult, deps, params, logger)
+	}
 	emitPhase(deps, params, "finalizing", time.Now())
 	logEffortRouteFailure(logger, effortDecision, effortRt, actualModel, err)
 	usageModel := actualModel
@@ -863,6 +870,11 @@ func wireBeforeAPICall(cfg *agent.AgentConfig, deps runDeps, params RunParams, p
 	var apc agent.BeforeAPICallChain
 	apc.Add("steer", agent.HookStageNormal, buildSteerHookIfEnabled(deps.steerQueue, params.SessionKey, logger))
 	apc.Add("trailing-cache", agent.HookStagePost, trailingCache)
+	// Mid-run language/mode anchor on tool steps (run_midrun_anchor.go): a
+	// per-request trailing text block after the cache marker, so the marker
+	// stays on the clean block. Off for ephemeral turns and via
+	// DENEB_MIDRUN_ANCHOR=off.
+	apc.Add("midrun-anchor", agent.HookStagePost, buildMidRunAnchorHook(params, logger), "trailing-cache")
 	cfg.BeforeAPICall = apc.Build(logger)
 	return apiMode
 }
