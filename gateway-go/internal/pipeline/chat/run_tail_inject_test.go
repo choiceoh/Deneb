@@ -120,8 +120,9 @@ func TestInjectTailAdditionsReturnsUnchangedWhenNothingToAdd(t *testing.T) {
 func TestBuildTailAdditionsReturnsRecallAndDeliveryDirective(t *testing.T) {
 	// Interactive turn with recall: recall first, then the directive.
 	adds := buildTailAdditions(RunParams{AutoDeliveredOutput: true}, "recall-블록", "", "", "")
-	if len(adds) != 2 || adds[0] != "recall-블록" ||
-		!strings.Contains(adds[1], "전달 정책") || !strings.Contains(adds[1], "message") {
+	if len(adds) != 3 || adds[0] != "recall-블록" ||
+		!strings.Contains(adds[1], "전달 정책") || !strings.Contains(adds[1], "message") ||
+		adds[2] != responseLanguageAnchor {
 		t.Fatalf("unexpected additions: %#v", adds)
 	}
 	// The directive must read true for an interactive chat too: no false
@@ -129,8 +130,9 @@ func TestBuildTailAdditionsReturnsRecallAndDeliveryDirective(t *testing.T) {
 	if strings.Contains(adds[1], "예약된 자동 실행") || strings.Contains(adds[1], "보고 본문") {
 		t.Fatalf("directive still carries cron-only framing: %q", adds[1])
 	}
-	// Heartbeat shape: no recall (EphemeralUser skips it), no auto-delivery.
-	if adds := buildTailAdditions(RunParams{}, "", "", "", ""); len(adds) != 0 {
+	// Heartbeat shape: no recall (EphemeralUser skips it), no auto-delivery,
+	// and no language anchor either — the ephemeral reply contract is its own.
+	if adds := buildTailAdditions(RunParams{EphemeralUser: true}, "", "", "", ""); len(adds) != 0 {
 		t.Fatalf("expected no additions, got %#v", adds)
 	}
 }
@@ -139,13 +141,13 @@ func TestBuildTailAdditionsWithNotebookGroundingReturnsGroundingOnly(t *testing.
 	// A notebook-grounded turn withholds BOTH recall and the 업무 feed digest —
 	// the pinned sources are the explicit scope. Only grounding + delivery ride.
 	adds := buildTailAdditions(RunParams{AutoDeliveredOutput: true, FeedContext: "feed"}, "recall-블록", "노트북-그라운딩", "", "")
-	if len(adds) != 2 || adds[0] != "노트북-그라운딩" || !strings.Contains(adds[1], "전달 정책") {
-		t.Fatalf("grounded turn should be [grounding, delivery] (no recall/feed), got %#v", adds)
+	if len(adds) != 3 || adds[0] != "노트북-그라운딩" || !strings.Contains(adds[1], "전달 정책") || adds[2] != responseLanguageAnchor {
+		t.Fatalf("grounded turn should be [grounding, delivery, anchor] (no recall/feed), got %#v", adds)
 	}
 	// Not grounded: recall + feed flow as reference material.
 	adds = buildTailAdditions(RunParams{FeedContext: "feed"}, "recall-블록", "", "", "")
-	if len(adds) != 2 || adds[0] != "recall-블록" || adds[1] != "feed" {
-		t.Fatalf("ungrounded turn should be [recall, feed], got %#v", adds)
+	if len(adds) != 3 || adds[0] != "recall-블록" || adds[1] != "feed" || adds[2] != responseLanguageAnchor {
+		t.Fatalf("ungrounded turn should be [recall, feed, anchor], got %#v", adds)
 	}
 }
 

@@ -259,10 +259,12 @@ func serializeExpandMessages(msgs []toolport.ChatMessage, maxChars int) (string,
 		// Expand shows the conversation AROUND a hit, where a tool call is
 		// content: "what happened here" is the question. TextContent answers
 		// "what was said", so a tool-only turn renders as an empty [assistant]:
-		// row that costs a line and tells the model nothing. SearchableText is
-		// the same rendering polaris's own index uses — tool name plus capped
-		// input, never the thinking signature.
-		text := m.SearchableText()
+		// row that costs a line and tells the model nothing. ExcerptText keeps
+		// the tool NAME (never the thinking signature) but, unlike the index's
+		// SearchableText, drops the raw tool input and the assistant's own
+		// reasoning — shown to a model those read as a document to continue
+		// (chatport.ExcerptText, incident 2026-09-17).
+		text := m.ExcerptText()
 		if strings.TrimSpace(text) == "" {
 			continue
 		}
