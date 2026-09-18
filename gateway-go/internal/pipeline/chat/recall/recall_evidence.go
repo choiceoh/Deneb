@@ -611,6 +611,13 @@ func recallTranscriptEvidence(ctx context.Context, transcript toolport.Transcrip
 				if text == "" || text == currentMessage {
 					continue
 				}
+				// Gateway-authored notes ("[SYSTEM: 직전 턴이 …]") sit in the
+				// transcript under the user role for the model's next turn;
+				// they are not something the user said and must not be cited
+				// as past conversation.
+				if toolport.IsSyntheticSystemNote(text) {
+					continue
+				}
 				key := fmt.Sprintf("%s#%d", result.SessionKey, match.Index)
 				if _, ok := seen[key]; ok {
 					continue

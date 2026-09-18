@@ -29,6 +29,46 @@ import (
 // this constant.
 const LinkEnrichmentHeader = "Link content from URLs in this message:"
 
+// syntheticSystemNotePrefixes mark user-role transcript messages the GATEWAY
+// wrote for the model's benefit, not utterances the user typed: the empty-turn
+// remnant / delivery-failure notes ("[SYSTEM: 직전 턴이 …]", run_delivery_failure.go)
+// and the interrupted-tools note ("**System:** the previous assistant turn was
+// interrupted …"). They ride the user role because that is the only role a
+// transcript can carry a mid-conversation note in, and the model must see
+// them on the next turn.
+// Compared case-insensitively: the turn-budget warning spells it "[System:".
+var syntheticSystemNotePrefixes = []string{"[system:", "**system:**"}
+
+// IsSyntheticSystemNote reports whether text is one of those gateway-authored
+// notes. Recall skips them as evidence (they are not past conversation), and
+// the display strips hide them (the user never typed them).
+func IsSyntheticSystemNote(text string) bool {
+	t := strings.ToLower(strings.TrimSpace(text))
+	for _, p := range syntheticSystemNotePrefixes {
+		if strings.HasPrefix(t, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// StripSyntheticSystemNotesForDisplay drops user-role messages that are
+// gateway-authored notes (IsSyntheticSystemNote). Without this the native
+// timeline rendered "[SYSTEM: 직전 턴이 빈 응답으로 끝났습니다 …]" as a bubble the
+// user apparently typed, right after the very failure it describes. Plain-
+// string and text-block content are both checked; the stored transcript is
+// untouched and a fresh slice is returned.
+func StripSyntheticSystemNotesForDisplay(msgs []ChatMessage) []ChatMessage {
+	out := make([]ChatMessage, 0, len(msgs))
+	for _, m := range msgs {
+		if m.Role == "user" && IsSyntheticSystemNote(m.TextContent()) {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
 // StripToolResultBlocksForDisplay removes tool_result content blocks from the
 // messages handed to the client. A message whose blocks are *all* tool_result
 // (the usual case — a tool turn has no user-visible text) is dropped entirely so

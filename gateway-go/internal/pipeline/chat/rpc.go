@@ -387,6 +387,9 @@ func (h *Handler) History(_ context.Context, req *protocol.RequestFrame) *protoc
 		msgs = toolport.StripLinkEnrichmentForDisplay(msgs)
 		msgs = toolport.StripToolResultBlocksForDisplay(msgs)
 		msgs = toolport.StripUserMessageTimestampsForDisplay(msgs)
+		// Gateway-authored notes stored under the user role are not bubbles the
+		// user typed (same strip as miniapp.sessions.transcript).
+		msgs = toolport.StripSyntheticSystemNotesForDisplay(msgs)
 		msgs = toolport.TransliterateAssistantTextForDisplay(msgs)
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"messages": msgs,

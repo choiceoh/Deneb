@@ -56,7 +56,23 @@ python3 scripts/dev/telemachus_ab_replay.py --engine http://<engine> --model glm
 
 id 모드(`--ids-file`)는 엔진 `/tokenize`가 `tokens` 리스트를 돌려줄 때만 가능하다(현행 Go 클라이언트는 `count`만 읽는다).
 
-## 4. 범위 밖 / 남은 갭
+## 4. 후속 감사 (2026-09-18, 엔진 무관 — Deneb 조립 경로의 추가 결함)
+
+운영자 요청("ST 엔진을 떠나 데네브 그 부분의 문제를 더 찾아봐")으로 꼬리 주입·회상 렌더·세션/polaris 도구·압축 요약·와이어 변환을 훑었다. 결함 아님으로 판정한 것: 압축 요약기 입력은 thinking을 이미 제외(`gateway-go/internal/pipeline/compaction/llm.go` `serializeMessages`); 과거 thinking을 `reasoning_content`로 되돌리는 와이어 정책(`gateway-go/internal/ai/llm/openai.go` `reasoningHistoryEchoed`)은 접두사 안정성 근거가 문서화돼 있고 GLM 템플릿이 과거 턴 추론을 버림; `tailForSystem` 폴백은 `PrebuiltMessages` 사용처(mail QA·OpenAI 호환 HTTP)가 모두 user 메시지를 갖고 있어 사실상 죽은 경로; `attachPersistedTails`는 copy-on-write(run_exec.go의 "in-place" 주석만 낡음).
+
+### 4.1 polaris FTS 텍스트가 자기 추론을 스니펫·NextText로 되먹임 (수리)
+
+- **증상**: `indexableText`(`gateway-go/internal/pipeline/polaris/store.go`)가 thinking 본문과 `[도구 name] {json}`을 한 FTS 텍스트로 넣었고, 그 스니펫이 `polaris(action=search)` 행과 **회상 근거 행**(`gateway-go/internal/pipeline/chat/recall/recall_evidence.go`의 `h.Snippet`/`h.NextText`)에 실렸다 — 요청서가 지목한 두 형상의 두 번째 발원지가 회상 꼬리 자체에 있었다.
+- **더 날카로운 부작용**: Q→A 스티치의 `NextText`("답의 머리")가 저장된 TextContent의 머리 = 추론 모델에서는 **thinking의 머리**. LongMemEval로 측정해 넣은 답-스티치가 GLM 턴에서는 추론을 답으로 실어 `⏩ …`로 렌더했다.
+- **수리**: 2-필드 인덱스 — 가시 텍스트(text·`[도구]`·tool_result)는 스니펫 소스, thinking은 `textsearch.Field{Hidden: true}`(매칭·점수만, 발췌 금지). 2026-07-05의 "thinking으로 찾을 수 있어야 한다" 의도는 유지된다. 원문 `Content`가 JSONL에 함께 있어 **로드 시 재계산으로 과거 행이 치유**된다(마이그레이션 없음, `TestLoadHealsThinkingOutOfPersistedTextContent`). 토큰 추정은 가시+숨김 합으로 유지.
+- `polaris` search/expand 출력도 `<transcript-excerpt source="polaris" trust="untrusted">` 봉투(`toolport.WrapTranscriptExcerpt`, sessions와 공유).
+
+### 4.2 게이트웨이 노트가 user 역할로 영속돼 사용자 말풍선으로 노출 (수리)
+
+- **증상**: `persistTimeoutRemnant`·전달 미확인·중단 노트(`gateway-go/internal/pipeline/chat/run_delivery_failure.go`)는 모델의 다음 턴을 위해 `[SYSTEM: …]`/`**System:** …`를 **user 역할**로 트랜스크립트에 쓴다. 전사 RPC(`miniapp.sessions.transcript`·`chat.history`)의 표시 새니타이저는 링크 보강·tool_result·타임스탬프만 숨겨 이 노트가 "내가 쓴 말"로 렌더된다. 프로덕션 트랜스크립트 657개 중 **8개**가 해당(전달 미확인 5+2+1, 중단 1). 서브에이전트 완료 노트(`**System:** subagent completed…`)도 tool-results user 메시지의 text 블록으로 타 tool_result strip 뒤 같은 방식으로 남는다.
+- **수리**: `toolport.IsSyntheticSystemNote` + `StripSyntheticSystemNotesForDisplay`를 두 RPC 체인에 배선(표시 전용, 저장 트랜스크립트 불변). 회상은 이 노트를 과거 대화 근거로 인용하지 않는다(`recall_evidence.go` 필터).
+
+## 5. 범위 밖 / 남은 갭
 
 - 엔진 커널·스케일·배율·난수·캐시: 변경 없음(요청서 §6).
 - **mid-run 단계**(도구 결과가 마지막 메시지일 때)에는 앵커가 마지막 user 메시지에 남아 절대적 마지막은 아니다. per-request `BeforeAPICall` 꼬리 메시지로 옮기면 더 강하지만, Anthropic 역할 교대·trailing cache 마커와의 상호작용을 따로 설계해야 한다. 사건 원본은 첫 생성 단계(꼬리 = 전달정책 → assistant 마커)였으므로 이번 수정이 사건 형상을 정확히 덮는다.

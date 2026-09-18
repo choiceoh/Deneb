@@ -179,6 +179,11 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 		work = toolport.StripLinkEnrichmentForDisplay(work)
 		work = toolport.StripToolResultBlocksForDisplay(work)
 		work = toolport.StripUserMessageTimestampsForDisplay(work)
+		// Gateway-authored notes stored under the user role ("[SYSTEM: 직전 턴이 …]",
+		// "**System:** the previous assistant turn …") are for the model's next
+		// turn, not bubbles the user typed — 8 production sessions carried them
+		// as apparent user messages (2026-09-18 audit).
+		work = toolport.StripSyntheticSystemNotesForDisplay(work)
 		// Read Sino-Korean Hanja in assistant prose as Hangul (報告書 → 보고서) —
 		// Chinese-lineage models sometimes emit it. Display-only; transcript intact.
 		work = toolport.TransliterateAssistantTextForDisplay(work)

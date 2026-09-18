@@ -203,8 +203,18 @@ func (s *Store) ensureSession(sessionKey string) *sessionData {
 		if m.MsgIndex >= sd.nextMsgIndex {
 			sd.nextMsgIndex = m.MsgIndex + 1
 		}
-		// Index for FTS.
-		sd.fts.Upsert(fmt.Sprintf("%d", m.MsgIndex), m.TextContent)
+		// Index for FTS. Recompute both texts from the raw content when it is
+		// present: rows written before the visible/hidden split persisted the
+		// thinking prose inside TextContent, and TextContent is also what
+		// NextText/Wide read — healing it here on load means no rewrite of
+		// the JSONL and no migration step.
+		visible, hidden := m.TextContent, ""
+		if len(m.Content) > 0 {
+			cm := chatport.ChatMessage{Role: m.Role, Content: m.Content}
+			visible, hidden = indexableText(cm), indexableThinking(cm)
+			m.TextContent = visible
+		}
+		indexMessage(sd.fts, m.MsgIndex, visible, hidden)
 	}
 
 	// Load summaries from JSON snapshot.
@@ -240,7 +250,8 @@ func (s *Store) AppendMessage(sessionKey string, msg chatport.ChatMessage) error
 
 	content := string(msg.Content)
 	textContent := indexableText(msg)
-	tokenEst := s.tokenEstimate(textContent)
+	thinking := indexableThinking(msg)
+	tokenEst := s.tokenEstimate(indexTokenText(textContent, thinking))
 	ts := msg.Timestamp
 	if ts == 0 {
 		ts = time.Now().UnixMilli()
@@ -262,18 +273,29 @@ func (s *Store) AppendMessage(sessionKey string, msg chatport.ChatMessage) error
 	sd.messages = append(sd.messages, rec)
 	sd.totalTokens += tokenEst
 	sd.nextMsgIndex++
-	sd.fts.Upsert(fmt.Sprintf("%d", rec.MsgIndex), textContent)
+	indexMessage(sd.fts, rec.MsgIndex, textContent, thinking)
 
 	return nil
 }
 
-// indexableText renders a message for FTS indexing (and thus search snippets)
-// as human-readable prose: text blocks, thinking prose, tool calls (name +
-// input), and tool results. ChatMessage.TextContent falls back to the RAW JSON
-// string for block arrays without text blocks — the common shape of tool-heavy
-// assistant turns (thinking + tool_use only) — which indexed JSON syntax and
-// made polaris search snippets read as `[{"type":"thinking",...` (production
-// observation 2026-07-05). Plain-string content passes through unchanged.
+// indexableText renders the VISIBLE prose of a message — text blocks, tool
+// calls (name + input), tool results — for FTS indexing and for everything the
+// store hands back as text: snippets, Wide windows and NextText (the "answer
+// head" stitched onto a user hit). ChatMessage.TextContent falls back to the
+// RAW JSON string for block arrays without text blocks — the common shape of
+// tool-heavy assistant turns (thinking + tool_use only) — which indexed JSON
+// syntax and made polaris search snippets read as `[{"type":"thinking",...`
+// (production observation 2026-07-05). Plain-string content passes through
+// unchanged.
+//
+// The assistant's thinking prose is deliberately NOT here. It is indexed as a
+// HIDDEN field (indexableThinking + indexMessage) so a turn whose only trace is
+// its reasoning stays findable, but the reasoning itself never surfaces:
+// before this split it rode the snippet into `polaris(action=search)` rows and
+// into recall evidence rows, and — worse — since a thinking model's reply
+// starts with its thinking block, NextText's "answer head" was the reasoning,
+// not the answer (incident 2026-09-17: the model fed its own past reasoning
+// back as body text and continued it).
 func indexableText(msg chatport.ChatMessage) string {
 	if len(msg.Content) == 0 {
 		return ""
@@ -299,10 +321,6 @@ func indexableText(msg chatport.ChatMessage) string {
 		case "text":
 			if b.Text != "" {
 				parts = append(parts, b.Text)
-			}
-		case "thinking":
-			if b.Thinking != "" {
-				parts = append(parts, b.Thinking)
 			}
 		case "tool_use":
 			if b.Name != "" {
@@ -330,6 +348,55 @@ func indexableText(msg chatport.ChatMessage) string {
 		return msg.TextContent()
 	}
 	return strings.Join(parts, "\n")
+}
+
+// indexableThinking returns the assistant's thinking prose of a block-array
+// message ("" for plain strings and thinking-free messages). See indexableText
+// for why it is indexed hidden rather than dropped or rendered.
+func indexableThinking(msg chatport.ChatMessage) string {
+	if len(msg.Content) == 0 {
+		return ""
+	}
+	var blocks []struct {
+		Type     string `json:"type"`
+		Thinking string `json:"thinking,omitempty"`
+	}
+	if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+		return ""
+	}
+	var parts []string
+	for _, b := range blocks {
+		if b.Type == "thinking" && b.Thinking != "" {
+			parts = append(parts, b.Thinking)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+// indexMessage posts one message to a session's FTS index: the visible text
+// as the snippet source, the thinking prose (when any) as a hidden field that
+// matches and scores but is never excerpted.
+func indexMessage(idx *textsearch.Index, msgIndex int, visible, hidden string) {
+	id := fmt.Sprintf("%d", msgIndex)
+	if hidden == "" {
+		idx.Upsert(id, visible)
+		return
+	}
+	idx.UpsertFields(
+		id,
+		textsearch.Field{Text: visible, Weight: 1},
+		textsearch.Field{Text: hidden, Weight: 1, Hidden: true},
+	)
+}
+
+// indexTokenText is what the token estimate is taken over: visible AND hidden
+// prose, so the session budget keeps counting reasoning the way it did before
+// the split (the split changes what is shown, not what was said).
+func indexTokenText(visible, hidden string) string {
+	if hidden == "" {
+		return visible
+	}
+	return visible + "\n" + hidden
 }
 
 // MessageCount returns the number of messages for a session.
