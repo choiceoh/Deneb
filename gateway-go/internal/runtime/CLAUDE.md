@@ -100,4 +100,4 @@ registerWorkflowSideEffects() # 비-RPC: autonomous/dreaming/notifier (server_rp
 - **등록 5단계 순서 의존**: Builtin(허브 전) → Early(Chat 없음) → Session(Chat 생성) → Late(Chat 의존) → SideEffects. Chat-의존 메서드를 Early에 두면 nil. 새 단계는 정말 필요할 때만.
 - **graceful shutdown drain hang 이력**(배포 후 미니앱 404): HTTP 리스너 닫혔는데 프로세스 생존 → watchdog+bound drain으로 방어([project_gateway_shutdown_wedge]). 종료 격리 kill은 `fuser`(`pkill -f`는 셸 자살).
 - **배경 goroutine**은 `docs/agent-rules/concurrency.md`: `Server.ShutdownCtx()` 파생 + recover + 종료경로. 사용자 무응답 실패는 `Error`+broadcast(`docs/agent-rules/logging.md`).
-- **dev 게이트웨이가 prod cron/transcripts 공유**(homeDir 기준) — 라이브 검증 후 즉시 stop([reference_livetest_dev_cron_shared]).
+- **dev 게이트웨이 격리는 경로 해석기가 정한다**(`config.ResolveStateDir()` vs `os.UserHomeDir()`) — 상태 디렉터리 기준 스토어(cron·transcripts·polaris·agent-logs·workspace)는 dev state dir로 격리되지만, homeDir 기준 스토어(세션 모델·라벨·핀 사이드카 등)는 아직 prod와 공유한다 — 라이브 검증 후 즉시 stop([reference_livetest_dev_cron_shared]).

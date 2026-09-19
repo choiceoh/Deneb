@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -180,12 +179,31 @@ func (s *Server) startSessionMemorySweep(transcriptDir string, polarisStore *pol
 	})
 }
 
+// agentLogDir is the one place the behavioral agent-log directory is resolved.
+//
+// It follows the STATE dir (DENEB_STATE_DIR), not $HOME — the boundary the
+// transcripts, polaris, cron store and workspace already use (#4831, #4833).
+// Anchored on $HOME, every dev, live-test and puppet gateway appended to the
+// operator's real log (measured 2026-09-19: a fake-engine dev run left
+// "fake-fallback"/"fake-tiny" model rows in boot.jsonl and system:helper.jsonl,
+// which the model tuner's AggregateByModel reads unfiltered, plus a dev Aurora
+// Dream failure as a delivered proactive.relay), and each dev start ran the
+// retention sweep over the production files. Production is unchanged: the unit
+// pins DENEB_STATE_DIR=$HOME/.deneb, which is also the default.
+func agentLogDir() string {
+	stateDir := strings.TrimSpace(config.ResolveStateDir())
+	if stateDir == "" {
+		return ""
+	}
+	return filepath.Join(stateDir, "agent-logs")
+}
+
 func (s *Server) newSessionAgentLogWriter() *agentlog.Writer {
-	home, err := os.UserHomeDir()
-	if err != nil {
+	dir := agentLogDir()
+	if dir == "" {
 		return nil
 	}
-	writer := agentlog.NewWriter(home + "/.deneb/agent-logs")
+	writer := agentlog.NewWriter(dir)
 	// Teach the aggregator which sessions a person was waiting on. agentlog is
 	// a core package and cannot reach the run-kind vocabulary in domain/session,
 	// so the classifier is injected here rather than copied there.
