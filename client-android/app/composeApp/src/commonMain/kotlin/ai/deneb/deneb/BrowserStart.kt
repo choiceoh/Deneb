@@ -4,7 +4,6 @@ import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.icons.filled.Bookmark
 import ai.deneb.ui.icons.outlined.History
-import ai.deneb.ui.icons.outlined.Public
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,7 +41,6 @@ internal fun BrowserStartPane(
             DenebEmpty(
                 text = "페이지가 없습니다",
                 hint = "아래 주소창에 주소를 입력하거나 검색해 보세요",
-                icon = Icons.Outlined.Public,
             )
             return@Column
         }

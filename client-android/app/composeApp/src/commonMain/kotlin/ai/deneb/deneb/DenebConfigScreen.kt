@@ -6,7 +6,6 @@ import ai.deneb.deneb.generated.WormholeStatusOut
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebType
 import ai.deneb.ui.denebOnWarningContainer
 import ai.deneb.ui.icons.outlined.Apps
 import ai.deneb.ui.icons.outlined.Article
@@ -19,7 +18,6 @@ import ai.deneb.ui.icons.outlined.Palette
 import ai.deneb.ui.icons.outlined.Schedule
 import ai.deneb.ui.icons.outlined.Storage
 import ai.deneb.ui.icons.outlined.Visibility
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,7 +28,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,7 +35,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -224,11 +220,7 @@ private fun ConfigSectionList(
 
 /** Centered one-line empty state shared by the settings-hub list sections. */
 @Composable
-internal fun EmptyTab(text: String) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text, style = DenebType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
+internal fun EmptyTab(text: String) = DenebEmpty(text)
 
 /** Shown when a section needs the gateway client but it is not connected yet. */
 @Composable

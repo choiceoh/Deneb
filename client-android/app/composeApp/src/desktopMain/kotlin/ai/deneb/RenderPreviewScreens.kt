@@ -39,6 +39,9 @@ import ai.deneb.deneb.generated.SkillDetailResponse
 import ai.deneb.deneb.koreanDayOfWeek
 import ai.deneb.deneb.layoutMonthBars
 import ai.deneb.deneb.timedSingleDayDots
+import ai.deneb.ui.DenebFeedApprovalPage
+import ai.deneb.ui.DenebFeedApprovalPivots
+import ai.deneb.ui.DenebPivotRow
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
@@ -575,6 +578,33 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             }
         }
     },
+    // The pivot grammar at both sizes: the title-row pivot (피드 | 결재 | 로그 with 결재
+    // open) and, under a titled page, the content-size view switch — plus a row of
+    // long labels that must bleed off the right edge rather than wrap or shrink.
+    "pivot" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(
+                title = "결재",
+                onBack = {},
+                showBack = false,
+                titleContent = {
+                    DenebFeedApprovalPivots(active = DenebFeedApprovalPage.Approvals, onOpenFeed = {}, onOpenLog = {})
+                },
+            ) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    DenebSectionLabel("페이지 안의 뷰 전환")
+                    DenebPivotRow(listOf("스킬 목록", "Propus 로그"), selectedIndex = 0, onSelect = {}, style = DenebType.subject)
+                    DenebSectionLabel("넘치면 가장자리로 흘린다")
+                    DenebPivotRow(
+                        listOf("노드", "모델", "작업", "레시피 이력", "벤치마크 결과"),
+                        selectedIndex = 2,
+                        onSelect = {},
+                        style = DenebType.subject,
+                    )
+                }
+            }
+        }
+    },
     "states" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
@@ -582,7 +612,7 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
                     DenebSectionLabel("로딩", Modifier.padding(start = 24.dp, top = 16.dp))
                     DenebLoading()
                     DenebSectionLabel("빈 상태", Modifier.padding(start = 24.dp))
-                    DenebEmpty("최근 30일 메일 없음", actionLabel = "새로고침", onAction = {})
+                    DenebEmpty("최근 30일 메일 없음", hint = "새 메일이 도착하면 여기에 정리됩니다", actionLabel = "새로고침", onAction = {})
                     DenebSectionLabel("오류", Modifier.padding(start = 24.dp))
                     DenebError("메일을 불러오지 못했습니다.", onRetry = {})
                 }

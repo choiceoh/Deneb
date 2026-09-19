@@ -7,6 +7,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,6 +41,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -48,9 +52,10 @@ import kotlin.math.abs
 // Deneb's component idiom in native Compose (design refresh, 2026-06): a calm
 // monochrome AMOLED base structured with GROUPED INSET CARDS ([DenebGroup] +
 // [DenebListRow]) — the iOS/Toss-style successor to the old flat hairline rows —
-// plus functional mono icons on nav and rows, and two restrained accents (cool
-// `primary` = interactive, warm apricot `denebInsight` = AI-insight). These
-// primitives are what Deneb screens build from so every surface reads the same.
+// plus functional mono icons on nav and rows, and one accent (cool `primary` =
+// what you can touch; ADR 0008 keeps semantic and category colour as separate
+// jobs). These primitives are what Deneb screens build from so every surface
+// reads the same.
 //
 // ---------------------------------------------------------------------------
 // Surface, spacing and component doctrine — extracted from how the shipped
@@ -61,11 +66,11 @@ import kotlin.math.abs
 //  SURFACE — content is grouped into rounded inset cards ([DenebGroup]) with a
 //  faint monochrome wash; rows inside are separated by inset hairlines. Elevation
 //  and shadow stay absent — the wash + radius carry grouping, not Material
-//  elevation. The cool `primary` accent marks the selected/interactive row; the
-//  warm apricot insight accent ([denebInsight]) marks AI-analysis callouts. A bare
+//  elevation. The cool `primary` accent marks the selected/interactive row. A bare
 //  [DenebRow] (single hairline, no card) is still used for content lists (mail,
-//  search) that aren't settings-like. Desktop never stretches: content is capped
-//  at [DenebMaxContentWidth] and centered.
+//  search) that aren't settings-like. View switching inside a surface is a
+//  [DenebPivotRow] — Light words, brightness for state, no chrome. Desktop never
+//  stretches: content is capped at [DenebMaxContentWidth] and centered.
 //
 //  SPACING — a 4dp grid with five working stops, each owning one job
 //  (usage counts across deneb screens: 4dp ×78, 8dp ×151, 12dp ×96,
@@ -278,9 +283,30 @@ fun DenebScreenScaffold(
     }
 }
 
+// ---------------------------------------------------------------------------
+// PIVOT — Zune HD / Windows Phone "Metro" view switching, the typographic way.
+// The sibling views of one surface are a row of Light words, and BRIGHTNESS
+// ALONE says which one is open: ink for the active label, dimmed for the rest.
+// No underline, no fill, no accent, no hairline — the type carries the state
+// (ADR 0007 principle 7: 구분은 위치와 활자). Where the labels outrun the width
+// the row scrolls, so the next label bleeds off the edge the way Zune's next
+// section peeks in — the bleed is the affordance.
+//
+// Two sizes, one grammar: [DenebType.viewTitle] when the pivot IS the page
+// title (피드 | 결재 | 로그 through the scaffold's `titleContent`), and
+// [DenebType.subject] for a view switch inside a titled page (스킬 목록 |
+// Propus 로그 under "스킬"). A `DenebSegmentedRow` is for FORM choices (a search
+// mode, a schedule kind) — never for switching what the page shows.
+// ---------------------------------------------------------------------------
+
+/** The idle pivot colour: hint dimmed once more, so the active ink is unmistakable. */
+@Composable
+private fun denebPivotIdle(): Color = denebHint().copy(alpha = 0.55f)
+
 /**
- * Zune-HD-style pivot label: dimmed when idle, ink when selected. Used by
- * [DenebFeedApprovalPivots] so 피드|결재|로그 always share one header order.
+ * One pivot label: dimmed when idle, ink when selected, [style]-sized. Tapping an
+ * idle label calls [onClick]; the active label (onClick == null) is inert. Used
+ * directly by [DenebFeedApprovalPivots] and per label by [DenebPivotRow].
  */
 @Composable
 fun DenebTitlePivot(
@@ -288,16 +314,13 @@ fun DenebTitlePivot(
     selected: Boolean = false,
     onClick: (() -> Unit)? = null,
     leading: Boolean = false,
+    style: TextStyle = DenebType.viewTitle,
 ) {
-    val color = if (selected) {
-        MaterialTheme.colorScheme.onBackground
-    } else {
-        denebHint().copy(alpha = 0.55f)
-    }
+    val color = if (selected) MaterialTheme.colorScheme.onBackground else denebPivotIdle()
     val haptics = rememberHaptics()
     Text(
         text = label,
-        style = DenebType.viewTitle,
+        style = style,
         color = color,
         maxLines = 1,
         modifier = Modifier
@@ -305,7 +328,7 @@ fun DenebTitlePivot(
             .then(
                 if (onClick != null) {
                     Modifier
-                        .clickable(onClickLabel = "$label 화면으로", role = Role.Button) {
+                        .selectable(selected = selected, role = Role.Tab) {
                             // The pivot owns its tap the way denebPressable does, so the
                             // screens hand the SAME destination lambda to the sibling
                             // swipe, whose release stays silent (the arm tick already spoke).
@@ -318,6 +341,37 @@ fun DenebTitlePivot(
                 },
             ),
     )
+}
+
+/**
+ * A pivot header over [labels]: [selectedIndex] is ink, the rest dimmed, and
+ * tapping an idle label reports its index. The row scrolls horizontally so a
+ * label that does not fit bleeds off the edge instead of wrapping or shrinking.
+ * Defaults to title size; pass [DenebType.subject] for a switch inside a page.
+ */
+@Composable
+fun DenebPivotRow(
+    labels: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    style: TextStyle = DenebType.viewTitle,
+) {
+    Row(
+        modifier = modifier.horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        labels.forEachIndexed { index, label ->
+            val selected = index == selectedIndex
+            DenebTitlePivot(
+                label = label,
+                selected = selected,
+                onClick = { onSelect(index) }.takeIf { !selected },
+                leading = index == 0,
+                style = style,
+            )
+        }
+    }
 }
 
 /** Which page of the 피드|결재|로그 pivot is active. */

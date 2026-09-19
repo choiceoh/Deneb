@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebPivotRow
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -28,7 +28,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.async
@@ -263,43 +262,20 @@ private fun ObserveLogRow(line: ObserveLogLine) {
     HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
 }
 
-// Flat period switcher in the Deneb idiom (mirrors SkillsViewSwitcher): a flat
-// text switcher over a shared hairline, no capsule or fill. The active span is
-// the one interactive accent (primary), the rest muted hint. Selecting a window
-// re-queries behavior + logs for that span. View navigation (not a form input),
-// so presentation is Deneb while each label keeps Material selectable + Role.Tab.
+// Period pivot in the Zune idiom (mirrors SkillsViewSwitcher — see [DenebPivotRow]):
+// 1일 / 7일 as Light words, brightness for the open span, no hairline or accent.
+// View navigation, not a form input: selecting a window re-queries behavior +
+// logs for that span.
 @Composable
 private fun ObservePeriodSwitcher(days: Int, onSelect: (Int) -> Unit) {
-    val haptics = rememberHaptics()
-    Column(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            listOf("1일" to 1, "7일" to 7).forEach { (label, d) ->
-                val selected = days == d
-                Text(
-                    label,
-                    style = if (selected) DenebType.rowTitleStrong else DenebType.rowTitle,
-                    color = if (selected) MaterialTheme.colorScheme.primary else denebHint(),
-                    modifier = Modifier
-                        .handCursor()
-                        .selectable(
-                            selected = selected,
-                            role = Role.Tab,
-                            onClick = {
-                                if (!selected) {
-                                    haptics.tap()
-                                    onSelect(d)
-                                }
-                            },
-                        )
-                        .padding(horizontal = 8.dp, vertical = 10.dp),
-                )
-            }
-        }
-        HorizontalDivider(color = denebHairline())
-    }
+    val options = listOf(1, 7)
+    DenebPivotRow(
+        labels = options.map { "${it}일" },
+        selectedIndex = options.indexOf(days).coerceAtLeast(0),
+        onSelect = { onSelect(options[it]) },
+        style = DenebType.subject,
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 10.dp),
+    )
 }
 
 // Tracked-caps section header in the Deneb idiom (mirrors [ai.deneb.ui.DenebSectionLabel]),
