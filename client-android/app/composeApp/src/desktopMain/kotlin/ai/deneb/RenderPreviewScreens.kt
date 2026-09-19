@@ -657,12 +657,17 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             }
         }
     },
+    // Historical detail remains available even when the current run has no diagnostic samples.
     "engine_expanded" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.width(412.dp)) {
                     ai.deneb.deneb.EngineStatusContent(
-                        sampleEngineStatus.copy(reachable = true, engineDown = false),
+                        sampleEngineStatus.copy(
+                            reachable = true,
+                            engineDown = false,
+                            diagnostics = ai.deneb.deneb.generated.EngineDiagnosticsReport(),
+                        ),
                         zone = kotlinx.datetime.TimeZone.of("Asia/Seoul"),
                         detailsExpanded = true,
                     )
