@@ -105,7 +105,7 @@ class AgentDevTests(unittest.TestCase):
              mock.patch.object(subprocess, "Popen", side_effect=AssertionError("execution")):
             result, code = dev.execute(BY_ID["ci.fast"], [], dry_run=True)
         self.assertEqual(code, 0)
-        self.assertEqual(result["argv"], ["bash", "scripts/dev/ci-check.sh", "--fast"])
+        self.assertEqual(result["argv"][:2], ["make", "ci/fast"])
         self.assertEqual(result["readiness"], "not_checked")
 
     def test_literal_arguments_and_json_stdout_are_preserved_once(self):
@@ -116,6 +116,23 @@ class AgentDevTests(unittest.TestCase):
         self.assertEqual(result["data"], arguments)
         self.assertIsNone(result["stdout"])
         self.assertEqual(result["validation"], "not_assessed")
+
+    def test_managed_python_and_make_path_are_used_without_changing_parent_environment(self):
+        python = self.write("profile/current/venv/bin/python", "#!/bin/sh\nexit 0\n")
+        python.chmod(0o755)
+        (self.root / "profile/current/bin").mkdir()
+        original = os.environ["PATH"]
+        with mock.patch.object(dev, "ROOT", self.root), \
+             mock.patch.dict(os.environ, {"DENEB_DEV_HOME": str(self.root / "profile"), "DENEB_DEV_PYTHON": "", "GOROOT": "/foreign/go"}):
+            self.assertEqual(dev.python_runtime(), (str(python), "managed Deneb environment"))
+            self.assertNotIn("GOROOT", dev.child_environment())
+            self.assertEqual(dev.child_environment()["GOTOOLCHAIN"], "local")
+            self.assertEqual(os.environ["GOROOT"], "/foreign/go")
+            command = dev.command_for(BY_ID["ci"], ["ARGS=--scripts"])
+            self.assertEqual(command[:2], ["make", "ci"])
+            self.assertTrue(command[2].startswith("PATH=" + str(python.parent)))
+            self.assertEqual(command[-1], "ARGS=--scripts")
+        self.assertEqual(os.environ["PATH"], original)
 
     def test_subprocess_nonzero_exit_and_stderr_are_preserved(self):
         tool = Tool("probe", "probe", ("{python}", "-c", "import sys; print('bad', file=sys.stderr); sys.exit(7)"))

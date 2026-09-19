@@ -1,0 +1,9 @@
+{
+  "name": "deneb-dev-tools",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "@colbymchenry/codegraph": "1.5.0",
+    "pnpm": "11.7.0"
+  }
+}
