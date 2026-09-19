@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""Run a fixed origin/main snapshot from a private bare mirror, never a worktree."""
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tarfile
+import tempfile
+
+REPOSITORY = "https://github.com/choiceoh/Deneb.git"
+
+
+def run(*arguments):
+    return subprocess.check_output(arguments, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+
+
+def main():
+    root = Path(os.environ.get("DENEB_DEV_HOME", str(Path.home() / ".local/share/deneb-dev"))).expanduser().resolve()
+    mirror = root / "source.git"
+    if root.resolve() in (Path("/"), Path.home().resolve()) or root.resolve().is_relative_to((Path.home() / "deneb").resolve()):
+        raise RuntimeError("refusing a production or home-directory target")
+    if mirror.is_symlink():
+        raise RuntimeError("private mirror must not be a symlink")
+    if not mirror.exists():
+        mirror.parent.mkdir(parents=True, exist_ok=True)
+        run("git", "init", "--quiet", "--bare", str(mirror))
+        run("git", "--git-dir", str(mirror), "remote", "add", "origin", REPOSITORY)
+    origin = run("git", "--git-dir", str(mirror), "remote", "get-url", "origin").decode().strip()
+    if origin != REPOSITORY:
+        raise RuntimeError("private mirror has a different origin; left untouched")
+    if run("git", "--git-dir", str(mirror), "rev-parse", "--is-bare-repository").strip() != b"true":
+        raise RuntimeError("private source mirror must be bare")
+    run("git", "--git-dir", str(mirror), "fetch", "--quiet", "--depth", "1", "origin",
+        "+refs/heads/main:refs/remotes/origin/main")
+    revision = run("git", "--git-dir", str(mirror), "rev-parse", "refs/remotes/origin/main").decode().strip()
+    with tempfile.TemporaryDirectory(prefix="deneb-main-sync-") as directory:
+        archive = Path(directory) / "source.tar"
+        archive.write_bytes(run("git", "--git-dir", str(mirror), "archive", revision,
+                                "scripts/devenv", "scripts/dev/devenv_host.py", "scripts/dev/devenv_sync.py",
+                                "requirements.lock", "requirements-dev.lock", "gateway-go/go.mod",
+                                "andromeda/package.json"))
+        with tarfile.open(archive) as source:
+            source.extractall(directory, filter="data")
+        print(json.dumps({"source": "origin/main", "revision": revision}), file=sys.stderr)
+        return subprocess.call([sys.executable, directory + "/scripts/dev/devenv_sync.py", *sys.argv[1:]])
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

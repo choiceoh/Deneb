@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "python": "3.12.13",
+  "go": "1.25.14",
+  "node": "24.18.0",
+  "uv": "0.11.26",
+  "golangci-lint": "2.5.0",
+  "pnpm": "11.7.0",
+  "codegraph": "1.5.0",
+  "hosts": [
+    "srv1",
+    "srv2",
+    "srv3",
+    "srv4",
+    "ost-97x"
+  ],
+  "optional_hosts": [
+    "ost-97x"
+  ],
+  "repository": "https://github.com/choiceoh/Deneb.git",
+  "platforms": {
+    "linux-arm64": {
+      "uv": {
+        "url": "https://github.com/astral-sh/uv/releases/download/0.11.26/uv-aarch64-unknown-linux-gnu.tar.gz",
+        "directory": "uv-aarch64-unknown-linux-gnu",
+        "digest": "sha256:befa1a59c91e96eb601b0fd9a97c03dd666f17baba644b2b4db9c59a767e387e"
+      },
+      "go": {
+        "url": "https://go.dev/dl/go1.25.14.linux-arm64.tar.gz",
+        "directory": "go",
+        "digest": "sha256:9bf234ea70ffec9347fdf6b22ce4add51717d3386a38a441e8c8743fceb5eaee"
+      },
+      "node": {
+        "url": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-arm64.tar.xz",
+        "directory": "node-v24.18.0-linux-arm64",
+        "digest": "sha256:58c9520501f6ae2b52d5b210444e24b9d0c029a58c5011b797bc1fe7105886f6"
+      },
+      "golangci-lint": {
+        "url": "https://github.com/golangci/golangci-lint/releases/download/v2.5.0/golangci-lint-2.5.0-linux-arm64.tar.gz",
+        "directory": "golangci-lint-2.5.0-linux-arm64",
+        "digest": "sha256:48693a98a7f4556d1117300aae240d0fe483df8d6f36dfaba56504626101a66e"
+      }
+    },
+    "linux-amd64": {
+      "uv": {
+        "url": "https://github.com/astral-sh/uv/releases/download/0.11.26/uv-x86_64-unknown-linux-gnu.tar.gz",
+        "directory": "uv-x86_64-unknown-linux-gnu",
+        "digest": "sha256:6426a73c3837e6e2483ee344cbc00f36394d179afcba6183cb77437e67db4af0"
+      },
+      "go": {
+        "url": "https://go.dev/dl/go1.25.14.linux-amd64.tar.gz",
+        "directory": "go",
+        "digest": "sha256:a21ae5633a269bcd7e90cf767e48225633795e99d831742cbf3397064fee7712"
+      },
+      "node": {
+        "url": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-x64.tar.xz",
+        "directory": "node-v24.18.0-linux-x64",
+        "digest": "sha256:55aa7153f9d88f28d765fcdad5ae6945b5c0f98a36881703817e4c450fa76742"
+      },
+      "golangci-lint": {
+        "url": "https://github.com/golangci/golangci-lint/releases/download/v2.5.0/golangci-lint-2.5.0-linux-amd64.tar.gz",
+        "directory": "golangci-lint-2.5.0-linux-amd64",
+        "digest": "sha256:c77313a77e19b06123962c411d9943cc0d092bbec76b956104d18964e274902e"
+      }
+    },
+    "darwin-arm64": {
+      "uv": {
+        "url": "https://github.com/astral-sh/uv/releases/download/0.11.26/uv-aarch64-apple-darwin.tar.gz",
+        "directory": "uv-aarch64-apple-darwin",
+        "digest": "sha256:8f7fbf1708399b921857bce71e1d60f0d3ccf52a30caebc1c1a2f175dce13ab6"
+      },
+      "go": {
+        "url": "https://go.dev/dl/go1.25.14.darwin-arm64.tar.gz",
+        "directory": "go",
+        "digest": "sha256:5b26c0b6f308240fca2614fb02f622cfcc8c0cc3b69c78bba4845489a4590259"
+      },
+      "node": {
+        "url": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-darwin-arm64.tar.xz",
+        "directory": "node-v24.18.0-darwin-arm64",
+        "digest": "sha256:4477b9f78efb77744cf5eb57a0e9594dba66466b38b4e93fa9f35cb907a095a6"
+      },
+      "golangci-lint": {
+        "url": "https://github.com/golangci/golangci-lint/releases/download/v2.5.0/golangci-lint-2.5.0-darwin-arm64.tar.gz",
+        "directory": "golangci-lint-2.5.0-darwin-arm64",
+        "digest": "sha256:0b3cbdc2a2472f60b538ebccb1b2e1ae5d938a051c010591aa68c6efd3706672"
+      }
+    }
+  }
+}

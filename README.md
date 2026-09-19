@@ -43,6 +43,11 @@ It uses the same interface as stkernel, with Deneb's existing tools underneath.
 See [Agent Development Tools](https://docs.deneb.ai/tools/agent-dev) for the
 execution contract and adapter maintenance.
 
+For the shared six-machine development environment, use `./dev run env.check`
+to inspect drift and `./dev run env.sync -- --verify` to synchronize the Mac and
+Linux hosts. The isolated toolchain leaves serving services and stkernel tools
+in place. See [Development Environment Sync](https://docs.deneb.ai/tools/development-sync).
+
 The repo supports parallel coding agents (Claude Code, ZCode, Codex) with
 automatic worktree isolation, shared CodeGraph code intelligence, and a common
 hook pipeline (conflict detection, rule guidance, index sync). See

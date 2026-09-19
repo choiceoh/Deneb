@@ -112,7 +112,8 @@
               {
                 "group": "Development",
                 "pages": [
-                  "tools/agent-dev"
+                  "tools/agent-dev",
+                  "tools/development-sync"
                 ]
               }
             ]

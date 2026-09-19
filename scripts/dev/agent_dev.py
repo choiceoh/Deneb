@@ -49,14 +49,25 @@ def python_runtime():
     candidate = ROOT / ".venv/bin/python"
     if candidate.is_file() and os.access(candidate, os.X_OK):
         return str(candidate), "checkout .venv"
+    candidate = managed_bin().parent / "venv/bin/python"
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+        return str(candidate), "managed Deneb environment"
     return sys.executable, "current interpreter"
+
+
+def managed_bin():
+    root = Path(os.environ.get("DENEB_DEV_HOME", str(Path.home() / ".local/share/deneb-dev")))
+    return root.expanduser() / "current/bin"
 
 
 def child_environment():
     python, _ = python_runtime()
     env = os.environ.copy()
-    env["PATH"] = os.pathsep.join((str(Path(python).parent), str(Path.home() / "go/bin"),
+    env["PATH"] = os.pathsep.join((str(Path(python).parent), str(managed_bin()), str(Path.home() / "go/bin"),
                                   env.get("PATH", os.defpath)))
+    if managed_bin().is_dir():
+        env["GOTOOLCHAIN"] = "local"
+        env.pop("GOROOT", None)
     return env
 
 
@@ -238,7 +249,12 @@ def status():
 
 def command_for(tool, arguments):
     python, _ = python_runtime()
-    return [python if part == "{python}" else part for part in tool.command] + list(arguments)
+    command = [python if part == "{python}" else part for part in tool.command]
+    if command[:1] == ["make"] and managed_bin().is_dir():
+        # The Makefile prepends ~/go/bin. A command-line PATH keeps the pinned
+        # linter/toolchain first and propagates to nested make calls in ci.fast.
+        command.append("PATH=" + child_environment()["PATH"])
+    return command + list(arguments)
 
 
 def prerequisites(tool, env):

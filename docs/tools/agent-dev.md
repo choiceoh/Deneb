@@ -73,8 +73,9 @@ The wrapper does not silently skip incompatible tests or replace their assertion
 ## Environment and evidence
 
 Python selection is `DENEB_DEV_PYTHON`, then the checkout's `.venv/bin/python`,
-then the interpreter running the entrypoint. An invalid explicit override is
-an error. The selected interpreter's bin directory and the Go user bin directory
+then the [managed Deneb environment](/tools/development-sync), then the interpreter
+running the entrypoint. An invalid explicit override is an error. The selected
+interpreter's bin directory, the managed binaries, and the Go user bin directory
 are prepended to child `PATH`, so nested `python3` commands use the same environment.
 
 `status` reports executable paths, locked Python package versions, prerequisite
