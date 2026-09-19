@@ -1,5 +1,37 @@
 # Changelog
 
+## [5.16.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.15.0...deneb-v5.16.0) (2026-09-19)
+
+
+### ✨ Features
+
+* **client-android:** 뷰 전환과 빈·오류 상태를 Zune식 활자 문법으로 — DenebPivotRow 신설 ([#5135](https://github.com/choiceoh/Deneb/issues/5135)) ([7b7ffe7](https://github.com/choiceoh/Deneb/commit/7b7ffe731a0a655f21a0ac1f5fdc88dc1dbd45be))
+* **client-android:** 엔진 핵심 수치와 상세 펼침으로 가시성 개선 ([#5137](https://github.com/choiceoh/Deneb/issues/5137)) ([580f1f5](https://github.com/choiceoh/Deneb/commit/580f1f5f5201b288f3fafc118e6bb4c1a3f95979))
+* **dev:** Deneb 개발 도구를 에이전트용 ./dev로 통합 ([#5132](https://github.com/choiceoh/Deneb/issues/5132)) ([213419b](https://github.com/choiceoh/Deneb/commit/213419bfa50a169d572d8fb14ba7e434c9ecbf59))
+* **dev:** synchronize isolated Deneb toolchains across six hosts ([#5134](https://github.com/choiceoh/Deneb/issues/5134)) ([06869eb](https://github.com/choiceoh/Deneb/commit/06869eb4e308a7a120ac8950a829906093ede7df))
+* **engine:** 이미지는 엔진이 이번 부팅에서 받는다고 말할 때만 — 라우터 게이트와 비전 역할 추종이 도어의 보고를 따른다 ([#5126](https://github.com/choiceoh/Deneb/issues/5126)) ([1fd58c7](https://github.com/choiceoh/Deneb/commit/1fd58c7c4580dc7383a1a6c141b39ade812bb8af))
+* **phoneevents:** 알림 게이트를 확률 판정으로 — 숨은 0.5 문턱을 꺼내 0.2로, 드롭도 로그에 남긴다 ([#5119](https://github.com/choiceoh/Deneb/issues/5119)) ([b441237](https://github.com/choiceoh/Deneb/commit/b441237b885d1c4224f8f3d3d493856bb95d656d))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** 엔진 캐시 표본 스코프를 라우터 설정에서 — Qwen 서빙 중에도 run.cache가 끊기지 않는다 ([#5121](https://github.com/choiceoh/Deneb/issues/5121)) ([c9ab364](https://github.com/choiceoh/Deneb/commit/c9ab364db82d3f06e92b8bf68b2666fcb75f5d57))
+* **chat:** 엔진 프로브가 DENEB_ENGINE_METRICS_URL 을 목록으로 읽는다 — 로컬 엔진이 둘이 돼도 run.cache·정확 토큰이 조용히 죽지 않는다 ([#5122](https://github.com/choiceoh/Deneb/issues/5122)) ([25b9ebc](https://github.com/choiceoh/Deneb/commit/25b9ebc00e62a75ce4c78d12607fc7513eb857ca))
+* **gateway:** 남은 쓰기 저장소도 상태 디렉터리를 따른다 — dev 게이트웨이가 세션 사이드카·하트비트·wiki-graph·파일함을 오염시키지 않는다 ([#5127](https://github.com/choiceoh/Deneb/issues/5127)) ([ae9a71d](https://github.com/choiceoh/Deneb/commit/ae9a71d969e3433e5c1dc32859897ddccb1659a9))
+* **observe:** 공란이던 엔진 캐시 읽기 4곳을 엔진 속도 이력과 run.cache 로 — 요청 수를 토큰으로 읽지 않는다 ([#5123](https://github.com/choiceoh/Deneb/issues/5123)) ([79f6a28](https://github.com/choiceoh/Deneb/commit/79f6a2849c5aa557f43c0861345918e39fb44980))
+* **server:** agent-logs 도 상태 디렉터리를 따른다 — dev·live-test 게이트웨이가 프로덕션 모델 통계와 릴레이 기록을 오염시키지 않는다 ([#5124](https://github.com/choiceoh/Deneb/issues/5124)) ([60519f3](https://github.com/choiceoh/Deneb/commit/60519f314a1719ecf34025ed49a6dc31795b293f))
+
+
+### ⚡ Performance
+
+* **translate:** 번역 캐시가 꽉 찬 뒤 매 flush 가 0.9초씩 락을 쥐던 것을 없앤다 — 정리는 O(n log n), 쓰기는 락 밖에서 ([#5130](https://github.com/choiceoh/Deneb/issues/5130)) ([f936a28](https://github.com/choiceoh/Deneb/commit/f936a285580882b3c6e5f1a7cf32b93e7dc5c273))
+* **translate:** 유니코드 배치 계산으로 DeepL 요청 대기 단축 ([#5133](https://github.com/choiceoh/Deneb/issues/5133)) ([5c4cac5](https://github.com/choiceoh/Deneb/commit/5c4cac5c1da0d31dfa5a903a65930997559bdda6))
+
+
+### 🔧 Internal
+
+* **client-android:** 알약 모양 크롬 은퇴 — 세그먼티드는 활자+밑줄, 태그는 DenebBadge, 하단바 인디케이터 제거 ([#5138](https://github.com/choiceoh/Deneb/issues/5138)) ([1de22ed](https://github.com/choiceoh/Deneb/commit/1de22ed119df88726bd68247f46d2afbe56fa5ff))
+
 ## [5.15.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.14.0...deneb-v5.15.0) (2026-09-19)
 
 
