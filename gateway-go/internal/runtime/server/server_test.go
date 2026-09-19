@@ -89,6 +89,10 @@ func TestHealthEndpointReturnsOKWithWorkerPoolStats(t *testing.T) {
 
 func TestHealthEndpointReturnsUsageQualityAndPropusSignals(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	// The tracker persists under the state dir, not HOME; TestMain's shared dir
+	// would carry these records into the next -count repetition and break the
+	// exact counters asserted below.
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tracker, err := genesis.NewTracker(slog.Default())
 	if err != nil {
 		t.Fatalf("NewTracker: %v", err)
