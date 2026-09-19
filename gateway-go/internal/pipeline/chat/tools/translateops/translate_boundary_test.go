@@ -102,7 +102,10 @@ func TestBoundaryTranslateInputCostContextDiscount(t *testing.T) {
 		{in: translateInput{Text: "abcd"}, want: 4},
 		{in: translateInput{Context: "abcd"}, want: 1},
 		{in: translateInput{Text: "abcd", Context: "abcdefgh"}, want: 6},
-		{in: translateInput{Text: "가"}, want: len("가")},
+		{in: translateInput{Text: "가"}, want: 1},
+		{in: translateInput{Text: "Привет"}, want: 6},
+		{in: translateInput{Text: "🛰"}, want: 1},
+		{in: translateInput{Text: "본문", Context: "문맥 네 글"}, want: 3},
 	}
 	for _, tt := range tests {
 		if got := translateInputCost(tt.in); got != tt.want {

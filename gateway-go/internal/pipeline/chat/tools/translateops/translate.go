@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"unicode/utf8"
 )
 
 const (
@@ -255,9 +256,13 @@ func translateInputTexts(in translateInput) int {
 }
 
 func translateInputCost(in translateInput) int {
-	cost := len(in.Text)
+	// This is a character budget, like the browser's batching limit. Counting
+	// UTF-8 bytes splits Cyrillic/CJK pages into extra provider waves even when
+	// their text fits. DeepL's separate 128 KiB body limit is far above this
+	// 3,000-character bound, including URL encoding and the context hint.
+	cost := utf8.RuneCountInString(in.Text)
 	if in.Context != "" {
-		cost += len(in.Context) / 4
+		cost += utf8.RuneCountInString(in.Context) / 4
 	}
 	return cost
 }
