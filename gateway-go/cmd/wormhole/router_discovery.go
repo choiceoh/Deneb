@@ -121,6 +121,7 @@ func (rt *router) watch(ctx context.Context) {
 func (rt *router) refreshWindows(parent context.Context) {
 	next := map[string]int{}
 	missing := map[string]bool{}
+	vision := map[string]bool{}
 	for _, m := range rt.mergedModels() {
 		e, ok := rt.lookup(m.Name) // resolve fleet-backed entries to a live URL
 		if !ok || e.URL == "" || !e.isLocal() || e.protocol() != protocolOpenAI {
@@ -133,9 +134,12 @@ func (rt *router) refreshWindows(parent context.Context) {
 			continue // could not ask; say nothing, the next pass tries again
 		}
 		want := upstreamModelOf(e)
-		if w, has := served[want]; has {
-			if w > 0 {
-				next[m.Name] = w
+		if got, has := served[want]; has {
+			if got.maxModelLen > 0 {
+				next[m.Name] = got.maxModelLen
+			}
+			if got.vision != nil {
+				vision[m.Name] = *got.vision
 			}
 			continue
 		}
@@ -154,13 +158,21 @@ func (rt *router) refreshWindows(parent context.Context) {
 		}
 	}
 	rt.missingLogged = missing
+	if prev := rt.visionReport.Load(); prev != nil {
+		for name, takes := range vision {
+			if was, known := (*prev)[name]; !known || was != takes {
+				rt.log.Info("backend reports image input", "model", name, "takesImages", takes)
+			}
+		}
+	}
 	rt.windows.Store(&next)
 	rt.missingUpstream.Store(&missing)
+	rt.visionReport.Store(&vision)
 }
 
 // servedNames is what the backend did answer with, for the warning above: the
 // whole point is to see the name it serves next to the name we asked for.
-func servedNames(served map[string]int) []string {
+func servedNames(served map[string]servedModel) []string {
 	out := make([]string, 0, len(served))
 	for id := range served {
 		out = append(out, id)
@@ -186,7 +198,7 @@ func upstreamModelOf(e modelEntry) string {
 // entry stays invisible. sidecar-models.md records what that costs — an entry
 // left pointing at a backend that no longer serves its model fails over to a
 // paid API, and the last time nobody noticed for twelve days.
-func probeServed(ctx context.Context, client *http.Client, e modelEntry) (map[string]int, bool) {
+func probeServed(ctx context.Context, client *http.Client, e modelEntry) (map[string]servedModel, bool) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(e.URL, "/")+"/models", nil)
 	if err != nil {
 		return nil, false
@@ -204,18 +216,35 @@ func probeServed(ctx context.Context, client *http.Client, e modelEntry) (map[st
 	}
 	var out struct {
 		Data []struct {
-			ID          string `json:"id"`
-			MaxModelLen int    `json:"max_model_len"`
+			ID           string `json:"id"`
+			MaxModelLen  int    `json:"max_model_len"`
+			Capabilities *struct {
+				Vision *bool `json:"vision"`
+			} `json:"capabilities"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, false
 	}
-	served := make(map[string]int, len(out.Data))
+	served := make(map[string]servedModel, len(out.Data))
 	for _, m := range out.Data {
-		served[m.ID] = m.MaxModelLen
+		s := servedModel{maxModelLen: m.MaxModelLen}
+		if m.Capabilities != nil {
+			s.vision = m.Capabilities.Vision
+		}
+		served[m.ID] = s
 	}
 	return served, true
+}
+
+// servedModel is what a backend's /v1/models says about one model it serves:
+// its window, and -- when the backend reports it -- whether THIS boot takes
+// images. The ST door derives `capabilities.vision` from the tower it actually
+// bound, never a constant, so a Qwen3.8 boot without vision.safetensors says
+// false and one with it says true. vLLM does not report it (nil).
+type servedModel struct {
+	maxModelLen int
+	vision      *bool
 }
 
 // probeMaxModelLen returns the max_model_len for the entry's served model id, or
@@ -226,7 +255,7 @@ func probeMaxModelLen(ctx context.Context, client *http.Client, e modelEntry) in
 	if !ok {
 		return 0
 	}
-	return served[upstreamModelOf(e)]
+	return served[upstreamModelOf(e)].maxModelLen
 }
 
 // refreshFleet re-polls SparkFleet and swaps in the freshly discovered model set.

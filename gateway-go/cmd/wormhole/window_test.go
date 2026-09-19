@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -128,5 +130,45 @@ func TestRefreshWindows_AnUnreachableBackendIsNotFlagged(t *testing.T) {
 
 	if (*rt.missingUpstream.Load())["down"] {
 		t.Error("unreachable must not be reported as not-served")
+	}
+}
+
+// The window probe records what the backend says about image input for the
+// model each entry asks for, and the image gate follows it: the same entry is
+// stripped while its backend boots text-only and passes once it reports the
+// tower — without a config edit or a restart.
+func TestRefreshWindows_TheImageGateFollowsTheBackendsReport(t *testing.T) {
+	var takes atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{
+			"id": "qwen3.8-flash-next", "max_model_len": 262144,
+			"capabilities": map[string]any{"vision": takes.Load()},
+		}}})
+	}))
+	t.Cleanup(srv.Close)
+	rt := quietRouter(config{Models: []modelEntry{
+		{Name: "qwen", UpstreamModel: "qwen3.8-flash-next", URL: srv.URL + "/v1"},
+		{Name: "glm", UpstreamModel: "glm-5.3-flash", URL: srv.URL + "/v1"}, // not served: no report
+	}})
+	withImage := []byte(`{"model":"qwen","messages":[{"role":"user","content":[` +
+		`{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]}]}`)
+	entry := modelEntry{Name: "qwen", UpstreamModel: "qwen3.8-flash-next"}
+
+	rt.refreshWindows(context.Background())
+	if report := *rt.visionReport.Load(); report["qwen"] != false || len(report) != 1 {
+		t.Fatalf("report = %v, want only qwen=false", report)
+	}
+	if out := rt.applyVisionGate(entry, withImage, protocolOpenAI); strings.Contains(string(out), "image_url") {
+		t.Errorf("a text-only boot got the image: %s", out)
+	}
+
+	takes.Store(true)
+	rt.refreshWindows(context.Background())
+	if out := rt.applyVisionGate(entry, withImage, protocolOpenAI); string(out) != string(withImage) {
+		t.Errorf("a boot with its tower lost the image: %s", out)
 	}
 }

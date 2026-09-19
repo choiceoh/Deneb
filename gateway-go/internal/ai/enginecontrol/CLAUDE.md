@@ -16,7 +16,9 @@
   않는 슈퍼바이저 앞에서 고르면 아무도 가져가지 않는다.
 - `PlanFollow`(`follow.go`)는 순수 함수다: 엔진 엔트리(라우터 설정에서 host:port가 같은
   엔트리) 위의 역할 중 업스트림이 서빙 모델과 다른 것을, 서빙 모델의 **같은 thinkingMode**
-  엔트리로 옮긴다. 비전은 대상 엔트리가 `vision: true`일 때만. 대상이 없으면 `Skip`(이유는
+  엔트리로 옮긴다. 비전은 `takesImages`: 엔트리 `vision: false`=금지, 그 외엔 **엔진이 이번 부팅에
+  대해 보고한 `capabilities.vision`**(`observe.FetchEngineVision`, 도어 `/v1/models`)이 결정, 보고가
+  없으면 엔트리 `vision: true`일 때만 — wormhole `acceptsImages`와 같은 판정. 대상이 없으면 `Skip`(이유는
   사용자에게 그대로 보인다 — 한국어, 조사는 한국어 단어에 붙일 것).
 - `FollowTask`(`follow_task.go`, 30초)는 엔진 `GET /`의 fleet owner가 `production/`일
   때만 따른다. 캠페인 창(`session/`·`queue/`)이 다른 모델을 띄워도 역할은 움직이지 않는다.

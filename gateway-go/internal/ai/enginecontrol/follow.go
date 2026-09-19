@@ -57,7 +57,7 @@ const VisionRole = "vision"
 //
 // Roles bound to anything else — a cloud model, another engine — are not the
 // engine's and never move. Nothing moves while served is empty.
-func PlanFollow(roles map[string]string, entries []Entry, served string) (moves []Move, skips []Skip) {
+func PlanFollow(roles map[string]string, entries []Entry, served string, servedVision *bool) (moves []Move, skips []Skip) {
 	served = strings.TrimSpace(served)
 	if served == "" {
 		return nil, nil
@@ -88,16 +88,41 @@ func PlanFollow(roles map[string]string, entries []Entry, served string) (moves 
 				Role: role, From: from,
 				Reason: "라우터에 " + served + " 의 " + variantLabel(cur.ThinkingMode) + " 엔트리가 없습니다",
 			})
-		case role == VisionRole && (target.Vision == nil || !*target.Vision):
-			skips = append(skips, Skip{
-				Role: role, From: from,
-				Reason: target.Name + " 엔트리는 이미지를 받지 않습니다",
-			})
+		case role == VisionRole && !takesImages(target, servedVision):
+			skips = append(skips, Skip{Role: role, From: from, Reason: noImagesReason(target, servedVision)})
 		default:
 			moves = append(moves, Move{Role: role, From: from, To: RouterProvider + "/" + target.Name})
 		}
 	}
 	return moves, skips
+}
+
+// takesImages is the router's image gate (wormhole acceptsImages) seen from
+// here: the entry's vision:false forbids; otherwise the engine's own report for
+// this boot decides when it gives one (ST's capabilities.vision — a Qwen3.8
+// boot without its tower says false); without a report only an entry that says
+// vision:true is trusted. Moving vision onto a model that cannot see would turn
+// every picture into a stripped stub, or with an older router a 400.
+func takesImages(target Entry, servedVision *bool) bool {
+	if target.Vision != nil && !*target.Vision {
+		return false
+	}
+	if servedVision != nil {
+		return *servedVision
+	}
+	return target.Vision != nil && *target.Vision
+}
+
+// noImagesReason says which of takesImages' three answers held vision back.
+func noImagesReason(target Entry, servedVision *bool) string {
+	switch {
+	case target.Vision != nil && !*target.Vision:
+		return target.Name + " 엔트리는 이미지를 받지 않습니다"
+	case servedVision != nil:
+		return "이번 부팅의 엔진이 이미지를 받지 않습니다 (비전 타워 없음)"
+	default:
+		return "엔진이 이미지 입력을 알리지 않고, " + target.Name + " 엔트리에도 vision 표시가 없습니다"
+	}
 }
 
 // sameVariant finds the engine entry asking for model in cur's thinking mode;

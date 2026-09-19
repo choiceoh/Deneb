@@ -151,3 +151,29 @@ func TestModelAcceptsImages_GLM53FamilySplit(t *testing.T) {
 		}
 	}
 }
+
+// The operator can forbid images; only the backend can promise them. A local
+// backend's report (ST's capabilities.vision) outranks "vision": true and the
+// builtin table, and never outranks "vision": false.
+func TestAcceptsImages_TheBackendsReportOutranksAPromiseNotAForbid(t *testing.T) {
+	rt := quietRouter(config{})
+	report := map[string]bool{"qwen-text": false, "qwen-pictures": true}
+	rt.visionReport.Store(&report)
+	tr, fa := true, false
+	cases := []struct {
+		name  string
+		entry modelEntry
+		want  bool
+	}{
+		{"a boot without its tower outvotes vision:true", modelEntry{Name: "qwen-text", UpstreamModel: "qwen3.8-flash-next", Vision: &tr}, false},
+		{"a boot with its tower outvotes the builtin table", modelEntry{Name: "qwen-pictures", UpstreamModel: "glm-5.2"}, true},
+		{"vision:false still forbids a backend that takes pictures", modelEntry{Name: "qwen-pictures", UpstreamModel: "qwen3.8-flash-next", Vision: &fa}, false},
+		{"no report: the config decides", modelEntry{Name: "unprobed", UpstreamModel: "glm-5.2", Vision: &tr}, true},
+		{"no report, no config: the builtin table", modelEntry{Name: "unprobed", UpstreamModel: "glm-5.2"}, false},
+	}
+	for _, c := range cases {
+		if got := rt.acceptsImages(c.entry); got != c.want {
+			t.Errorf("%s: acceptsImages = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

@@ -80,3 +80,41 @@ func FetchEngineFleet(ctx context.Context, metricsURL string) (EngineFleet, bool
 	}
 	return out, true
 }
+
+// FetchEngineVision reads whether the engine behind metricsURL takes image
+// input for model in THIS boot: the `capabilities.vision` of that model's card
+// on its /v1/models. The ST door derives it from the tower it actually bound —
+// a Qwen3.8 boot whose ranks carry no vision.safetensors says false — so it is
+// the fact to route pictures by, where a router entry can only promise. Nil
+// when the engine does not report it (vLLM), does not list model, or did not
+// answer; same private-host rule as the scraper.
+func FetchEngineVision(ctx context.Context, metricsURL, model string) *bool {
+	model = strings.TrimSpace(model)
+	if model == "" || !httputil.IsPrivateHost(httputil.Hostname(metricsURL)) {
+		return nil
+	}
+	modelsURL := strings.TrimSuffix(strings.TrimRight(metricsURL, "/"), "/metrics") + "/v1/models"
+	client := httputil.NewClient(engineScrapeTimeout)
+	body, ok := getBody(ctx, client, modelsURL)
+	if !ok {
+		return nil
+	}
+	defer body.Close()
+	var payload struct {
+		Data []struct {
+			ID           string `json:"id"`
+			Capabilities *struct {
+				Vision *bool `json:"vision"`
+			} `json:"capabilities"`
+		} `json:"data"`
+	}
+	if json.NewDecoder(io.LimitReader(body, 1<<20)).Decode(&payload) != nil {
+		return nil
+	}
+	for _, card := range payload.Data {
+		if strings.TrimSpace(card.ID) == model && card.Capabilities != nil {
+			return card.Capabilities.Vision
+		}
+	}
+	return nil
+}

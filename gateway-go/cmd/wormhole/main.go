@@ -114,9 +114,12 @@ type modelEntry struct {
 	Pricing *modelPricing `json:"pricing,omitempty"`
 	// Vision overrides the builtin image-capability table (vision.go): false
 	// forces image content parts to be stripped to text stubs before forwarding,
-	// true forces pass-through. Nil = builtin table keyed by the upstream model
+	// true passes them through. Nil = builtin table keyed by the upstream model
 	// id (GLM text families exact-match, DeepSeek family prefix; unknown models
-	// pass images through). See applyVisionGate for the APC-safety contract.
+	// pass images through). A local backend that reports `capabilities.vision`
+	// on /v1/models (ST) outranks true and the table, never false — the
+	// operator may forbid images, only the backend can promise them
+	// (router.acceptsImages). See applyVisionGate for the APC-safety contract.
 	Vision *bool `json:"vision,omitempty"`
 	// Local overrides the loopback/private-IP auto-detection (privacy.go). Set it
 	// false to mark an on-box endpoint as cloud (e.g. a local tunnel that egresses)

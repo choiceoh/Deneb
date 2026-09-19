@@ -93,14 +93,34 @@ func modelAcceptsImages(modelID string) bool {
 	return !textOnlyImageModels[key]
 }
 
-// entryAcceptsImages resolves an entry's image capability: an explicit config
-// override ("vision": true/false) wins; otherwise the builtin table, keyed by
-// the UPSTREAM model id (what the backend actually serves).
+// entryAcceptsImages resolves an entry's image capability from config alone: an
+// explicit override ("vision": true/false) wins; otherwise the builtin table,
+// keyed by the UPSTREAM model id (what the backend actually serves).
 func entryAcceptsImages(e modelEntry) bool {
 	if e.Vision != nil {
 		return *e.Vision
 	}
 	return modelAcceptsImages(e.UpstreamModel)
+}
+
+// acceptsImages is entryAcceptsImages with the backend's own report in it. The
+// operator can forbid images ("vision": false wins over everything); only the
+// backend can promise them: when a local backend reports what this boot does
+// (ST's `capabilities.vision`), that outranks "vision": true and the builtin
+// table. A Qwen3.8 boot without its vision tower answers 400 to any image —
+// and the image then poisons every later turn of that history — so a config
+// that says yes must not outvote a backend that says no. Without a report
+// (vLLM, cloud, no probe yet) the config decides, as before.
+func (rt *router) acceptsImages(e modelEntry) bool {
+	if e.Vision != nil && !*e.Vision {
+		return false
+	}
+	if report := rt.visionReport.Load(); report != nil {
+		if takes, known := (*report)[e.Name]; known {
+			return takes
+		}
+	}
+	return entryAcceptsImages(e)
 }
 
 // strippedImageStub replaces a removed image part so the model still sees that
@@ -111,7 +131,7 @@ const strippedImageStub = "[이미지 첨부 생략 — 텍스트 전용 모델]
 // known to reject them. Returns the body unchanged (same bytes) for
 // image-capable entries, unparseable bodies, and bodies without image parts.
 func (rt *router) applyVisionGate(entry modelEntry, body []byte, proto string) []byte {
-	if entryAcceptsImages(entry) {
+	if rt.acceptsImages(entry) {
 		return body
 	}
 	stripped, n := stripImageParts(body, proto)
