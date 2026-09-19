@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -62,21 +63,28 @@ func TestDurableCacheSurvivesAProcessRestart(t *testing.T) {
 func TestDurableCacheKeepsTheNewestWhenTrimmed(t *testing.T) {
 	useTempDiskCache(t)
 	translateDisk.mu.Lock()
+	defer translateDisk.mu.Unlock()
 	translateDisk.loadLocked()
 	for i := 0; i < translateDiskMaxEntries+50; i++ {
-		id := string(rune('a'+i%26)) + string(rune('a'+(i/26)%26)) + string(rune(i))
-		translateDisk.file.Entries[id] = translateDiskEntry{Text: "x", Seen: int64(i)}
+		id := strconv.Itoa(i)
+		// Entries from one provider batch share a timestamp. The oldest five
+		// groups must be evicted without depending on map iteration order.
+		translateDisk.file.Entries[id] = translateDiskEntry{Text: "번역 " + id, Seen: int64(i / 10)}
 	}
 	translateDisk.trimLocked()
-	n := len(translateDisk.file.Entries)
-	_, oldestKept := translateDisk.file.Entries[string(rune('a'))+string(rune('a'))+string(rune(0))]
-	translateDisk.mu.Unlock()
 
-	if n > translateDiskMaxEntries {
-		t.Fatalf("entries = %d, want <= %d", n, translateDiskMaxEntries)
+	if n := len(translateDisk.file.Entries); n != translateDiskMaxEntries {
+		t.Fatalf("entries = %d, want %d", n, translateDiskMaxEntries)
 	}
-	if oldestKept {
-		t.Fatal("trim kept the oldest entry")
+	for i := 0; i < translateDiskMaxEntries+50; i++ {
+		id := strconv.Itoa(i)
+		got, kept := translateDisk.file.Entries[id]
+		if wantKept := i >= 50; kept != wantKept {
+			t.Fatalf("entry %s: kept=%v, want %v", id, kept, wantKept)
+		}
+		if kept && (got.Text != "번역 "+id || got.Seen != int64(i/10)) {
+			t.Fatalf("retained entry %s changed: %+v", id, got)
+		}
 	}
 }
 
