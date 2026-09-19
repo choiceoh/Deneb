@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginecontrol"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 )
@@ -110,4 +111,6 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	s.registerCalendarBriefingWorkflow()
 	s.registerRoleHealthWorkflow()
 	s.registerEngineLivenessWorkflow()
+	s.engineFollowLog = &enginecontrol.FollowLog{}
+	s.registerEngineFollowWorkflow() // after the liveness watcher: it skips a down engine
 }

@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.EngineGlance
+import ai.deneb.deneb.generated.EngineServing
 import ai.deneb.deneb.generated.EngineStatusResult
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -29,6 +30,25 @@ suspend fun DenebGatewayClient.fetchEngineStatus(model: String? = null): EngineS
  * router call — cheap enough for the 더보기 tile to ask on every visit.
  */
 suspend fun DenebGatewayClient.fetchEngineGlance(): EngineGlance? = callRpc<EngineGlance>("miniapp.engine.glance", buildJsonObject { })
+
+/**
+ * Which model the engine's production serves, which one it was told to serve,
+ * and what its supervisor is doing about it (`miniapp.engine.serving`). The
+ * gateway asks the fleet's head; an answer with available=false says why it
+ * could not. Null only on a fetch failure.
+ */
+suspend fun DenebGatewayClient.fetchEngineServing(): EngineServing? = callRpc<EngineServing>("miniapp.engine.serving", buildJsonObject { })
+
+/**
+ * Tells production to serve [profile] (`miniapp.engine.select`). The fleet's
+ * supervisor does the switch — minutes of downtime — so the answer is the
+ * fleet's state right after the choice was written, not after the switch.
+ * Null when the choice could not be written.
+ */
+suspend fun DenebGatewayClient.selectEngineModel(profile: String): EngineServing? = callRpc<EngineServing>(
+    "miniapp.engine.select",
+    buildJsonObject { put("profile", profile) },
+)
 
 /**
  * One readiness change of the local engine, as the gateway pushes it on the

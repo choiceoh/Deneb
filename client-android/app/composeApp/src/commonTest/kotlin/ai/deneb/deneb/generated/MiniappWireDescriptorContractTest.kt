@@ -169,10 +169,34 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("sinceMs", "untilMs", "durationSec", "reason"),
         ),
         contract(
+            name = "EngineRoleHold",
+            serializer = EngineRoleHold.serializer(),
+            empty = EngineRoleHold(),
+            fields = listOf("role", "from", "reason"),
+        ),
+        contract(
+            name = "EngineRoleMove",
+            serializer = EngineRoleMove.serializer(),
+            empty = EngineRoleMove(),
+            fields = listOf("role", "from", "to"),
+        ),
+        contract(
             name = "EngineRoutingRow",
             serializer = EngineRoutingRow.serializer(),
             empty = EngineRoutingRow(),
             fields = listOf("model", "local", "known", "requests", "inputTokens", "outputTokens", "circuitState", "circuitFailures", "retryAfterMs", "keyHealth", "upstreamMissing"),
+        ),
+        contract(
+            name = "EngineServing",
+            serializer = EngineServing.serializer(),
+            empty = EngineServing(),
+            fields = listOf("nowMs", "available", "reason", "head", "selected", "selectedModel", "chosenBy", "chosenAtMs", "note", "supervised", "serving", "servingModel", "phase", "detail", "updatedAtMs", "profiles", "followAtMs", "followServed", "moved", "held"),
+        ),
+        contract(
+            name = "EngineServingProfile",
+            serializer = EngineServingProfile.serializer(),
+            empty = EngineServingProfile(),
+            fields = listOf("profile", "model"),
         ),
         contract(
             name = "EngineStatusResult",

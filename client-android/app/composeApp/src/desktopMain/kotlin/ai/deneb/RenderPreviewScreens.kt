@@ -605,7 +605,43 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.width(412.dp)) {
-                    ai.deneb.deneb.EngineStatusContent(sampleEngineStatus, zone = kotlinx.datetime.TimeZone.of("Asia/Seoul"))
+                    ai.deneb.deneb.EngineStatusContent(
+                        sampleEngineStatus,
+                        zone = kotlinx.datetime.TimeZone.of("Asia/Seoul"),
+                        serving = ai.deneb.deneb.ServingState(sampleEngineServing),
+                    )
+                }
+            }
+        }
+    },
+    // The verdict line with the serving model as its control, in the states a
+    // switch passes through — at rest, booting the new model, Qwen3.8 with vision
+    // held back, an unbootable model reverted, a fleet older than the selection —
+    // and the switch dialog's face (a dialog opens a window the headless renderer
+    // cannot draw).
+    "engine_serving" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.width(412.dp).padding(bottom = 24.dp)) {
+                    listOf(
+                        "평상시" to (sampleEngineUp to sampleEngineServing),
+                        "전환 중" to (sampleEngineSwitching to sampleEngineServingLaunching),
+                        "비전 남음" to (sampleEngineUp.copy(model = "qwen3.8-flash-next") to sampleEngineServingQwen),
+                        "되돌림" to (sampleEngineUp to sampleEngineServingReverted),
+                        "구버전 플릿" to (sampleEngineUp to sampleEngineServingOldFleet),
+                    ).forEach { (label, pair) ->
+                        DenebSectionLabel(label, Modifier.padding(start = 24.dp))
+                        ai.deneb.deneb.EngineStateLine(pair.first, ai.deneb.deneb.ServingState(pair.second))
+                    }
+                    DenebSectionLabel("전환 다이얼로그", Modifier.padding(start = 24.dp))
+                    Box(Modifier.padding(horizontal = 24.dp)) {
+                        DenebDialogCard(
+                            title = { Text("서빙 모델") },
+                            text = { ai.deneb.deneb.EngineServingChoices(sampleEngineServing, picked = "qwen38", onPick = {}) },
+                            confirmButton = { DenebTextButton(onClick = {}) { Text("전환") } },
+                            dismissButton = { DenebTextButton(onClick = {}) { Text("취소") } },
+                        )
+                    }
                 }
             }
         }

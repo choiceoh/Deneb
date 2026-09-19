@@ -13,6 +13,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginecontrol"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginelive"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/routershare"
@@ -328,6 +329,13 @@ type EngineDeps struct {
 	Liveness func() LivenessSource
 	// RouterShare resolves the per-day router meter history.
 	RouterShare func() *routershare.Store
+	// Control asks the fleet which model the engine's production serves and
+	// chooses it; nil (or returning nil) when the gateway cannot reach the
+	// engine's head.
+	Control func() EngineControl
+	// Follow is the routing follow's record (built after this registration;
+	// nil-safe).
+	Follow func() *enginecontrol.FollowLog
 	// Now is the clock; nil means time.Now. Tests freeze it.
 	Now func() time.Time
 }
@@ -359,8 +367,10 @@ func (d EngineDeps) liveness() LivenessSource {
 // EngineMethods returns the Mini App engine RPC handlers.
 func EngineMethods(deps EngineDeps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.engine.status": engineStatus(deps),
-		"miniapp.engine.glance": engineGlance(deps),
+		"miniapp.engine.status":  engineStatus(deps),
+		"miniapp.engine.glance":  engineGlance(deps),
+		"miniapp.engine.serving": engineServing(deps),
+		"miniapp.engine.select":  engineSelect(deps),
 	}
 }
 

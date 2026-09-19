@@ -189,7 +189,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		// registerSessionRPCMethods. Registered early (#3457) the snapshot
 		// stayed nil forever — the native picker showed every role as 미설정
 		// and models.set was rejected as "not ready".
-		modelpicker.NewController(modelpicker.ControllerConfig{
+		s.newModelPicker(modelpicker.ControllerConfig{
 			Registry:    s.modelRegistry,
 			ChatHandler: s.chatHandler,
 			Sessions:    s.sessions,
@@ -355,4 +355,13 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			))
 		}
 	}
+}
+
+// newModelPicker builds the native model picker (miniapp.models.*) and keeps
+// it: the routing follow (engine_follow_task.go) moves roles through the same
+// controller, so a role the engine carries to another model is persisted and
+// applied exactly as a tap in the picker would.
+func (s *Server) newModelPicker(cfg modelpicker.ControllerConfig) *modelpicker.Controller {
+	s.modelPicker = modelpicker.NewController(cfg)
+	return s.modelPicker
 }

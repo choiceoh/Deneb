@@ -668,3 +668,101 @@ internal val sampleEnginePastModelStatus: ai.deneb.deneb.generated.EngineStatusR
         busySeconds = 1_300.0, observedSeconds = 2_700.0, utilization = 0.48, restarts = 1,
     ),
 )
+
+/**
+ * Production on GLM-5.3, chosen from the app three hours ago; the last routing
+ * follow took the local roles back with it, vision included (GLM-5.3 takes
+ * images), so nothing is held back and the page says nothing more. Relative
+ * times against PREVIEW_NOW_MS.
+ */
+internal val sampleEngineServing: ai.deneb.deneb.generated.EngineServing = ai.deneb.deneb.generated.EngineServing(
+    nowMs = PREVIEW_NOW_MS,
+    available = true,
+    head = "choiceoh@100.125.220.117",
+    selected = "glm53",
+    selectedModel = "glm-5.3-flash",
+    chosenBy = "deneb",
+    chosenAtMs = PREVIEW_NOW_MS - 3 * 3_600_000L,
+    note = "Deneb 앱에서 선택",
+    supervised = true,
+    serving = "glm53",
+    servingModel = "glm-5.3-flash",
+    phase = "serving",
+    updatedAtMs = PREVIEW_NOW_MS - 3 * 3_600_000L + 4 * 60_000L,
+    profiles = listOf(
+        ai.deneb.deneb.generated.EngineServingProfile(profile = "glm53", model = "glm-5.3-flash"),
+        ai.deneb.deneb.generated.EngineServingProfile(profile = "qwen38", model = "qwen3.8-flash-next"),
+    ),
+    followAtMs = PREVIEW_NOW_MS - 3 * 3_600_000L + 5 * 60_000L,
+    followServed = "glm-5.3-flash",
+    moved = listOf(
+        ai.deneb.deneb.generated.EngineRoleMove(role = "coding", from = "wormhole/qwen3.8-flash-next", to = "wormhole/glm-5.3-flash"),
+        ai.deneb.deneb.generated.EngineRoleMove(role = "vision", from = "wormhole/qwen3.8-flash-next", to = "wormhole/glm-5.3-flash"),
+    ),
+)
+
+/** Qwen3.8 chosen a minute ago: the supervisor let GLM-5.3's rows finish and
+ *  took it down, and is booting Qwen3.8 (its SERVING is empty meanwhile). */
+internal val sampleEngineServingLaunching: ai.deneb.deneb.generated.EngineServing = sampleEngineServing.copy(
+    selected = "qwen38",
+    selectedModel = "qwen3.8-flash-next",
+    chosenAtMs = PREVIEW_NOW_MS - 60_000L,
+    serving = "",
+    servingModel = "",
+    phase = "launching",
+)
+
+/** Qwen3.8 in production: the text roles went with it, vision stayed — the
+ *  router's Qwen3.8 entry takes no images. */
+internal val sampleEngineServingQwen: ai.deneb.deneb.generated.EngineServing = sampleEngineServing.copy(
+    selected = "qwen38",
+    selectedModel = "qwen3.8-flash-next",
+    chosenAtMs = PREVIEW_NOW_MS - 40 * 60_000L,
+    serving = "qwen38",
+    servingModel = "qwen3.8-flash-next",
+    followAtMs = PREVIEW_NOW_MS - 34 * 60_000L,
+    followServed = "qwen3.8-flash-next",
+    moved = listOf(
+        ai.deneb.deneb.generated.EngineRoleMove(role = "coding", from = "wormhole/glm-5.3-flash", to = "wormhole/qwen3.8-flash-next"),
+    ),
+    held = listOf(
+        ai.deneb.deneb.generated.EngineRoleHold(role = "vision", from = "wormhole/glm-5.3-flash", reason = "qwen3.8-flash-next 엔트리는 이미지를 받지 않습니다"),
+    ),
+)
+
+/** A model that would not boot: the supervisor chose GLM-5.3 again and serves
+ *  it — the operator did not pick the model the fleet came back with. */
+internal val sampleEngineServingReverted: ai.deneb.deneb.generated.EngineServing = sampleEngineServing.copy(
+    chosenBy = "supervisor",
+    chosenAtMs = PREVIEW_NOW_MS - 20 * 60_000L,
+    note = "qwen38 did not boot in 5 attempts in a row",
+)
+
+/** A fleet whose tree predates the selection: the gateway reached the head,
+ *  the script was not there. */
+internal val sampleEngineServingOldFleet: ai.deneb.deneb.generated.EngineServing = ai.deneb.deneb.generated.EngineServing(
+    nowMs = PREVIEW_NOW_MS,
+    available = false,
+    reason = "플릿이 모델 선택을 아직 지원하지 않습니다 (st_production.py 없음)",
+    head = "choiceoh@100.125.220.117",
+)
+
+/** The verdict line's engine for the serving previews: up for three hours. */
+internal val sampleEngineUp: ai.deneb.deneb.generated.EngineStatusResult = ai.deneb.deneb.generated.EngineStatusResult(
+    nowMs = PREVIEW_NOW_MS,
+    configured = true,
+    reachable = true,
+    model = "glm-5.3-flash",
+    livenessTracked = true,
+    upSinceMs = PREVIEW_NOW_MS - 3 * 3_600_000L,
+)
+
+/** ...and the same engine two minutes into a switch: down, turns on the fallback. */
+internal val sampleEngineSwitching: ai.deneb.deneb.generated.EngineStatusResult = sampleEngineUp.copy(
+    reachable = false,
+    model = "",
+    engineDown = true,
+    downSinceMs = PREVIEW_NOW_MS - 2 * 60_000L,
+    downReason = "connection refused",
+    downModels = listOf("glm-5.3-flash", "glm-5.3-flash-low"),
+)

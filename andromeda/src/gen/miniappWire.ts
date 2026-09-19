@@ -223,6 +223,18 @@ export interface EngineOutage {
   reason?: string
 }
 
+export interface EngineRoleHold {
+  role?: string
+  from?: string
+  reason?: string
+}
+
+export interface EngineRoleMove {
+  role?: string
+  from?: string
+  to?: string
+}
+
 export interface EngineRoutingRow {
   model?: string
   local?: boolean
@@ -235,6 +247,34 @@ export interface EngineRoutingRow {
   retryAfterMs?: number
   keyHealth?: string
   upstreamMissing?: boolean
+}
+
+export interface EngineServing {
+  nowMs?: number
+  available?: boolean
+  reason?: string
+  head?: string
+  selected?: string
+  selectedModel?: string
+  chosenBy?: string
+  chosenAtMs?: number
+  note?: string
+  supervised?: boolean
+  serving?: string
+  servingModel?: string
+  phase?: string
+  detail?: string
+  updatedAtMs?: number
+  profiles?: EngineServingProfile[]
+  followAtMs?: number
+  followServed?: string
+  moved?: EngineRoleMove[]
+  held?: EngineRoleHold[]
+}
+
+export interface EngineServingProfile {
+  profile?: string
+  model?: string
 }
 
 export interface EngineStatusResult {

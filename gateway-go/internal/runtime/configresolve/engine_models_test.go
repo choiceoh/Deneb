@@ -57,3 +57,39 @@ func TestEngineModelsIsNilWithoutAUsableConfig(t *testing.T) {
 		t.Fatalf("unparseable config: EngineModels = %v, want nil", got)
 	}
 }
+
+// Routing follows the engine's model by pairing entries of the same variant:
+// what each asks the engine for, whether it thinks, and whether it takes images.
+func TestEngineEntriesCarryTheVariantEachEntryIs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	body := `{
+	  "models": [
+	    {"name": "glm-5.3-flash", "url": "http://100.125.220.117:8000/v1", "upstreamModel": "glm-5.3-flash", "thinkingMode": "on", "vision": true},
+	    {"name": "glm-5.3-flash-low", "url": "http://100.125.220.117:8000/v1", "upstreamModel": "glm-5.3-flash", "thinkingMode": "off"},
+	    {"name": "qwen3.8-flash-next", "url": "http://100.125.220.117:8000/v1", "thinkingMode": "on", "vision": false},
+	    {"name": "glm-5.3", "url": "https://api.z.ai/api/coding/paas/v4", "upstreamModel": "glm-5.3"}
+	  ]
+	}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	t.Setenv(routerConfigEnv, path)
+
+	got := EngineEntries("http://100.125.220.117:8000/metrics")
+	if len(got) != 3 {
+		t.Fatalf("entries = %+v, want the three at the engine", got)
+	}
+	byName := map[string]EngineEntry{}
+	for _, e := range got {
+		byName[e.Name] = e
+	}
+	if e := byName["glm-5.3-flash-low"]; e.UpstreamModel != "glm-5.3-flash" || e.ThinkingMode != "off" || e.Vision != nil {
+		t.Errorf("low variant = %+v", e)
+	}
+	if e := byName["qwen3.8-flash-next"]; e.UpstreamModel != "qwen3.8-flash-next" || e.Vision == nil || *e.Vision {
+		t.Errorf("an entry without upstreamModel asks for its own name, and says it takes no images: %+v", e)
+	}
+	if e := byName["glm-5.3-flash"]; e.Vision == nil || !*e.Vision || e.ThinkingMode != "on" {
+		t.Errorf("thinking variant = %+v", e)
+	}
+}
