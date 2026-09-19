@@ -32,6 +32,11 @@ type openAIRequest struct {
 	// kwarg does not reach the model behind the hosting provider, and
 	// reasoning_effort "low" keeps it reasoning.
 	Reasoning *openAIReasoning `json:"reasoning,omitempty"`
+	// Logprobs and TopLogprobs ask for each generated token's probability and
+	// its top alternatives. Only CompleteFirstToken sets them; every other
+	// request body goes out exactly as before.
+	Logprobs    bool `json:"logprobs,omitempty"`
+	TopLogprobs int  `json:"top_logprobs,omitempty"`
 }
 
 // openAIReasoning is OpenRouter's request-level reasoning control.
@@ -158,6 +163,14 @@ type completionTokensDetails struct {
 // vLLM (--enable-prefix-caching) and OpenAI both report cached_tokens here.
 type promptTokensDetails struct {
 	CachedTokens int `json:"cached_tokens"`
+}
+
+// reasoningTokens is the completion's reasoning share; 0 when unreported.
+func (u *openAIUsage) reasoningTokens() int {
+	if u.CompletionTokensDetails == nil {
+		return 0
+	}
+	return u.CompletionTokensDetails.ReasoningTokens
 }
 
 // splitPromptTokens normalizes the OpenAI prompt-token count to Anthropic

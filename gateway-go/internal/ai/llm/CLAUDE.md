@@ -34,6 +34,11 @@ HTTP wire 형식만 책임진다.
   `openai_stream.go`에서 내부 `StreamEvent` 형식으로 변환한다.
 - `openai_complete.go`의 `Client.Complete`는 짧은 동기 호출의 단일
   진입점이고 Anthropic mode에서는 streaming 경로를 재사용한다.
+  `Client.CompleteFirstToken`은 **정확히 1토큰**을 생성해 그 위치의 상위 대안
+  (`logprobs`/`top_logprobs`)을 돌려준다 — 한 단어 판정의 분포용. `MaxTokens`를
+  1로 강제하므로 예산 정지는 요청 그 자체이고 절단이 아니다(아래 불변조건과
+  충돌하지 않는다). 두 호출은 `postCompletion`의 같은 요청·디코딩을 쓰며,
+  logprob 필드는 `CompleteFirstToken`만 켠다(`Complete` 요청 본문은 불변).
 - `normalize.go`의 `NormalizeMessages`, `DropEmptyMessages`,
   `ContentToBlocks`가 provider 전송 전 메시지 정규화를 소유한다.
 - `sse.go`의 `ParseSSE`, `parseSSE`, `startSSEPipelineWithByteLimit`가

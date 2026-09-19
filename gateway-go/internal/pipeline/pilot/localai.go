@@ -98,6 +98,75 @@ func getRoleModel(role modelrole.Role, defaultModel string) string {
 	return defaultModel
 }
 
+// roleCandidate is one model a direct helper call may try.
+type roleCandidate struct {
+	client            *llm.Client
+	model, providerID string
+}
+
+// roleCandidates lists them in order: the role's own model, then its helper
+// fallbacks — the chain without rungs that bill unless configured to
+// (Registry.HelperFallbacks). Walking the raw chain put 2,262 tiny calls in 30
+// days on a metered model.
+//
+// The own model's provider is registry-aware when possible so
+// routing.toggleKwarg overrides apply; the registry-less fallback assumes
+// "vllm" — the direct path defaults to DefaultVllmBaseURL anyway.
+func roleCandidates(role modelrole.Role) []roleCandidate {
+	providerID := "vllm"
+	if pkgRegistry != nil {
+		if p := pkgRegistry.Config(role).ProviderID; p != "" {
+			providerID = p
+		}
+	}
+	out := []roleCandidate{{
+		client:     getRoleClient(role, modelrole.DefaultVllmBaseURL, "local"),
+		model:      getRoleModel(role, modelrole.DefaultVllmModel),
+		providerID: providerID,
+	}}
+	for _, fb := range pkgRegistry.HelperFallbacks(role) {
+		out = append(out, roleCandidate{client: fb.Client, model: fb.Config.Model, providerID: fb.Config.ProviderID})
+	}
+	return out
+}
+
+// shapeRoleExtra builds one candidate's extra request body: model-specific
+// thinking-off fields + caller extras + the server-side timeout. Built per
+// attempt — the fallback chain crosses providers, and reusing the primary
+// model's kwargs would send e.g. a vLLM-only template toggle to a cloud
+// provider (or enable_thinking to an untoggleable reasoning model).
+//
+// Thinking-off shaping is shared with the localai hub (modelrole.
+// ThinkingOffDirectiveFor): the template toggle for dual-mode models
+// (deepseek-v4 → chat_template_kwargs.thinking=false), nothing for
+// untoggleable reasoning models (their thinking-only templates can 400 on
+// enable_thinking), enable_thinking=false for vLLM-backed non-reasoning models.
+func shapeRoleExtra(ctx context.Context, role modelrole.Role, providerID, model string, callerExtra map[string]any) map[string]any {
+	// Role-aware: a speed/concurrency-first role (RoleTiny) forces thinking off
+	// even when the per-model policy would leave it on, so the role's latency
+	// stays low regardless of which model it points at.
+	directive := pkgRegistry.ThinkingOffDirectiveForRole(role, providerID, model) // nil-receiver safe
+	merged := make(map[string]any, len(callerExtra)+2)
+	if directive != nil {
+		for k, v := range llm.ThinkingOffFields(directive.TemplateKwarg(), directive.DisablesReasoningParam()) {
+			merged[k] = v
+		}
+	}
+	for k, v := range callerExtra {
+		merged[k] = v
+	}
+	// Inject server-side timeout so local AI aborts generation when the
+	// gateway's context deadline expires. Without this, cancelled requests
+	// become zombies that hold KV cache until max_tokens is exhausted.
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline).Seconds() - 2.0 // 2s headroom for network
+		if remaining > 1 {
+			merged["timeout"] = remaining
+		}
+	}
+	return merged
+}
+
 // LightweightModel returns the model name for the lightweight role.
 func LightweightModel() string {
 	return getRoleModel(modelrole.RoleLightweight, modelrole.DefaultVllmModel)
@@ -135,24 +204,6 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 	ctx, cancel := context.WithTimeout(ctx, pilotTimeout)
 	defer cancel()
 
-	client := getRoleClient(role, modelrole.DefaultVllmBaseURL, "local")
-	model := getRoleModel(role, modelrole.DefaultVllmModel)
-
-	// Thinking-off shaping, shared with the localai hub (modelrole.
-	// ThinkingOffDirectiveFor): the template toggle for dual-mode models
-	// (deepseek-v4 → chat_template_kwargs.thinking=false), nothing for
-	// untoggleable reasoning models (their thinking-only templates can 400
-	// on enable_thinking), enable_thinking=false for vLLM-backed
-	// non-reasoning models.
-	// Registry-aware when possible so routing.toggleKwarg overrides apply;
-	// the registry-less fallback assumes "vllm" — this direct path defaults
-	// to DefaultVllmBaseURL anyway.
-	providerID := "vllm"
-	if pkgRegistry != nil {
-		if p := pkgRegistry.Config(role).ProviderID; p != "" {
-			providerID = p
-		}
-	}
 	callerExtra := make(map[string]any)
 	for _, body := range extraBody {
 		if len(body) == 0 {
@@ -166,62 +217,17 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 			callerExtra[key] = value
 		}
 	}
-	// shapedExtra rebuilds the per-model request body: model-specific
-	// thinking-off kwargs + caller extras + the server-side timeout. Computed
-	// per attempt — the fallback chain crosses providers, and reusing the
-	// primary model's kwargs would send e.g. a vLLM-only template toggle to a
-	// cloud provider (or enable_thinking to an untoggleable reasoning model).
-	shapedExtra := func(providerID, model string) map[string]any {
-		// Role-aware: a speed/concurrency-first role (RoleTiny) forces thinking off
-		// even when the per-model policy would leave it on, so the role's latency
-		// stays low regardless of which model it points at.
-		directive := pkgRegistry.ThinkingOffDirectiveForRole(role, providerID, model) // nil-receiver safe
-		merged := make(map[string]any, len(callerExtra)+2)
-		if directive != nil {
-			for k, v := range llm.ThinkingOffFields(directive.TemplateKwarg(), directive.DisablesReasoningParam()) {
-				merged[k] = v
-			}
-		}
-		for k, v := range callerExtra {
-			merged[k] = v
-		}
-		// Inject server-side timeout so local AI aborts generation when the
-		// gateway's context deadline expires. Without this, cancelled requests
-		// become zombies that hold KV cache until max_tokens is exhausted.
-		if deadline, ok := ctx.Deadline(); ok {
-			remaining := time.Until(deadline).Seconds() - 2.0 // 2s headroom for network
-			if remaining > 1 {
-				merged["timeout"] = remaining
-			}
-		}
-		return merged
-	}
-
 	req := llm.ChatRequest{
-		Model:     model,
 		Messages:  []llm.Message{llm.NewTextMessage("user", userMessage)},
 		System:    llm.SystemString(system),
 		MaxTokens: maxTokens,
 		Stream:    true,
-		ExtraBody: pilotExtraBody(shapedExtra(providerID, model)),
-	}
-
-	// Candidates: the role's own model, then its helper fallbacks — the chain
-	// without rungs that bill unless configured to (Registry.HelperFallbacks).
-	// Walking the raw chain put 2,262 tiny calls in 30 days on a metered model.
-	type candidate struct {
-		client            *llm.Client
-		model, providerID string
-	}
-	candidates := []candidate{{client: client, model: model, providerID: providerID}}
-	for _, fb := range pkgRegistry.HelperFallbacks(role) {
-		candidates = append(candidates, candidate{client: fb.Client, model: fb.Config.Model, providerID: fb.Config.ProviderID})
 	}
 
 	var lastErr error
-	for _, c := range candidates {
+	for _, c := range roleCandidates(role) {
 		req.Model = c.model
-		req.ExtraBody = pilotExtraBody(shapedExtra(c.providerID, c.model))
+		req.ExtraBody = pilotExtraBody(shapeRoleExtra(ctx, role, c.providerID, c.model, callerExtra))
 		text, usage, started, err := streamCandidate(ctx, c.client, req)
 		if err == nil {
 			emitHelperUsage(role, c.model, c.providerID, usage)

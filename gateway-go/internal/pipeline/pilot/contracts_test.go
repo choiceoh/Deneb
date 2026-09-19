@@ -61,6 +61,12 @@ func TestMain(m *testing.M) {
 			}
 			mode = ""
 		}
+		// Non-streaming calls (CallRoleYesNo's one-token completion) get a JSON
+		// body; writePilotCompletion lives with the tests that use it.
+		if stream, _ := req["stream"].(bool); !stream && mode != "http-error" {
+			writePilotCompletion(w, model, mode)
+			return
+		}
 		switch mode {
 		case "overloaded":
 			w.Header().Set("Content-Type", "text/event-stream")
