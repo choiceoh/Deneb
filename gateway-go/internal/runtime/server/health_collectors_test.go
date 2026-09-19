@@ -2,6 +2,7 @@ package server
 
 import (
 	"testing"
+	"time"
 
 	runtimehealth "github.com/choiceoh/deneb/gateway-go/internal/runtime/health"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
@@ -14,6 +15,11 @@ func TestCollectBaseHealthPreservesRequiredContract(t *testing.T) {
 	// with real crons (package convention — see server_test.go).
 	t.Setenv("HOME", t.TempDir())
 	srv := testutil.Must(New(":0"))
+	// Swap in empty chat/genesis subsystems so local_ai and embedding read
+	// "off" on every machine — New() wires clients that probe 127.0.0.1, so the
+	// real ones report the host's daemons. New() also left goroutines running
+	// that read Server fields unlocked; join them before the swap.
+	quiesceBackground(t, srv)
 	srv.ChatManager = &ChatManager{}
 	srv.GenesisSubsystem = &GenesisSubsystem{}
 	health := srv.collectBaseHealth()
@@ -51,6 +57,28 @@ func TestCollectBaseHealthPreservesRequiredContract(t *testing.T) {
 	}
 	if _, ok := health["rpc"].(map[string]any); !ok {
 		t.Fatalf("rpc type = %T, want map[string]any", health["rpc"])
+	}
+}
+
+// quiesceBackground cancels srv's lifecycle and joins every goroutine New()
+// started through safeGo, so the test can then reassign Server fields without
+// racing them. Subsystem fields are assigned during New() and read without
+// locks afterwards; the semantic warmup, for one, polls s.embeddingClient —
+// loaded through the embedded *ChatManager — until the sidecar turns healthy
+// or the lifecycle ends. In-memory state (sessions, dispatcher, cron store)
+// stays readable afterwards.
+func quiesceBackground(t *testing.T, srv *Server) {
+	t.Helper()
+	srv.lifecycleCancel()
+	joined := make(chan struct{})
+	go func() {
+		srv.bgWg.Wait()
+		close(joined)
+	}()
+	select {
+	case <-joined:
+	case <-time.After(10 * time.Second):
+		t.Fatal("background goroutines still running 10s after lifecycle cancel")
 	}
 }
 
