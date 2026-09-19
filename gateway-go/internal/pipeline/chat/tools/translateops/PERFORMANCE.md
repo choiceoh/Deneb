@@ -1,6 +1,13 @@
 # Translation cache latency
 
-Measured 2026-09-19 against baseline `35554e253`.
+Measured 2026-09-19 against baseline `35554e253` and integrated on `f936a2855`.
+
+The production fix already landed in [PR #5130](https://github.com/choiceoh/Deneb/pull/5130),
+including sorting and moving serialization/file writes outside the cache mutex.
+This follow-up adds stricter eviction checks and reproducible benchmarks. Its
+production code is identical to that upstream commit. The historical results
+below isolate a sort-only candidate; they are not measurements of #5130's full
+implementation or an additional speedup supplied by this follow-up.
 
 ## Cause and change
 
@@ -11,15 +18,16 @@ The former insertion sort reordered the entire randomly iterated map in O(n²)
 time. Concurrent DeepL batches therefore waited for repeated cache trims even
 after their provider responses were ready.
 
-`slices.SortFunc` reduces that sort to O(n log n). The capacity, oldest-first
-eviction, persisted format, synchronous durability, request batching, provider
-parameters, and translation text are unchanged. Entries with identical timestamps
-still have no specified eviction order.
+The historical candidate's `slices.SortFunc` reduced that sort to O(n log n).
+The capacity, oldest-first eviction, persisted format, synchronous durability, request batching, provider
+parameters, and translation text were unchanged. Entries with identical timestamps
+had no specified eviction order in that candidate; #5130 additionally orders
+equal-age entries by ID and coalesces writes outside the cache mutex.
 
 The pre-change prediction was at least an 80% reduction in local processing time
 with a full cache and an immediate provider response.
 
-## Controlled local comparison
+## Historical controlled local comparison
 
 Apple M5, macOS arm64, Go 1.26.2; five one-iteration samples per variant. Both
 variants used the same benchmark, synthetic 50,000-entry cache, and temporary
@@ -50,7 +58,7 @@ go test -run '^$' \
   -benchtime=1x -count=5 -benchmem ./internal/pipeline/chat/tools/translateops
 ```
 
-## Live DeepL comparison
+## Historical live DeepL comparison
 
 Linux arm64 gateway host, isolated loopback development instances, separate
 synthetic state directories, and real `miniapp.web.translate` RPCs. Production
@@ -92,9 +100,25 @@ contained warnings about the unavailable optional LLM endpoint and canceled
 embedding warmup during shutdown. Neither subsystem is used by the DeepL
 translation RPC.
 
+## Integrated upstream measurement
+
+The same benchmarks were rerun on `f936a2855` plus this follow-up's tests, using
+the same Apple M5 environment and five one-iteration samples. Production files
+were verified byte-for-byte identical to #5130.
+
+| Measurement | Integrated median |
+| --- | ---: |
+| Trim 50,050 entries to 50,000 | 5.673 ms |
+| `TranslateSegments`, 40 uncached 433-character segments | 84.984 ms |
+
+The full-path samples were 72.506 / 90.668 / 101.779 / 84.984 / 83.660 ms.
+This preserves the fix's low local overhead with the upstream write coalescing
+and deterministic tie ordering. These are stubbed-provider measurements; the
+historical live API samples above were not rerun for this tests-only follow-up.
+
 ## Verification
 
-- `TMPDIR=/private/tmp make check GO_PAR=4`: passed generation checks, formatting,
+- `TMPDIR=/private/tmp make check GO_PAR=2`: passed generation checks, formatting,
   vet, lint, all Go tests, runtime-health tests, and Health Bench scorer tests.
   The opt-in LLM Korean-response quality gate was skipped by its default setting;
   live translation behavior was exercised directly above.
@@ -112,3 +136,8 @@ The first plain `make check` run exposed the existing
 The unchanged test failed independently with the default temp directory and
 passed with canonical `TMPDIR=/private/tmp`; the full gate then passed with that
 environment. No test exclusions or unrelated code changes were made.
+
+After integration, the four-package parallel run hit the unchanged liteparse
+test `TestBoundaryParsePartialOutputWinsOnCancellation` at its one-second
+fake-process readiness deadline. Three isolated repetitions passed, followed by
+the full gate at the repository's default two-package parallelism.

@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 )
