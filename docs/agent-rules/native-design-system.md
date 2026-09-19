@@ -26,7 +26,7 @@ globs: ["client-android/app/composeApp/src/**/*.kt"]
 | 화면 프레임 → `DenebScreenScaffold(title, onBack, tabBar?)` (flat AMOLED, `←`, 제목) | 폼 **기반**: `Switch`·`Checkbox`·`Slider` 직접 / `SegmentedButton`→`DenebSegmentedRow`+`DenebSegment` / `OutlinedTextField`→`DenebTextField` (박스 없이 라벨·값·hairline 밑줄; 검색·필터 입력은 `DenebUnderlineSearchField`) / 칩→`DenebChip` |
 | 리스트 행 → `DenebRow { … }` (행 아래 하airline, 노카드, 여백, 전체 탭) | 오버레이 **기반**: `BasicAlertDialog`→`DenebDialog`(호출부 API는 `AlertDialog`와 동일) · `ModalBottomSheet`·`Snackbar`·`ModalNavigationDrawer` |
 | 섹션 헤더 → `DenebSectionLabel("…")` (트랙트 캡스) | 비동기: `PullToRefreshBox`·`CircularProgressIndicator` |
-| **뷰 전환(피벗)** → `DenebPivotRow(labels, selectedIndex, onSelect)` — Light 활자, **밝기만으로 상태**(활성=ink·나머지=흐림), 밑줄·fill·액센트·하airline 없음. 제목 자리면 `viewTitle`(피드|결재|로그), 제목 아래 페이지 안이면 `style = DenebType.subject`(스킬 목록|Propus 로그·1일|7일·노드|모델|작업). 넘치면 줄바꿈·축소 대신 가장자리로 흘린다(Zune bleed) | `SegmentedButton`은 **폼 선택**(검색 모드·반복 종류·기간 집계)에만 — 페이지가 *무엇을 보여줄지* 바꾸는 데 쓰면 위반 |
+| **뷰 전환(피벗)** → `DenebPivotRow(labels, selectedIndex, onSelect)` — Light 활자, **밝기만으로 상태**(활성=ink·나머지=흐림), 밑줄·fill·액센트·하airline 없음. 제목 자리면 `viewTitle`(피드·결재·로그), 제목 아래 페이지 안이면 `style = DenebType.subject`(스킬 목록·Propus 로그 / 1일·7일 / 노드·모델·작업). 넘치면 줄바꿈·축소 대신 가장자리로 흘린다(Zune bleed) | `SegmentedButton`은 **폼 선택**(검색 모드·반복 종류·기간 집계)에만 — 페이지가 *무엇을 보여줄지* 바꾸는 데 쓰면 위반 |
 | **빈·오류 상태** → `DenebEmpty(text, hint?, actionLabel?)`/`DenebError(text, onRetry?)` — 아이콘 없이 `subject` 크기 한 문장을 다른 줄과 같은 24dp 거터에 **왼쪽 정렬**, 이유는 `rowSubtitle` 흐린 색으로 한 겹 아래, 행동은 거터에 붙은 텍스트 버튼 하나 | — |
 | 구분선 → `denebHairline()` · 힌트색 → `denebHint()` | 시맨틱: `selectable`/`toggleable`/`Role`, `contentDescription` |
 | — | 색 토큰: `MaterialTheme.colorScheme` **단일 소스** (다크모드·브랜드) |
