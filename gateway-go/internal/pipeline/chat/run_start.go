@@ -276,6 +276,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		promptWorkspaceDir:   h.promptWorkspaceDir,
 		briefcaseMode:        h.briefcaseMode,
 		auditSystemPrompt:    h.auditSystemPrompt,
+		engineModels:         h.engineModels,
 		drainPendingFn:       h.pending.Drain,
 		startRunFn: func(params RunParams) {
 			h.startQueuedAsyncRun("pending-"+params.ClientRunID, params)

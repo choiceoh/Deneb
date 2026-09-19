@@ -44,9 +44,12 @@ type EngineEntry struct {
 }
 
 // EngineEntries returns the router entries whose upstream is the serving
-// engine at engineURL, sorted by name, first entry of a name winning. The same
-// matching as EngineModels: host and port, never the path or the name. Nil
-// when the config is absent, unreadable, or lists nothing at that server.
+// engine at engineURL, sorted by name. The same matching as EngineModels: host
+// and port, never the path or the name. A name listed twice is judged by its
+// last entry, because that is the one the router sends it to (wormhole keys its
+// table by name, last entry winning): a cloud twin listed after the local entry
+// of the same name takes that name's traffic, so the name is not the engine's.
+// Nil when the config is absent, unreadable, or lists nothing at that server.
 func EngineEntries(engineURL string) []EngineEntry {
 	target := httputil.HostPort(engineURL)
 	if target == "" {
@@ -76,14 +79,16 @@ func EngineEntries(engineURL string) []EngineEntry {
 	if json.Unmarshal(raw, &cfg) != nil {
 		return nil
 	}
-	seen := make(map[string]bool)
+	last := make(map[string]int, len(cfg.Models))
+	for i, m := range cfg.Models {
+		last[strings.TrimSpace(m.Name)] = i
+	}
 	var out []EngineEntry
-	for _, m := range cfg.Models {
+	for i, m := range cfg.Models {
 		name := strings.TrimSpace(m.Name)
-		if name == "" || seen[name] || httputil.HostPort(m.URL) != target {
+		if name == "" || last[name] != i || httputil.HostPort(m.URL) != target {
 			continue
 		}
-		seen[name] = true
 		upstream := strings.TrimSpace(m.UpstreamModel)
 		if upstream == "" {
 			upstream = name // the router asks for the entry's own name (wormhole upstreamModelOf)

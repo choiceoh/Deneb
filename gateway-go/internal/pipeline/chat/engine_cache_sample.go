@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,7 +64,8 @@ var engineCacheState = struct {
 // logEngineCacheAsync samples the engine serving this run and emits a
 // run.cache event. Fire-and-forget: never blocks the reply path. Skipped for
 // non-OpenAI-mode providers, fallback runs (the sampled engine would not be
-// the one that answered), and base URLs that don't resolve to a local engine.
+// the one that answered), base URLs that don't resolve to a local engine, and
+// runs the engine did not serve (engineCacheSampleScoped).
 func logEngineCacheAsync(deps runDeps, runLog *agentlog.RunLogger, client *llm.Client, model string, fellBack bool, logger *slog.Logger) {
 	if deps.briefcaseMode {
 		return
@@ -75,10 +77,8 @@ func logEngineCacheAsync(deps runDeps, runLog *agentlog.RunLogger, client *llm.C
 	if runLog == nil || client == nil || fellBack || client.APIMode() != llm.APIModeOpenAI {
 		return
 	}
-	if !engineMetricsModelAllowed(model, os.Getenv(engineMetricsModelsEnv)) {
-		return
-	}
-	metricsURL := resolveEngineMetricsURL(client.BaseURL())
+	baseURL := client.BaseURL()
+	metricsURL := resolveEngineMetricsURL(baseURL)
 	if metricsURL == "" {
 		return
 	}
@@ -87,6 +87,11 @@ func logEngineCacheAsync(deps runDeps, runLog *agentlog.RunLogger, client *llm.C
 		parentCtx = context.Background() // tests; bounded by the timeout below
 	}
 	safego.GoWithSlog(logger, "engine-cache-sample", func() {
+		// Scoped here rather than before the spawn: the router-derived scope
+		// reads the router's config file, which the reply path must not wait on.
+		if !engineCacheSampleScoped(baseURL, model, metricsURL, deps.engineModels, logger) {
+			return
+		}
 		ctx, cancel := context.WithTimeout(parentCtx, engineCacheSampleTimeout)
 		defer cancel()
 		hitDelta, queryDelta, ok := sampleEngineCacheDelta(ctx, metricsURL)
@@ -109,14 +114,67 @@ func logEngineCacheAsync(deps runDeps, runLog *agentlog.RunLogger, client *llm.C
 // e.g. http://100.125.220.117:8000/metrics.
 const engineMetricsURLEnv = "DENEB_ENGINE_METRICS_URL"
 
-// engineMetricsModelsEnv scopes sampling to runs whose model name contains one
-// of the comma-separated substrings (case-insensitive). Needed when a single
-// OpenAI-mode provider (wormhole) fronts both cloud and local models: without
-// a filter, a cloud glm run would scrape the pinned local engine and log
-// unrelated APC deltas under its own run ID. Empty = sample every run.
+// engineMetricsModelsEnv is the operator's explicit sampling scope: runs whose
+// model name contains one of the comma-separated substrings (case-insensitive).
+// When set it replaces the router-derived scope — kept so an existing drop-in
+// keeps meaning what it meant — and is otherwise unneeded. A hand-kept list
+// goes stale the moment the engine serves another model: the production value
+// "glm-5.3-flash" left every Qwen run unsampled once the engine screen could
+// switch the served model (2026-09-19).
 const engineMetricsModelsEnv = "DENEB_ENGINE_METRICS_MODELS"
 
-// engineMetricsModelAllowed applies the optional model filter. Pure for tests.
+// engineScopeWarned holds the models already reported as served by the engine
+// but excluded by engineMetricsModelsEnv — one warning per model per process.
+var engineScopeWarned sync.Map
+
+// engineCacheSampleScoped reports whether the engine's delta belongs to this
+// run. One OpenAI-mode provider (wormhole) fronts both cloud and local models,
+// and the metrics override pins the engine whichever of them answered —
+// unscoped, a cloud run would log the local engine's unrelated APC delta under
+// its own run ID. engineModels lists the router's entries at an engine; nil
+// leaves only runs sent straight to the engine in scope.
+func engineCacheSampleScoped(baseURL, model, metricsURL string, engineModels func(engineURL string) []string, logger *slog.Logger) bool {
+	var routed []string
+	if engineModels != nil {
+		routed = engineModels(metricsURL) // re-read per run: the router hot-reloads its config
+	}
+	served := engineServedRun(baseURL, model, metricsURL, routed)
+	filter := strings.TrimSpace(os.Getenv(engineMetricsModelsEnv))
+	if filter == "" {
+		return served
+	}
+	allowed := engineMetricsModelAllowed(model, filter)
+	// The explicit list wins, but a list that drops a model the engine serves
+	// is the silent blindness the router-derived scope exists to end: say so.
+	if !allowed && served {
+		if _, seen := engineScopeWarned.LoadOrStore(model, true); !seen {
+			logger.Warn("engine cache sample: "+engineMetricsModelsEnv+" excludes a model the engine serves; its runs log no run.cache",
+				"model", model, "filter", filter, "metricsURL", metricsURL)
+		}
+	}
+	return allowed
+}
+
+// engineServedRun reports whether a run reached the engine at metricsURL:
+// straight at its address (a role pointed at the engine, or no override, so
+// metricsURL was derived from the run's own base URL), or through the router
+// under the exact name of an entry the router sends there (routed). Exact
+// names, never substrings: "glm-5.3" (cloud) must not pass for "glm-5.3-flash"
+// (local), nor a vendor-prefixed "z-ai/glm-5.3-flash". And a request that went
+// to a public host was not the engine's whatever the model is called — the
+// local engine and its cloud twin answer under the same name. Pure for tests.
+func engineServedRun(baseURL, model, metricsURL string, routed []string) bool {
+	base := httputil.HostPort(baseURL)
+	if base == "" {
+		return false
+	}
+	if base == httputil.HostPort(metricsURL) {
+		return true
+	}
+	return isPrivateEngineHost(httputil.Hostname(baseURL)) && slices.Contains(routed, model)
+}
+
+// engineMetricsModelAllowed applies the explicit substring scope. Pure for tests.
 func engineMetricsModelAllowed(model, filter string) bool {
 	filter = strings.TrimSpace(filter)
 	if filter == "" {

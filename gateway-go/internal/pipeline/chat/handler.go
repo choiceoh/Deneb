@@ -67,6 +67,7 @@ type Handler struct {
 	promptWorkspaceDir   string
 	briefcaseMode        bool
 	auditSystemPrompt    func(sessionKey string, prompt []byte)
+	engineModels         func(engineURL string) []string
 
 	// Extracted components.
 	abort       *AbortTracker
@@ -265,6 +266,12 @@ type HandlerConfig struct {
 	// AuditSystemPrompt receives the exact finalized system-prompt wire bytes.
 	// It is a trusted observability hook used by deterministic evaluation only.
 	AuditSystemPrompt func(sessionKey string, prompt []byte)
+	// EngineModels lists the router entry names whose upstream is the serving
+	// engine at engineURL (configresolve.EngineModels, wired by the server so
+	// this package keeps no runtime import). It scopes the per-run engine cache
+	// sample to runs the engine served. Optional; nil leaves only runs sent
+	// straight to the engine in scope.
+	EngineModels func(engineURL string) []string
 
 	// Fields below were previously Set*() after construction. They are all
 	// available at handler creation time and passed here to reduce late-binding.
@@ -369,6 +376,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		promptWorkspaceDir:   cfg.PromptWorkspaceDir,
 		briefcaseMode:        cfg.BriefcaseMode,
 		auditSystemPrompt:    cfg.AuditSystemPrompt,
+		engineModels:         cfg.EngineModels,
 		providerRuntime:      cfg.ProviderRuntime,
 		abort:                NewAbortTracker(),
 		pending:              NewPendingQueue(),
