@@ -1,5 +1,19 @@
 # Changelog
 
+## [5.16.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.15.0...deneb-v5.16.0) (2026-09-19)
+
+
+### ✨ Features
+
+* **phoneevents:** 알림 게이트를 확률 판정으로 — 숨은 0.5 문턱을 꺼내 0.2로, 드롭도 로그에 남긴다 ([#5119](https://github.com/choiceoh/Deneb/issues/5119)) ([b441237](https://github.com/choiceoh/Deneb/commit/b441237b885d1c4224f8f3d3d493856bb95d656d))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** 엔진 캐시 표본 스코프를 라우터 설정에서 — Qwen 서빙 중에도 run.cache가 끊기지 않는다 ([#5121](https://github.com/choiceoh/Deneb/issues/5121)) ([c9ab364](https://github.com/choiceoh/Deneb/commit/c9ab364db82d3f06e92b8bf68b2666fcb75f5d57))
+* **chat:** 엔진 프로브가 DENEB_ENGINE_METRICS_URL 을 목록으로 읽는다 — 로컬 엔진이 둘이 돼도 run.cache·정확 토큰이 조용히 죽지 않는다 ([#5122](https://github.com/choiceoh/Deneb/issues/5122)) ([25b9ebc](https://github.com/choiceoh/Deneb/commit/25b9ebc00e62a75ce4c78d12607fc7513eb857ca))
+* **observe:** 공란이던 엔진 캐시 읽기 4곳을 엔진 속도 이력과 run.cache 로 — 요청 수를 토큰으로 읽지 않는다 ([#5123](https://github.com/choiceoh/Deneb/issues/5123)) ([79f6a28](https://github.com/choiceoh/Deneb/commit/79f6a2849c5aa557f43c0861345918e39fb44980))
+
 ## [5.15.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.14.0...deneb-v5.15.0) (2026-09-19)
 
 
