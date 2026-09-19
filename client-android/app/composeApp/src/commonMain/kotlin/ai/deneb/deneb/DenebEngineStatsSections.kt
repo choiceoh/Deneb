@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -90,13 +91,13 @@ internal fun EngineSummarySection(total: EngineTotals) {
 @Composable
 internal fun EngineStatLine(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(text = label, style = DenebType.rowSubtitle, color = denebHint(), modifier = Modifier.weight(1f))
+        Text(text = label, style = DenebType.rowSubtitle, color = denebHint(), modifier = Modifier.weight(0.45f).padding(end = 8.dp))
         Text(
             text = value,
             style = DenebType.rowTitle,
             color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(0.55f),
+            textAlign = TextAlign.End,
         )
     }
 }

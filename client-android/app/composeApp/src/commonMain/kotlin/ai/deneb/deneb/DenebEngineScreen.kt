@@ -210,34 +210,35 @@ internal fun EngineStatusContent(
     zone: TimeZone = TimeZone.currentSystemDefault(),
     onSelectModel: (String) -> Unit = {},
     serving: ServingState? = null,
+    detailsExpanded: Boolean = false,
 ) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         EngineStateLine(status, serving)
         EngineModelTabs(status, onSelectModel)
-        Spacer(Modifier.height(14.dp))
-        EngineDiagnosticsSection(status, zone)
-        Spacer(Modifier.height(14.dp))
-        EngineAvailabilitySection(status, zone)
-        Spacer(Modifier.height(18.dp))
-        EngineShareSection(status)
-        if (status.total.requests > 0 || status.total.outages > 0) {
-            Spacer(Modifier.height(18.dp))
-            EngineSummarySection(status.total)
+        EngineDiagnosticsSection(status, zone, detailsExpanded) {
+            EngineAvailabilitySection(status, zone, showDetails = false)
+            EngineShareSection(status, showDetails = false)
+            Spacer(Modifier.height(16.dp))
         }
-        Spacer(Modifier.height(18.dp))
-        EngineDaysSection(status.days)
+        EngineDisclosure("가용성·일별 기록", "최근 ${status.total.days}일 · 요청 ${status.total.requests}회 · 끊김 ${status.total.outages}회", detailsExpanded) {
+            EngineAvailabilitySection(status, zone)
+            EngineShareSection(status)
+            if (status.total.requests > 0 || status.total.outages > 0) EngineSummarySection(status.total)
+            EngineDaysSection(status.days)
+        }
         // The live process's gauges describe the model it serves, not a past one.
         if (status.reachable && status.viewingCurrentModel() && (status.internals.published || status.internals.fleetKnown)) {
-            Spacer(Modifier.height(18.dp))
-            EngineInternalsSection(status)
+            EngineDisclosure("엔진 내부", "실행 ${status.runningRequests} · 대기 ${status.waitingRequests} · 메모리·캐시·플릿", detailsExpanded) {
+                EngineInternalsSection(status)
+            }
         }
-        if (status.routingToday.isNotEmpty()) {
-            Spacer(Modifier.height(18.dp))
-            EngineRoutingSection("오늘 실제로 답한 곳", status.routingToday)
-        }
-        if (status.routing.isNotEmpty()) {
-            Spacer(Modifier.height(18.dp))
-            EngineRoutingSection("이번 달 실제로 답한 곳" + (if (status.routerWindow.isNotBlank()) " · ${status.routerWindow}" else ""), status.routing)
+        if (status.routingToday.isNotEmpty() || status.routing.isNotEmpty()) {
+            EngineDisclosure("라우팅 내역", "오늘 ${status.routingToday.size}개 · 이번 달 ${status.routing.size}개 모델", detailsExpanded) {
+                if (status.routingToday.isNotEmpty()) EngineRoutingSection("오늘 실제로 답한 곳", status.routingToday)
+                if (status.routing.isNotEmpty()) {
+                    EngineRoutingSection("이번 달 실제로 답한 곳" + (if (status.routerWindow.isNotBlank()) " · ${status.routerWindow}" else ""), status.routing)
+                }
+            }
         }
     }
 }
@@ -249,7 +250,7 @@ internal fun EngineStatusContent(
  * is, and the line says so.
  *
  * With the fleet's answer ([serving]) the second line is the model production
- * serves and the control that switches it ("glm-5.3-flash ▾"), or the switch in
+ * serves and an explicit model-change action, or the switch in
  * motion; a down engine's reason then moves one line down — unless a switch is
  * what took it down, which the second line already says.
  */
@@ -257,7 +258,7 @@ internal fun EngineStatusContent(
 internal fun EngineStateLine(status: EngineStatusResult, serving: ServingState? = null) {
     val tracked = status.livenessTracked
     val live = if (tracked) !status.engineDown else status.reachable
-    val dot = if (live) MaterialTheme.colorScheme.primary else denebHint()
+    val dot = if (live) MaterialTheme.colorScheme.onBackground else denebHint()
     val title = when {
         tracked && status.engineDown -> "클라우드로 우회 중"
         tracked -> "가동 중"
@@ -273,8 +274,8 @@ internal fun EngineStateLine(status: EngineStatusResult, serving: ServingState? 
     val progress = serving?.serving?.let(::servingProgress)
     val modelLine = if (serving?.serving == null) "" else progress ?: status.model.ifBlank { serving.serving.servingModel }
     Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(8.dp).background(dot, CircleShape))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            Box(Modifier.padding(top = 7.dp).size(8.dp).background(dot, CircleShape))
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -331,12 +332,12 @@ private fun EngineStateNote(text: String, failure: Boolean = false) {
 }
 
 /**
- * The last 24 hours as one strip — up in the accent, down in the hint, and
+ * The last 24 hours as one strip — up in ink, down in the hint, and
  * the time before tracking began left blank — with the outages listed under
  * it. This is the card the 2026-09-16 flapping was invisible without.
  */
 @Composable
-private fun EngineAvailabilitySection(status: EngineStatusResult, zone: TimeZone) {
+private fun EngineAvailabilitySection(status: EngineStatusResult, zone: TimeZone, showDetails: Boolean = true) {
     DenebGroup(label = "최근 24시간") {
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 14.dp)) {
             if (!status.livenessTracked) {
@@ -369,6 +370,7 @@ private fun EngineAvailabilitySection(status: EngineStatusResult, zone: TimeZone
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
+            if (!showDetails) return@DenebGroup
             recent.take(MAX_OUTAGE_ROWS).forEach { OutageRow(it, status.nowMs, zone) }
             if (recent.size > MAX_OUTAGE_ROWS) {
                 Text(
@@ -386,7 +388,7 @@ private const val MAX_OUTAGE_ROWS = 8
 
 @Composable
 private fun AvailabilityStrip(segments: List<AvailabilitySegment>) {
-    val up = MaterialTheme.colorScheme.primary
+    val up = MaterialTheme.colorScheme.onBackground
     val down = denebHint()
     val unknown = denebHint().copy(alpha = 0.12f)
     Row(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(3.dp))) {
@@ -437,7 +439,7 @@ private fun OutageRow(outage: EngineOutage, nowMs: Long, zone: TimeZone) {
  * says so rather than rendering 0%.
  */
 @Composable
-private fun EngineShareSection(status: EngineStatusResult) {
+private fun EngineShareSection(status: EngineStatusResult, showDetails: Boolean = true) {
     DenebGroup(label = "점유율") {
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 14.dp)) {
             val todayPct = sharePercent(status.todayLocalRequests, status.todayRemoteRequests + status.todayUnknownRequests)
@@ -469,6 +471,7 @@ private fun EngineShareSection(status: EngineStatusResult) {
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
+            if (!showDetails) return@DenebGroup
             val monthPct = sharePercent(status.localRequests, status.remoteRequests + status.unknownRequests)
             Text(
                 text = when {
@@ -493,8 +496,7 @@ private fun EngineShareSection(status: EngineStatusResult) {
     }
 }
 
-/** The local share as a single proportional bar — the interactive accent for
- *  the local part, a hairline-weight track for the rest. */
+/** The local share as a monochrome proportional bar with a muted track. */
 @Composable
 internal fun ShareBar(fraction: Float) {
     val f = fraction.coerceIn(0f, 1f)
@@ -505,7 +507,7 @@ internal fun ShareBar(fraction: Float) {
         if (f > 0f) {
             Box(
                 Modifier.fillMaxWidth(f).height(6.dp)
-                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)),
+                    .background(MaterialTheme.colorScheme.onBackground, RoundedCornerShape(3.dp)),
             )
         }
     }

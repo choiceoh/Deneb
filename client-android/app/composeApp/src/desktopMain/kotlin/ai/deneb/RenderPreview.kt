@@ -256,7 +256,9 @@ fun main() {
     // Chat empty/welcome — muted sparkle + greeting (replaced the purple orb).
     renderScreen("chat_empty.png", "chat_empty", OledColorScheme, 824, 720)
     // Engine page (the whole statistics stack, newest day expanded).
-    renderScreen("engine.png", "engine", OledColorScheme, 824, 3400)
+    renderScreen("engine.png", "engine", OledColorScheme, 824, 2400)
+    renderScreen("engine_narrow.png", "engine_narrow", OledColorScheme, 640, 2400)
+    renderScreen("engine_expanded.png", "engine_expanded", OledColorScheme, 412, 6800, density = 1f)
     renderScreen("engine_statistics.png", "engine_statistics", OledColorScheme, 824, 10000)
     renderScreen("engine_past_model.png", "engine_past_model", OledColorScheme, 824, 1400)
     renderScreen("engine_serving.png", "engine_serving", OledColorScheme, 824, 1812)

@@ -9,7 +9,9 @@ import ai.deneb.ui.components.DenebSegment
 import ai.deneb.ui.components.DenebSegmentedRow
 import ai.deneb.ui.denebHint
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -19,7 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -33,60 +35,101 @@ import kotlin.math.roundToInt
 /** Operational history from real interval deltas, including zero and missing values. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun EngineDiagnosticsSection(status: EngineStatusResult, zone: TimeZone) {
+internal fun EngineDiagnosticsSection(
+    status: EngineStatusResult,
+    zone: TimeZone,
+    detailsExpanded: Boolean = false,
+    overview: @Composable () -> Unit = {},
+) {
     val report = status.diagnostics
-    // A past model's last sample is old by definition — that is history, not a stalled collector.
     val past = !status.viewingCurrentModel()
-    // A past model has nothing in the last 30 minutes; open it on the day instead.
-    var minutes by remember(status.selectedModel) { mutableStateOf(if (past) 1440 else 30) }
+    var minutes by rememberSaveable(status.selectedModel) { mutableStateOf(if (past) 1440 else 30) }
     val window = report.windows.firstOrNull { it.minutes == minutes }
     val run = if (past) "마지막 실행" else "현재 실행"
-    DenebGroup(label = "실행 통계") {
-        DiagnosticHint(
-            when {
-                report.lastSampleMs <= 0L -> "아직 수집된 실행 통계가 없습니다."
-                past -> "지난 실행 · 마지막 표본 ${formatClockOrDay(report.lastSampleMs, status.nowMs, zone)}"
-                report.stale -> "수집 지연 · 마지막 표본 ${formatClockOrDay(report.lastSampleMs, status.nowMs, zone)}"
-                else -> "마지막 표본 ${formatClock(report.lastSampleMs, zone)} · 15초 간격 수집"
-            },
-        )
-        DenebSegmentedRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            listOf(30 to "30분", 1440 to "24시간").forEachIndexed { index, (value, label) ->
-                DenebSegment(selected = minutes == value, onClick = { minutes = value }, index = index, count = 2) {
-                    Text(label)
+    DiagnosticHint(
+        when {
+            report.lastSampleMs <= 0L -> "아직 수집된 실행 통계가 없습니다."
+            past -> "지난 실행 · 마지막 표본 ${formatClockOrDay(report.lastSampleMs, status.nowMs, zone)}"
+            report.stale -> "수집 지연 · 마지막 표본 ${formatClockOrDay(report.lastSampleMs, status.nowMs, zone)}"
+            else -> "마지막 표본 ${formatClock(report.lastSampleMs, zone)} · 15초 간격 수집"
+        },
+    )
+    DenebSegmentedRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        listOf(30 to "최근 30분", 1440 to "24시간").forEachIndexed { index, (value, label) ->
+            DenebSegment(selected = minutes == value, onClick = { minutes = value }, index = index, count = 2) { Text(label) }
+        }
+    }
+    EngineCoreMeasures(window)
+    DiagnosticHint("${run}의 유효 관측 ${formatDuration(window?.observedSeconds ?: 0.0)} · 표본 없는 항목은 —")
+    overview()
+    if (window == null) return
+    EngineDisclosure("실행 상세", measureSummary(window.metrics, "steps", "tokens_step"), detailsExpanded) {
+        DenebGroup {
+            DiagnosticMeasures(window.metrics)
+            DiagnosticHint("호스트 회차는 그래프 호출 단위입니다. 기기에서 여러 스텝을 묶어 실행하면 완료 스텝 수와 다릅니다.")
+        }
+        EngineStageSection(window)
+        DenebGroup(label = "비교 조건") {
+            DiagnosticHint(runtimeDescription(window.runtime))
+            DiagnosticHint("요약은 ${run}만 집계합니다. 재시작·빌드 변경 전 기록은 추이에만 남습니다.")
+        }
+    }
+    EngineDisclosure("시간별 변화", "호스트 회차 · 요청 디코드 · 수용률", detailsExpanded) {
+        EngineTrendSection(window, status, zone)
+    }
+    EngineDisclosure("응답·길이 분포", measureSummary(window.latency, "ttft95", "e2e95"), detailsExpanded) {
+        DiagnosticMeasureGroup("첫 토큰·응답 분포", window.latency, "P50·P95는 히스토그램 추정값입니다. 최상위 버킷을 넘으면 —로 표시합니다.")
+        DiagnosticMeasureGroup("드래프트 수용 분포", window.acceptance, "각 구간은 해당 개수의 드래프트를 수용한 디코드 구간의 비중입니다.")
+        DiagnosticMeasureGroup("추론·답변 길이", window.lengths, "완료된 채팅 선택지 기준입니다. 답변은 본문 토큰이며 도구 호출은 별도입니다.")
+    }
+    EngineDisclosure("조건별 성능", "${window.conditions.size}개 조건 · 동시성·문맥·캐시·측정방식", detailsExpanded) {
+        EngineConditionSection(window)
+    }
+}
+
+@Composable
+private fun EngineCoreMeasures(window: EngineDiagnosticWindow?) {
+    val measures = window?.let { it.metrics + it.latency }.orEmpty()
+    val keys = listOf("decode" to "요청 디코드", "prefill" to "실제 프리필", "ttft50" to "첫 토큰 P50", "acceptance" to "드래프트 수용률")
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        keys.chunked(2).forEach { pair ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                pair.forEach { (key, label) ->
+                    val measure = measures.firstOrNull { it.key == key }
+                    Column(Modifier.weight(1f)) {
+                        Text(label, style = DenebType.meta, color = denebHint())
+                        Text(
+                            measure?.let(::diagnosticValue) ?: "—",
+                            style = DenebType.subject.copy(fontFeatureSettings = "tnum"),
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                    }
                 }
             }
         }
-        if (window != null) {
-            window.metrics.forEach { DiagnosticMeasure(it) }
-            DiagnosticHint("${run}의 유효 관측 ${formatDuration(window.observedSeconds)} · 표본 없는 항목은 —")
-            DiagnosticHint("호스트 회차는 그래프 호출 단위입니다. 기기에서 여러 스텝을 묶어 실행하면 완료 스텝 수와 다릅니다.")
-        }
     }
-    if (window == null) return
-    EngineTrendSection(window, status, zone)
-    EngineStageSection(window)
-    DiagnosticMeasureGroup("첫 토큰·응답 분포", window.latency, "P50·P95는 히스토그램 추정값입니다. 최상위 버킷을 넘으면 —로 표시합니다.")
-    DiagnosticMeasureGroup("드래프트 수용 분포", window.acceptance, "각 구간은 해당 개수의 드래프트를 수용한 디코드 구간의 비중입니다.")
-    EngineConditionSection(window)
-    DiagnosticMeasureGroup("추론·답변 길이", window.lengths, "완료된 채팅 선택지 기준입니다. 답변은 본문 토큰이며 도구 호출은 별도입니다.")
-    DenebGroup(label = "비교 조건") {
-        DiagnosticHint(runtimeDescription(window.runtime))
-        DiagnosticHint("요약은 ${run}만 집계합니다. 재시작·빌드 변경 전 기록은 추이에만 남습니다.")
+}
+
+internal fun measureSummary(measures: List<EngineMeasure>, vararg keys: String): String = keys.mapNotNull { key ->
+    measures.firstOrNull { it.key == key }?.let { "${it.label} ${diagnosticValue(it)}" }
+}.joinToString(" · ").ifBlank { "측정된 표본 없음" }
+
+/** Only share a sample label when every displayed available measure has exactly the same count. */
+internal fun commonSampleCount(measures: List<EngineMeasure>): Double? = measures.filter { it.available }.map { it.samples }.distinct().singleOrNull()
+
+@Composable
+private fun DiagnosticMeasures(measures: List<EngineMeasure>) {
+    val common = commonSampleCount(measures)
+    measures.forEach { measure ->
+        DiagnosticStatLine(measure.label, diagnosticValue(measure))
+        if (common == null && measure.available) DiagnosticHint("표본 ${formatTokenCount(measure.samples.toLong())}")
     }
+    if (common != null) DiagnosticHint("항목별 표본 ${formatTokenCount(common.toLong())}")
 }
 
 @Composable
 private fun DiagnosticHint(text: String) {
     Text(text, style = DenebType.meta, color = denebHint(), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp))
-}
-
-@Composable
-private fun DiagnosticMeasure(measure: EngineMeasure) {
-    Column(Modifier.fillMaxWidth()) {
-        DiagnosticStatLine(measure.label, diagnosticValue(measure))
-        if (measure.available) DiagnosticHint("표본 ${formatTokenCount(measure.samples.toLong())}")
-    }
 }
 
 @Composable
@@ -116,7 +159,7 @@ private fun DiagnosticMeasureGroup(label: String, measures: List<EngineMeasure>,
         if (measures.none { it.available }) {
             DiagnosticHint("이 실행에서 측정된 표본이 없습니다.")
         } else {
-            measures.forEach { DiagnosticMeasure(it) }
+            DiagnosticMeasures(measures)
         }
         DiagnosticHint(note)
     }
@@ -210,8 +253,8 @@ private fun TrendLine(
     val values = window.points.mapNotNull(value)
     val maximum = values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
     DiagnosticHint("$label · 최근 ${values.lastOrNull()?.let(::oneDecimal) ?: "—"}")
-    val color = MaterialTheme.colorScheme.primary
-    val marker = MaterialTheme.colorScheme.error
+    val color = MaterialTheme.colorScheme.onBackground
+    val marker = denebHint()
     Canvas(Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 16.dp).semantics { contentDescription = "$label 시간별 변화" }) {
         fun x(at: Long): Float = ((at - from).toDouble() / (until - from).coerceAtLeast(1)).toFloat() * size.width
         status.outages.forEach { outage ->
