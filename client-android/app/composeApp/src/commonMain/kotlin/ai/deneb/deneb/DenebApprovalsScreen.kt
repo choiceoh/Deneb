@@ -12,7 +12,6 @@ import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
 import ai.deneb.ui.handCursor
-import ai.deneb.ui.icons.outlined.Assignment
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +27,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -173,7 +171,6 @@ fun DenebApprovalsScreen(
                     ) {
                         DenebEmpty(
                             "최근 결재 문서가 없습니다",
-                            icon = Icons.Outlined.Assignment,
                             hint = "새 결재가 올라오면 여기에 모입니다",
                         )
                     }

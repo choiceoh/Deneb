@@ -36,7 +36,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -256,7 +255,6 @@ internal fun FeedScreen(
                     dayItems.isEmpty() -> Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         DenebEmpty(
                             feedEmptyLabel(selectedDate, today, lane),
-                            icon = Icons.Outlined.Notifications,
                             hint = if (lane == FeedLane.Log) {
                                 "모델·자가개선 기록이 여기에 모입니다"
                             } else {

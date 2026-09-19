@@ -20,8 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -284,7 +282,7 @@ internal fun SearchContent(
 
             r.wiki.isEmpty() && r.diary.isEmpty() && r.people.isEmpty() && r.files.isEmpty() && r.mail.isEmpty() -> {
                 SearchSourceNotices(r.sourceStatus)
-                DenebEmpty("검색 결과가 없습니다", icon = Icons.Outlined.Search, hint = "개인 자료 전체에서 다시 검색해 보세요")
+                DenebEmpty("검색 결과가 없습니다", hint = "개인 자료 전체에서 다시 검색해 보세요")
             }
 
             else -> {

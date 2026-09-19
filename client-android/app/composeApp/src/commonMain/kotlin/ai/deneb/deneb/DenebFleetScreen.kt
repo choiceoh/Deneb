@@ -1,11 +1,9 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebPivotRow
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebTextButton
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.handCursor
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,9 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,10 +27,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -44,8 +35,9 @@ import kotlinx.coroutines.launch
 /**
  * Fleet management as its own full screen (NOT a settings tab — the settings
  * hub stays configuration-only; running GPU nodes is an operational surface,
- * like mail or people). The frame deliberately mirrors [DenebConfigScreen]:
- * title row + pill tab bar + pager, with 노드 / 모델 / 작업 as the tabs. (레시피·벤치
+ * like mail or people). The frame deliberately mirrors [DenebConfigScreen]'s
+ * section detail: title row + view pivot + pager, with 노드 / 모델 / 작업 as the
+ * pivot pages. (레시피·벤치
  * surfaces were removed 2026-08-28: recipe control is AI-only via the gateway's
  * `fleet` chat tool; benchmarking left the product.)
  *
@@ -63,7 +55,6 @@ fun DenebFleetScreen(
 ) {
     val pagerState = rememberPagerState(pageCount = { FleetTab.entries.size })
     val scope = rememberCoroutineScope()
-    val haptics = rememberHaptics()
 
     var state by remember { mutableStateOf<FleetState?>(null) }
     var jobs by remember { mutableStateOf<List<FleetJob>?>(null) }
@@ -104,47 +95,18 @@ fun DenebFleetScreen(
                 Text("플릿", style = DenebType.viewTitle, modifier = Modifier.weight(1f))
                 DenebTextButton(onClick = onBack) { Text("닫기") }
             }
-            // Pill tab bar — same look as the settings hub so the two screens
-            // read as siblings.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                FleetTab.entries.forEachIndexed { idx, entry ->
-                    val isSelected = pagerState.currentPage == idx
-                    Surface(
-                        modifier = Modifier
-                            .handCursor()
-                            .clip(RoundedCornerShape(50))
-                            .selectable(
-                                selected = isSelected,
-                                role = Role.Tab,
-                                onClick = {
-                                    haptics.tap()
-                                    scope.launch { pagerState.animateScrollToPage(idx) }
-                                },
-                            ),
-                        shape = RoundedCornerShape(50),
-                        color = if (isSelected) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                        } else {
-                            Color.Transparent
-                        },
-                    ) {
-                        Text(
-                            text = entry.label,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = DenebType.rowTitle,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                            maxLines = 1,
-                        )
-                    }
-                }
-            }
+            // Pivot under the title — 노드 / 모델 / 작업 as Light words, brightness for
+            // the open page ([DenebPivotRow], which owns the tap haptic); the pager
+            // below swipes between the same pages, which is the Metro pivot control
+            // in full. The pill tab bar it replaces was Material chrome the settings
+            // hub itself no longer has (that hub is a list now).
+            DenebPivotRow(
+                labels = FleetTab.entries.map { it.label },
+                selectedIndex = pagerState.currentPage,
+                onSelect = { idx -> scope.launch { pagerState.animateScrollToPage(idx) } },
+                style = DenebType.subject,
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 8.dp),
+            )
             if (stale) {
                 Text(
                     "⚠ 플릿 연결 끊김 — 마지막으로 받은 데이터를 표시 중입니다",
