@@ -496,7 +496,8 @@ func reportCompactionDegraded(
 // system prompt. recallAddition is normally "" — per-turn recall rides the
 // last user message now (run_tail_inject.go) so the system prompt stays a
 // stable vLLM APC prefix; it is only non-empty on the degenerate
-// no-user-message fallback path.
+// no-user-message fallback path. route places the run at its engine, whose
+// tokenizer then measures the head (prompt_exact_tokens.go).
 func finalizePrompt(
 	systemPrompt json.RawMessage,
 	recallAddition string,
@@ -504,6 +505,7 @@ func finalizePrompt(
 	contextCfg ContextConfig,
 	sessionToolPreset string,
 	message string,
+	route engineRoute,
 	logger *slog.Logger,
 ) (json.RawMessage, promptBudgetOutcome) {
 	// Budget-optimize variable prompt additions before appending.
@@ -528,7 +530,7 @@ func finalizePrompt(
 		// It answers from cache after the first turn on a given head; a miss
 		// keeps the estimate, which is what this line always did.
 		baseTokens := uint64(promptbudget.EstimateTokens(string(systemPrompt)))
-		if exact, ok := exactPromptTokens(string(systemPrompt), logger); ok {
+		if exact, ok := exactPromptTokens(string(systemPrompt), route, logger); ok {
 			outcome.BaseTokensExact = true
 			baseTokens = uint64(exact) //nolint:gosec // G115 — engine token counts are small positives
 		}

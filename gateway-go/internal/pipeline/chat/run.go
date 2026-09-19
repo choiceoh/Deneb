@@ -105,8 +105,8 @@ type runDeps struct {
 	briefcaseMode        bool
 	strictErrors         *strictRunErrorSink
 	auditSystemPrompt    func(sessionKey string, prompt []byte)
-	// engineModels lists the router's entries at a serving engine; it scopes
-	// the engine cache sample (engine_cache_sample.go). Optional.
+	// engineModels lists the router's entries at a serving engine; it places a
+	// run at its engine for the engine probes (engineRoute). Optional.
 	engineModels func(engineURL string) []string
 	// drainPendingFn drains the next queued message for a session after the
 	// current run completes. Set by the Handler; nil disables pending queue.

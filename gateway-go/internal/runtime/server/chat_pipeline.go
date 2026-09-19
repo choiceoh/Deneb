@@ -76,9 +76,10 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 	*regPtr = reg
 	chatCfg.Registry = reg
 	s.modelRegistry = reg
-	// The router's entries at the serving engine scope the per-run engine cache
-	// sample, so it follows whichever model the engine serves (the same source
-	// the liveness gate and the routing follow read).
+	// The router's entries at each serving engine place a run at the engine
+	// that served it — for the per-run engine cache sample and the exact
+	// prompt-head count — so both follow whichever model an engine serves (the
+	// same source the liveness gate and the routing follow read).
 	chatCfg.EngineModels = configresolve.EngineModels
 
 	// Seed new sessions with operator-configured thinking defaults so the

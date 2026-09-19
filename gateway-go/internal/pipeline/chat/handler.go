@@ -268,9 +268,10 @@ type HandlerConfig struct {
 	AuditSystemPrompt func(sessionKey string, prompt []byte)
 	// EngineModels lists the router entry names whose upstream is the serving
 	// engine at engineURL (configresolve.EngineModels, wired by the server so
-	// this package keeps no runtime import). It scopes the per-run engine cache
-	// sample to runs the engine served. Optional; nil leaves only runs sent
-	// straight to the engine in scope.
+	// this package keeps no runtime import). It places a run at the engine that
+	// served it (engineRoute), for the per-run engine cache sample and the exact
+	// prompt-head count. Optional; nil leaves only runs sent straight to an
+	// engine placeable.
 	EngineModels func(engineURL string) []string
 
 	// Fields below were previously Set*() after construction. They are all
