@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.EngineOutage
+import ai.deneb.deneb.generated.EngineServing
 import ai.deneb.deneb.generated.EngineStatusResult
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebScreenScaffold
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -79,6 +81,12 @@ fun DenebEngineScreen(
     var refreshing by remember { mutableStateOf(false) }
     // Whose statistics to show; null follows the model the engine serves.
     var selectedModel by remember { mutableStateOf<String?>(null) }
+    // Which model production serves (the fleet's answer, via the gateway). A
+    // failed fetch keeps the last answer; null until one arrives, and for good
+    // on a gateway without the RPC — the section then stays hidden.
+    var serving by remember { mutableStateOf<EngineServing?>(null) }
+    var switchRequesting by remember { mutableStateOf(false) }
+    var switchFailed by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
     val loadMutex = remember { Mutex() }
@@ -86,16 +94,21 @@ fun DenebEngineScreen(
 
     suspend fun load() {
         loadMutex.withLock {
-            val asked = selectedModel
-            val fetched = client.fetchEngineStatus(asked)
-            if (fetched == null) {
-                loadOk = false
-            } else {
-                // The window no longer holds the model asked for (it aged out):
-                // follow the current model again instead of asking for it forever.
-                if (asked != null && fetched.selectedModel != asked && selectedModel == asked) selectedModel = null
-                status = fetched
-                loadOk = true
+            coroutineScope {
+                // The fleet's head is asked over ssh; it runs beside the status call.
+                val servingAsk = async { client.fetchEngineServing() }
+                val asked = selectedModel
+                val fetched = client.fetchEngineStatus(asked)
+                if (fetched == null) {
+                    loadOk = false
+                } else {
+                    // The window no longer holds the model asked for (it aged out):
+                    // follow the current model again instead of asking for it forever.
+                    if (asked != null && fetched.selectedModel != asked && selectedModel == asked) selectedModel = null
+                    status = fetched
+                    loadOk = true
+                }
+                servingAsk.await()?.let { serving = it }
             }
         }
     }
@@ -164,6 +177,15 @@ fun DenebEngineScreen(
                                 selectedModel = model.takeUnless { m -> s.models.firstOrNull { it.current }?.model == m }
                                 scope.launch { load() }
                             },
+                            serving = ServingState(serving, switchRequesting, switchFailed) { profile ->
+                                scope.launch {
+                                    switchRequesting = true
+                                    switchFailed = false
+                                    val answer = client.selectEngineModel(profile)
+                                    if (answer == null) switchFailed = true else serving = answer
+                                    switchRequesting = false
+                                }
+                            },
                         )
                     }
                 }
@@ -187,9 +209,10 @@ internal fun EngineStatusContent(
     status: EngineStatusResult,
     zone: TimeZone = TimeZone.currentSystemDefault(),
     onSelectModel: (String) -> Unit = {},
+    serving: ServingState? = null,
 ) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-        EngineStateLine(status)
+        EngineStateLine(status, serving)
         EngineModelTabs(status, onSelectModel)
         Spacer(Modifier.height(14.dp))
         EngineDiagnosticsSection(status, zone)
@@ -224,9 +247,14 @@ internal fun EngineStatusContent(
  * for the engine's models goes to the fallback chain the whole time it says
  * down, whatever a scrape says. Without a watcher the live probe is all there
  * is, and the line says so.
+ *
+ * With the fleet's answer ([serving]) the second line is the model production
+ * serves and the control that switches it ("glm-5.3-flash ▾"), or the switch in
+ * motion; a down engine's reason then moves one line down — unless a switch is
+ * what took it down, which the second line already says.
  */
 @Composable
-private fun EngineStateLine(status: EngineStatusResult) {
+internal fun EngineStateLine(status: EngineStatusResult, serving: ServingState? = null) {
     val tracked = status.livenessTracked
     val live = if (tracked) !status.engineDown else status.reachable
     val dot = if (live) MaterialTheme.colorScheme.primary else denebHint()
@@ -241,6 +269,9 @@ private fun EngineStateLine(status: EngineStatusResult) {
         tracked && !status.engineDown && status.upSinceMs > 0L -> "복구 ${formatAgo(status.upSinceMs, status.nowMs)}"
         else -> ""
     }
+    val downReason = downReasonLabel(status.downReason).ifBlank { "엔진이 요청을 거부합니다" }
+    val progress = serving?.serving?.let(::servingProgress)
+    val modelLine = if (serving?.serving == null) "" else progress ?: status.model.ifBlank { serving.serving.servingModel }
     Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).background(dot, CircleShape))
@@ -251,19 +282,21 @@ private fun EngineStateLine(status: EngineStatusResult) {
                     style = DenebType.rowTitleStrong,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
-                val detail = when {
-                    tracked && status.engineDown -> downReasonLabel(status.downReason).ifBlank { "엔진이 요청을 거부합니다" }
-                    status.model.isNotBlank() -> status.model
-                    live -> status.endpoint
-                    else -> "엔진에 닿지 않습니다"
+                EngineModelSwitcher(modelLine, serving) {
+                    val detail = when {
+                        tracked && status.engineDown -> downReason
+                        status.model.isNotBlank() -> status.model
+                        live -> status.endpoint
+                        else -> "엔진에 닿지 않습니다"
+                    }
+                    Text(
+                        text = detail,
+                        style = DenebType.rowSubtitle,
+                        color = denebHint(),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-                Text(
-                    text = detail,
-                    style = DenebType.rowSubtitle,
-                    color = denebHint(),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
             if (live && (status.runningRequests > 0 || status.waitingRequests > 0)) {
                 Text(
@@ -273,23 +306,28 @@ private fun EngineStateLine(status: EngineStatusResult) {
                 )
             }
         }
-        if (tracked && status.engineDown && status.downModels.isNotEmpty()) {
-            Text(
-                text = "폴백으로 가는 모델: ${status.downModels.joinToString(", ")}",
-                style = DenebType.meta,
-                color = denebHint(),
-                modifier = Modifier.padding(start = 16.dp, top = 6.dp),
-            )
+        if (tracked && status.engineDown && modelLine.isNotBlank() && progress == null) {
+            EngineStateNote(downReason)
         }
+        if (tracked && status.engineDown && status.downModels.isNotEmpty()) {
+            EngineStateNote("폴백으로 가는 모델: ${status.downModels.joinToString(", ")}")
+        }
+        servingNotices(serving).forEach { EngineStateNote(it.text, failure = it.failure) }
         if (!tracked) {
-            Text(
-                text = "게이트웨이의 엔진 감시가 꺼져 있어 지금 이 순간의 프로브만 보입니다.",
-                style = DenebType.meta,
-                color = denebHint(),
-                modifier = Modifier.padding(start = 16.dp, top = 6.dp),
-            )
+            EngineStateNote("게이트웨이의 엔진 감시가 꺼져 있어 지금 이 순간의 프로브만 보입니다.")
         }
     }
+}
+
+/** One line of evidence under the verdict, aligned with its text past the dot. */
+@Composable
+private fun EngineStateNote(text: String, failure: Boolean = false) {
+    Text(
+        text = text,
+        style = DenebType.meta,
+        color = if (failure) MaterialTheme.colorScheme.error else denebHint(),
+        modifier = Modifier.padding(start = 16.dp, top = 6.dp),
+    )
 }
 
 /**

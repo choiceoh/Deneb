@@ -22,6 +22,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginecontrol"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/routershare"
@@ -514,6 +515,13 @@ func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities 
 			// nil-safe, so an absent watcher reads as "not tracked".
 			Liveness:    func() handlerminiapp.LivenessSource { return s.engineLiveness },
 			RouterShare: func() *routershare.Store { return s.modelMaintenance.RouterShare() },
+			// Which model the engine's production serves is the fleet's to decide
+			// (stkernel st_production.py on the engine's head, asked over ssh).
+			// Built once here so its short cache is shared by every call.
+			Control: engineControlSource(enginecontrol.FromEnv(enginespeed.Endpoints())),
+			// The routing follow's record is built in registerWorkflowSideEffects,
+			// after this early registration — resolve it per call (nil-safe).
+			Follow: func() *enginecontrol.FollowLog { return s.engineFollowLog },
 		}),
 		// miniapp.models.* is deliberately registered in registerLateMethods:
 		// the picker snapshots the model registry and chat handler at creation.
@@ -1131,4 +1139,16 @@ func protectedRepoRoots() []string {
 		}
 	}
 	return roots
+}
+
+// engineControlSource hands the fleet controller to the engine RPC as an
+// interface: a nil controller (no engine, or the control switched off) must
+// reach the handler as a nil interface, not a typed nil it would call.
+func engineControlSource(c *enginecontrol.Controller) func() handlerminiapp.EngineControl {
+	return func() handlerminiapp.EngineControl {
+		if c == nil {
+			return nil
+		}
+		return c
+	}
 }

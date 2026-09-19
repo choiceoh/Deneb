@@ -17,8 +17,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// engineServing is a live engine door that names model in /v1/models.
-func engineServing(t *testing.T, model string) string {
+// fakeEngineDoor is a live engine door that names model in /v1/models.
+func fakeEngineDoor(t *testing.T, model string) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -96,7 +96,7 @@ func dayList(days []EngineDay) string {
 func TestEngineStatusShowsOneModelsStatisticsAtATime(t *testing.T) {
 	loc := time.Local
 	const glm, qwen = "glm-5.3-flash", "qwen3.8-flash-next"
-	endpoint := engineServing(t, glm)
+	endpoint := fakeEngineDoor(t, glm)
 	now := time.Date(2026, 9, 19, 22, 0, 0, 0, loc)
 	day := func(d, h int) time.Time { return time.Date(2026, 9, d, h, 0, 0, 0, loc) }
 

@@ -24,6 +24,9 @@ type EngineFleet struct {
 	Steps  int64 `json:"steps"`
 	// Parked is conversations the engine holds resident for resumption.
 	Parked int `json:"parked"`
+	// Model is the id the door answers to. With Owner it says what production
+	// serves: one GET, instead of reading /v1/models and / apart.
+	Model string `json:"model,omitempty"`
 
 	// Owner is the fleet lock holder as the engine reports it (for example
 	// "production/deploy/2011680"); Draining and HandedOver name a successor
@@ -52,6 +55,7 @@ func FetchEngineFleet(ctx context.Context, metricsURL string) (EngineFleet, bool
 
 	var payload struct {
 		Engine string `json:"engine"`
+		Model  string `json:"model"`
 		Served int64  `json:"served"`
 		Steps  int64  `json:"steps"`
 		Parked int    `json:"parked"`
@@ -67,7 +71,7 @@ func FetchEngineFleet(ctx context.Context, metricsURL string) (EngineFleet, bool
 	if payload.Engine == "" {
 		return EngineFleet{}, false // answered, but not an engine's status document
 	}
-	out := EngineFleet{Served: payload.Served, Steps: payload.Steps, Parked: payload.Parked}
+	out := EngineFleet{Served: payload.Served, Steps: payload.Steps, Parked: payload.Parked, Model: strings.TrimSpace(payload.Model)}
 	if payload.Fleet != nil {
 		out.FleetKnown = true
 		out.Owner = strings.TrimSpace(payload.Fleet.Owner)

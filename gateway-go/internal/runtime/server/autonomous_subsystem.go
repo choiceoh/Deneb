@@ -1,12 +1,14 @@
 package server
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginecontrol"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginelive"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelmaintenance"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelpicker"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rolehealth"
 )
 
@@ -23,6 +25,12 @@ type AutonomousSubsystem struct {
 	roleHealth           *rolehealth.Watch   // set during registerWorkflowSideEffects()
 	engineLiveness       *enginelive.Watcher // set during registerWorkflowSideEffects()
 	modelMaintenance     *modelmaintenance.Suite
+
+	// The routing follow (engine_follow_task.go): the picker it moves roles
+	// through (set during registerLateMethods) and what it last did (set during
+	// registerWorkflowSideEffects, read by miniapp.engine.serving; nil-safe).
+	modelPicker     *modelpicker.Controller
+	engineFollowLog *enginecontrol.FollowLog
 
 	// agentLogWriter is the shared behavioral event log (the same instance the
 	// chat pipeline uses). Promoted to Server so registerWorkflowSideEffects can
