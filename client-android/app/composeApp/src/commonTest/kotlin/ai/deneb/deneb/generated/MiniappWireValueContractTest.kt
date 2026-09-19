@@ -1036,6 +1036,52 @@ class MiniappWireValueContractTest {
             invalidValue = JsonPrimitive("not-a-long"),
         ),
         wireContract(
+            name = "EngineRoleHold",
+            serializer = EngineRoleHold.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "role",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "from",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "reason",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "role",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "EngineRoleMove",
+            serializer = EngineRoleMove.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "role",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "from",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "to",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "role",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
             name = "EngineRoutingRow",
             serializer = EngineRoutingRow.serializer(),
             fields = listOf(
@@ -1096,6 +1142,132 @@ class MiniappWireValueContractTest {
                 ),
             ),
             invalidField = "model",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "EngineServing",
+            serializer = EngineServing.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "nowMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "available",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "reason",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "head",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "selected",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "selectedModel",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "chosenBy",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "chosenAtMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "note",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "supervised",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "serving",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "servingModel",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "phase",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "detail",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "updatedAtMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "profiles",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "followAtMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "followServed",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "moved",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "held",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+            ),
+            invalidField = "nowMs",
+            invalidValue = JsonPrimitive("not-a-long"),
+        ),
+        wireContract(
+            name = "EngineServingProfile",
+            serializer = EngineServingProfile.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "profile",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "model",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "profile",
             invalidValue = JsonObject(emptyMap()),
         ),
         wireContract(

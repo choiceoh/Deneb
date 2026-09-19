@@ -268,6 +268,22 @@ data class EngineOutage(
 
 @Immutable
 @Serializable
+data class EngineRoleHold(
+    val role: String = "",
+    val from: String = "",
+    val reason: String = "",
+)
+
+@Immutable
+@Serializable
+data class EngineRoleMove(
+    val role: String = "",
+    val from: String = "",
+    val to: String = "",
+)
+
+@Immutable
+@Serializable
 data class EngineRoutingRow(
     val model: String = "",
     val local: Boolean = false,
@@ -280,6 +296,38 @@ data class EngineRoutingRow(
     val retryAfterMs: Long = 0L,
     val keyHealth: String = "",
     val upstreamMissing: Boolean = false,
+)
+
+@Immutable
+@Serializable
+data class EngineServing(
+    val nowMs: Long = 0L,
+    val available: Boolean = false,
+    val reason: String = "",
+    val head: String = "",
+    val selected: String = "",
+    val selectedModel: String = "",
+    val chosenBy: String = "",
+    val chosenAtMs: Long = 0L,
+    val note: String = "",
+    val supervised: Boolean = false,
+    val serving: String = "",
+    val servingModel: String = "",
+    val phase: String = "",
+    val detail: String = "",
+    val updatedAtMs: Long = 0L,
+    val profiles: List<EngineServingProfile> = emptyList(),
+    val followAtMs: Long = 0L,
+    val followServed: String = "",
+    val moved: List<EngineRoleMove> = emptyList(),
+    val held: List<EngineRoleHold> = emptyList(),
+)
+
+@Immutable
+@Serializable
+data class EngineServingProfile(
+    val profile: String = "",
+    val model: String = "",
 )
 
 @Immutable
