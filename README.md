@@ -29,6 +29,20 @@ Andromeda (desktop, Tauri) ───┘         │
 
 ## Multi-agent development environment
 
+Coding agents start with `./dev`: a standard-library-only JSON entrypoint for
+tool search, contracts, environment status, bounded execution, and catalog audits.
+It uses the same interface as stkernel, with Deneb's existing tools underneath.
+
+```bash
+./dev search "RPC"
+./dev describe rpcmap
+./dev run rpcmap -- miniapp.people.list --json
+./dev status
+```
+
+See [Agent Development Tools](https://docs.deneb.ai/tools/agent-dev) for the
+execution contract and adapter maintenance.
+
 The repo supports parallel coding agents (Claude Code, ZCode, Codex) with
 automatic worktree isolation, shared CodeGraph code intelligence, and a common
 hook pipeline (conflict detection, rule guidance, index sync). See

@@ -8,6 +8,17 @@ read_when:
 
 # AGENTS.md - Deneb Personal Assistant (default)
 
+## Coding tool entrypoint
+
+When developing this repository, start with `./dev`. It returns JSON and needs
+only the Python standard library. Search existing tools with `./dev search <intent>`,
+inspect arguments, effects, and prerequisites with `./dev describe <id>`, and
+invoke them with `./dev run <id> -- <arguments>`. Use `./dev status` for environment
+inventory and `./dev audit` to catch catalog drift. New scripts, Makefile targets,
+and package scripts remain discoverable before an execution adapter is added.
+Read [the contract](docs/tools/agent-dev.md) and the authoritative coding rules
+in [CLAUDE.md](CLAUDE.md); process completion does not prove skipped checks passed.
+
 ## First run (recommended)
 
 Deneb uses a dedicated workspace directory for the agent. Default: `~/.deneb/workspace` (configurable via `agents.defaults.workspace`).
