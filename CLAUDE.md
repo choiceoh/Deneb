@@ -13,6 +13,11 @@
 
 ## 안전 (항상 적용)
 
+Coding sessions start with `./dev`. Before adding a tool, use `./dev search <intent>`;
+inspect its contract with `./dev describe <id>`, then `./dev run <id> -- <arguments>`.
+Use `./dev status` for local prerequisites and `./dev audit` for catalog drift.
+The existing gates below still apply. See [Agent Development Tools](docs/tools/agent-dev.md).
+
 - 레포: https://github.com/choiceoh/Deneb. 챗 응답의 파일 참조는 레포 상대 경로만 (절대경로·`~/...` 금지).
 - `~/deneb/` = **프로덕션 전용** (main만 — srv4 의 auto-deploy 타이머가 pull·빌드·핫스왑) — 에이전트는 거기서 브랜치/워크트리/수동 빌드 금지. 개발은 `~/deneb-dev/`.
 - 멀티에이전트 안전: `git stash`·워크트리 조작·브랜치 전환은 **명시 요청 시에만**. "push" = rebase 통합 허용, "commit" = 내 변경만. 낯선 파일은 무시하고 내 변경만 커밋.
