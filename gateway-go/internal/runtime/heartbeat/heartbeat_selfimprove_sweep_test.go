@@ -13,8 +13,8 @@ import (
 func sweepTask(t *testing.T, proposed int, funnel genesis.SelfCorrectionFunnelSummary, recurrences int) *heartbeatTask {
 	t.Helper()
 	return &heartbeatTask{
-		homeDir: t.TempDir(),
-		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		stateDir: t.TempDir(),
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		proposedSelfCoding: func() (int, string) {
 			return proposed, ""
 		},
@@ -117,7 +117,7 @@ func TestDetectSelfImproveSweepFiresThenExpiresThrottle(t *testing.T) {
 func TestDetectSelfImproveSweep_EscalatesAfterIgnoredNudges(t *testing.T) {
 	proposed := 0
 	task := &heartbeatTask{
-		homeDir:            t.TempDir(),
+		stateDir:           t.TempDir(),
 		logger:             slog.New(slog.NewTextHandler(io.Discard, nil)),
 		proposedSelfCoding: func() (int, string) { return proposed, "" },
 		selfImproveSignals: func() (genesis.SelfCorrectionFunnelSummary, int) {
@@ -170,7 +170,7 @@ func TestDetectSelfImproveSweepBusyEmptyAndNilStayQuiet(t *testing.T) {
 	}
 
 	// Lane unwired (tracker absent) → disabled.
-	bare := &heartbeatTask{homeDir: t.TempDir(), logger: slog.Default()}
+	bare := &heartbeatTask{stateDir: t.TempDir(), logger: slog.Default()}
 	if got := bare.detectSelfImproveSweepNudge(time.Now()); got != "" {
 		t.Fatalf("nil signals should disable the lane, got %q", got)
 	}

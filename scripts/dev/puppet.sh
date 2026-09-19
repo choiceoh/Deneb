@@ -281,10 +281,10 @@ cmd_send() {
     echo "Usage: puppet.sh send MESSAGE [--new-session] [--sync] [--timeout SECS]" >&2
     return 1
   fi
-  # Instance-scoped default session: transcripts and agent-logs follow the
-  # instance state dir, but per-session sidecars (session models/labels/pins)
-  # still live in the shared ~/.deneb — a fixed global key would
-  # cross-contaminate parallel worktree instances there.
+  # Instance-scoped default session. Everything keyed by it — transcripts,
+  # agent-logs and the per-session sidecars (models/labels/pins/focus) — lives
+  # in the instance state dir, so the suffix no longer guards a shared store; it
+  # keeps parallel worktree instances' sessions distinguishable in their output.
   local session="client:puppet-${DEVLIB_INSTANCE}" sync=0 timeout=330
   while [[ $# -gt 0 ]]; do
     case "$1" in

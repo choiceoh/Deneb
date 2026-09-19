@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 )
 
 // skillsPromptCache is a version-aware cache for the workspace skills prompt.
@@ -200,12 +201,16 @@ func availableToolNames(tools *ToolRegistry) []string {
 	return tools.SortedNames()
 }
 
+// skillCuratorStatePath is the genesis Tracker's curator ledger, which lives in
+// the state dir's data/ (genesis.NewTracker). Resolved from $HOME, a dev
+// gateway keyed its skills-prompt cache and archive filter off production's
+// file while its own curator wrote somewhere else.
 func skillCuratorStatePath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
+	stateDir := strings.TrimSpace(config.ResolveStateDir())
+	if stateDir == "" {
 		return ""
 	}
-	return filepath.Join(home, ".deneb", "data", "skill_curator_state.json")
+	return filepath.Join(stateDir, "data", "skill_curator_state.json")
 }
 
 func skillCuratorStateVersion() int64 {

@@ -8,7 +8,7 @@
 // idle conversations never got re-titled.
 //
 // Two pieces close the loop:
-//  1. A sidecar label store (~/.deneb/session-labels.json) — a periodic sweep
+//  1. A sidecar label store (<state dir>/session-labels.json) — a periodic sweep
 //     snapshots {sessionKey → Label} for restorable sessions (write only on
 //     change) and a final flush runs on shutdown; the restore path re-applies
 //     stored labels.
@@ -48,11 +48,7 @@ const (
 )
 
 func sessionLabelStorePath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".deneb", "session-labels.json"), nil
+	return stateFilePath("session-labels.json")
 }
 
 // loadSessionLabels reads the sidecar store; a missing or corrupt file degrades
@@ -120,11 +116,7 @@ func labelsEqual(a, b map[string]string) bool {
 // cross-file skew only risks one extra re-title, never a lost label.
 
 func sessionPinsStorePath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".deneb", "session-pins.json"), nil
+	return stateFilePath("session-pins.json")
 }
 
 // loadSessionPins reads the pinned-key set; a missing or corrupt file degrades to

@@ -1,19 +1,13 @@
 package server
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 func sessionModelsStorePath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".deneb", "session-models.json"), nil
+	return stateFilePath("session-models.json")
 }
 
 func loadSessionModels(path string) map[string]string {

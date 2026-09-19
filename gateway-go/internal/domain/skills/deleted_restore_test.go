@@ -11,6 +11,7 @@ import (
 // reached from, so recovery meant hand-editing the JSON.
 func TestUnmarkSkillDeletedRoundTrip(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 
 	if err := MarkSkillDeleted("kb-interview", "테스트", time.Now()); err != nil {
 		t.Fatalf("mark: %v", err)
@@ -38,6 +39,7 @@ func TestUnmarkSkillDeletedRoundTrip(t *testing.T) {
 // unmarking a skill that was never deleted is a no-op.
 func TestUnmarkSkillDeletedIsIdempotent(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 
 	if err := UnmarkSkillDeleted("never-deleted"); err != nil {
 		t.Fatalf("unmark of a live skill must be a no-op, got %v", err)
@@ -60,6 +62,7 @@ func TestUnmarkSkillDeletedIsIdempotent(t *testing.T) {
 func TestDeletedSkillNamesSortedEmptyAfterFullRestore(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("DENEB_STATE_DIR", filepath.Join(home, ".deneb"))
 	if err := MarkSkillDeleted("deep-research", "테스트", time.Now()); err != nil {
 		t.Fatalf("mark: %v", err)
 	}

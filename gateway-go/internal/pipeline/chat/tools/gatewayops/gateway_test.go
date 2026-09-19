@@ -423,6 +423,13 @@ func TestGatewayUpdateReturnsApprovalEnvelope(t *testing.T) {
 }
 
 func TestGatewayUpdateConfirmedHappyPath(t *testing.T) {
+	// A successful update stamps .update-sentinel. Give HOME and the state dir
+	// different temp dirs (the dev-gateway shape): this test used to overwrite
+	// the operator's real ~/.deneb/.update-sentinel with its fake clock.
+	home := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("DENEB_STATE_DIR", stateDir)
 	runner := &fakeRunner{responses: []fakeResponse{
 		{match: matcherFor("git", "rev-parse"), output: []byte("main\n")},
 		{match: matcherFor("git", "status"), output: []byte("")},
@@ -442,6 +449,13 @@ func TestGatewayUpdateConfirmedHappyPath(t *testing.T) {
 	}
 	if len(sig.sent) != 1 || sig.sent[0] != syscall.SIGUSR1 {
 		t.Errorf("expected SIGUSR1 after successful update, got: %v", sig.sent)
+	}
+	sentinel, err := os.ReadFile(filepath.Join(stateDir, ".update-sentinel"))
+	if err != nil || !strings.Contains(string(sentinel), `"branch":"main"`) {
+		t.Errorf("sentinel under the state dir = %q, %v", sentinel, err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".deneb")); !os.IsNotExist(err) {
+		t.Errorf("update touched $HOME/.deneb (stat err = %v)", err)
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -103,11 +104,13 @@ func ToolGraphify(workspaceDir string) toolport.ToolFunc {
 func resolveGraphifyPath(hint, workspaceDir string) (string, error) {
 	switch hint {
 	case "", "wiki":
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("resolve home for wiki graph: %w", err)
+		// The dreamer writes the snapshot under the state dir
+		// (wiki.graphSnapshotOutDir); read the same file.
+		stateDir := strings.TrimSpace(config.ResolveStateDir())
+		if stateDir == "" {
+			return "", errors.New("resolve state dir for wiki graph")
 		}
-		return filepath.Join(home, ".deneb", "wiki-graph", "graphify-out", "graph.json"), nil
+		return filepath.Join(stateDir, "wiki-graph", "graphify-out", "graph.json"), nil
 	case "code":
 		// Code call/import graph built by `graphify update .` in the workspace.
 		// Matches the system prompt's graph="code" guidance.

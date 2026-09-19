@@ -20,7 +20,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 )
 
 // selfCodingRetryInterval re-nudges an UNCHANGED pending set after this long.
@@ -49,7 +52,7 @@ const selfCodingRetryInterval = 2 * time.Hour
 const selfCodingEscalateAfterIgnored = 2
 
 // selfCodingNudgeState persists the last firing under the state dir
-// (~/.deneb/heartbeat-selfcoding.json).
+// (<state dir>/heartbeat-selfcoding.json).
 type selfCodingNudgeState struct {
 	LastFingerprint string `json:"lastFingerprint"`
 	LastNudgeAtMs   int64  `json:"lastNudgeAtMs"`
@@ -61,22 +64,23 @@ type selfCodingNudgeState struct {
 }
 
 func (t *heartbeatTask) selfCodingStatePath() string {
-	return selfCodingStatePath(t.homeDir)
+	return selfCodingStatePath(t.stateDir)
 }
 
-func selfCodingStatePath(homeDir string) string {
-	return filepath.Join(homeDir, ".deneb", "heartbeat-selfcoding.json")
+func selfCodingStatePath(stateDir string) string {
+	return filepath.Join(stateDir, "heartbeat-selfcoding.json")
 }
 
 // lastSelfCodingNudgeAtMs reports when the self-coding review lane last fired,
 // straight from the persisted marker (0 = never). Used by the miniapp funnel
-// summary so the native screen can show consumption-lane liveness.
+// summary so the native screen can show consumption-lane liveness. Reads the
+// marker the server's heartbeat task writes, which is rooted in the state dir.
 func lastSelfCodingNudgeAtMs() int64 {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	stateDir := strings.TrimSpace(config.ResolveStateDir())
+	if stateDir == "" {
 		return 0
 	}
-	return loadSelfCodingNudgeState(selfCodingStatePath(home)).LastNudgeAtMs
+	return loadSelfCodingNudgeState(selfCodingStatePath(stateDir)).LastNudgeAtMs
 }
 
 // LastSelfCodingNudgeAtMillis reports the most recent self-coding nudge time.
@@ -88,7 +92,7 @@ func LastSelfCodingNudgeAtMillis() int64 { return lastSelfCodingNudgeAtMs() }
 // The marker persists on fire (fail-closed: a failed save skips the nudge so
 // a broken state dir cannot re-fire a cloud turn every 30 minutes).
 func (t *heartbeatTask) detectSelfCodingNudge(now time.Time) string {
-	if t.proposedSelfCoding == nil || t.homeDir == "" {
+	if t.proposedSelfCoding == nil || t.stateDir == "" {
 		return ""
 	}
 	count, fingerprint := t.proposedSelfCoding()

@@ -302,6 +302,7 @@ func TestSkillsDelete_RemovesSkillDirectoryAndInvalidates(t *testing.T) {
 
 func TestSkillsDelete_BundledSkillTombstonesInsteadOfRemoving(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	root := t.TempDir()
 	skillDir := filepath.Join(root, "email-analysis")
 	path := filepath.Join(skillDir, "SKILL.md")

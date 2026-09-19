@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 )
 
 // graphifyNode mirrors the per-node shape produced by the `graphify` CLI.
@@ -438,14 +440,19 @@ func wikiFileType(page *Page) string {
 }
 
 // graphSnapshotOutDir returns the absolute directory where the wiki graph
-// snapshot lives (~/.deneb/wiki-graph). Returns ok=false when the home
-// directory cannot be resolved (degenerate environments only).
+// snapshot lives: <state dir>/wiki-graph (~/.deneb/wiki-graph in production),
+// next to the wiki it is built from (ConfigFromEnv). Built from $HOME, a dev
+// gateway's dream cycle replaced production's graph with its own — measured
+// 2026-09-19: the live graph.json held one node sourced from
+// /tmp/deneb-dev-state/wiki where the 11:25 production cycle had written 1,262.
+// Returns ok=false when the state dir cannot be resolved (degenerate
+// environments only).
 func graphSnapshotOutDir() (string, bool) {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	stateDir := strings.TrimSpace(config.ResolveStateDir())
+	if stateDir == "" {
 		return "", false
 	}
-	return filepath.Join(home, ".deneb", "wiki-graph"), true
+	return filepath.Join(stateDir, "wiki-graph"), true
 }
 
 // resolveRelatedID maps a Related[] entry — which can be a page id, a path

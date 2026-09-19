@@ -450,9 +450,23 @@ func TestDefaultDirReturnsConfiguredOrFallback(t *testing.T) {
 	if got := DefaultDir(); got != "/tmp/deneb-files-test" {
 		t.Errorf("DefaultDir with env = %q", got)
 	}
+
+	// The fallback follows the state dir: a dev gateway keeps the real $HOME
+	// but runs under DENEB_STATE_DIR=/tmp/…, and built from $HOME its file
+	// RPCs and tools wrote into the operator's drive.
+	home := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("HOME", home)
 	t.Setenv("DENEB_FILES_DIR", "")
-	if got := DefaultDir(); !strings.HasSuffix(got, filepath.Join(".deneb", "files")) {
-		t.Errorf("DefaultDir fallback = %q, want …/.deneb/files", got)
+	t.Setenv("DENEB_STATE_DIR", stateDir)
+	if got, want := DefaultDir(), filepath.Join(stateDir, "files"); got != want {
+		t.Errorf("DefaultDir dev fallback = %q, want %q", got, want)
+	}
+
+	// Production pins DENEB_STATE_DIR=$HOME/.deneb, and unset defaults there.
+	t.Setenv("DENEB_STATE_DIR", "")
+	if got, want := DefaultDir(), filepath.Join(home, ".deneb", "files"); got != want {
+		t.Errorf("DefaultDir production fallback = %q, want %q", got, want)
 	}
 }
 

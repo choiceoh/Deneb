@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -12,11 +11,7 @@ type sessionFocusStore struct {
 }
 
 func sessionFocusStorePath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".deneb", "session-focus.json"), nil
+	return stateFilePath("session-focus.json")
 }
 
 func loadSessionFocus(path string) string {

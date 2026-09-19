@@ -30,12 +30,16 @@
   chat 포트에만 의존한다. `runtime/server`를 임포트하지 않는다 — 서버는
   `TaskConfig` 클로저(예: 아이들 스킬 리뷰 레인, `server/heartbeat_idle_review.go`)로
   능력을 주입하는 방향이 유일하다.
-- 레인 마커 파일(`~/.deneb/heartbeat-*.json`)은 **fail-closed가 반드시 유지**돼야
+- 레인 마커 파일(`<state dir>/heartbeat-*.json`)은 **fail-closed가 반드시 유지**돼야
   한다: 마커 저장 실패 시 넛지를 건너뛴다 — 깨진 state dir가 30분마다 클라우드
   턴을 재발화시키면 안 된다.
-- 마커·fixture는 homeDir 기준이라 dev 인스턴스와 프로덕션이 **공유**된다.
-  프로덕션 상태를 쓰는 레인을 새로 추가할 때는 서버 쪽 프로덕션 state-dir
-  게이트와 같은 불변조건을 검토하라.
+- HEARTBEAT.md·BOOT.md·마커·fixture는 서버가 넘긴 `TaskConfig.StateDir`
+  (`config.ResolveStateDir()`) 기준이다. dev 인스턴스(`DENEB_STATE_DIR=/tmp/…`, 실제
+  `$HOME`)는 자기 state dir만 읽고 쓴다 — 운영자의 HEARTBEAT.md를 따르거나
+  `heartbeat_update`로 고치지 않는다(dev에서 하트비트 턴을 보려면 dev state dir에
+  HEARTBEAT.md를 둔다). 새 파일은 `$HOME`이 아니라 `t.stateDir`에서 만든다.
+  실모델 호출·운영자 카드처럼 프로덕션에만 있어야 할 효과를 내는 레인은 서버 쪽
+  프로덕션 state-dir 게이트와 같은 불변조건을 검토하라.
 - sweep 레인은 proposed 큐가 빌 때만 발화한다(드레인 레인과 상호배타 — 순서는
   `Run`의 감지 순서가 단일 소스). 넛지 본문 계약은 필수-행동이다: NO_REPLY는
   사용자 메시지 억제에만 쓰고, 판정/확인 도구 호출 자체를 건너뛰는 지름길로

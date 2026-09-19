@@ -157,7 +157,7 @@ func TestHeartbeatRunReachesIdleReviewLaneBeforeEarlyReturn(t *testing.T) {
 		Now:         func() time.Time { return time.Date(2026, 7, 11, 12, 0, 0, 0, kst) },
 		ChatHandler: readyChatStub{},
 		Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
-		HomeDir:     t.TempDir(),
+		StateDir:    t.TempDir(),
 		IdleSkillReview: func(context.Context) (bool, string) {
 			called = true
 			return false, ""

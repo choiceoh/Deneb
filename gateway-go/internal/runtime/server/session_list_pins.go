@@ -1,18 +1,11 @@
 package server
 
 import (
-	"os"
-	"path/filepath"
-
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 func sessionListPinsStorePath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".deneb", "session-list-pins.json"), nil
+	return stateFilePath("session-list-pins.json")
 }
 
 func loadSessionListPins(path string) map[string]bool {
