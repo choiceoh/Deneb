@@ -12,6 +12,14 @@ import (
 )
 
 func TestHealthEndpointReturnsOKStatus(t *testing.T) {
+	// StartAndListen restores sessions, starts the sidecar sweep and the
+	// autonomous service, all under the resolved state dir. Unisolated, that is
+	// the operator's ~/.deneb: measured 2026-09-19, a `go test ./...` run
+	// rewrote production's fact projection (workspace MEMORY.md/USER.md) and
+	// wiki index from here.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
