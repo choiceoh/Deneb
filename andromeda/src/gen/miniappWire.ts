@@ -208,6 +208,14 @@ export interface EngineMeasure {
   samples?: number
 }
 
+export interface EngineModelRow {
+  model?: string
+  current?: boolean
+  days?: number
+  requests?: number
+  lastDay?: string
+}
+
 export interface EngineOutage {
   sinceMs?: number
   untilMs?: number
@@ -247,6 +255,8 @@ export interface EngineStatusResult {
   trackedSinceMs?: number
   outages?: EngineOutage[]
   internals?: EngineInternals
+  models?: EngineModelRow[]
+  selectedModel?: string
   days?: EngineDay[]
   total?: EngineTotals
   routerAvailable?: boolean

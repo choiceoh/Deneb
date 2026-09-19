@@ -157,6 +157,12 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("key", "label", "value", "unit", "available", "samples"),
         ),
         contract(
+            name = "EngineModelRow",
+            serializer = EngineModelRow.serializer(),
+            empty = EngineModelRow(),
+            fields = listOf("model", "current", "days", "requests", "lastDay"),
+        ),
+        contract(
             name = "EngineOutage",
             serializer = EngineOutage.serializer(),
             empty = EngineOutage(),
@@ -172,7 +178,7 @@ class MiniappWireDescriptorContractTest {
             name = "EngineStatusResult",
             serializer = EngineStatusResult.serializer(),
             empty = EngineStatusResult(),
-            fields = listOf("diagnostics", "nowMs", "configured", "endpoint", "reachable", "model", "runningRequests", "waitingRequests", "livenessTracked", "engineDown", "downSinceMs", "upSinceMs", "downReason", "downModels", "trackedSinceMs", "outages", "internals", "days", "total", "routerAvailable", "routerWindow", "localRequests", "remoteRequests", "unknownRequests", "routing", "routerStatusAvailable", "routerDay", "routerDayMetered", "todayLocalRequests", "todayRemoteRequests", "todayUnknownRequests", "routingToday"),
+            fields = listOf("diagnostics", "nowMs", "configured", "endpoint", "reachable", "model", "runningRequests", "waitingRequests", "livenessTracked", "engineDown", "downSinceMs", "upSinceMs", "downReason", "downModels", "trackedSinceMs", "outages", "internals", "models", "selectedModel", "days", "total", "routerAvailable", "routerWindow", "localRequests", "remoteRequests", "unknownRequests", "routing", "routerStatusAvailable", "routerDay", "routerDayMetered", "todayLocalRequests", "todayRemoteRequests", "todayUnknownRequests", "routingToday"),
         ),
         contract(
             name = "EngineTotals",

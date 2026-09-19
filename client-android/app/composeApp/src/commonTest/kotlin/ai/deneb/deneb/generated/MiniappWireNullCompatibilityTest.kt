@@ -946,6 +946,36 @@ class MiniappWireNullCompatibilityTest {
             field = "samples",
         ),
         nullContract(
+            name = "EngineModelRow.model",
+            serializer = EngineModelRow.serializer(),
+            empty = EngineModelRow(),
+            field = "model",
+        ),
+        nullContract(
+            name = "EngineModelRow.current",
+            serializer = EngineModelRow.serializer(),
+            empty = EngineModelRow(),
+            field = "current",
+        ),
+        nullContract(
+            name = "EngineModelRow.days",
+            serializer = EngineModelRow.serializer(),
+            empty = EngineModelRow(),
+            field = "days",
+        ),
+        nullContract(
+            name = "EngineModelRow.requests",
+            serializer = EngineModelRow.serializer(),
+            empty = EngineModelRow(),
+            field = "requests",
+        ),
+        nullContract(
+            name = "EngineModelRow.lastDay",
+            serializer = EngineModelRow.serializer(),
+            empty = EngineModelRow(),
+            field = "lastDay",
+        ),
+        nullContract(
             name = "EngineOutage.sinceMs",
             serializer = EngineOutage.serializer(),
             empty = EngineOutage(),
@@ -1136,6 +1166,18 @@ class MiniappWireNullCompatibilityTest {
             serializer = EngineStatusResult.serializer(),
             empty = EngineStatusResult(),
             field = "internals",
+        ),
+        nullContract(
+            name = "EngineStatusResult.models",
+            serializer = EngineStatusResult.serializer(),
+            empty = EngineStatusResult(),
+            field = "models",
+        ),
+        nullContract(
+            name = "EngineStatusResult.selectedModel",
+            serializer = EngineStatusResult.serializer(),
+            empty = EngineStatusResult(),
+            field = "selectedModel",
         ),
         nullContract(
             name = "EngineStatusResult.days",
