@@ -14,6 +14,13 @@ role; provider selection and health fallback remain centralized here.
   `LocalAIRecentlyDown` is the synchronized degradation signal.
 - `vision.go`: `VisionFrame` and `CallVisionLLM` validate and assemble
   multimodal requests through the same role registry.
+- `yesno.go`: `CallRoleYesNo`/`CallTinyYesNo` answer a one-word YES/NO question
+  with P(YES) read from the first token's logprobs (one token, temperature 0,
+  non-streaming via `llm.Client.CompleteFirstToken`). Candidates and request
+  shaping are `CallRoleLLM`'s — `roleCandidates` and `shapeRoleExtra` in
+  `localai.go` are the one place both take them from. A backend without
+  logprobs (the OpenRouter rungs) returns the token alone; YES and NO must hold
+  `minYesNoMass` of the token before their ratio is trusted.
 
 ## Dependency direction and invariants
 

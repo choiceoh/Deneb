@@ -37,7 +37,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
@@ -567,9 +566,13 @@ func (s *Handler) processJudgment(ctx context.Context, eventType, source, text s
 
 	// Tiered triage: a cheap tiny-model gate before the expensive tool-calling
 	// judgment turn. Electronic approvals always bypass it. Fail-open.
-	if !approval && notificationLikeEvent(eventType) && !worthFullJudgment(ctx, source, text) {
-		s.logger.Debug("phone-event tiny-gate dropped", "source", source, "type", eventType)
-		return false, nil
+	if !approval && notificationLikeEvent(eventType) {
+		threshold := tinyGateThreshold()
+		verdict := worthFullJudgment(ctx, source, text, threshold)
+		logTinyGate(s.logger, source, eventType, threshold, verdict)
+		if !verdict.pass {
+			return false, nil
+		}
 	}
 
 	msg := command
@@ -726,21 +729,6 @@ func notificationLikeEvent(eventType string) bool {
 	default:
 		return true
 	}
-}
-
-// worthFullJudgment is the tiered-triage first pass: a cheap tiny-model yes/no on
-// whether a notification deserves the full tool-calling judgment turn. It catches
-// the obvious noise (ads/promo/OTP/receipts/routine) the full judgment would also
-// NO_REPLY, but without spending a main-model turn. Fail-open — any tiny-model error
-// returns true so the full judgment still runs (never silently drop signal).
-func worthFullJudgment(ctx context.Context, source, text string) bool {
-	const system = "당신은 스마트폰 알림 분류기다. 사용자에게 즉시 알릴 가치가 있는 업무·일정·금전·중요 연락이면 YES, " +
-		"광고·프로모션·스팸·인증번호(OTP)·결제 영수증·배송/마케팅 알림·일상적 시스템/앱 알림이면 NO. YES 또는 NO 한 단어만 답하라."
-	out, err := pilot.CallTinyLLM(ctx, system, "앱: "+source+"\n알림 내용:\n"+text, 4, json.RawMessage(`{"temperature":0}`))
-	if err != nil {
-		return true // fail-open: run the full judgment rather than drop on a gate error
-	}
-	return !strings.HasPrefix(strings.TrimSpace(strings.ToUpper(out)), "NO")
 }
 
 func (s *Handler) writeJSON(w http.ResponseWriter, status int, value any) {
