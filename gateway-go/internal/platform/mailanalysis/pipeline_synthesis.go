@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
@@ -191,11 +192,13 @@ func extractWikiGraphContext(ctx context.Context, msg *gmail.MessageDetail) Memo
 		return zero
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
+	// The dreamer writes the snapshot under the state dir
+	// (wiki.graphSnapshotOutDir); read the same file.
+	stateDir := strings.TrimSpace(config.ResolveStateDir())
+	if stateDir == "" {
 		return zero
 	}
-	graphPath := filepath.Join(home, ".deneb", "wiki-graph", "graphify-out", "graph.json")
+	graphPath := filepath.Join(stateDir, "wiki-graph", "graphify-out", "graph.json")
 	if _, err := os.Stat(graphPath); err != nil {
 		return zero // wiki graph not built yet
 	}

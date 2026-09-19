@@ -12,8 +12,8 @@ import (
 func fixtureTask(t *testing.T) *heartbeatTask {
 	t.Helper()
 	return &heartbeatTask{
-		homeDir: t.TempDir(),
-		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		stateDir: t.TempDir(),
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 }
 
@@ -52,7 +52,7 @@ func TestRecordHeartbeatFixture_ShapeAndTruncation(t *testing.T) {
 		t.Fatalf("contract hash should track content: %+v", entries)
 	}
 
-	// homeDir unset → silent no-op (lane unwired in tests/minimal servers).
+	// stateDir unset → silent no-op (lane unwired in tests/minimal servers).
 	bare := &heartbeatTask{logger: slog.Default()}
 	bare.recordHeartbeatFixture(heartbeatFixture{OutcomeText: "x"})
 }

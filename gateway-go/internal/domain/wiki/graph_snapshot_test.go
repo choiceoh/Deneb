@@ -218,3 +218,24 @@ func writeGraphFixturePage(t *testing.T, store *Store, path, id, title string, t
 		t.Fatalf("WritePage(%s): %v", path, err)
 	}
 }
+
+// The dream cycle writes the graph that the graphify tool and the mail
+// synthesis read. Built from $HOME, a dev gateway (real $HOME,
+// DENEB_STATE_DIR=/tmp/…) replaced production's 1,262-node graph with its own
+// one-node wiki (2026-09-19).
+func TestGraphSnapshotOutDirFollowsTheStateDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	stateDir := t.TempDir()
+	t.Setenv("DENEB_STATE_DIR", stateDir)
+	if got, ok := graphSnapshotOutDir(); !ok || got != filepath.Join(stateDir, "wiki-graph") {
+		t.Fatalf("dev graph dir = %q (ok=%v), want %q", got, ok, filepath.Join(stateDir, "wiki-graph"))
+	}
+
+	// Production pins DENEB_STATE_DIR=$HOME/.deneb, and unset defaults there.
+	t.Setenv("DENEB_STATE_DIR", "")
+	if got, _ := graphSnapshotOutDir(); got != filepath.Join(home, ".deneb", "wiki-graph") {
+		t.Fatalf("production graph dir = %q, want %q", got, filepath.Join(home, ".deneb", "wiki-graph"))
+	}
+}

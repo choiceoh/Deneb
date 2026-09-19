@@ -42,13 +42,13 @@ const (
 )
 
 // researchNudgeState persists the last firing time under the state dir
-// (~/.deneb/heartbeat-research.json).
+// (<state dir>/heartbeat-research.json).
 type researchNudgeState struct {
 	LastNudgeAt time.Time `json:"lastNudgeAt"`
 }
 
 func (t *heartbeatTask) researchStatePath() string {
-	return filepath.Join(t.homeDir, ".deneb", "heartbeat-research.json")
+	return filepath.Join(t.stateDir, "heartbeat-research.json")
 }
 
 // detectResearchNudge scans the wiki for data accumulated since the last nudge
@@ -56,7 +56,7 @@ func (t *heartbeatTask) researchStatePath() string {
 // most once per researchNudgeMinInterval and persists the marker immediately
 // when firing — a failed agent turn must not re-fire every 30 minutes.
 func (t *heartbeatTask) detectResearchNudge(now time.Time) string {
-	if t.homeDir == "" {
+	if t.stateDir == "" {
 		return ""
 	}
 	statePath := t.researchStatePath()
@@ -73,7 +73,7 @@ func (t *heartbeatTask) detectResearchNudge(now time.Time) string {
 	if st.LastNudgeAt.After(since) {
 		since = st.LastNudgeAt
 	}
-	dig := scanWikiNewData(filepath.Join(t.homeDir, ".deneb", "wiki"), since)
+	dig := scanWikiNewData(filepath.Join(t.stateDir, "wiki"), since)
 	if dig.totalAnalyses() < researchNudgeMinAnalyses {
 		return ""
 	}

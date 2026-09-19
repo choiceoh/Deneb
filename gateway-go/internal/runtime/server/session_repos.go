@@ -4,7 +4,7 @@ package server
 //
 // A conversation can be pointed at one registered repository; its runs then work
 // there instead of the server-wide workspace. The binding lives in a sidecar
-// (~/.deneb/session-repos.json) for the same reason labels and pins do: the
+// (<state dir>/session-repos.json) for the same reason labels and pins do: the
 // gateway hot-swaps every few minutes, and a binding that vanished on restart
 // would silently move the agent back to the default workspace mid-task.
 //
@@ -16,8 +16,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -28,11 +26,7 @@ import (
 )
 
 func sessionReposStorePath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".deneb", "session-repos.json"), nil
+	return stateFilePath("session-repos.json")
 }
 
 // loadSessionRepos reads sessionKey → repoID. Shares the label store's JSON

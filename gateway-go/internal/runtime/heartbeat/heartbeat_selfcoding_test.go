@@ -3,6 +3,7 @@ package heartbeat
 import (
 	"io"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -11,8 +12,8 @@ import (
 func selfCodingTask(t *testing.T, count int, fingerprint string) *heartbeatTask {
 	t.Helper()
 	return &heartbeatTask{
-		homeDir: t.TempDir(),
-		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		stateDir: t.TempDir(),
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		proposedSelfCoding: func() (int, string) {
 			return count, fingerprint
 		},
@@ -92,7 +93,7 @@ func TestDetectSelfCodingNudge_EscalatesAfterIgnoredNudges(t *testing.T) {
 
 func TestDetectSelfCodingNudgeNilCounterAndEmptyQueueStayQuiet(t *testing.T) {
 	// No counter wired (tracker absent) → lane disabled.
-	bare := &heartbeatTask{homeDir: t.TempDir(), logger: slog.Default()}
+	bare := &heartbeatTask{stateDir: t.TempDir(), logger: slog.Default()}
 	if got := bare.detectSelfCodingNudge(time.Now()); got != "" {
 		t.Fatalf("nil counter should disable the lane, got %q", got)
 	}
@@ -120,5 +121,26 @@ func TestComposeHeartbeatBodySelfCodingLaneFormatsSectionOrder(t *testing.T) {
 	if !(si >= 0 && si < ci && ci < sci && sci < ri) {
 		t.Errorf("section order wrong (signal=%d content=%d selfcoding=%d research=%d):\n%s",
 			si, ci, sci, ri, body)
+	}
+}
+
+// The funnel summary reads the marker the server's heartbeat task writes, and
+// the task roots it in the state dir. Resolved from $HOME, a dev gateway (real
+// $HOME, DENEB_STATE_DIR=/tmp/…) reported production's lane liveness.
+func TestLastSelfCodingNudgeReadsTheStateDir(t *testing.T) {
+	home := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("DENEB_STATE_DIR", stateDir)
+	if err := saveSelfCodingNudgeState(selfCodingStatePath(filepath.Join(home, ".deneb")),
+		selfCodingNudgeState{LastNudgeAtMs: 111}); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveSelfCodingNudgeState(selfCodingStatePath(stateDir),
+		selfCodingNudgeState{LastNudgeAtMs: 222}); err != nil {
+		t.Fatal(err)
+	}
+	if got := LastSelfCodingNudgeAtMillis(); got != 222 {
+		t.Fatalf("LastSelfCodingNudgeAtMillis = %d, want the state dir's 222", got)
 	}
 }

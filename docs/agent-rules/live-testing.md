@@ -334,7 +334,10 @@ scripts/dev/puppet.sh stop                   # 게이트웨이 + 브로커 정�
 + **하트비트 난입**: 30분 주기 시스템 하트비트가 main 클라이언트 세션(=퍼펫 기본
   세션)에서 돌므로 장기 퍼펫 세션 중 `[시스템 하트비트]` 요청이 pending에
   나타나고, 같은 세션의 유저 턴은 그 뒤로 직렬화된다. `NO_REPLY` 텍스트로 닫으면
-  된다 (하트비트 규약).
+  된다 (하트비트 규약). dev 하트비트는 운영자의 `~/.deneb/HEARTBEAT.md`가 아니라
+  dev state dir(`/tmp/deneb-<instance>-dev-state/HEARTBEAT.md`)를 읽으므로, 파일이
+  없으면 신호·레인 넛지가 있을 때만 턴을 낸다 — 하트비트 턴을 재현하려면 그 경로에
+  HEARTBEAT.md를 둔다.
 + **전 role 빙의가 기본** (`--main-only`로 main만): main/lightweight/tiny/
   fallback/coding(+설정된 vision, 서브에이전트) 전부 브로커行이라 실모델로
   새는 응답이 없고, 백그라운드 LLM 호출(스킬 넛저 리뷰·드리밍 등)도 `pending`에

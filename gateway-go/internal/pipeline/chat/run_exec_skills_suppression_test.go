@@ -3,6 +3,7 @@ package chat
 import (
 	"bytes"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +33,7 @@ func captureSlog(t *testing.T) *bytes.Buffer {
 func TestLogSuppressedSkillsSeparatesTombstoneFromArchive(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("DENEB_STATE_DIR", filepath.Join(home, ".deneb"))
 	if err := skills.MarkSkillDeleted("kb-interview", "테스트", time.Now()); err != nil {
 		t.Fatalf("MarkSkillDeleted: %v", err)
 	}

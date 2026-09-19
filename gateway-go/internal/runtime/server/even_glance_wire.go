@@ -214,22 +214,22 @@ func (s *Server) evenAckAlert() func(id string) error {
 // Deliberately a file and not a store: this is an INSTRUMENT, used to collect a
 // few dozen labelled windows so a head-gesture detector can be written against
 // real motion instead of an assumed axis convention. When the detector exists
-// and the fixtures are checked in, this can go away.
+// and the fixtures are checked in, this can go away. Lives under the state dir
+// so a dev gateway's windows never land in the operator's collection.
 func (s *Server) evenRecordImu() func(rec evenapi.ImuRecording) error {
 	return func(rec evenapi.ImuRecording) error {
-		home, err := os.UserHomeDir()
+		path, err := stateFilePath("even-imu-samples.jsonl")
 		if err != nil {
 			return err
 		}
-		dir := filepath.Join(home, ".deneb")
-		if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {
+		if mkErr := os.MkdirAll(filepath.Dir(path), 0o755); mkErr != nil {
 			return mkErr
 		}
 		line, err := json.Marshal(rec)
 		if err != nil {
 			return err
 		}
-		f, err := os.OpenFile(filepath.Join(dir, "even-imu-samples.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err != nil {
 			return err
 		}

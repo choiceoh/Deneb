@@ -51,17 +51,18 @@ type heartbeatFixture struct {
 }
 
 func (t *heartbeatTask) heartbeatFixturePath() string {
-	return heartbeatFixturePathFor(t.homeDir)
+	return heartbeatFixturePathFor(t.stateDir)
 }
 
 // heartbeatFixturePathFor is shared with the shadow-replay backend wiring
 // (init_genesis.go), which has no heartbeatTask at hand.
-func heartbeatFixturePathFor(homeDir string) string {
-	return filepath.Join(homeDir, ".deneb", "data", "heartbeat_fixtures.jsonl")
+func heartbeatFixturePathFor(stateDir string) string {
+	return filepath.Join(stateDir, "data", "heartbeat_fixtures.jsonl")
 }
 
-// FixturePath returns the recorded heartbeat replay corpus path for a home dir.
-func FixturePath(homeDir string) string { return heartbeatFixturePathFor(homeDir) }
+// FixturePath returns the recorded heartbeat replay corpus path under a Deneb
+// state dir.
+func FixturePath(stateDir string) string { return heartbeatFixturePathFor(stateDir) }
 
 // recordHeartbeatFixture persists one firing. Best-effort: a failed write must
 // never affect the heartbeat turn itself, but it is logged so a persistently
@@ -69,7 +70,7 @@ func FixturePath(homeDir string) string { return heartbeatFixturePathFor(homeDir
 // fixtures — the exact failure mode the backfill lane exists to prevent for
 // skills).
 func (t *heartbeatTask) recordHeartbeatFixture(fixture heartbeatFixture) {
-	if t.homeDir == "" {
+	if t.stateDir == "" {
 		return
 	}
 	fixture.SignalSummary = truncateHeartbeatFixtureText(fixture.SignalSummary)

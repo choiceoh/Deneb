@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 )
 
 // OCR results are content-addressed and deterministic (temperature 0 against
@@ -27,16 +29,18 @@ const (
 )
 
 // ocrCacheDir resolves the cache directory, creating it on first use.
-// DENEB_OCR_CACHE_DIR overrides (tests, non-default deployments); an empty
+// DENEB_OCR_CACHE_DIR overrides (tests, non-default deployments); the default
+// sits under the Deneb state dir (~/.deneb/cache/ocr in production), so a dev
+// gateway's writes and overflow prunes stay in its own state dir. An empty
 // resolution disables caching entirely (fail-open — OCR still works).
 func ocrCacheDir() string {
 	dir := strings.TrimSpace(os.Getenv("DENEB_OCR_CACHE_DIR"))
 	if dir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
+		stateDir := strings.TrimSpace(config.ResolveStateDir())
+		if stateDir == "" {
 			return ""
 		}
-		dir = filepath.Join(home, ".deneb", "cache", "ocr")
+		dir = filepath.Join(stateDir, "cache", "ocr")
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return ""

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/pkg/pathutil"
 )
 
@@ -57,18 +58,20 @@ func NewLocalStore(dir string) (*LocalStore, error) {
 }
 
 // DefaultDir returns the configured store root: $DENEB_FILES_DIR, else
-// ~/.deneb/files. This single indirection is what makes the store
-// location-independent — pointing it at an srv4 mount (or running the gateway
-// on srv4) changes only this path, never the code.
+// <state dir>/files (~/.deneb/files in production). This single indirection is
+// what makes the store location-independent — pointing it at an srv4 mount (or
+// running the gateway on srv4) changes only this path, never the code. The
+// default follows DENEB_STATE_DIR: built from $HOME, every dev gateway's
+// uploads, archives, moves and deletes landed in the operator's drive.
 func DefaultDir() string {
 	if d := strings.TrimSpace(os.Getenv("DENEB_FILES_DIR")); d != "" {
 		return d
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
+	stateDir := strings.TrimSpace(config.ResolveStateDir())
+	if stateDir == "" {
 		return filepath.Join(".deneb", "files")
 	}
-	return filepath.Join(home, ".deneb", "files")
+	return filepath.Join(stateDir, "files")
 }
 
 // DefaultLocalStore opens the store at DefaultDir().

@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginecontrol"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 )
 
@@ -29,10 +30,11 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 
 	if s.chatHandler != nil {
 		homeDir := workflowHomeDir()
+		stateDir := config.ResolveStateDir()
 		s.registerGroupwareRadarTask(homeDir)
 		s.registerGroupwareBoardRadarTask(homeDir)
-		s.registerHeartbeatWorkflowTasks(homeDir)
-		s.registerGoalWorkflowTask(homeDir)
+		s.registerHeartbeatWorkflowTasks(homeDir, stateDir)
+		s.registerGoalWorkflowTask(stateDir)
 
 		// Daily offsite memory backup: tar.gz of the memory stores streamed
 		// over ssh to the storage node (the NFS mount is read-only from this

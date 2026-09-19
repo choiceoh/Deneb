@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -501,10 +502,12 @@ func gatewayUpdate(ctx context.Context, deps GatewayDeps, repoDir string, confir
 		return fmt.Sprintf("update 실패 (빌드): %s\n%s", err.Error(), strings.TrimSpace(string(buildOut))), nil
 	}
 
-	// Sentinel for operator inspection.
-	home, _ := os.UserHomeDir()
-	if home != "" {
-		sentinelPath := home + "/.deneb/.update-sentinel"
+	// Sentinel for operator inspection — the same file the system.update RPC
+	// writes, under the state dir. Built from $HOME it was the production
+	// marker for every dev gateway and every test run (measured 2026-09-19: the
+	// live file read updatedAt 1970-01-01T09:00:01, this package's fake clock).
+	if stateDir := strings.TrimSpace(config.ResolveStateDir()); stateDir != "" {
+		sentinelPath := filepath.Join(stateDir, ".update-sentinel")
 		sentinel := map[string]any{
 			"updatedAt": deps.now().Format(time.RFC3339),
 			"branch":    branch,

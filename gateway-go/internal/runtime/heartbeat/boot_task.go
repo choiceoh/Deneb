@@ -1,6 +1,6 @@
 // boot_task.go — Startup agent turn (inspired by OpenClaw's BOOT.md).
 //
-// On first run (30s after gateway start), reads ~/.deneb/BOOT.md and executes
+// On first run (30s after gateway start), reads <state dir>/BOOT.md and executes
 // it as a full agent turn. This allows the agent to perform initialization
 // tasks: check for updates, summarize overnight activity, run diagnostics, etc.
 //
@@ -32,7 +32,7 @@ type bootTask struct {
 	chatHandler chatport.SyncRunner
 	activity    *monitoring.ActivityTracker
 	logger      *slog.Logger
-	homeDir     string
+	stateDir    string // Deneb state dir holding BOOT.md; "" skips it
 	// model routes the boot turn to a specific role/model ("" = default main).
 	// Production passes the fallback role (local, always-resident): the boot
 	// turn is a self-check that fires right after gateway start — exactly when
@@ -60,8 +60,8 @@ type BootTask = bootTask
 
 // NewBootTask constructs the boot worker. model may be a role name (e.g.
 // "fallback") or a full model id; empty keeps the default (main).
-func NewBootTask(chatHandler chatport.SyncRunner, activity *monitoring.ActivityTracker, logger *slog.Logger, homeDir, model string) *BootTask {
-	return &bootTask{chatHandler: chatHandler, activity: activity, logger: logger, homeDir: homeDir, model: model}
+func NewBootTask(chatHandler chatport.SyncRunner, activity *monitoring.ActivityTracker, logger *slog.Logger, stateDir, model string) *BootTask {
+	return &bootTask{chatHandler: chatHandler, activity: activity, logger: logger, stateDir: stateDir, model: model}
 }
 
 // Name returns the component's stable scheduler name.
@@ -137,14 +137,14 @@ func (t *bootTask) Run(ctx context.Context) error {
 	return nil
 }
 
-// resolveBootPrompt reads ~/.deneb/BOOT.md if it exists, otherwise returns
+// resolveBootPrompt reads <state dir>/BOOT.md if it exists, otherwise returns
 // the default boot prompt.
 func (t *bootTask) resolveBootPrompt() string {
-	if t.homeDir == "" {
+	if t.stateDir == "" {
 		return defaultBootPrompt
 	}
 
-	bootPath := filepath.Join(t.homeDir, ".deneb", "BOOT.md")
+	bootPath := filepath.Join(t.stateDir, "BOOT.md")
 	data, err := os.ReadFile(bootPath)
 	if err != nil {
 		if os.IsNotExist(err) {

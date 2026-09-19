@@ -291,10 +291,9 @@ func (s *Server) registerSkillLifecycleTool() {
 	if s.chatHandler == nil || s.genesisSvc == nil {
 		return
 	}
-	var fixturePath string
-	if home, err := os.UserHomeDir(); err == nil {
-		fixturePath = runtimeheartbeat.FixturePath(home)
-	}
+	// The corpus the heartbeat task records (registerHeartbeatWorkflowTasks
+	// roots it in the same state dir).
+	fixturePath := runtimeheartbeat.FixturePath(config.ResolveStateDir())
 	var shadowComplete runtimeheartbeat.ShadowCompleteFunc
 	// Heartbeat shadow-replay wiring (P1): text-only lightweight executor over
 	// the harvested fixture corpus. Same model both sides, thinking disabled on

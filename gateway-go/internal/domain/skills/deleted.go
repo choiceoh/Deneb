@@ -18,17 +18,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
 // deletedSkillsPath is the tombstone file, a sibling of the curator state so
-// operator-facing skill lifecycle data stays in one place.
+// operator-facing skill lifecycle data stays in one place: the state dir's
+// data/ (genesis.NewTracker). Resolved from $HOME it was production's file for
+// every dev gateway, so a dev miniapp.skills.delete of a bundled skill hid it
+// from production's prompt, skills tab and slash routing.
 func deletedSkillsPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	stateDir := strings.TrimSpace(config.ResolveStateDir())
+	if stateDir == "" {
 		return ""
 	}
-	return filepath.Join(home, ".deneb", "data", "deleted_skills.json")
+	return filepath.Join(stateDir, "data", "deleted_skills.json")
 }
 
 type deletedSkillsFile struct {

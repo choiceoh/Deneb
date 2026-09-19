@@ -111,6 +111,7 @@ func TestPaddleOCR_FallbackOnError(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Setenv("DENEB_OCR_VL_URL", srv.URL)
+	t.Setenv("DENEB_OCR_CACHE_DIR", t.TempDir()) // the cache lookup would mkdir the real one
 
 	// Server is up but 500s, so paddleOCR fails and ocrImageBytes must fall
 	// through to tesseract on this 1-byte junk image.

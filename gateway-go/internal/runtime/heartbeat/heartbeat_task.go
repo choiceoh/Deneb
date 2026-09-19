@@ -1,7 +1,7 @@
 // heartbeat_task.go — Periodic task that checks HEARTBEAT.md for autonomous work.
 //
 // Every 30 minutes during active hours (08:00–23:00 Asia/Seoul), reads
-// ~/.deneb/HEARTBEAT.md and executes its instructions as a full agent turn.
+// <state dir>/HEARTBEAT.md and executes its instructions as a full agent turn.
 // Users write tasks into HEARTBEAT.md and the agent picks them up autonomously.
 // Outside active hours, or if the file is missing/empty, the task is a no-op —
 // unless the proactive signal pass or the research lane (heartbeat_research.go,
@@ -55,7 +55,9 @@ type heartbeatTask struct {
 	chatHandler chatport.SyncRunner
 	activity    *monitoring.ActivityTracker
 	logger      *slog.Logger
-	homeDir     string
+	// stateDir is the Deneb state dir (DENEB_STATE_DIR) holding HEARTBEAT.md,
+	// the lane markers and the replay fixtures; "" disables every file lane.
+	stateDir string
 
 	// collectSignals, when set, gathers a transport-agnostic snapshot of the
 	// user's recent state (calendar conflicts, imminent events, etc.) each tick.
@@ -142,7 +144,7 @@ type TaskConfig struct {
 	ChatHandler               chatport.SyncRunner
 	Activity                  *monitoring.ActivityTracker
 	Logger                    *slog.Logger
-	HomeDir                   string
+	StateDir                  string
 	CollectSignals            func(context.Context) autonomous.SignalInputs
 	SignalConfig              autonomous.SignalConfig
 	ProposedSelfCoding        func() (count int, fingerprint string)
@@ -163,7 +165,7 @@ func NewTask(cfg TaskConfig) *Task {
 		chatHandler:               cfg.ChatHandler,
 		activity:                  cfg.Activity,
 		logger:                    cfg.Logger,
-		homeDir:                   cfg.HomeDir,
+		stateDir:                  cfg.StateDir,
 		collectSignals:            cfg.CollectSignals,
 		signalConfig:              cfg.SignalConfig,
 		proposedSelfCoding:        cfg.ProposedSelfCoding,
@@ -386,8 +388,8 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	// Post-apply anomaly watch (instruction-surface P2): consecutive failed
 	// heartbeat turns after an auto-applied HEARTBEAT.md restore the backup.
 	// No-op unless an auto-apply marker exists.
-	if t.homeDir != "" {
-		noteHeartbeatTurnOutcome(filepath.Join(t.homeDir, ".deneb", "HEARTBEAT.md"), err == nil, t.logger)
+	if t.stateDir != "" {
+		noteHeartbeatTurnOutcome(filepath.Join(t.stateDir, "HEARTBEAT.md"), err == nil, t.logger)
 	}
 
 	if err != nil {
@@ -578,14 +580,14 @@ func withinActiveHours(now time.Time) bool {
 	return hour >= heartbeatActiveStartHour && hour < heartbeatActiveEndHour
 }
 
-// readHeartbeat reads ~/.deneb/HEARTBEAT.md if it exists.
+// readHeartbeat reads <state dir>/HEARTBEAT.md if it exists.
 // Returns empty string if not found or empty.
 func (t *heartbeatTask) readHeartbeat() string {
-	if t.homeDir == "" {
+	if t.stateDir == "" {
 		return ""
 	}
 
-	path := filepath.Join(t.homeDir, ".deneb", "HEARTBEAT.md")
+	path := filepath.Join(t.stateDir, "HEARTBEAT.md")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "" // Not found or not readable — silent skip.

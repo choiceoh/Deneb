@@ -474,6 +474,9 @@ func TestFinishRenderedImageSuccessAndFailureStates(t *testing.T) {
 }
 
 func TestDeliveryCallbackObservesBoundedSendTimeoutDeadline(t *testing.T) {
+	// A delivered send is archived into the file store; keep it off the
+	// operator's ~/.deneb/files (every run used to leave 전송/<date>/x.txt).
+	t.Setenv("DENEB_FILES_DIR", t.TempDir())
 	path := writeArtifactFixture(t, "x.txt", []byte("x"))
 	ctx := deliveryContext(context.Background(), &toolport.DeliveryContext{Channel: "x", To: "y"},
 		func(ctx context.Context, _ *toolport.DeliveryContext, _ string, _ string, _ string, _ bool) error {

@@ -57,39 +57,30 @@ func TestWithinActiveHours_boundaries(t *testing.T) {
 }
 
 func TestReadHeartbeat_missingFile(t *testing.T) {
-	home := t.TempDir()
-	tk := &heartbeatTask{homeDir: home, logger: slog.Default()}
+	tk := &heartbeatTask{stateDir: t.TempDir(), logger: slog.Default()}
 	if got := tk.readHeartbeat(); got != "" {
 		t.Errorf("missing file should return empty, got %q", got)
 	}
 }
 
 func TestReadHeartbeat_whitespaceOnlyTreatedAsEmpty(t *testing.T) {
-	home := t.TempDir()
-	dir := filepath.Join(home, ".deneb")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "HEARTBEAT.md"), []byte("   \n\t\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	tk := &heartbeatTask{homeDir: home, logger: slog.Default()}
+	tk := &heartbeatTask{stateDir: dir, logger: slog.Default()}
 	if got := tk.readHeartbeat(); got != "" {
 		t.Errorf("whitespace-only file should return empty, got %q", got)
 	}
 }
 
 func TestReadHeartbeat_returnsContent(t *testing.T) {
-	home := t.TempDir()
-	dir := filepath.Join(home, ".deneb")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	dir := t.TempDir()
 	want := "task A\ntask B"
 	if err := os.WriteFile(filepath.Join(dir, "HEARTBEAT.md"), []byte(want+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	tk := &heartbeatTask{homeDir: home, logger: slog.Default()}
+	tk := &heartbeatTask{stateDir: dir, logger: slog.Default()}
 	if got := tk.readHeartbeat(); got != want {
 		t.Errorf("want %q, got %q", want, got)
 	}
@@ -164,7 +155,7 @@ func TestHeartbeatSelfCodingNudgePreloadsSkillLifecycle(t *testing.T) {
 	tk := NewTask(TaskConfig{
 		ChatHandler: runner,
 		Logger:      slog.Default(),
-		HomeDir:     t.TempDir(),
+		StateDir:    t.TempDir(),
 		ProposedSelfCoding: func() (int, string) {
 			return 1, "1:sc-a:100"
 		},
@@ -195,11 +186,7 @@ func TestHeartbeatRunIsolatesSessionAndDeliversReport(t *testing.T) {
 	if err != nil {
 		t.Skipf("Asia/Seoul tzdata unavailable: %v", err)
 	}
-	home := t.TempDir()
-	dir := filepath.Join(home, ".deneb")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	dir := t.TempDir()
 	// A real task line guarantees the tick warrants a turn.
 	if err := os.WriteFile(filepath.Join(dir, "HEARTBEAT.md"), []byte("- 납품 확인 진행중\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -215,7 +202,7 @@ func TestHeartbeatRunIsolatesSessionAndDeliversReport(t *testing.T) {
 	tk := NewTask(TaskConfig{
 		ChatHandler: runner,
 		Logger:      slog.Default(),
-		HomeDir:     home,
+		StateDir:    dir,
 		Model:       "submain",
 		Deliver: func(text, source string) (bool, error) {
 			deliverCalled = true

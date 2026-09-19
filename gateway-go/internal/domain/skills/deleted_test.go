@@ -9,6 +9,7 @@ import (
 
 func TestMarkSkillDeletedRoundtripIdempotentSorted(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 
 	if got := LoadDeletedSkillNames(); got != nil {
 		t.Fatalf("empty state should load nil, got %v", got)
@@ -42,6 +43,7 @@ func TestMarkSkillDeletedRoundtripIdempotentSorted(t *testing.T) {
 func TestLoadDeletedSkillNamesMalformedReadsEmpty(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("DENEB_STATE_DIR", filepath.Join(home, ".deneb"))
 	path := filepath.Join(home, ".deneb", "data", "deleted_skills.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
@@ -59,6 +61,7 @@ func TestLoadDeletedSkillNamesMalformedReadsEmpty(t *testing.T) {
 // weeks and the only way to date the suppression was the file's mtime.
 func TestMarkSkillDeletedRecordsReasonAndTime(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	at := time.Date(2026, 8, 26, 7, 39, 0, 0, time.UTC)
 
 	if err := MarkSkillDeleted("fact-check", "저빈도라 잠시 숨김", at); err != nil {
@@ -99,6 +102,7 @@ func TestMarkSkillDeletedRecordsReasonAndTime(t *testing.T) {
 func TestLoadDeletedSkillsReadsLegacyNameList(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("DENEB_STATE_DIR", filepath.Join(home, ".deneb"))
 	dir := filepath.Join(home, ".deneb", "data")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -114,5 +118,30 @@ func TestLoadDeletedSkillsReadsLegacyNameList(t *testing.T) {
 	got := LoadDeletedSkills()
 	if len(got) != 2 || got[0].Name != "deep-research" || got[0].Reason != "" {
 		t.Errorf("레거시 항목 해석이 다름: %+v", got)
+	}
+}
+
+// Tombstones used to be built from $HOME, so a dev gateway (real $HOME,
+// DENEB_STATE_DIR=/tmp/…) deleting a bundled skill hid it in production.
+func TestDeletedSkillsFollowTheStateDir(t *testing.T) {
+	home := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("DENEB_STATE_DIR", stateDir)
+
+	if err := MarkSkillDeleted("kb-interview", "dev", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "data", "deleted_skills.json")); err != nil {
+		t.Fatalf("tombstone not under the state dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".deneb")); !os.IsNotExist(err) {
+		t.Fatalf("$HOME/.deneb was touched (stat err = %v)", err)
+	}
+
+	// Production pins DENEB_STATE_DIR=$HOME/.deneb, and unset defaults there.
+	t.Setenv("DENEB_STATE_DIR", "")
+	if got, want := deletedSkillsPath(), filepath.Join(home, ".deneb", "data", "deleted_skills.json"); got != want {
+		t.Fatalf("production tombstone path = %q, want %q", got, want)
 	}
 }

@@ -3,16 +3,19 @@ package gatewayops
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// heartbeatFileName is the filename written under <home>/.deneb/.
+// heartbeatFileName is the filename written under the Deneb state dir.
 const heartbeatFileName = "HEARTBEAT.md"
 
 // heartbeatBackupName is the 1-generation backup written before each overwrite.
@@ -21,10 +24,12 @@ const heartbeatFileName = "HEARTBEAT.md"
 // frequent and a deeper history would just add maintenance noise.
 const heartbeatBackupName = "HEARTBEAT.md.prev"
 
-// ToolHeartbeatUpdate writes ~/.deneb/HEARTBEAT.md atomically. The path is
-// fixed: the heartbeat task reads from this exact location, so a free-form
-// path argument would invite mistakes (typos, wrong dir, escaping the
-// home dir under fs.write's workspace clamp).
+// ToolHeartbeatUpdate writes <state dir>/HEARTBEAT.md (~/.deneb/HEARTBEAT.md in
+// production) atomically. The path is fixed: the heartbeat task reads from
+// this exact location, so a free-form path argument would invite mistakes
+// (typos, wrong dir, escaping the home dir under fs.write's workspace clamp).
+// It follows DENEB_STATE_DIR like the heartbeat task does — resolved from
+// $HOME, a dev gateway's heartbeat rewrote the operator's file.
 //
 // Before each write the prior content is copied to HEARTBEAT.md.prev so an
 // accidental clear by the autonomous heartbeat (or user) is recoverable.
@@ -34,12 +39,12 @@ const heartbeatBackupName = "HEARTBEAT.md.prev"
 // failure mode. Also usable from a normal user session ("add this to my
 // heartbeat") so the user can self-manage the file without leaving the chat.
 func ToolHeartbeatUpdate() toolport.ToolFunc {
-	return toolHeartbeatUpdateWithHome("")
+	return toolHeartbeatUpdateInDir("")
 }
 
-// toolHeartbeatUpdateWithHome is the testable variant: when homeDir is empty
-// it falls back to os.UserHomeDir() for production use; tests pass a tmpdir.
-func toolHeartbeatUpdateWithHome(homeDir string) toolport.ToolFunc {
+// toolHeartbeatUpdateInDir is the testable variant: when stateDir is empty it
+// resolves the state dir per call (config.ResolveStateDir); tests pass a tmpdir.
+func toolHeartbeatUpdateInDir(stateDir string) toolport.ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Content string `json:"content"`
@@ -48,15 +53,13 @@ func toolHeartbeatUpdateWithHome(homeDir string) toolport.ToolFunc {
 			return "", err
 		}
 
-		home := homeDir
-		if home == "" {
-			h, err := os.UserHomeDir()
-			if err != nil {
-				return "", fmt.Errorf("heartbeat_update: cannot resolve home dir: %w", err)
-			}
-			home = h
+		dir := stateDir
+		if dir == "" {
+			dir = strings.TrimSpace(config.ResolveStateDir())
 		}
-		dir := filepath.Join(home, ".deneb")
+		if dir == "" {
+			return "", errors.New("heartbeat_update: cannot resolve the state dir")
+		}
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return "", fmt.Errorf("heartbeat_update: cannot create %s: %w", dir, err)
 		}

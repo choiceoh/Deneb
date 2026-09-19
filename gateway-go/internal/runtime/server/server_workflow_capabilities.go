@@ -119,6 +119,9 @@ func (s *Server) configureAutonomousWorkflow(hub *rpcutil.GatewayHub) {
 	}
 }
 
+// workflowHomeDir feeds the production gates (productionStateDir compares the
+// state dir against $HOME/.deneb). Stores never resolve from it: a dev gateway
+// keeps the real $HOME, so a $HOME-built path is the production file.
 func workflowHomeDir() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -127,15 +130,20 @@ func workflowHomeDir() string {
 	return homeDir
 }
 
-func (s *Server) registerHeartbeatWorkflowTasks(homeDir string) {
+// registerHeartbeatWorkflowTasks roots the heartbeat's files (HEARTBEAT.md and
+// its auto-apply marker, BOOT.md, the lane markers, the replay fixtures) in
+// stateDir. They were built from $HOME, so a dev heartbeat followed the
+// operator's HEARTBEAT.md, rewrote it through heartbeat_update, appended its
+// turns to the shadow-replay corpus and advanced the lane markers.
+func (s *Server) registerHeartbeatWorkflowTasks(homeDir, stateDir string) {
 	s.autonomousSvc.RegisterTask(runtimeheartbeat.NewBootTask(
-		s.chatHandler, s.activity, s.logger, homeDir, s.fallbackRoleIfConfigured(),
+		s.chatHandler, s.activity, s.logger, stateDir, s.fallbackRoleIfConfigured(),
 	))
 	s.autonomousSvc.RegisterTask(runtimeheartbeat.NewTask(runtimeheartbeat.TaskConfig{
 		ChatHandler: s.chatHandler,
 		Activity:    s.activity,
 		Logger:      s.logger,
-		HomeDir:     homeDir,
+		StateDir:    stateDir,
 		CollectSignals: runtimeheartbeat.CombineCollectors(
 			runtimeheartbeat.CalendarSignalCollector(runtimemeeting.ResolveCalendarClient),
 			runtimeheartbeat.TodoDeadlineCollector(),
@@ -284,12 +292,11 @@ func (s *Server) selfCodingFailureEvidence(limit int) []genesis.FailureClusterSu
 	return genesis.MergeFailureClusters(clusters, s.retryMiner.MineAndClusters(limit, time.Now()), limit)
 }
 
-func (s *Server) registerGoalWorkflowTask(homeDir string) {
-	goalStateDir := ""
-	if homeDir != "" {
-		goalStateDir = filepath.Join(homeDir, ".deneb")
-	}
-	goalStore := goals.NewStore(goalStateDir, s.logger)
+// registerGoalWorkflowTask keeps goals.json in stateDir. Built from $HOME, a dev
+// gateway loaded the operator's goals, ran the goal loop's continuation turns
+// for them and saved its progress over production's.
+func (s *Server) registerGoalWorkflowTask(stateDir string) {
+	goalStore := goals.NewStore(stateDir, s.logger)
 	goals.SetDefault(goalStore)
 	s.autonomousSvc.RegisterTask(goalloop.NewTask(
 		s.chatHandler,

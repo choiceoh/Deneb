@@ -47,7 +47,7 @@ const sweepEvidenceClusterLimit = 5
 const selfImproveEscalateAfterIgnored = 2
 
 // selfImproveSweepState persists the last firing under the state dir
-// (~/.deneb/heartbeat-selfimprove-sweep.json).
+// (<state dir>/heartbeat-selfimprove-sweep.json).
 type selfImproveSweepState struct {
 	LastNudgeAt time.Time `json:"lastNudgeAt"`
 	// YieldedSinceLastNudge flips true when the queue shows proposed
@@ -62,7 +62,7 @@ type selfImproveSweepState struct {
 }
 
 func (t *heartbeatTask) selfImproveSweepStatePath() string {
-	return filepath.Join(t.homeDir, ".deneb", "heartbeat-selfimprove-sweep.json")
+	return filepath.Join(t.stateDir, "heartbeat-selfimprove-sweep.json")
 }
 
 // detectSelfImproveSweepNudge returns the sweep trigger text when the proposed
@@ -71,7 +71,7 @@ func (t *heartbeatTask) selfImproveSweepStatePath() string {
 // as the review lane: a broken state dir must not re-fire a cloud turn every
 // 30 minutes).
 func (t *heartbeatTask) detectSelfImproveSweepNudge(now time.Time) string {
-	if t.selfImproveSignals == nil || t.proposedSelfCoding == nil || t.homeDir == "" {
+	if t.selfImproveSignals == nil || t.proposedSelfCoding == nil || t.stateDir == "" {
 		return ""
 	}
 	if count, _ := t.proposedSelfCoding(); count > 0 {
@@ -142,7 +142,7 @@ func (t *heartbeatTask) detectSelfImproveSweepNudge(now time.Time) string {
 // flag only flips false→true, so busy ticks after the first cost no state
 // write; each fire resets it.
 func (t *heartbeatTask) markSelfImproveSweepYield() {
-	if t.homeDir == "" {
+	if t.stateDir == "" {
 		return
 	}
 	statePath := t.selfImproveSweepStatePath()
