@@ -6,21 +6,17 @@ import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
-import ai.deneb.ui.denebPressable
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -32,7 +28,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 // Which model the engine's production serves, and switching it.
@@ -44,13 +39,7 @@ import androidx.compose.ui.unit.dp
 // a choice (`miniapp.engine.select`), and moves the roles that ran on the
 // engine once production answers as the new model.
 //
-// On the page this is not a card of its own (operator, 2026-09-19: the first
-// cut — a card with the choice's history and every role that moved — read as
-// clutter). The verdict line's model name IS the control ("glm-5.3-flash ▾"),
-// it reads "a → b · 띄우는 중" while a switch is in motion, and a line appears
-// under it only for an exception: a choice the fleet reverted, a role that
-// could not follow, a switch the gateway cannot make. A switch that went as
-// asked says nothing more.
+// The serving model has an explicit action, separate from the statistics filter.
 
 /**
  * What the engine page's shell hands the verdict line: the fleet's last answer
@@ -65,11 +54,7 @@ internal class ServingState(
     val onSwitch: (String) -> Unit = {},
 )
 
-/**
- * The verdict line's second line: [text] (the model, or the switch in motion),
- * with a ▾ and the whole line as the button when a switch can be made. The
- * dialog it opens is the decision.
- */
+/** The serving model and its explicit change action. The dialog is the decision. */
 @Composable
 internal fun EngineModelSwitcher(text: String, state: ServingState?, fallback: @Composable () -> Unit = {}) {
     val serving = state?.serving
@@ -79,30 +64,14 @@ internal fun EngineModelSwitcher(text: String, state: ServingState?, fallback: @
         fallback()
         return
     }
-    Row(
-        modifier = if (switchable) {
-            Modifier.denebPressable(onClick = { choosing = true }, role = Role.Button, onClickLabel = "모델 전환").handCursor()
-        } else {
-            Modifier
-        },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    Column(Modifier.fillMaxWidth()) {
         Text(
             text = if (state?.requesting == true) "$text · 전환 요청 중" else text,
             style = DenebType.rowSubtitle,
             color = denebHint(),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
         )
         if (switchable) {
-            Spacer(Modifier.width(2.dp))
-            Icon(
-                imageVector = Icons.Filled.KeyboardArrowDown,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
-            )
+            DenebTextButton(onClick = { choosing = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text("모델 변경") }
         }
     }
     if (choosing && serving != null) {

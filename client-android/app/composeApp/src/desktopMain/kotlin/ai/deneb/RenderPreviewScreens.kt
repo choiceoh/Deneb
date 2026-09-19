@@ -626,7 +626,7 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.width(412.dp)) {
-                    ai.deneb.deneb.EngineDiagnosticsSection(sampleEngineStatus, kotlinx.datetime.TimeZone.of("Asia/Seoul"))
+                    ai.deneb.deneb.EngineDiagnosticsSection(sampleEngineStatus, kotlinx.datetime.TimeZone.of("Asia/Seoul"), detailsExpanded = true)
                 }
             }
         }
@@ -639,6 +639,32 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
                         sampleEngineStatus,
                         zone = kotlinx.datetime.TimeZone.of("Asia/Seoul"),
                         serving = ai.deneb.deneb.ServingState(sampleEngineServing),
+                    )
+                }
+            }
+        }
+    },
+    "engine_narrow" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.width(320.dp)) {
+                    ai.deneb.deneb.EngineStatusContent(
+                        sampleEngineStatus.copy(reachable = true, engineDown = false),
+                        zone = kotlinx.datetime.TimeZone.of("Asia/Seoul"),
+                        serving = ai.deneb.deneb.ServingState(sampleEngineServing),
+                    )
+                }
+            }
+        }
+    },
+    "engine_expanded" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.width(412.dp)) {
+                    ai.deneb.deneb.EngineStatusContent(
+                        sampleEngineStatus.copy(reachable = true, engineDown = false),
+                        zone = kotlinx.datetime.TimeZone.of("Asia/Seoul"),
+                        detailsExpanded = true,
                     )
                 }
             }

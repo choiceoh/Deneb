@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -39,14 +40,22 @@ import androidx.compose.ui.unit.dp
  *
  * Plain text tabs: the model names on the page background, the selected one
  * in ink with an accent underline (operator, 2026-09-19: boxed chips read
- * heavier than the statistics they filter). Hidden while the window holds a
- * single model — a choice of one is not a choice. Selecting only re-reads the
- * statistics; what the engine serves is not touched here.
+ * heavier than the statistics they filter). A single model is a plain label.
+ * Selecting only re-reads the statistics; what the engine serves is not touched here.
  */
 @Composable
 internal fun EngineModelTabs(status: EngineStatusResult, onSelect: (String) -> Unit) {
-    if (status.models.size < 2) return
     Column(Modifier.fillMaxWidth()) {
+        Text(
+            "통계 모델",
+            style = DenebType.sectionLabel,
+            color = denebHint(),
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
+        )
+        if (status.models.size < 2) {
+            Text(status.selectedModel.ifBlank { status.model }.ifBlank { "모델 미상" }, style = DenebType.rowTitle, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            return@Column
+        }
         Row(
             Modifier
                 .fillMaxWidth()
@@ -94,6 +103,7 @@ private fun EngineModelTab(row: EngineModelRow, status: EngineStatusResult, onSe
                 }
             }
             .handCursor()
+            .heightIn(min = 48.dp)
             .padding(top = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
