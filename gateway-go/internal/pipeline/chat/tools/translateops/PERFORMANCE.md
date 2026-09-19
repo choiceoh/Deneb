@@ -1,13 +1,112 @@
-# Translation cache latency
+# Translation latency
+
+## Unicode batching follow-up (2026-09-20)
+
+Baseline: `05f2716649d5b1a94585c2e58269668e9a9f2aea`, including both cache
+optimizations below. The only production change in this follow-up is counting
+Unicode code points, instead of UTF-8 bytes, in `translateInputCost` for source
+text and its discounted context. The 3,000-character budget, 50-text limit,
+six-worker limit, provider parameters, and cache behavior are unchanged.
+
+The browser budgets JavaScript string length. Charging UTF-8 bytes on the server
+inflated Cyrillic/CJK text and unnecessarily added provider scheduling waves.
+The browser counts supplementary characters as two UTF-16 units; the server now
+counts one code point, so these are still not identical units. The ordinary
+3,000-code-point batches remain comfortably below DeepL's separate
+[128 KiB request-body limit](https://developers.deepl.com/api-reference/translate/request-translation),
+including URL encoding and the capped context. A single oversized input retains
+the existing handling; this change does not introduce a new hard byte limit.
+
+### Prediction and live result
+
+Before editing, the prediction was 10 requests / two waves becoming 6 requests /
+one wave for a fixed Russian fixture, with at least 20% lower median cold RPC
+latency if provider latency remained approximately flat. This prediction held.
+
+Forty synthetic Russian paragraphs, 15,160 source characters / 27,800 UTF-8
+bytes, target Korean, no explicit context hints. The test exercised the actual
+`miniapp.web.translate` RPC and real DeepL on the Linux arm64 gateway host.
+Each trial started an isolated development gateway with a fresh synthetic
+50,000-entry disk cache; production state was not modified. A = baseline,
+B = candidate; order was A B B A B A A B.
+
+| Run | Variant | Cold RPC | Warm RPC | Provider requests |
+| --- | --- | ---: | ---: | ---: |
+| 1 | A | 2,666.85 ms | 2.68 ms | 10 |
+| 2 | B | 2,121.02 ms | 1.80 ms | 6 |
+| 3 | B | 2,011.68 ms | 2.15 ms | 6 |
+| 4 | A | 2,602.22 ms | 1.38 ms | 10 |
+| 5 | B | 2,200.71 ms | 2.34 ms | 6 |
+| 6 | A | 2,819.24 ms | 3.22 ms | 10 |
+| 7 | A | 2,493.49 ms | 2.88 ms | 10 |
+| 8 | B | 1,952.44 ms | 1.69 ms | 6 |
+
+The cold median fell from **2,634.54 ms to 2,066.35 ms (21.6%)**. Each variant
+still sent exactly 15,160 billable source characters. This is an exploratory
+four-sample-per-variant RPC comparison, not a device rendering measurement or
+a guarantee for every page. ASCII batching is unchanged. Different batch
+boundaries can also change the combined context hint for contextual envelopes;
+these live samples exercise plain paragraphs, not every such context case.
+
+All 320 live segments contained Korean and retained their numbered section
+positions. Every warm result exactly matched its own cold result, and every
+cache retained 50,000 entries. The eight response hashes differed, including
+between unchanged-binary runs. Manual checks of each run's first and last
+paragraph found wording differences such as equivalent terms for "guide";
+an eight-keyword coverage check passed for every paragraph. These are limited
+quality checks, not a general semantic equivalence claim.
+
+### Regression coverage and artifacts
+
+`TestTranslateSegmentsUnicodeBudgetPreservesResults` exercises the production
+entrypoint with an exact stubbed provider response and 40 unique 400-character
+segments. Before the change, provider counts were Latin 6, Cyrillic 14, CJK 20,
+and supplementary-plane text 40. Afterward all four use 6 calls, preserving
+every output by index. The test checks actual encoded body size and flattened
+text counts. Boundary cases cover Unicode source/context costs.
+
+```bash
+go test -run 'TestTranslateSegmentsUnicodeBudgetPreservesResults|TestBoundaryTranslateInputCostContextDiscount' \
+  -count=1 ./internal/pipeline/chat/tools/translateops
+```
+
+Live fixture SHA-256:
+`10c60d0e23ab0548550882635dae6cd6afb0dcf9a34df8e2a52839b270d64d05`.
+Linux binary SHA-256 values:
+`b71c75d2e28ee23adbd3817464f1ee610a032e5cf20da4fe51c0e9f36286db6f` (A),
+`ae42cb150ff00766037a8c0aaa62f54170e8f57d7d8e1ea458a1685235af3828` (B).
+The harness, fixture, raw results and synthetic translations are retained in
+`~/deneb-dev/codex-deepl-unicode-20260920/` on the test host, with a local copy in
+`/tmp/deneb-deepl-unicode-evidence/`. Test gateways were stopped and their
+temporary state removed after every run.
+
+Validation: the targeted package tests, race tests for `translateops`,
+`opstranslate` and `rpc/handler/chat/miniapp`, and
+`TMPDIR=/private/tmp make check GO_PAR=2` passed. The full check includes
+generation, formatting, vet, lint and all Go tests; its optional LLM-response
+quality gate was skipped by default. Live translation quality was checked via
+the actual RPC above. `DENEB_INSTANCE=deepl-unicode scripts/dev/live-test.sh
+restart` and `smoke` also passed both health/readiness checks, and that local
+development gateway was stopped afterward. Development logs included optional local-model probe
+and embedding warmup warnings; no translation/deepl warning category occurred.
+
+The patch-note fragment also triggered native gates: spotless, detekt, desktop
+smoke tests, Android compilation and design lint passed on macOS. The golden
+image gate differed for 74 images on both the unchanged baseline and candidate;
+all 75 deterministic baseline/candidate renders were byte-identical. The same
+candidate native sources and patch note then passed the golden image gate on
+Linux (75 PNGs match), without changing or regenerating committed goldens.
+
+## Historical cache optimization
 
 Measured 2026-09-19 against baseline `35554e253` and integrated on `f936a2855`.
 
 The production fix already landed in [PR #5130](https://github.com/choiceoh/Deneb/pull/5130),
 including sorting and moving serialization/file writes outside the cache mutex.
-This follow-up adds stricter eviction checks and reproducible benchmarks. Its
-production code is identical to that upstream commit. The historical results
+PR #5131 added stricter eviction checks and reproducible benchmarks. Its
+production code was identical to that upstream commit. The historical results
 below isolate a sort-only candidate; they are not measurements of #5130's full
-implementation or an additional speedup supplied by this follow-up.
+implementation or an additional speedup supplied by #5131.
 
 ## Cause and change
 
@@ -102,7 +201,7 @@ translation RPC.
 
 ## Integrated upstream measurement
 
-The same benchmarks were rerun on `f936a2855` plus this follow-up's tests, using
+The same benchmarks were rerun on `f936a2855` plus #5131's tests, using
 the same Apple M5 environment and five one-iteration samples. Production files
 were verified byte-for-byte identical to #5130.
 
