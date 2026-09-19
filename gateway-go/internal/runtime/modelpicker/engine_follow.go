@@ -12,14 +12,14 @@ import (
 // deneb.json and the live registry agree and no restart is needed. A move the
 // picker refuses (the entry is not a model it offers) comes back as a skip
 // with the reason, and the role stays where it was.
-func (s *Controller) FollowEngine(ctx context.Context, entries []enginecontrol.Entry, served string) ([]enginecontrol.Move, []enginecontrol.Skip) {
+func (s *Controller) FollowEngine(ctx context.Context, entries []enginecontrol.Entry, served string, servedVision *bool) ([]enginecontrol.Move, []enginecontrol.Skip) {
 	roles := make(map[string]string)
 	for _, r := range s.roleMiniappModels() {
 		if r.Model != "" {
 			roles[r.Role] = r.Model
 		}
 	}
-	planned, skips := enginecontrol.PlanFollow(roles, entries, served)
+	planned, skips := enginecontrol.PlanFollow(roles, entries, served, servedVision)
 	moves := make([]enginecontrol.Move, 0, len(planned))
 	for _, m := range planned {
 		if _, err := s.setMiniappModel(ctx, m.Role, m.To); err != nil {

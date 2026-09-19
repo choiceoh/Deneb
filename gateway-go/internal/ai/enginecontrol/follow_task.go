@@ -12,7 +12,7 @@ import (
 
 // Follower moves roles (modelpicker.Controller.FollowEngine).
 type Follower interface {
-	FollowEngine(ctx context.Context, entries []Entry, served string) ([]Move, []Skip)
+	FollowEngine(ctx context.Context, entries []Entry, served string, servedVision *bool) ([]Move, []Skip)
 }
 
 // Liveness is the engine liveness watcher as the follow reads it
@@ -42,6 +42,9 @@ type FollowTask struct {
 	Logger   *slog.Logger
 	// Fleet reads the door's root status; nil is observe.FetchEngineFleet.
 	Fleet func(ctx context.Context, metricsURL string) (observe.EngineFleet, bool)
+	// Vision reads whether this boot of the served model takes images (its
+	// model card's capabilities.vision); nil is observe.FetchEngineVision.
+	Vision func(ctx context.Context, metricsURL, model string) *bool
 
 	held map[string]bool // role|reason already warned about, so a held-back role is said once
 }
@@ -68,7 +71,11 @@ func (t *FollowTask) Run(ctx context.Context) error {
 	if t.Entries != nil {
 		entries = t.Entries()
 	}
-	moves, skips := t.Picker.FollowEngine(ctx, entries, fleet.Model)
+	see := t.Vision
+	if see == nil {
+		see = observe.FetchEngineVision
+	}
+	moves, skips := t.Picker.FollowEngine(ctx, entries, fleet.Model, see(ctx, t.Endpoint, fleet.Model))
 	t.Log.Record(FollowReport{At: time.Now(), Served: fleet.Model, Moves: moves, Skips: skips})
 	logger := t.Logger
 	if logger == nil {

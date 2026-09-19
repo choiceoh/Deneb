@@ -96,6 +96,12 @@ type router struct {
 	// fleetState, instead of once a minute forever.
 	missingUpstream atomic.Pointer[map[string]bool]
 	missingLogged   map[string]bool
+	// visionReport is what each LOCAL entry's backend says about image input for
+	// the model it serves (servedModel.vision), keyed by client-facing name and
+	// written by refreshWindows beside `windows`. Present only when the backend
+	// reports it; acceptsImages lets it outrank the config's promise, so a boot
+	// that bound no vision tower gets its images stripped instead of a 400.
+	visionReport atomic.Pointer[map[string]bool]
 	// keyHealth caches each CLOUD model's last upstream-auth probe (keyhealth.go),
 	// refreshed by refreshKeyHealth on the watch loop. Lock-free read in status;
 	// never nil after newRouter. Empty for local (keyless) models. Surfacing it lets
@@ -143,6 +149,8 @@ func newRouter(cfg config, path string, log *slog.Logger) *router {
 	rt.fleet.Store(&empty)
 	emptyWindows := map[string]int{}
 	rt.windows.Store(&emptyWindows)
+	emptyVision := map[string]bool{}
+	rt.visionReport.Store(&emptyVision)
 	emptyHealth := map[string]keyHealthState{}
 	rt.keyHealth.Store(&emptyHealth)
 	rt.secretsPath = secretsFileFor(path)

@@ -19,8 +19,8 @@ func boolPtr(v bool) *bool { return &v }
 var followEntries = []enginecontrol.Entry{
 	{Name: "glm-5.3-flash", UpstreamModel: "glm-5.3-flash", ThinkingMode: "on", Vision: boolPtr(true)},
 	{Name: "glm-5.3-flash-low", UpstreamModel: "glm-5.3-flash", ThinkingMode: "off", Vision: boolPtr(true)},
-	{Name: "qwen3.8-flash-next", UpstreamModel: "qwen3.8-flash-next", ThinkingMode: "on", Vision: boolPtr(false)},
-	{Name: "qwen3.8-flash-next-low", UpstreamModel: "qwen3.8-flash-next", ThinkingMode: "off", Vision: boolPtr(false)},
+	{Name: "qwen3.8-flash-next", UpstreamModel: "qwen3.8-flash-next", ThinkingMode: "on"},
+	{Name: "qwen3.8-flash-next-low", UpstreamModel: "qwen3.8-flash-next", ThinkingMode: "off"},
 }
 
 // followFixture is a picker over a throwaway deneb.json — never the host's —
@@ -62,11 +62,12 @@ func followFixture(t *testing.T, offered ...string) (*Controller, string) {
 }
 
 // The engine now serves Qwen3.8: the local roles move by variant, through the
-// picker's persist-and-apply path, and vision stays off a text-only door.
+// picker's persist-and-apply path, and vision stays off a boot that says it
+// bound no vision tower.
 func TestFollowEngineMovesTheLocalRolesThroughThePicker(t *testing.T) {
 	ctrl, path := followFixture(t, "glm-5.3-flash", "glm-5.3-flash-low", "qwen3.8-flash-next", "qwen3.8-flash-next-low")
 
-	moves, skips := ctrl.FollowEngine(context.Background(), followEntries, "qwen3.8-flash-next")
+	moves, skips := ctrl.FollowEngine(context.Background(), followEntries, "qwen3.8-flash-next", boolPtr(false))
 	got := map[string]string{}
 	for _, m := range moves {
 		got[m.Role] = m.To
@@ -104,7 +105,7 @@ func TestFollowEngineMovesTheLocalRolesThroughThePicker(t *testing.T) {
 // stays, and the reason comes back as a skip.
 func TestFollowEngineLeavesARoleThePickerRefuses(t *testing.T) {
 	ctrl, _ := followFixture(t, "glm-5.3-flash", "glm-5.3-flash-low") // the Qwen3.8 entries not offered
-	moves, skips := ctrl.FollowEngine(context.Background(), followEntries, "qwen3.8-flash-next")
+	moves, skips := ctrl.FollowEngine(context.Background(), followEntries, "qwen3.8-flash-next", boolPtr(false))
 	if len(moves) != 0 {
 		t.Fatalf("moves = %+v, want none", moves)
 	}
@@ -113,5 +114,31 @@ func TestFollowEngineLeavesARoleThePickerRefuses(t *testing.T) {
 	}
 	if id := ctrl.modelRegistry.FullModelID(modelrole.RoleCoding); id != "wormhole/glm-5.3-flash" {
 		t.Errorf("coding = %q, want it untouched", id)
+	}
+}
+
+// A Qwen3.8 boot that bound its vision tower takes vision along with the rest.
+func TestFollowEngineTakesVisionAlongWhenTheBootSeesPictures(t *testing.T) {
+	ctrl, path := followFixture(t, "glm-5.3-flash", "glm-5.3-flash-low", "qwen3.8-flash-next", "qwen3.8-flash-next-low")
+	moves, skips := ctrl.FollowEngine(context.Background(), followEntries, "qwen3.8-flash-next", boolPtr(true))
+	if len(skips) != 0 {
+		t.Fatalf("skips = %+v, want none", skips)
+	}
+	moved := map[string]string{}
+	for _, m := range moves {
+		moved[m.Role] = m.To
+	}
+	if moved["vision"] != "wormhole/qwen3.8-flash-next" {
+		t.Fatalf("vision moved to %q (moves %+v)", moved["vision"], moves)
+	}
+	var onDisk struct {
+		Agents map[string]string `json:"agents"`
+	}
+	raw, _ := os.ReadFile(path)
+	if err := json.Unmarshal(raw, &onDisk); err != nil {
+		t.Fatal(err)
+	}
+	if onDisk.Agents["visionModel"] != "wormhole/qwen3.8-flash-next" {
+		t.Errorf("deneb.json visionModel = %q", onDisk.Agents["visionModel"])
 	}
 }

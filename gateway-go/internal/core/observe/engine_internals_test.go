@@ -172,3 +172,34 @@ func TestFetchRouterStatusReadsCircuitsAndRefusesPublicHosts(t *testing.T) {
 		t.Error("an unreachable router must read as unavailable")
 	}
 }
+
+// The door's model card says whether this boot takes pictures; a card without
+// capabilities (vLLM), another model's card, or no answer say nothing.
+func TestFetchEngineVisionReadsTheServedModelsCard(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{
+			{"id": "qwen3.8-flash-next", "object": "model", "capabilities": map[string]any{"vision": false, "tools": true}},
+			{"id": "glm-5.3-flash", "object": "model", "capabilities": map[string]any{"vision": true}},
+			{"id": "vllm-model", "object": "model"},
+		}})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	metrics := srv.URL + "/metrics"
+	if v := FetchEngineVision(context.Background(), metrics, "qwen3.8-flash-next"); v == nil || *v {
+		t.Errorf("qwen3.8 = %v, want false", v)
+	}
+	if v := FetchEngineVision(context.Background(), metrics, "glm-5.3-flash"); v == nil || !*v {
+		t.Errorf("glm-5.3 = %v, want true", v)
+	}
+	for _, model := range []string{"vllm-model", "not-served", ""} {
+		if v := FetchEngineVision(context.Background(), metrics, model); v != nil {
+			t.Errorf("%q = %v, want no report", model, *v)
+		}
+	}
+	if v := FetchEngineVision(context.Background(), "http://127.0.0.1:1/metrics", "qwen3.8-flash-next"); v != nil {
+		t.Errorf("an engine that did not answer reported %v", *v)
+	}
+}

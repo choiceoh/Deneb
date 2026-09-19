@@ -301,6 +301,7 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 
 - **동작**: 엔트리의 upstreamModel 이 텍스트 전용으로 판정되면 `messages[].content` 배열의 이미지 파트를 텍스트 스텁(`[이미지 첨부 생략 — 텍스트 전용 모델]`)으로 치환. openai(`image_url`)·anthropic(`image`) 양 프로토콜 지원.
 - **판정**: GLM 텍스트 계열은 **정확 일치 목록**(vision 변형 `glm-4.6v` 등이 프리픽스를 공유해 프리픽스 매칭 금지), DeepSeek 은 **패밀리 프리픽스**(`vl` 포함 id 제외), unknown 모델은 이미지 통과(멀쩡한 멀티모달에서 깎는 게 더 나쁜 실패). 엔트리 `"vision": true/false` 로 강제 오버라이드 가능.
+- **★ 백엔드 보고가 약속을 이긴다 (2026-09-19)**: 로컬 백엔드가 `/v1/models` 모델 카드에 `capabilities.vision` 을 보고하면(ST 도어 — 이번 부팅이 실제로 문 비전 타워에서 도출, 상수 아님) 그 보고가 엔트리 `"vision": true` 와 내장 표보다 우선한다(`router.acceptsImages`, 윈도 조사와 같은 60초 루프). `"vision": false` 는 여전히 모든 것에 우선하는 금지다 — **운영자는 막을 수 있고, 약속은 백엔드만 한다.** 계기: Qwen3.8 이 stkernel #1274 부터 그림을 받지만 랭크에 `vision.safetensors` 가 없으면 텍스트 전용으로 뜬다 — 정적 `true` 는 그 부팅에서 400 을 부른다. 엔진 엔트리에는 `vision` 키를 두지 말 것(게이트웨이 역할 추종도 같은 보고를 본다: `internal/ai/enginecontrol` `takesImages`).
 - **★ APC 논거**: 게이트는 **이미지 파트가 실제로 있는 요청만** 재작성한다 — 이미지 없는 요청은 fast-scan 단락 + 파싱 후에도 원본 바이트 그대로 전달(바이트 불변). 이미지 포함 요청은 어차피 400 이던 트래픽이라 기존 prefix family 를 가르지 않는다.
 
 ### ★ 클라우드 모델 추론 프로필 (`reasoning`, glm-5.2; 2026-06-21)

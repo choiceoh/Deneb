@@ -13,13 +13,19 @@ import (
 
 type recordingPicker struct {
 	served []string
+	vision []*bool
 	moves  []Move
 	skips  []Skip
 }
 
-func (p *recordingPicker) FollowEngine(_ context.Context, _ []Entry, served string) ([]Move, []Skip) {
+func (p *recordingPicker) FollowEngine(_ context.Context, _ []Entry, served string, servedVision *bool) ([]Move, []Skip) {
 	p.served = append(p.served, served)
+	p.vision = append(p.vision, servedVision)
 	return p.moves, p.skips
+}
+
+func sees(v *bool) func(context.Context, string, string) *bool {
+	return func(context.Context, string, string) *bool { return v }
 }
 
 type fixedLiveness struct{ down bool }
@@ -39,7 +45,7 @@ func TestProductionServingAnotherModelMovesTheRoles(t *testing.T) {
 	log := &FollowLog{}
 	task := &FollowTask{
 		Endpoint: "http://10.0.0.5:8000/metrics", Picker: picker, Log: log,
-		Fleet: door("production/srv2/1368796", "qwen3.8-flash-next"),
+		Fleet: door("production/srv2/1368796", "qwen3.8-flash-next"), Vision: sees(nil),
 	}
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatal(err)
@@ -58,7 +64,7 @@ func TestProductionServingAnotherModelMovesTheRoles(t *testing.T) {
 func TestAWindowMovesNothing(t *testing.T) {
 	for _, owner := range []string{"session/qwen38-s2h6-0919", "queue/qwen38-qsa-geometry-0919", "choiceoh@srv2/1204007", ""} {
 		picker := &recordingPicker{}
-		task := &FollowTask{Endpoint: "e", Picker: picker, Fleet: door(owner, "qwen3.8-flash-next")}
+		task := &FollowTask{Endpoint: "e", Picker: picker, Fleet: door(owner, "qwen3.8-flash-next"), Vision: sees(nil)}
 		if err := task.Run(context.Background()); err != nil {
 			t.Fatal(err)
 		}
@@ -93,7 +99,7 @@ func TestAHeldBackRoleIsWarnedOnce(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
 	skip := Skip{Role: "vision", From: "wormhole/glm-5.3-flash", Reason: "qwen3.8-flash-next 엔트리는 이미지를 받지 않습니다"}
 	picker := &recordingPicker{skips: []Skip{skip}}
-	task := &FollowTask{Endpoint: "e", Picker: picker, Logger: logger, Fleet: door("production/srv2/1", "qwen3.8-flash-next")}
+	task := &FollowTask{Endpoint: "e", Picker: picker, Logger: logger, Fleet: door("production/srv2/1", "qwen3.8-flash-next"), Vision: sees(nil)}
 	for range 3 {
 		_ = task.Run(context.Background())
 	}
@@ -106,5 +112,30 @@ func TestAHeldBackRoleIsWarnedOnce(t *testing.T) {
 	_ = task.Run(context.Background())
 	if n := strings.Count(buf.String(), "cannot follow"); n != 2 {
 		t.Fatalf("warned %d times, want again after it cleared", n)
+	}
+}
+
+// The pass asks the door whether this boot of the served model takes images
+// and hands the answer to the picker with the model — the planner decides.
+func TestThePassCarriesTheEnginesVisionReport(t *testing.T) {
+	picker := &recordingPicker{}
+	asked := ""
+	task := &FollowTask{
+		Endpoint: "http://10.0.0.5:8000/metrics", Picker: picker,
+		Fleet: door("production/srv2/1", "qwen3.8-flash-next"),
+		Vision: func(_ context.Context, metricsURL, model string) *bool {
+			asked = metricsURL + " " + model
+			v := true
+			return &v
+		},
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if asked != "http://10.0.0.5:8000/metrics qwen3.8-flash-next" {
+		t.Errorf("asked %q", asked)
+	}
+	if len(picker.vision) != 1 || picker.vision[0] == nil || !*picker.vision[0] {
+		t.Errorf("picker got vision %v", picker.vision)
 	}
 }
