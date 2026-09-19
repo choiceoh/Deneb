@@ -133,8 +133,9 @@ func translateBatchDeepL(ctx context.Context, batch []translateInput, lang strin
 		}
 		// Land what was just paid for. The write thresholds only fire on the
 		// NEXT write, so without this the last batch before a restart — exactly
-		// the one the durable layer exists to keep — would still be lost. One
-		// file write per provider request, right after a network round trip.
+		// the one the durable layer exists to keep — would still be lost. At
+		// most one file write per provider request, outside the cache lock;
+		// a page's concurrent batches share the newest one (translateDiskCache).
 		translateDisk.flush()
 	}
 	for i, text := range resolved {
