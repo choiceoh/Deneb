@@ -8,8 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"math"
-	"net/http"
-	"net/http/httptest"
 	"reflect"
 	"sort"
 	"strings"
@@ -575,7 +573,7 @@ func TestPromLabelBoundaryMatrix(t *testing.T) {
 func TestParseVllmCounterNumericBoundaryMatrix(t *testing.T) {
 	t.Parallel()
 
-	const metric = vllmPrefixQueriesMetric
+	const metric = enginePrefixQueriesMetric
 	tests := []struct {
 		name  string
 		value string
@@ -618,69 +616,6 @@ func TestParseVllmCounterNumericBoundaryMatrix(t *testing.T) {
 				t.Fatalf("value = %v, want %v", got, tc.want)
 			}
 		})
-	}
-}
-
-func TestScrapeVllmCacheHTTPBoundaryMatrix(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name       string
-		status     int
-		body       string
-		want       []VllmPrefixCache
-		wantMethod string
-		wantPath   string
-	}{
-		{name: "not found", status: http.StatusNotFound, body: "not found", want: nil, wantMethod: http.MethodGet, wantPath: "/metrics"},
-		{name: "server error", status: http.StatusInternalServerError, body: "boom", want: nil, wantMethod: http.MethodGet, wantPath: "/metrics"},
-		{name: "empty ok", status: http.StatusOK, body: "", want: []VllmPrefixCache{}, wantMethod: http.MethodGet, wantPath: "/metrics"},
-		{name: "queries only", status: http.StatusOK, body: vllmPrefixQueriesMetric + "{model_name=\"m\"} 10\n", want: []VllmPrefixCache{{Model: "m", Queries: 10, Hits: 0, HitRatePct: 0}}, wantMethod: http.MethodGet, wantPath: "/metrics"},
-		{name: "hits only", status: http.StatusOK, body: vllmPrefixHitsMetric + "{model_name=\"m\"} 7\n", want: []VllmPrefixCache{{Model: "m", Queries: 0, Hits: 7, HitRatePct: 0}}, wantMethod: http.MethodGet, wantPath: "/metrics"},
-		{name: "both", status: http.StatusOK, body: vllmPrefixQueriesMetric + "{model_name=\"m\"} 8\n" + vllmPrefixHitsMetric + "{model_name=\"m\"} 3\n", want: []VllmPrefixCache{{Model: "m", Queries: 8, Hits: 3, HitRatePct: 37.5}}, wantMethod: http.MethodGet, wantPath: "/metrics"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			var method, path string
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				method, path = r.Method, r.URL.Path
-				w.WriteHeader(tc.status)
-				_, _ = io.WriteString(w, tc.body)
-			}))
-			defer server.Close()
-			got := scrapeVllmPrefixCache(context.Background(), server.Client(), server.URL+"/v1/")
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("scrape = %#v, want %#v", got, tc.want)
-			}
-			if method != tc.wantMethod || path != tc.wantPath {
-				t.Fatalf("request = %s %s, want %s %s", method, path, tc.wantMethod, tc.wantPath)
-			}
-		})
-	}
-}
-
-func TestFetchVllmPrefixCachesPreservesEndpointOrderAndSortsWithinEndpoint(t *testing.T) {
-	t.Parallel()
-
-	server := func(prefix string) *httptest.Server {
-		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			fmt.Fprintf(w, "%s{model_name=\"%s-z\"} 10\n", vllmPrefixQueriesMetric, prefix)
-			fmt.Fprintf(w, "%s{model_name=\"%s-a\"} 20\n", vllmPrefixQueriesMetric, prefix)
-		}))
-	}
-	one := server("one")
-	defer one.Close()
-	two := server("two")
-	defer two.Close()
-	got := FetchVllmPrefixCaches(context.Background(), []string{two.URL + "/v1", one.URL + "/v1"})
-	wantModels := []string{"two-a", "two-z", "one-a", "one-z"}
-	models := make([]string, len(got))
-	for i := range got {
-		models[i] = got[i].Model
-	}
-	if !reflect.DeepEqual(models, wantModels) {
-		t.Fatalf("models = %v, want %v", models, wantModels)
 	}
 }
 

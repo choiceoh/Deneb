@@ -20,12 +20,14 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
@@ -45,12 +47,11 @@ type Deps struct {
 	AgentLog func() *agentlog.Writer
 	Logger   *slog.Logger
 
-	// VllmBases lazily lists the deduped base URLs of OpenAI-mode vLLM roles
-	// (lazy for the same reason as AgentLog: the model registry is built
-	// after early registration). observe.health scrapes each endpoint's
-	// /metrics for the engine-level prefix-cache hit rate; nil or an empty
-	// list simply omits the field.
-	VllmBases func() []string
+	// EngineSpeed resolves the local serving engines' measured history (nil
+	// when no engine is configured). observe.health reports each engine
+	// model's prompt-token reuse on the newest measured day from it; nil or an
+	// unmeasured day simply omits the field.
+	EngineSpeed func() *enginespeed.Store
 
 	// StateDir resolves the deneb state dir — observe.workstation_usage reads
 	// the workstation-tool tally (utility-grounding ledger) from its cache.
@@ -287,15 +288,56 @@ func behaviorHandler(deps Deps) rpcutil.HandlerFunc {
 // configured it also scrapes the engine's /metrics for the prefix-cache hit
 // rate (cumulative since engine boot) — absent on non-vLLM deployments or
 // when the engine is down.
+// promptCacheRow is one engine model's prompt-token reuse on the newest
+// measured day, in the shape the native Observe tab renders ("<model> 캐시
+// N%"). The wire key stays vllmPrefixCache for that client, but the numbers
+// are TOKENS from the engine-speed history (ST's st:prefix_reused_tokens_total
+// against vllm:prompt_tokens_total) — never ST's vllm:prefix_cache_* counters,
+// which count requests. The key used to be filled by scraping the model
+// registry's vllm-provider roles, a list the wormhole cutover left empty, so
+// the tab's cache line had not appeared since 2026-06.
+type promptCacheRow struct {
+	Model      string  `json:"model"`
+	Queries    int64   `json:"queries"`
+	Hits       int64   `json:"hits"`
+	HitRatePct float64 `json:"hitRatePct"` // hits/queries*100, one decimal
+}
+
+// promptCacheRows reads the newest day of store: one row per engine model
+// whose token reuse was measured. Nil for a nil store or an unmeasured day.
+func promptCacheRows(store *enginespeed.Store) []promptCacheRow {
+	if store == nil {
+		return nil
+	}
+	var rows []promptCacheRow
+	for _, d := range store.Days(1) {
+		r := d.Rates()
+		if !r.PromptCacheMeasured {
+			continue
+		}
+		label := d.Model
+		if label == "" {
+			label = d.Endpoint
+		}
+		rows = append(rows, promptCacheRow{
+			Model:      label,
+			Queries:    r.CachePromptTokens,
+			Hits:       r.CachedPromptTokens,
+			HitRatePct: math.Round(r.PromptCacheHitRatio*1000) / 10,
+		})
+	}
+	return rows
+}
+
 func healthHandler(deps Deps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		out := map[string]any{
 			"captureEnabled":  deps.ring() != nil,
 			"agentLogEnabled": deps.alog() != nil,
 		}
-		if deps.VllmBases != nil {
-			if stats := observe.FetchVllmPrefixCaches(ctx, deps.VllmBases()); len(stats) > 0 {
-				out["vllmPrefixCache"] = stats
+		if deps.EngineSpeed != nil {
+			if rows := promptCacheRows(deps.EngineSpeed()); len(rows) > 0 {
+				out["vllmPrefixCache"] = rows
 			}
 		}
 		if ring := deps.ring(); ring != nil {

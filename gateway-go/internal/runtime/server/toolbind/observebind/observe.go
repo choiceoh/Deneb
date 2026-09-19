@@ -12,6 +12,6 @@ import (
 )
 
 // ToolObserve binds the concrete observeops observe tool.
-func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Store, vllmBases func() []string, engineSpeed func() *enginespeed.Store, routerMeter observeops.RouterMeter) toolport.ToolFunc {
-	return observeops.ToolObserve(lc, alog, wf, vllmBases, engineSpeed, routerMeter)
+func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Store, engineSpeed func() *enginespeed.Store, routerMeter observeops.RouterMeter) toolport.ToolFunc {
+	return observeops.ToolObserve(lc, alog, wf, engineSpeed, routerMeter)
 }

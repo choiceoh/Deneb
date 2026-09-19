@@ -1,8 +1,6 @@
 package toolwire
 
 import (
-	"context"
-
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/bridge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/wire"
 )
@@ -17,10 +15,6 @@ func RegisterRegistryBridgeTools(registry RegistryBridge, deps *wire.CoreToolDep
 
 func ExecCommandPreservesRunCache(command string) bool {
 	return bridge.ExecCommandPreservesRunCache(command)
-}
-
-func SumVllmPrefixCacheCounters(ctx context.Context, bases []string, model string) (queries, hits int64, ok bool) {
-	return bridge.SumVllmPrefixCacheCounters(ctx, bases, model)
 }
 
 func SubstituteMarketLetterTokens(s string) string {

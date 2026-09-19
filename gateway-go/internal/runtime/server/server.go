@@ -129,11 +129,12 @@ type ServerRuntime struct {
 	prStatusMu sync.Mutex
 	prStatus   map[string]prStatusEntry
 
-	// cacheHealth holds the rolling vLLM prefix-cache hit-ratio samples surfaced
-	// on /health and /status. gpuHealth caches the latest nvidia-smi reading for
-	// the /health gpu section and /health/gpu route. Both zero values are
-	// ready-to-use (no constructor) and degrade silently on hosts without a vLLM
-	// role or NVIDIA GPU. See health_cache.go and health_gpu.go.
+	// healthProbes caches the latest nvidia-smi reading for the /health gpu
+	// section and /health/gpu route; the /health cache section it collects
+	// alongside reads the engine-speed history (engineHealthDays) and keeps no
+	// state here. The zero value is ready to use and degrades silently on hosts
+	// without an NVIDIA GPU or a local engine. See health_cache.go and
+	// health_gpu.go.
 	healthProbes runtimehealth.Probes
 }
 

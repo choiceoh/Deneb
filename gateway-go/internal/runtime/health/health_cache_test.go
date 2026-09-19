@@ -5,158 +5,136 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 )
 
-func TestSummarizeCacheWindowBoundaryStates(t *testing.T) {
-	now := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
-	mk := func(ago time.Duration, q, h int64) cacheSample {
-		return cacheSample{at: now.Add(-ago), queries: q, hits: h}
+// measuredDay is one engine model's day whose token-reuse counters were
+// published at both ends of its intervals.
+func measuredDay(day, endpoint, model string, cached, prompt float64, polls int) enginespeed.DayStat {
+	return enginespeed.DayStat{
+		Day: day, Endpoint: endpoint, Model: model, Polls: polls,
+		Delta: observe.EngineDelta{PromptTokens: prompt, CachePromptTokens: prompt, CachedPromptTokens: cached},
 	}
-
-	t.Run("empty ring omits section", func(t *testing.T) {
-		_, ok := summarizeCacheWindow(nil, now)
-		if ok {
-			t.Errorf("ok = true for empty ring, want false (section omitted)")
-		}
-	})
-
-	t.Run("single sample is baseline only, ratio omitted", func(t *testing.T) {
-		sec, ok := summarizeCacheWindow([]cacheSample{mk(time.Minute, 1000, 800)}, now)
-		if !ok {
-			t.Fatalf("ok = false for baseline sample, want true (section present)")
-		}
-		if sec.HitRatePct != nil {
-			t.Errorf("HitRatePct = %v for baseline, want nil", *sec.HitRatePct)
-		}
-		if sec.Samples != 1 {
-			t.Errorf("Samples = %d, want 1", sec.Samples)
-		}
-	})
-
-	t.Run("rolling ratio is delta between oldest and newest", func(t *testing.T) {
-		// Oldest 24h ago: 1000 queries / 700 hits. Newest now: 3000 / 2500.
-		// Delta: 2000 queries, 1800 hits → 90.0%.
-		samples := []cacheSample{
-			mk(24*time.Hour, 1000, 700),
-			mk(12*time.Hour, 2000, 1500),
-			mk(0, 3000, 2500),
-		}
-		sec, ok := summarizeCacheWindow(samples, now)
-		if !ok || sec.HitRatePct == nil {
-			t.Fatalf("summarize = (%+v, %v), want a ratio", sec, ok)
-		}
-		if *sec.HitRatePct != 90.0 {
-			t.Errorf("HitRatePct = %v, want 90.0", *sec.HitRatePct)
-		}
-		if sec.WindowQueries != 2000 || sec.WindowHits != 1800 {
-			t.Errorf("window deltas = (q=%d, h=%d), want (2000, 1800)", sec.WindowQueries, sec.WindowHits)
-		}
-		if sec.Samples != 3 {
-			t.Errorf("Samples = %d, want 3", sec.Samples)
-		}
-	})
-
-	t.Run("ratio rounds to one decimal", func(t *testing.T) {
-		// Delta 3 hits / 7 queries = 42.857% → 42.9.
-		samples := []cacheSample{mk(time.Hour, 0, 0), mk(0, 7, 3)}
-		sec, ok := summarizeCacheWindow(samples, now)
-		if !ok || sec.HitRatePct == nil || *sec.HitRatePct != 42.9 {
-			t.Errorf("HitRatePct = %v (ok=%v), want 42.9", sec.HitRatePct, ok)
-		}
-	})
-
-	t.Run("engine restart (counter went backwards) suppresses ratio", func(t *testing.T) {
-		// Newest has lower cumulative counters than oldest → restart; no negative
-		// ratio, surface the section warming-up instead.
-		samples := []cacheSample{mk(2*time.Hour, 5000, 4000), mk(0, 100, 80)}
-		sec, ok := summarizeCacheWindow(samples, now)
-		if !ok {
-			t.Fatalf("ok = false after restart, want true (section present, warming up)")
-		}
-		if sec.HitRatePct != nil {
-			t.Errorf("HitRatePct = %v after restart, want nil", *sec.HitRatePct)
-		}
-	})
-
-	t.Run("zero query delta (idle engine) suppresses ratio", func(t *testing.T) {
-		samples := []cacheSample{mk(time.Hour, 1000, 900), mk(0, 1000, 900)}
-		sec, ok := summarizeCacheWindow(samples, now)
-		if !ok || sec.HitRatePct != nil {
-			t.Errorf("idle engine: section=(%+v, %v), want present with nil ratio", sec, ok)
-		}
-	})
 }
 
-func TestSummarizeCacheWindowFormatsSummaryLabel(t *testing.T) {
-	now := time.Now()
-	mk := func(q, h int64) []cacheSample {
-		return []cacheSample{{at: now.Add(-time.Hour), queries: 0, hits: 0}, {at: now, queries: q, hits: h}}
+func TestCacheFromEngineDaysSumsTheNewestDayAcrossEngines(t *testing.T) {
+	days := []enginespeed.DayStat{ // newest first, as Store.Days returns them
+		measuredDay("2026-09-19", "http://a:8000/metrics", "glm-5.3-flash", 1_840_128, 4_161_535, 3393),
+		measuredDay("2026-09-19", "http://a:8000/metrics", "qwen3.8-flash-next", 60_000, 100_000, 138),
+		measuredDay("2026-09-18", "http://a:8000/metrics", "glm-5.3-flash", 9_000_000, 9_000_000, 3486),
 	}
+	sec, ok := CacheFromEngineDays(days)
+	if !ok || sec.HitRatePct == nil {
+		t.Fatalf("section = (%+v, %v), want a ratio", sec, ok)
+	}
+	// (1,840,128 + 60,000) / (4,161,535 + 100,000) = 44.6% — yesterday's
+	// perfect day must not leak into today's alarm.
+	if *sec.HitRatePct != 44.6 {
+		t.Errorf("HitRatePct = %v, want 44.6", *sec.HitRatePct)
+	}
+	if sec.WindowHits != 1_900_128 || sec.WindowQueries != 4_261_535 {
+		t.Errorf("window = (hits %d, queries %d), want the newest day's token sums", sec.WindowHits, sec.WindowQueries)
+	}
+	if sec.WindowLabel != "2026-09-19" || sec.Samples != 3393+138 {
+		t.Errorf("label/samples = %q/%d", sec.WindowLabel, sec.Samples)
+	}
+	if !strings.Contains(sec.Summary, "token reuse 44.6% (fair)") {
+		t.Errorf("Summary = %q", sec.Summary)
+	}
+}
+
+// ST counts its vllm:prefix_cache_* series in REQUESTS. A day that has only
+// those — no token-reuse interval — must read as unmeasured, not as a ratio of
+// requests (8 of 130 would have alarmed LOW at 6.2% while the engine reused
+// 59% of prompt tokens).
+func TestCacheFromEngineDaysNeverReadsRequestCountsAsTokens(t *testing.T) {
+	days := []enginespeed.DayStat{{
+		Day: "2026-09-19", Endpoint: "http://a:8000/metrics", Polls: 12,
+		Delta: observe.EngineDelta{PromptTokens: 423_319, PrefixCacheQueries: 130, PrefixCacheHits: 8},
+	}}
+	sec, ok := CacheFromEngineDays(days)
+	if !ok {
+		t.Fatal("a configured engine with history must keep its section")
+	}
+	if sec.HitRatePct != nil || sec.WindowQueries != 0 {
+		t.Fatalf("request counts leaked into the token ratio: %+v", sec)
+	}
+	if !strings.Contains(sec.Summary, "not measured") {
+		t.Errorf("Summary = %q, want it to say the day is unmeasured", sec.Summary)
+	}
+}
+
+// An unmeasured interval on the same day stays out of the denominator instead
+// of diluting the measured ones toward zero.
+func TestCacheFromEngineDaysLeavesUnmeasuredRowsOutOfTheDenominator(t *testing.T) {
+	days := []enginespeed.DayStat{
+		measuredDay("2026-09-19", "http://a:8000/metrics", "glm-5.3-flash", 900, 1000, 10),
+		{Day: "2026-09-19", Endpoint: "http://b:8000/metrics", Polls: 10, Delta: observe.EngineDelta{PromptTokens: 50_000}},
+	}
+	sec, ok := CacheFromEngineDays(days)
+	if !ok || sec.HitRatePct == nil || *sec.HitRatePct != 90 {
+		t.Fatalf("section = %+v, want 90%% from the measured row alone", sec)
+	}
+	if sec.Samples != 20 {
+		t.Errorf("Samples = %d, want both rows' polls", sec.Samples)
+	}
+}
+
+func TestCacheFromEngineDaysOmitsTheSectionWithoutHistory(t *testing.T) {
+	if _, ok := CacheFromEngineDays(nil); ok {
+		t.Fatal("no engine history must omit the section")
+	}
+}
+
+func TestCacheFromEngineDaysRoundsAndLabels(t *testing.T) {
 	cases := []struct {
-		desc     string
-		q, h     int64
-		contains string
+		cached, prompt float64
+		pct            float64
+		label          string
 	}{
-		{"high hit-rate is ok", 1000, 950, "(ok)"},
-		{"mid hit-rate is fair", 1000, 550, "(fair)"},
-		{"low hit-rate flags LOW", 1000, 100, "(LOW)"},
+		{300_000, 700_000, 42.9, "(fair)"},
+		{950_000, 1_000_000, 95, "(ok)"},
+		{100_000, 1_000_000, 10, "(LOW)"},
+		// A day a turn or two deep reports its ratio but no verdict.
+		{0, 14, 0, "(thin sample: 14 prompt tokens)"},
 	}
-	for _, tc := range cases {
-		t.Run(tc.desc, func(t *testing.T) {
-			sec, ok := summarizeCacheWindow(mk(tc.q, tc.h), now)
-			if !ok {
-				t.Fatalf("ok = false")
-			}
-			if !strings.Contains(sec.Summary, tc.contains) {
-				t.Errorf("Summary = %q, want to contain %q", sec.Summary, tc.contains)
-			}
-		})
+	for _, c := range cases {
+		sec, ok := CacheFromEngineDays([]enginespeed.DayStat{measuredDay("2026-09-19", "e", "m", c.cached, c.prompt, 1)})
+		if !ok || sec.HitRatePct == nil || *sec.HitRatePct != c.pct || !strings.Contains(sec.Summary, c.label) {
+			t.Errorf("%v/%v: section = %+v, want %.1f%% %s", c.cached, c.prompt, sec, c.pct, c.label)
+		}
 	}
 }
 
-func TestPruneCacheSamplesEvictsBeforeCutoffAnchor(t *testing.T) {
-	base := time.Date(2026, 6, 26, 0, 0, 0, 0, time.UTC)
-	at := func(h int) time.Time { return base.Add(time.Duration(h) * time.Hour) }
-
-	t.Run("keeps one pre-cutoff anchor so delta spans full window", func(t *testing.T) {
-		samples := []cacheSample{
-			{at: at(0)}, {at: at(1)}, {at: at(10)}, {at: at(20)},
-		}
-		// Cutoff at hour 5: hours 0 and 1 are pre-cutoff; only the latest pre-cutoff
-		// (hour 1) is kept as the anchor.
-		pruneCacheSamples(&samples, at(5))
-		if len(samples) != 3 {
-			t.Fatalf("len = %d, want 3 (anchor + 2 in-window)", len(samples))
-		}
-		if !samples[0].at.Equal(at(1)) {
-			t.Errorf("anchor = %v, want hour 1 (latest pre-cutoff)", samples[0].at)
-		}
+// /health hands Collect a getter; a nil one (no engine configured) omits the
+// cache section while the GPU half still runs.
+func TestProbesCollectReadsTheEngineHistoryItIsHanded(t *testing.T) {
+	var p Probes
+	// A fresh cached GPU reading, so the GPU half never execs nvidia-smi here.
+	p.gpu.probed, p.gpu.cachedAt = true, time.Now()
+	if got := p.Collect(context.Background(), nil); got.CachePresent {
+		t.Fatalf("nil history getter produced a cache section: %+v", got.Cache)
+	}
+	got := p.Collect(context.Background(), func() []enginespeed.DayStat {
+		return []enginespeed.DayStat{measuredDay("2026-09-19", "e", "m", 500, 1000, 4)}
 	})
-
-	t.Run("no pruning when all in window", func(t *testing.T) {
-		samples := []cacheSample{{at: at(6)}, {at: at(7)}}
-		pruneCacheSamples(&samples, at(5))
-		if len(samples) != 2 {
-			t.Errorf("len = %d, want 2 (nothing pruned)", len(samples))
-		}
-	})
-
-	t.Run("single pre-cutoff sample retained as sole anchor", func(t *testing.T) {
-		samples := []cacheSample{{at: at(0)}}
-		pruneCacheSamples(&samples, at(5))
-		if len(samples) != 1 {
-			t.Errorf("len = %d, want 1 (anchor retained)", len(samples))
-		}
-	})
+	if !got.CachePresent || got.Cache.HitRatePct == nil || *got.Cache.HitRatePct != 50 {
+		t.Fatalf("cache section = %+v (present=%v)", got.Cache, got.CachePresent)
+	}
 }
 
-// TestCacheHealthObserveNoBasesReturnsEmptySection verifies that with no vLLM bases the
-// collector never scrapes, the ring stays empty, and observe reports nothing to
-// surface — so /health omits the cache section on non-vLLM hosts.
-func TestCacheHealthObserveNoBasesReturnsEmptySection(t *testing.T) {
-	var c cacheHealth
-	_, ok := c.observe(context.Background(), nil)
-	if ok {
-		t.Errorf("ok = true with no vLLM bases, want false (cache section omitted)")
+// The thin-sample rule withholds only the verdict: the ratio and its mass are
+// still there for a reader who wants them.
+func TestCacheFromEngineDaysGivesNoVerdictOnAThinDay(t *testing.T) {
+	sec, ok := CacheFromEngineDays([]enginespeed.DayStat{measuredDay("2026-09-19", "e", "m", 0, 14, 11)})
+	if !ok || sec.HitRatePct == nil || *sec.HitRatePct != 0 || sec.WindowQueries != 14 {
+		t.Fatalf("section = %+v", sec)
+	}
+	for _, verdict := range []string{"(LOW)", "(fair)", "(ok)"} {
+		if strings.Contains(sec.Summary, verdict) {
+			t.Errorf("a 14-token day gave the verdict %s: %q", verdict, sec.Summary)
+		}
 	}
 }

@@ -1,20 +1,21 @@
 package chat
 
 import (
-	"context"
+	"bytes"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-// apcDiagFor runs beginAPCDiag with no registry (scrape disabled) against the
-// shared snapshot store, keyed uniquely per test.
+// apcDiagFor runs beginAPCDiag against the shared snapshot store, keyed
+// uniquely per test.
 func apcDiagFor(t *testing.T, system string, msgs []llm.Message, recall string) *apcDiagRun {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return beginAPCDiag(context.Background(), runDeps{}, "test:"+t.Name(), llm.APIModeOpenAI, "vllm", "deepseek-v4-flash", []byte(system), recall, msgs, logger)
+	return beginAPCDiag("run-"+t.Name(), "test:"+t.Name(), "deepseek-v4-flash", []byte(system), recall, msgs, logger)
 }
 
 func TestAPCDiagClassifiesRunsWhenHistoryChanges(t *testing.T) {
@@ -114,5 +115,28 @@ func TestAPCDiagCommonPrefixLenReturnsMatchCount(t *testing.T) {
 		if got := commonPrefixLen(c.a, c.b); got != c.want {
 			t.Errorf("commonPrefixLen(%v,%v) = %d, want %d", c.a, c.b, got, c.want)
 		}
+	}
+}
+
+// The line carries runId: the engine's side of the same run is its run.cache
+// event, and runId is what joins the two. The engine fields the line once
+// promised are gone — they came from a registry list that was always empty.
+func TestAPCDiagLineCarriesRunIDForTheRunCacheJoin(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	msgs := []llm.Message{llm.NewTextMessage("user", "안녕")}
+	d := beginAPCDiag("run-join", "test:"+t.Name(), "glm-5.3-flash", []byte("sys"), "", msgs, logger)
+	d.finish()
+	d.finish() // deferred and explicit calls must not double-log
+
+	out := logs.String()
+	if n := strings.Count(out, "apc diag"); n != 1 {
+		t.Fatalf("apc diag lines = %d, want 1:\n%s", n, out)
+	}
+	if !strings.Contains(out, "runId=run-join") || !strings.Contains(out, "class=first-run") {
+		t.Fatalf("apc diag line lacks the join key or class:\n%s", out)
+	}
+	if strings.Contains(out, "engine") {
+		t.Fatalf("apc diag line still carries engine fields:\n%s", out)
 	}
 }

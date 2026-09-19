@@ -1,9 +1,6 @@
 package bridge
 
 import (
-	"context"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/goals"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
@@ -61,31 +58,6 @@ func RegisterRegistryBridgeTools(registry RegistryBridge, deps *tooldeps.CoreToo
 // not import tools/runtimeops solely for this predicate.
 func ExecCommandPreservesRunCache(command string) bool {
 	return runtimeops.ExecCommandPreservesRunCache(command)
-}
-
-// SumVllmPrefixCacheCounters scrapes vLLM prefix-cache counters across bases,
-// preferring rows whose served-model name matches model. Used by chat APC
-// diagnostics so the chat parent does not import core/observe.
-func SumVllmPrefixCacheCounters(ctx context.Context, bases []string, model string) (queries, hits int64, ok bool) {
-	rows := observe.FetchVllmPrefixCaches(ctx, bases)
-	if len(rows) == 0 {
-		return 0, 0, false
-	}
-	var mq, mh int64
-	matched := false
-	for _, r := range rows {
-		queries += r.Queries
-		hits += r.Hits
-		if r.Model == model {
-			mq += r.Queries
-			mh += r.Hits
-			matched = true
-		}
-	}
-	if matched {
-		return mq, mh, true
-	}
-	return queries, hits, true
 }
 
 // SubstituteMarketLetterTokens replaces {{market:*}} letter tokens with cached

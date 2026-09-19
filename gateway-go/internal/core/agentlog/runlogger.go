@@ -32,6 +32,15 @@ func NewRunLogger(w *Writer, session, runID string) *RunLogger {
 	}
 }
 
+// RunID is the run this logger writes for — what joins the run's agentlog
+// events to its journal lines (e.g. "apc diag"). "" for a nil logger.
+func (rl *RunLogger) RunID() string {
+	if rl == nil {
+		return ""
+	}
+	return rl.runID
+}
+
 // LogStart records agent run start.
 func (rl *RunLogger) LogStart(data RunStartData) {
 	if rl == nil {

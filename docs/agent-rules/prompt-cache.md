@@ -67,7 +67,7 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 
 ### 측정
 
-- 엔진 전역: `curl -s http://<engine>/metrics | grep prefix_cache` (`vllm:prefix_cache_{hits,queries}_total`, 토큰 단위 누적). vLLM 컨테이너 로그의 `Prefix cache hit rate: N%` 라인은 **누적** 비율이라 시간대별 grep 으로 하락/상승 시점을 복원할 수 있다.
+- 엔진 전역: ⚠️ ST 엔진의 `vllm:prefix_cache_{hits,queries}_total` 은 **요청** 단위다(8/130 요청 적중=6% 인데 토큰 재사용은 59% — #5106). 토큰 재사용은 `st:prefix_reused_tokens_total` ÷ `vllm:prompt_tokens_total`. 일 단위 집계(엔진별·모델별)는 엔진 속도 이력이 정본이다 — 네이티브 엔진 화면, 에이전트 `observe action=speed`, `/health` 의 `cache`, `observe.health` 의 행이 전부 그것을 읽는다(2026-09-19 전까지 뒤의 셋은 모델 레지스트리의 vllm 프로바이더 목록을 긁었는데, 웜홀 전환 뒤 그 목록이 비어 조용히 공란이었다).
 - per-run: agentlog `run.cache` 이벤트 (`chat/engine_cache_sample.go` 가 턴 종료 후 /metrics 델타를 비동기 기록; vLLM usage 에 cached_tokens 가 없는 빌드에서 유일한 per-turn 신호). 단일 사용자 직렬 트래픽 기준 근사치. ⚠️ **웜홀 뒤에서는 baseURL 유도가 불가** — 2026-06-14 웜홀 전환 후 provider baseURL(`:18800`)에 /metrics 가 없어 6/14~7/5 사이 run.cache 가 조용히 죽어 있었다(실측: agent-logs 0건). 수리(2026-07-05): **`DENEB_ENGINE_METRICS_URL`** 오버라이드(`resolveEngineMetricsURLs`, 사설망 호스트 검증 포함)로 실제 서빙 엔진의 /metrics 를 지정한다 — 웜홀 경유 배치에서는 이 env 가 필수, 미설정 시 샘플링은 안전하게 skip. 로컬 엔진이 여럿이면 **쉼표 목록**(`enginespeed.Endpoints` 와 같은 파싱, 항목마다 검증)이고, 표본은 **그 런을 서빙한 엔진**에서 뜬다(`engineRoute.servingEngine` — 런의 base URL host:port 가 곧 엔진이면 그 엔진, 아니면 라우터 엔트리에 모델 이름이 있는 엔진; 프롬프트 머리 정확 토큰 수 `prompt_exact_tokens.go` 도 같은 규칙, 어느 엔진도 서빙하지 않은 클라우드 런은 첫 엔진 토크나이저). 어떤 런을 샘플링할지(스코프)는 라우터 설정에서 도출한다(2026-09-19): 엔진에 직접 간 런, 또는 라우터를 거쳐 **엔진 host:port 로 가는 엔트리의 정확한 이름**(`configresolve.EngineModels`, 이름이 겹치면 라우터처럼 마지막 엔트리 기준)으로 간 런만 — 엔진이 GLM↔Qwen 을 바꿔도 따라가고, 공개 호스트로 나간 런(동명 클라우드 쌍둥이)은 제외. `DENEB_ENGINE_METRICS_MODELS` 는 명시 오버라이드로만 남았다(설정 시 부분문자열 필터가 이김; 수작업 목록은 엔진 모델 전환 때 조용히 썩는다 — 엔진이 서빙하는 모델을 빠뜨리면 모델당 1회 Warn).
 
 ---
@@ -91,7 +91,7 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 
 **진단 플레이북** (재조사 대신 이 순서로 관측):
 
-- 런 경계 분류: `beginAPCDiag`(`chat/apc_diag.go`)의 `apc diag` 로그 라인 — `session`·`model`·`class`(append-only/history-mutated/system-changed)·`sysDivergedAt`(시스템 변경 시 첫 상이 바이트 오프셋: head=정적 회귀=나쁨, tail=day-only 타임스탬프=예상됨). 저널: `journalctl --user -u deneb-gateway | grep "apc diag"`.
+- 런 경계 분류: `beginAPCDiag`(`chat/apc_diag.go`)의 `apc diag` 로그 라인 — `runId`·`session`·`model`·`class`(append-only/history-mutated/system-changed)·`sysDivergedAt`(시스템 변경 시 첫 상이 바이트 오프셋: head=정적 회귀=나쁨, tail=day-only 타임스탬프=예상됨). 저널: `journalctl --user -u deneb-gateway | grep "apc diag"`. 그 프리픽스를 엔진이 실제로 얼마나 재사용했는지는 같은 `runId` 의 agentlog `run.cache` 이벤트다(서빙한 엔진·프롬프트 토큰 단위). apc diag 는 엔진 카운터를 직접 긁지 않는다.
 - within-run 프리픽스 안정성: 위 결정적 테스트 (라이브 불필요, 프로바이더 무관).
 - 라이브 재현: `live-test.sh restart` → mock_native_client 한 연결로 2 chat(같은 세션) → `logs-grep "apc diag"` + `grep cacheReadTokens`. (단발 `live-test.sh chat` 은 매번 새 `client:lt-*` 세션이라 런 경계 비교 불가.)
 - ⚠️ **`client:lt-*` 세션은 캐시/CPM 지표에서 제외**(라이브테스트 합성, 연속성 0). `cache_cost_audit.py`·`rsi_bench/token_economics.py` 가 스킵(Go `aggregate_failed.go` 미러).

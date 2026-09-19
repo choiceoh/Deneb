@@ -386,12 +386,18 @@ func TestRunLoggerAllEventShapesAndNilSafety(t *testing.T) {
 	nilLogger.LogEnd(RunEndData{})
 	nilLogger.LogError(RunErrorData{})
 	nilLogger.LogCache(RunCacheData{})
+	if got := nilLogger.RunID(); got != "" {
+		t.Fatalf("nil logger RunID = %q, want empty", got)
+	}
 	if got := NewRunLogger(nil, "session", "run"); got != nil {
 		t.Fatalf("nil writer returned logger: %+v", got)
 	}
 
 	w := NewWriter(t.TempDir())
 	rl := NewRunLogger(w, "session", "run")
+	if got := rl.RunID(); got != "run" {
+		t.Fatalf("RunID = %q, want the id its entries carry", got)
+	}
 	rl.LogStart(RunStartData{Model: "model", Provider: "provider", Message: "hello"})
 	rl.LogPrep(RunPrepData{SystemPromptChars: 10, ContextMessages: 2, PrepMs: 3})
 	rl.LogTurnLLM(TurnLLMData{Turn: 1, InputTokens: 11, OutputTokens: 4})
