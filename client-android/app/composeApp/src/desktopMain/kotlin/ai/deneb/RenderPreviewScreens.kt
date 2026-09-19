@@ -50,6 +50,7 @@ import ai.deneb.ui.chat.WorkFeedItem
 import ai.deneb.ui.chat.composables.EmptyState
 import ai.deneb.ui.chat.composables.WorkFeedAnswerBlock
 import ai.deneb.ui.chat.composables.WorkFeedPanel
+import ai.deneb.ui.components.DenebBadge
 import ai.deneb.ui.components.DenebButton
 import ai.deneb.ui.components.DenebDialogCard
 import ai.deneb.ui.components.DenebOutlinedButton
@@ -62,6 +63,8 @@ import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.SectionedScrubList
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebOnSuccessContainer
+import ai.deneb.ui.denebSuccessContainer
 import ai.deneb.ui.icons.outlined.Restore
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -542,8 +545,15 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
                     DenebSectionLabel("세그먼티드", Modifier.padding(start = 24.dp))
                     DenebSegmentedRow(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
                         listOf("매일", "매주", "주기", "한 번").forEachIndexed { i, label ->
-                            DenebSegment(selected = i == 1, onClick = {}, index = i, count = 4) { Text(label) }
+                            DenebSegment(selected = i == 1, onClick = {}) { Text(label) }
                         }
+                    }
+                    DenebSectionLabel("배지", Modifier.padding(start = 24.dp))
+                    Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        DenebBadge("생성", MaterialTheme.colorScheme.onSecondaryContainer, MaterialTheme.colorScheme.secondaryContainer)
+                        DenebBadge("가동 중", denebOnSuccessContainer(), denebSuccessContainer())
+                        DenebBadge("기각", MaterialTheme.colorScheme.onErrorContainer, MaterialTheme.colorScheme.errorContainer)
+                        DenebBadge("휴면", denebHint(), MaterialTheme.colorScheme.surfaceVariant)
                     }
                     DenebSectionLabel("필드", Modifier.padding(start = 24.dp))
                     Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -5,6 +5,7 @@ package ai.deneb.ui.dynamicui
 import ai.deneb.ui.DenebMotion
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.JetBrainsMonoFamily
+import ai.deneb.ui.components.DenebBadge
 import ai.deneb.ui.denebOnSuccessContainer
 import ai.deneb.ui.denebOnWarningContainer
 import ai.deneb.ui.denebSuccessContainer
@@ -677,21 +678,15 @@ internal fun RenderStat(node: StatNode) {
 
                 else -> desc
             }
-            // Trend as a tinted pill so the direction reads at a glance, not as a
-            // bare colored word (desktop .dui-stat-desc chip parity).
-            Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = chipColor,
+            // Trend as a tinted tag so the direction reads at a glance, not as a
+            // bare colored word (desktop .dui-stat-desc chip parity) — the house
+            // 4dp badge, not a stadium.
+            DenebBadge(
+                text = display,
+                color = trendColor,
+                containerColor = chipColor,
                 modifier = Modifier.padding(top = 5.dp),
-            ) {
-                Text(
-                    text = display,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = if (positive || negative) FontWeight.SemiBold else null,
-                    color = trendColor,
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                )
-            }
+            )
         }
     }
 }

@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import ai.deneb.deneb.generated.MemberOut
 import ai.deneb.deneb.generated.OrgNodeOut
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebBadge
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.DenebOutlinedButton
 import ai.deneb.ui.components.DenebTextField
@@ -27,7 +28,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -359,13 +359,7 @@ private fun OrgTypeBadge(type: String) {
  *  column title is the node name). */
 @Composable
 private fun OrgLaneChip() {
-    Box(
-        Modifier
-            .background(denebInsightContainer(), RoundedCornerShape(6.dp))
-            .padding(horizontal = 6.dp, vertical = 1.dp),
-    ) {
-        Text("파트", style = DenebType.sectionLabel, color = denebInsight())
-    }
+    DenebBadge(text = "파트", color = denebInsight(), containerColor = denebInsightContainer())
 }
 
 /** Box member-count line: leader (부서장) + count, e.g. "김철수 외 1명" / "3명" / "".

@@ -128,20 +128,17 @@ fun DenebUsageScreen(
     }
 }
 
-/** The 1일 / 7일 window selector — Material segmented control, Deneb labels. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** The 1일 / 7일 window selector — a Deneb segmented row (words + underline). */
 @Composable
 private fun UsageWindowRow(days: Int, onDaysChange: (Int) -> Unit) {
     val options = listOf(1 to "1일", 7 to "7일")
     DenebSegmentedRow(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
     ) {
-        options.forEachIndexed { i, (d, label) ->
+        options.forEach { (d, label) ->
             DenebSegment(
                 selected = days == d,
                 onClick = { onDaysChange(d) },
-                index = i,
-                count = options.size,
             ) { Text(label) }
         }
     }

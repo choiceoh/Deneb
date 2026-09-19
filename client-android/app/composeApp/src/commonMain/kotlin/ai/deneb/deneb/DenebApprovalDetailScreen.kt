@@ -4,6 +4,7 @@ import ai.deneb.network.httpTeardownTolerantHandler
 import ai.deneb.openUrl
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebBadge
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebTextButton
@@ -55,7 +56,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -172,14 +172,12 @@ fun DenebApprovalDetailScreen(
                 // Document header: 양식 badge + title + 기안 meta. 문서번호/id stay
                 // out of the UI — agent plumbing, not operator info.
                 if (sections.form.isNotBlank()) {
-                    Text(
-                        sections.form,
-                        style = DenebType.meta.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    // 양식 is a category tag, not a control — neutral rather than the
+                    // accent (ADR 0008 job 1), and the house 4dp badge, not a stadium.
+                    DenebBadge(
+                        text = sections.form,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     )
                     Spacer(Modifier.height(8.dp))
                 }

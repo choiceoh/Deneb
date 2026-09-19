@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import ai.deneb.ui.icons.automirrored.filled.Chat as ChatFilled
@@ -194,14 +195,16 @@ fun DenebBottomBar(
     val hairline = denebHairline()
     val ink = MaterialTheme.colorScheme.onBackground
     val hint = denebHint()
-    // Monochrome restraint: the selected item is ink (not a brand color), and the
-    // indicator is a faint ink wash rather than M3's filled secondaryContainer pill.
+    // Monochrome restraint: the selected item is ink (not a brand color), and there
+    // is no indicator at all — M3's pill behind the active glyph was the one
+    // stadium left on the bar. The filled glyph + ink label say which tab is open;
+    // brightness carries the state, the same way the title pivot does (Zune).
     val colors = NavigationBarItemDefaults.colors(
         selectedIconColor = ink,
         selectedTextColor = ink,
         unselectedIconColor = hint,
         unselectedTextColor = hint,
-        indicatorColor = ink.copy(alpha = 0.10f),
+        indicatorColor = Color.Transparent,
     )
     // Total bar height = content + system nav-bar inset. The NavigationBar still applies
     // its own windowInsets (pushing the items above the gesture bar), so the items get
