@@ -610,6 +610,16 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             }
         }
     },
+    // A past model selected: chips, the scope note, "지난 실행", no live internals.
+    "engine_past_model" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.width(412.dp)) {
+                    ai.deneb.deneb.EngineStatusContent(sampleEnginePastModelStatus, zone = kotlinx.datetime.TimeZone.of("Asia/Seoul"))
+                }
+            }
+        }
+    },
     // Chat empty/welcome — muted sparkle glyph + personalized greeting (was a purple orb).
     "chat_empty" to { scheme ->
         MaterialTheme(colorScheme = scheme) {

@@ -35,12 +35,17 @@ import kotlin.math.roundToInt
 @Composable
 internal fun EngineDiagnosticsSection(status: EngineStatusResult, zone: TimeZone) {
     val report = status.diagnostics
-    var minutes by remember { mutableStateOf(30) }
+    // A past model's last sample is old by definition — that is history, not a stalled collector.
+    val past = !status.viewingCurrentModel()
+    // A past model has nothing in the last 30 minutes; open it on the day instead.
+    var minutes by remember(status.selectedModel) { mutableStateOf(if (past) 1440 else 30) }
     val window = report.windows.firstOrNull { it.minutes == minutes }
+    val run = if (past) "마지막 실행" else "현재 실행"
     DenebGroup(label = "실행 통계") {
         DiagnosticHint(
             when {
                 report.lastSampleMs <= 0L -> "아직 수집된 실행 통계가 없습니다."
+                past -> "지난 실행 · 마지막 표본 ${formatClockOrDay(report.lastSampleMs, status.nowMs, zone)}"
                 report.stale -> "수집 지연 · 마지막 표본 ${formatClockOrDay(report.lastSampleMs, status.nowMs, zone)}"
                 else -> "마지막 표본 ${formatClock(report.lastSampleMs, zone)} · 15초 간격 수집"
             },
@@ -54,7 +59,7 @@ internal fun EngineDiagnosticsSection(status: EngineStatusResult, zone: TimeZone
         }
         if (window != null) {
             window.metrics.forEach { DiagnosticMeasure(it) }
-            DiagnosticHint("현재 실행의 유효 관측 ${formatDuration(window.observedSeconds)} · 표본 없는 항목은 —")
+            DiagnosticHint("${run}의 유효 관측 ${formatDuration(window.observedSeconds)} · 표본 없는 항목은 —")
             DiagnosticHint("호스트 회차는 그래프 호출 단위입니다. 기기에서 여러 스텝을 묶어 실행하면 완료 스텝 수와 다릅니다.")
         }
     }
@@ -67,7 +72,7 @@ internal fun EngineDiagnosticsSection(status: EngineStatusResult, zone: TimeZone
     DiagnosticMeasureGroup("추론·답변 길이", window.lengths, "완료된 채팅 선택지 기준입니다. 답변은 본문 토큰이며 도구 호출은 별도입니다.")
     DenebGroup(label = "비교 조건") {
         DiagnosticHint(runtimeDescription(window.runtime))
-        DiagnosticHint("요약은 현재 실행만 집계합니다. 재시작·빌드 변경 전 기록은 추이에만 남습니다.")
+        DiagnosticHint("요약은 ${run}만 집계합니다. 재시작·빌드 변경 전 기록은 추이에만 남습니다.")
     }
 }
 
@@ -109,7 +114,7 @@ internal fun runtimeDescription(runtime: String): String {
 private fun DiagnosticMeasureGroup(label: String, measures: List<EngineMeasure>, note: String) {
     DenebGroup(label = label) {
         if (measures.none { it.available }) {
-            DiagnosticHint("현재 실행에서 측정된 표본이 없습니다.")
+            DiagnosticHint("이 실행에서 측정된 표본이 없습니다.")
         } else {
             measures.forEach { DiagnosticMeasure(it) }
         }

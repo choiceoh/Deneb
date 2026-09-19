@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import ai.deneb.deneb.generated.EngineGlance
 import ai.deneb.deneb.generated.EngineStatusResult
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Local serving engine surface of [DenebGatewayClient] (`miniapp.engine.*`).
@@ -13,8 +14,15 @@ import kotlinx.serialization.json.buildJsonObject
  * it, the days it measured itself, and the router's account of who actually
  * served. Returns null on a fetch failure so the screen can tell a real
  * "nothing configured" from a network error.
+ *
+ * [model] picks whose statistics come back (days, totals, diagnostics); null
+ * means the model the engine serves now. Liveness and the router's split are
+ * the engine's whichever model is picked.
  */
-suspend fun DenebGatewayClient.fetchEngineStatus(): EngineStatusResult? = callRpc<EngineStatusResult>("miniapp.engine.status", buildJsonObject { })
+suspend fun DenebGatewayClient.fetchEngineStatus(model: String? = null): EngineStatusResult? = callRpc<EngineStatusResult>(
+    "miniapp.engine.status",
+    buildJsonObject { if (!model.isNullOrBlank()) put("model", model) },
+)
 
 /**
  * The engine's standing from state the gateway already holds — no probe, no

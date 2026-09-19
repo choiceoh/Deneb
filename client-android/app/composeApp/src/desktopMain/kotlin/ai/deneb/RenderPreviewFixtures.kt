@@ -563,6 +563,12 @@ internal val sampleEngineStatus: ai.deneb.deneb.generated.EngineStatusResult = r
             hostMemoryAvailableBytes = 16_106_307_584L,
             fleetKnown = true, fleetOwner = "production/deploy/2011680", served = 166L, steps = 7107L,
         ),
+        // GLM-5.3 is the engine's model; Qwen3.8 had a window on the newest day.
+        models = listOf(
+            ai.deneb.deneb.generated.EngineModelRow(model = "glm-5.3-flash", current = true, days = 3, requests = 3_091, lastDay = "2026-08-21"),
+            ai.deneb.deneb.generated.EngineModelRow(model = "qwen3.8-flash-next", current = false, days = 1, requests = 212, lastDay = "2026-08-21"),
+        ),
+        selectedModel = "glm-5.3-flash",
         days = listOf(
             ai.deneb.deneb.generated.EngineDay(
                 day = "2026-08-21", model = "glm-5.3-flash", measured = true,
@@ -638,3 +644,27 @@ internal val sampleEngineStatus: ai.deneb.deneb.generated.EngineStatusResult = r
         ),
     )
 }
+
+/**
+ * The same engine with Qwen3.8 — a past window's model — selected: its one
+ * measured day and totals, and none of the engine's liveness on that day.
+ */
+internal val sampleEnginePastModelStatus: ai.deneb.deneb.generated.EngineStatusResult = sampleEngineStatus.copy(
+    selectedModel = "qwen3.8-flash-next",
+    days = listOf(
+        ai.deneb.deneb.generated.EngineDay(
+            day = "2026-08-21", model = "qwen3.8-flash-next", measured = true,
+            decodeTokensPerSec = 60.4, prefillTokensPerSec = 2410.0, concurrencyWhileBusy = 1.1, peakConcurrency = 2, pollIntervalSec = 15,
+            requests = 212, promptTokens = 1_220_400, generatedTokens = 61_880,
+            meanTtftSeconds = 1.9, meanQueueSeconds = 0.1, meanE2eSeconds = 6.4,
+            specAcceptRatio = 0.61, specDraftTokens = 20_100,
+            busySeconds = 1_300.0, observedSeconds = 2_700.0, utilization = 0.48, restarts = 1,
+        ),
+    ),
+    total = ai.deneb.deneb.generated.EngineTotals(
+        days = 1, requests = 212, promptTokens = 1_220_400, generatedTokens = 61_880,
+        decodeTokensPerSec = 60.4, prefillTokensPerSec = 2410.0, meanTtftSeconds = 1.9, meanQueueSeconds = 0.1, meanE2eSeconds = 6.4,
+        specAcceptRatio = 0.61, specDraftTokens = 20_100,
+        busySeconds = 1_300.0, observedSeconds = 2_700.0, utilization = 0.48, restarts = 1,
+    ),
+)
