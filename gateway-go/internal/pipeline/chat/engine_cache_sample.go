@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
@@ -61,11 +62,11 @@ var engineCacheState = struct {
 	last map[string]engineCacheSample // metricsURL → token counters and source
 }{last: make(map[string]engineCacheSample)}
 
-// logEngineCacheAsync samples the engine serving this run and emits a
+// logEngineCacheAsync samples the engine that served this run and emits a
 // run.cache event. Fire-and-forget: never blocks the reply path. Skipped for
 // non-OpenAI-mode providers, fallback runs (the sampled engine would not be
 // the one that answered), base URLs that don't resolve to a local engine, and
-// runs the engine did not serve (engineCacheSampleScoped).
+// runs no configured engine served (engineCacheSampleTarget).
 func logEngineCacheAsync(deps runDeps, runLog *agentlog.RunLogger, client *llm.Client, model string, fellBack bool, logger *slog.Logger) {
 	if deps.briefcaseMode {
 		return
@@ -77,9 +78,9 @@ func logEngineCacheAsync(deps runDeps, runLog *agentlog.RunLogger, client *llm.C
 	if runLog == nil || client == nil || fellBack || client.APIMode() != llm.APIModeOpenAI {
 		return
 	}
-	baseURL := client.BaseURL()
-	metricsURL := resolveEngineMetricsURL(baseURL)
-	if metricsURL == "" {
+	route := engineRoute{baseURL: client.BaseURL(), model: model, engineModels: deps.engineModels}
+	endpoints := resolveEngineMetricsURLs(route.baseURL)
+	if len(endpoints) == 0 {
 		return
 	}
 	parentCtx := deps.callbacks.shutdownCtx
@@ -87,9 +88,10 @@ func logEngineCacheAsync(deps runDeps, runLog *agentlog.RunLogger, client *llm.C
 		parentCtx = context.Background() // tests; bounded by the timeout below
 	}
 	safego.GoWithSlog(logger, "engine-cache-sample", func() {
-		// Scoped here rather than before the spawn: the router-derived scope
+		// Picked here rather than before the spawn: placing a run at an engine
 		// reads the router's config file, which the reply path must not wait on.
-		if !engineCacheSampleScoped(baseURL, model, metricsURL, deps.engineModels, logger) {
+		metricsURL := engineCacheSampleTarget(route, endpoints, logger)
+		if metricsURL == "" {
 			return
 		}
 		ctx, cancel := context.WithTimeout(parentCtx, engineCacheSampleTimeout)
@@ -106,12 +108,19 @@ func logEngineCacheAsync(deps runDeps, runLog *agentlog.RunLogger, client *llm.C
 	})
 }
 
-// engineMetricsURLEnv pins the engine /metrics endpoint explicitly. Needed
-// since the wormhole cutover (2026-06-14): the provider baseURL points at the
-// router (:18800), which serves no /metrics, so URL derivation fails and
-// per-run APC sampling silently died — production agent-logs show zero
-// run.cache events after the cutover. Set it to the actual serving engine,
-// e.g. http://100.125.220.117:8000/metrics.
+// engineMetricsURLEnv pins the serving engines' /metrics endpoints explicitly,
+// e.g. http://100.125.220.117:8000/metrics — comma-separated when the fleet
+// serves more than one model locally. Needed since the wormhole cutover
+// (2026-06-14): the provider baseURL points at the router (:18800), which
+// serves no /metrics, so URL derivation fails and per-run APC sampling
+// silently died — production agent-logs show zero run.cache events after the
+// cutover.
+//
+// It is read as a list through enginespeed.Endpoints, the same parse the
+// engine-speed task and the liveness watcher use. This package once read the
+// raw value as one URL: a two-engine list parsed as the first host with the
+// path "/metrics,http://…", so every scrape and every /tokenize call would
+// have gone to a path that does not exist, and failed in silence.
 const engineMetricsURLEnv = "DENEB_ENGINE_METRICS_URL"
 
 // engineMetricsModelsEnv is the operator's explicit sampling scope: runs whose
@@ -123,55 +132,98 @@ const engineMetricsURLEnv = "DENEB_ENGINE_METRICS_URL"
 // switch the served model (2026-09-19).
 const engineMetricsModelsEnv = "DENEB_ENGINE_METRICS_MODELS"
 
-// engineScopeWarned holds the models already reported as served by the engine
+// engineScopeWarned holds the models already reported as served by an engine
 // but excluded by engineMetricsModelsEnv — one warning per model per process.
 var engineScopeWarned sync.Map
 
-// engineCacheSampleScoped reports whether the engine's delta belongs to this
-// run. One OpenAI-mode provider (wormhole) fronts both cloud and local models,
-// and the metrics override pins the engine whichever of them answered —
-// unscoped, a cloud run would log the local engine's unrelated APC delta under
-// its own run ID. engineModels lists the router's entries at an engine; nil
-// leaves only runs sent straight to the engine in scope.
-func engineCacheSampleScoped(baseURL, model, metricsURL string, engineModels func(engineURL string) []string, logger *slog.Logger) bool {
-	var routed []string
-	if engineModels != nil {
-		routed = engineModels(metricsURL) // re-read per run: the router hot-reloads its config
-	}
-	served := engineServedRun(baseURL, model, metricsURL, routed)
+// engineUnplacedWarned holds the models already reported as admitted by
+// engineMetricsModelsEnv while no engine among several is known to serve them —
+// one warning per model per process.
+var engineUnplacedWarned sync.Map
+
+// engineCacheSampleTarget returns the engine whose delta belongs to this run,
+// or "" when none does. One OpenAI-mode provider (wormhole) fronts both cloud
+// and local models, so the configured engines say nothing about which of them
+// answered: unscoped, a cloud run would log a local engine's unrelated APC
+// delta under its own run ID — and with several engines, a local run would log
+// the wrong engine's.
+func engineCacheSampleTarget(route engineRoute, endpoints []string, logger *slog.Logger) string {
+	served := route.servingEngine(endpoints)
 	filter := strings.TrimSpace(os.Getenv(engineMetricsModelsEnv))
 	if filter == "" {
 		return served
 	}
-	allowed := engineMetricsModelAllowed(model, filter)
-	// The explicit list wins, but a list that drops a model the engine serves
-	// is the silent blindness the router-derived scope exists to end: say so.
-	if !allowed && served {
-		if _, seen := engineScopeWarned.LoadOrStore(model, true); !seen {
-			logger.Warn("engine cache sample: "+engineMetricsModelsEnv+" excludes a model the engine serves; its runs log no run.cache",
-				"model", model, "filter", filter, "metricsURL", metricsURL)
+	if !engineMetricsModelAllowed(route.model, filter) {
+		// The explicit list wins, but a list that drops a model an engine serves
+		// is the silent blindness the router-derived scope exists to end: say so.
+		if served != "" {
+			if _, seen := engineScopeWarned.LoadOrStore(route.model, true); !seen {
+				logger.Warn("engine cache sample: "+engineMetricsModelsEnv+" excludes a model the engine serves; its runs log no run.cache",
+					"model", route.model, "filter", filter, "metricsURL", served)
+			}
 		}
+		return ""
 	}
-	return allowed
+	if served != "" {
+		return served
+	}
+	// The list admits the run by its name alone. With one engine that settles
+	// where to sample — what the list meant before it could name several.
+	// Among several, a pick would log one engine's delta under a run it may
+	// not have served, so the run goes unsampled, and that is said once.
+	if len(endpoints) == 1 {
+		return endpoints[0]
+	}
+	if _, seen := engineUnplacedWarned.LoadOrStore(route.model, true); !seen {
+		logger.Warn("engine cache sample: "+engineMetricsModelsEnv+" admits a model no configured engine is known to serve; with several engines its runs log no run.cache",
+			"model", route.model, "filter", filter, "engines", len(endpoints))
+	}
+	return ""
 }
 
-// engineServedRun reports whether a run reached the engine at metricsURL:
-// straight at its address (a role pointed at the engine, or no override, so
-// metricsURL was derived from the run's own base URL), or through the router
-// under the exact name of an entry the router sends there (routed). Exact
+// engineRoute is what places a run at an engine: the address its client sends
+// to, the model it asks for, and the router's entries at each engine
+// (configresolve.EngineModels, handed in through HandlerConfig.EngineModels so
+// this package keeps no runtime import). A nil engineModels leaves only runs
+// sent straight to an engine placeable.
+type engineRoute struct {
+	baseURL      string
+	model        string
+	engineModels func(engineURL string) []string
+}
+
+// servingEngine returns the endpoint, among the configured engines, of the one
+// that served the run — "" when none did. First the engine at the run's own
+// address: a role pointed straight at an engine, or no configured list, so the
+// endpoint was derived from the run's base URL. Else the engine the router
+// sends the run's model to, under the exact name of an entry there. Exact
 // names, never substrings: "glm-5.3" (cloud) must not pass for "glm-5.3-flash"
 // (local), nor a vendor-prefixed "z-ai/glm-5.3-flash". And a request that went
-// to a public host was not the engine's whatever the model is called — the
-// local engine and its cloud twin answer under the same name. Pure for tests.
-func engineServedRun(baseURL, model, metricsURL string, routed []string) bool {
-	base := httputil.HostPort(baseURL)
+// to a public host was no engine's whatever the model is called — the local
+// engine and its cloud twin answer under the same name.
+//
+// The router's entries are re-read on every call, because the router
+// hot-reloads its config. It lists each name once (the last entry winning),
+// so at most one engine carries the model.
+func (r engineRoute) servingEngine(endpoints []string) string {
+	base := httputil.HostPort(r.baseURL)
 	if base == "" {
-		return false
+		return ""
 	}
-	if base == httputil.HostPort(metricsURL) {
-		return true
+	for _, endpoint := range endpoints {
+		if httputil.HostPort(endpoint) == base {
+			return endpoint
+		}
 	}
-	return isPrivateEngineHost(httputil.Hostname(baseURL)) && slices.Contains(routed, model)
+	if r.engineModels == nil || !isPrivateEngineHost(httputil.Hostname(r.baseURL)) {
+		return ""
+	}
+	for _, endpoint := range endpoints {
+		if slices.Contains(r.engineModels(endpoint), r.model) {
+			return endpoint
+		}
+	}
+	return ""
 }
 
 // engineMetricsModelAllowed applies the explicit substring scope. Pure for tests.
@@ -189,23 +241,32 @@ func engineMetricsModelAllowed(model, filter string) bool {
 	return false
 }
 
-// resolveEngineMetricsURL picks the metrics endpoint: the operator override
-// when set (validated by the same private-host rule so a typo cannot point
-// the sampler at a public service), else derivation from the base URL.
-func resolveEngineMetricsURL(baseURL string) string {
-	if override := strings.TrimSpace(os.Getenv(engineMetricsURLEnv)); override != "" {
-		u, err := url.Parse(override)
-		// Also reject userinfo/query/fragment: the override string is persisted
+// resolveEngineMetricsURLs lists the engines a run's cache sample may come
+// from: the operator's list when set — each entry held to the private-host
+// rule, so a typo cannot point the sampler at a public service — else the one
+// endpoint derived from the run's own base URL.
+func resolveEngineMetricsURLs(baseURL string) []string {
+	listed := enginespeed.Endpoints()
+	if len(listed) == 0 {
+		if derived := engineMetricsURL(baseURL); derived != "" {
+			return []string{derived}
+		}
+		return nil
+	}
+	var out []string
+	for _, endpoint := range listed {
+		u, err := url.Parse(endpoint)
+		// Also reject userinfo/query/fragment: the endpoint is persisted
 		// verbatim into run.cache events (MetricsURL), so embedded credentials
 		// or tokens would leak into agent logs.
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
 			u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
 			!isPrivateEngineHost(u.Hostname()) {
-			return "" // misconfigured override fails safe: skip sampling
+			continue // a misconfigured entry fails safe: never sampled, and no cue to derive
 		}
-		return override
+		out = append(out, endpoint)
 	}
-	return engineMetricsURL(baseURL)
+	return out
 }
 
 // engineMetricsURL derives the /metrics endpoint from an OpenAI-compatible

@@ -27,7 +27,7 @@
 - **`slash_*` + `*_dispatch.go`** — 슬래시 커맨드(`/help`·`/reset`·`/status`·`/kill`·`/goal`·`/rollback`·`/update`·`/restart`·`/weekly`).
 - 캐시 마커/바이트 안정성: `cache_breakpoints.go`·`tier1_cache.go`·`prompt_snapshot_persist.go`·`calendar_glance.go`·`tail_register.go`(런 경계 꼬리 재부착 — content-prefix 캐시, prompt-cache.md §1.6).
 - 엔진 다운 = 재시도 없이 바로 폴백: `internal/ai/enginelive` 워처가 엔진 `/health`를 보고 레지스트리에 다운 집합을 알리면, `run_fallback.go`는 첫 시도를 건너뛰고(`skipInitial`) 런 재생(`retryTransient`)을 막고 사슬에서 같은 엔진 후보를 건너뛰며, 그 거부로 서킷을 올리지 않는다. ★게이트는 클라이언트에 걸려야 효과가 있다 — 프로덕션 턴은 레지스트리가 아니라 deneb.json 프로바이더 설정에서 클라이언트를 만든다(`run_provider.go`의 `engineDownGate`). 레지스트리 클라이언트에만 걸었을 때 라이브 턴이 79.6초 재시도 사다리를 그대로 탔다.
-- 로컬 엔진 직결 프로브(전부 사설호스트 가드·비동기·실패=무시): `engine_cache_sample.go`(APC 히트 표본 → run.cache), `prompt_exact_tokens.go`(프롬프트 머리의 **정확한** 토큰 수를 엔진 `/tokenize` 에서 — 추정치는 45K 예산 안 40K 머리의 나머지를 임의로 만든다; `internal/ai/enginetokenize`).
+- 로컬 엔진 직결 프로브(전부 사설호스트 가드·비동기·실패=무시): `engine_cache_sample.go`(APC 히트 표본 → run.cache), `prompt_exact_tokens.go`(프롬프트 머리의 **정확한** 토큰 수를 엔진 `/tokenize` 에서 — 추정치는 45K 예산 안 40K 머리의 나머지를 임의로 만든다; `internal/ai/enginetokenize`). `DENEB_ENGINE_METRICS_URL` 은 **쉼표 목록**(`enginespeed.Endpoints`)이다 — 원문을 URL 하나로 읽지 말 것; 둘 다 `engineRoute.servingEngine` 으로 런을 서빙한 엔진을 고른다.
 - Variable prompt addition 예산: `promptbudget/`를 `run_prepare_compact.go`가 소비한다. 시스템 프롬프트 본문 조립은 `prompt/`에 둔다.
 
 ## 핵심 흐름: 한 턴의 실행 순서

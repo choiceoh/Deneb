@@ -15,21 +15,20 @@ package chat
 
 import (
 	"log/slog"
-	"os"
-	"strings"
 	"sync"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginetokenize"
 )
 
-// exactTokens holds the process-wide counter, rebuilt when the operator points
-// the engine URL somewhere else. Package-level and env-derived to match the
+// exactTokens holds one counter per configured engine: each caches counts in
+// its own engine's tokenizer, so two engines serving different models never
+// answer from each other's cache. Package-level and env-derived to match the
 // engine APC sampler next door (engine_cache_sample.go) rather than threading a
 // second engine handle through every run.
 var exactTokens struct {
-	mu      sync.Mutex
-	builtAt string // the env value this counter was built from
-	counter *enginetokenize.Counter
+	mu       sync.Mutex
+	counters map[string]*enginetokenize.Counter // endpoint → counter; nil = unusable URL
 }
 
 // exactPromptTokens returns the engine's own token count for text when it is
@@ -38,18 +37,42 @@ var exactTokens struct {
 // fill, so the first turn on a given head estimates and the rest are exact.
 // The prompt-cache doctrine keeps that head byte-stable across turns, which is
 // what makes the cache hit.
-func exactPromptTokens(text string, logger *slog.Logger) (int, bool) {
-	endpoint := strings.TrimSpace(os.Getenv(engineMetricsURLEnv))
-	if endpoint == "" {
+//
+// The count comes from the engine that serves the run (engineRoute), whose
+// tokenizer is the one that will actually read the head. A run no configured
+// engine serves — a cloud model — is counted by the first engine listed. With
+// one engine that is the engine every run has always been counted by, so
+// adding a second engine changes nothing for the runs neither serves. Each URL
+// passes the private-host rule in enginetokenize.New (no userinfo, query or
+// fragment either) or yields a counter that always misses.
+func exactPromptTokens(text string, route engineRoute, logger *slog.Logger) (int, bool) {
+	endpoints := enginespeed.Endpoints()
+	if len(endpoints) == 0 {
 		return 0, false
 	}
-	exactTokens.mu.Lock()
-	if exactTokens.builtAt != endpoint {
-		exactTokens.counter = enginetokenize.NewCounter(endpoint, logger)
-		exactTokens.builtAt = endpoint
+	endpoint := endpoints[0]
+	// One engine leaves nothing to choose, so nothing is read. Among several,
+	// placing the run reads the router's config — a small local file, the same
+	// read the liveness watcher makes on every probe.
+	if len(endpoints) > 1 {
+		if served := route.servingEngine(endpoints); served != "" {
+			endpoint = served
+		}
 	}
-	counter := exactTokens.counter
-	exactTokens.mu.Unlock()
+	return exactTokenCounter(endpoint, logger).Exact(text)
+}
 
-	return counter.Exact(text)
+// exactTokenCounter returns the counter for endpoint, building it on first use.
+func exactTokenCounter(endpoint string, logger *slog.Logger) *enginetokenize.Counter {
+	exactTokens.mu.Lock()
+	defer exactTokens.mu.Unlock()
+	counter, ok := exactTokens.counters[endpoint]
+	if !ok {
+		if exactTokens.counters == nil {
+			exactTokens.counters = make(map[string]*enginetokenize.Counter)
+		}
+		counter = enginetokenize.NewCounter(endpoint, logger)
+		exactTokens.counters[endpoint] = counter
+	}
+	return counter
 }
