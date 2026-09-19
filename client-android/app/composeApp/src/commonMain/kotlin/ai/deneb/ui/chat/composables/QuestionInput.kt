@@ -6,6 +6,8 @@ import ai.deneb.data.MAX_BATCH_FILES
 import ai.deneb.data.ServiceEntry
 import ai.deneb.data.formatFileSize
 import ai.deneb.data.imageExtensions
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.animatedGradientBorder
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBreathing
@@ -31,7 +33,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -116,26 +117,26 @@ fun QuestionInput(
                     val sizeLabel by produceState<String?>(null, file) {
                         value = runCatching { formatFileSize(file.size()) }.getOrNull()
                     }
-                    SuggestionChip(
-                        modifier = Modifier.handCursor(),
-                        onClick = { removeFile(file) },
-                        icon = {
+                    // Our chip, not Material's stadium SuggestionChip — the one Material
+                    // pill left in the app after the 2026-09-06 chip sweep.
+                    DenebChip(onClick = { removeFile(file) }) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
                             Icon(
                                 modifier = Modifier.size(16.dp),
                                 painter = painterResource(icon),
                                 contentDescription = "첨부 제거",
-                                tint = MaterialTheme.colorScheme.onBackground,
                             )
-                        },
-                        label = {
                             DisableSelection {
                                 Text(
-                                    modifier = Modifier.handCursor(),
                                     text = truncateFileName(file.name) + (sizeLabel?.let { "  ·  $it" } ?: ""),
+                                    style = DenebType.rowSubtitle,
                                 )
                             }
-                        },
-                    )
+                        }
+                    }
                 }
             }
         }

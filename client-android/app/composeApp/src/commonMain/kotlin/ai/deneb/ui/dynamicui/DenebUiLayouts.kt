@@ -2,6 +2,8 @@
 
 package ai.deneb.ui.dynamicui
 
+import ai.deneb.ui.components.DenebSegment
+import ai.deneb.ui.components.DenebSegmentedRow
 import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.denebAdaptiveCardBorder
 import ai.deneb.ui.denebAdaptiveCardColors
@@ -13,7 +15,6 @@ import ai.deneb.ui.icons.filled.Map
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +23,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -55,7 +55,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -403,71 +402,17 @@ internal fun RenderTabs(
 ) {
     if (node.tabs.isEmpty()) return
     var selectedIndex by remember { mutableIntStateOf((node.selectedIndex ?: 0).coerceIn(0, node.tabs.lastIndex)) }
-    val pillShape = RoundedCornerShape(50)
 
     Column(Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .layout { measurable, constraints ->
-                    val bleed = 12.dp.roundToPx()
-                    val wider = if (constraints.maxWidth == Int.MAX_VALUE) {
-                        constraints.maxWidth
-                    } else {
-                        constraints.maxWidth + bleed * 2
-                    }
-                    val placeable = measurable.measure(
-                        constraints.copy(minWidth = 0, maxWidth = wider),
-                    )
-                    layout(wider, placeable.height) {
-                        placeable.place(0, 0)
-                    }
-                }
-                .horizontalScroll(rememberScrollState()),
-        ) {
-            Spacer(Modifier.width(12.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier
-                    .clip(pillShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, pillShape)
-                    .padding(4.dp),
-            ) {
-                node.tabs.forEachIndexed { index, tab ->
-                    val isSelected = selectedIndex == index
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .height(32.dp)
-                            .clip(pillShape)
-                            .then(
-                                if (isSelected) {
-                                    Modifier.background(
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                        pillShape,
-                                    )
-                                } else {
-                                    Modifier
-                                },
-                            )
-                            .clickable { selectedIndex = index }
-                            .handCursor()
-                            .padding(horizontal = 16.dp),
-                    ) {
-                        Text(
-                            text = tab.label,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isSelected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            maxLines = 1,
-                        )
-                    }
+        // Tabs inside a card follow the app's form-choice grammar (DenebSegment):
+        // row-size words, the open one ink with a 2dp underline, the rest dimmed —
+        // no pill container. Long tab sets scroll rather than shrink.
+        DenebSegmentedRow(Modifier.horizontalScroll(rememberScrollState())) {
+            node.tabs.forEachIndexed { index, tab ->
+                DenebSegment(selected = selectedIndex == index, onClick = { selectedIndex = index }) {
+                    Text(text = tab.label, maxLines = 1)
                 }
             }
-            Spacer(Modifier.width(12.dp))
         }
 
         val selectedTab = node.tabs.getOrNull(selectedIndex)

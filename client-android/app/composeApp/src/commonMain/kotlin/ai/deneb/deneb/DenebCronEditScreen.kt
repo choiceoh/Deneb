@@ -307,15 +307,13 @@ private fun ScheduleEditor(
         SchedMode.ONCE to "한 번",
     )
     DenebSegmentedRow(Modifier.fillMaxWidth()) {
-        segments.forEachIndexed { i, (m, label) ->
+        segments.forEach { (m, label) ->
             DenebSegment(
                 selected = draft.mode == m,
                 onClick = {
                     haptics.tap()
                     onDraft(draft.copy(mode = m))
                 },
-                index = i,
-                count = segments.size,
             ) { Text(label) }
         }
     }
@@ -432,12 +430,10 @@ private fun IntervalField(draft: ScheduleDraft, onDraft: (ScheduleDraft) -> Unit
         Spacer(Modifier.width(16.dp))
         val units = listOf(IntervalUnit.MIN to "분", IntervalUnit.HOUR to "시간")
         DenebSegmentedRow {
-            units.forEachIndexed { i, (u, label) ->
+            units.forEach { (u, label) ->
                 DenebSegment(
                     selected = draft.intervalUnit == u,
                     onClick = { onDraft(draft.copy(intervalUnit = u)) },
-                    index = i,
-                    count = units.size,
                 ) { Text(label) }
             }
         }

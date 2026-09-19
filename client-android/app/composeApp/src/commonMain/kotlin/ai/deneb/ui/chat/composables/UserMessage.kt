@@ -3,6 +3,7 @@ package ai.deneb.ui.chat.composables
 import ai.deneb.data.Attachment
 import ai.deneb.shareTextToApps
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.DenebTextField
@@ -36,7 +37,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -172,18 +172,21 @@ internal fun UserMessage(
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         for (att in others) {
-                            SuggestionChip(
-                                onClick = {},
-                                icon = {
+                            // Inert (no onClick): a sent attachment is a record, not a
+                            // control. Our chip, not Material's stadium SuggestionChip.
+                            DenebChip {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
                                     Icon(
                                         modifier = Modifier.size(16.dp),
                                         painter = painterResource(Res.drawable.ic_file),
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                     )
-                                },
-                                label = { Text(truncateFileName(att.fileName ?: att.mimeType)) },
-                            )
+                                    Text(truncateFileName(att.fileName ?: att.mimeType), style = DenebType.rowSubtitle)
+                                }
+                            }
                         }
                     }
                     if (message.isNotEmpty()) {

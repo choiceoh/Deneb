@@ -118,12 +118,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -280,14 +278,10 @@ internal fun AppContent(
                 val isHome = currentRoute == ROUTE_MAIN && selectedTabRoute == ROUTE_HOME
 
                 val navigationTabBar: @Composable () -> Unit = {
-                    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-                    val count = 2
                     DenebSegmentedRow {
                         DenebSegment(
                             selected = isHome,
                             onClick = { openLiveTab(Home) },
-                            index = if (isRtl) count - 1 else 0,
-                            count = count,
                         ) {
                             Text(stringResource(Res.string.tab_chat))
                         }
@@ -299,8 +293,6 @@ internal fun AppContent(
                                     launchSingleTop = true
                                 }
                             },
-                            index = if (isRtl) 0 else count - 1,
-                            count = count,
                         ) {
                             Text(stringResource(Res.string.tab_settings))
                         }

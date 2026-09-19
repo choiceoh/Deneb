@@ -55,8 +55,8 @@ internal fun EngineDiagnosticsSection(
         },
     )
     DenebSegmentedRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        listOf(30 to "최근 30분", 1440 to "24시간").forEachIndexed { index, (value, label) ->
-            DenebSegment(selected = minutes == value, onClick = { minutes = value }, index = index, count = 2) { Text(label) }
+        listOf(30 to "최근 30분", 1440 to "24시간").forEach { (value, label) ->
+            DenebSegment(selected = minutes == value, onClick = { minutes = value }) { Text(label) }
         }
     }
     EngineCoreMeasures(window)

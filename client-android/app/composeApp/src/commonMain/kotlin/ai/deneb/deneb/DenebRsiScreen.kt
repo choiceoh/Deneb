@@ -8,6 +8,7 @@ import ai.deneb.deneb.generated.SkillLifecycleEvent
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebBadge
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
@@ -428,7 +429,7 @@ private fun rsiCandidateStatusLabel(status: String): String = when (status) {
     else -> status.ifBlank { "제안" }
 }
 
-/** A colored pill for the layer state — the LIVE/DATA-GATED/STARVED/FROZEN/IDLE
+/** A colored tag for the layer state — the LIVE/DATA-GATED/STARVED/FROZEN/IDLE
  *  taxonomy, colored so "turning" (LIVE), "waiting" (DATA-GATED), "needs wiring"
  *  (STARVED), "self-braked" (FROZEN), and "dormant" (IDLE) separate at a glance. */
 @Composable
@@ -468,13 +469,5 @@ private fun RsiStateBadge(state: String) {
         "FROZEN" -> "동결"
         else -> "휴면"
     }
-    Text(
-        text = label,
-        style = DenebType.meta,
-        color = fg,
-        modifier = Modifier
-            .padding(start = 8.dp)
-            .background(bg, RoundedCornerShape(6.dp))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-    )
+    DenebBadge(text = label, color = fg, containerColor = bg, modifier = Modifier.padding(start = 8.dp))
 }

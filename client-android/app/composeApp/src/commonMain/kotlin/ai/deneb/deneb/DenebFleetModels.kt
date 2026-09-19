@@ -1,7 +1,10 @@
 package ai.deneb.deneb
 
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebBadge
 import ai.deneb.ui.components.DenebDialog
+import ai.deneb.ui.components.DenebSegment
+import ai.deneb.ui.components.DenebSegmentedRow
 import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.rememberHaptics
@@ -18,11 +21,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,7 +34,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -165,21 +165,9 @@ internal fun FleetModelsPage(client: DenebGatewayClient, nodes: List<FleetNode>,
                 // Server-side sort (trending / downloads / likes / recent) — only
                 // meaningful once there's a query to sort.
                 if (query.isNotBlank()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DenebSegmentedRow {
                         hfSortOptions.forEach { (key, label) ->
-                            val sel = sort == key
-                            Surface(
-                                shape = RoundedCornerShape(50),
-                                color = if (sel) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                modifier = Modifier.clip(RoundedCornerShape(50)).clickable { sort = key },
-                            ) {
-                                Text(
-                                    label,
-                                    style = DenebType.meta,
-                                    color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                )
-                            }
+                            DenebSegment(selected = sort == key, onClick = { sort = key }) { Text(label) }
                         }
                     }
                 }
@@ -210,14 +198,13 @@ internal fun FleetModelsPage(client: DenebGatewayClient, nodes: List<FleetNode>,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
-                        Text(
-                            fmtParamsK(m.params),
-                            style = DenebType.meta,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        )
-                    }
+                    // Parameter count is information, not a control — neutral tag,
+                    // not the accent (ADR 0008 job 1: primary = what you can touch).
+                    DenebBadge(
+                        text = fmtParamsK(m.params),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    )
                 }
                 HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
             }
@@ -271,21 +258,9 @@ private fun FleetDownloadDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text("다운로드할 노드", style = DenebType.hint, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                DenebSegmentedRow {
                     nodes.forEach { n ->
-                        val sel = target == n.name
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = if (sel) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                            modifier = Modifier.clip(RoundedCornerShape(50)).clickable { target = n.name },
-                        ) {
-                            Text(
-                                n.name,
-                                style = DenebType.meta,
-                                color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            )
-                        }
+                        DenebSegment(selected = target == n.name, onClick = { target = n.name }) { Text(n.name) }
                     }
                 }
                 // Disk-fit check: weights are big and the nodes are tight, so warn

@@ -61,6 +61,7 @@ A~D 레터 배지 옵션·옵션별 한 줄 설명·비활성 `제출`·닫기 X
 | 피벗 헤더(밝기로 상태, 크롬 없음) | ✅ 이미 피드\|결재\|로그가 쓰던 문법을 `DenebPivotRow`로 올리고 스킬(스킬 목록\|Propus 로그)·관찰(1일\|7일)·플릿(노드\|모델\|작업) 뷰 전환기에 적용. 파란 텍스트 탭·알약 탭이 사라져 뷰 전환 문법이 하나가 됐다 |
 | 넘치는 헤더가 가장자리로 흘림(bleed) | ✅ `DenebPivotRow`는 수평 스크롤 — 줄바꿈·축소 대신 잘려 나간다. 골든 `pivot.png` |
 | 상태를 그림이 아니라 문장으로 | ✅ `DenebEmpty`/`DenebError` — 아이콘 제거, `subject` 크기 문장 왼쪽 정렬, 이유는 아래 흐리게, 행동은 텍스트 버튼. 골든 `states.png` |
+| 크롬 없음 — 박스·알약·필 탭 | ✅ 2차(운영자 "못생긴 알약모양도 바꿔주지"): Material `SegmentedButton`→`DenebSegment`(활자+2dp 밑줄), `SuggestionChip`→`DenebChip`, 하단바 인디케이터 필 제거, 카드 `<tabs>` 필→`DenebSegment`, 스타디움 배지 5곳→`DenebBadge`. 골든 `controls.png`·`cron_edit*.png`·`files_search_mode_*.png`·`bottombar_*.png` |
 
 ### 빌릴 것 (남은 후보)
 

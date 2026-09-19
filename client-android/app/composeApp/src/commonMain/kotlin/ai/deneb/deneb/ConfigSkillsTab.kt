@@ -6,13 +6,13 @@ import ai.deneb.deneb.generated.SkillRow
 import ai.deneb.deneb.generated.SkillsLifecycleResponse
 import ai.deneb.ui.DenebPivotRow
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebBadge
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebInsightContainer
 import ai.deneb.ui.handCursor
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -42,7 +41,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -575,15 +573,7 @@ internal fun SkillStateBadges(skill: SkillRow) {
 
 @Composable
 private fun SkillStateChip(label: String, bg: androidx.compose.ui.graphics.Color, fg: androidx.compose.ui.graphics.Color) {
-    Text(
-        label,
-        style = DenebType.meta,
-        color = fg,
-        modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(bg)
-            .padding(horizontal = 6.dp, vertical = 1.dp),
-    )
+    DenebBadge(text = label, color = fg, containerColor = bg)
 }
 
 /** Korean label per lifecycle event type, rendered in [LifecycleTypeBadge]. */
@@ -608,15 +598,7 @@ private fun LifecycleTypeBadge(type: String) {
         "evolve_rolled_back" -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
-    Text(
-        lifecycleTypeLabel(type),
-        style = DenebType.meta,
-        color = fg,
-        modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(bg)
-            .padding(horizontal = 6.dp, vertical = 1.dp),
-    )
+    DenebBadge(text = lifecycleTypeLabel(type), color = fg, containerColor = bg)
 }
 
 // skillSourceLabel maps the gateway's discovery-origin string to a Korean label,

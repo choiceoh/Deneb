@@ -2,6 +2,7 @@ package ai.deneb.deneb
 
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.JetBrainsMonoFamily
+import ai.deneb.ui.components.DenebBadge
 import ai.deneb.ui.components.DenebDialog
 import ai.deneb.ui.components.DenebTextButton
 import ai.deneb.ui.components.rememberHaptics
@@ -182,9 +183,7 @@ private fun FleetJobRow(job: FleetJob, expanded: Boolean, onToggle: () -> Unit, 
                 "done" -> "완료" to MaterialTheme.colorScheme.primary
                 else -> "실패" to MaterialTheme.colorScheme.error
             }
-            Surface(shape = RoundedCornerShape(50), color = color.copy(alpha = 0.15f)) {
-                Text(label, style = DenebType.meta, color = color, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
-            }
+            DenebBadge(text = label, color = color, containerColor = color.copy(alpha = 0.15f))
             Text(job.title, style = DenebType.rowTitle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             if (job.state == "running") {
                 DenebTextButton(onClick = onCancel) { Text("취소", color = MaterialTheme.colorScheme.error) }

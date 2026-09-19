@@ -5,6 +5,7 @@ import ai.deneb.deneb.generated.SelfImprovementCodingFunnel
 import ai.deneb.deneb.generated.SelfImprovementCodingListResponse
 import ai.deneb.deneb.generated.SelfImprovementCodingStatusCount
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebBadge
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -43,7 +44,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -351,15 +351,7 @@ private fun SelfImprovementCodingStatusBadge(status: String) {
         "rejected", "superseded" -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
         else -> denebInsightContainer() to denebInsight()
     }
-    Text(
-        selfImprovementCodingStatusLabel(status),
-        style = DenebType.meta,
-        color = fg,
-        modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(bg)
-            .padding(horizontal = 6.dp, vertical = 1.dp),
-    )
+    DenebBadge(text = selfImprovementCodingStatusLabel(status), color = fg, containerColor = bg)
 }
 
 /** Capture-side health line: distinguishes "queue consumed" from "capture
