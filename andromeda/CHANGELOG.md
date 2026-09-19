@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.0.127](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.126...andromeda-v0.0.127) (2026-09-19)
+
+
+### ✨ Features
+
+* **client-android:** 엔진 화면 — 게이트웨이 라우팅 판정·24시간 가용성·오늘 점유율·상세 통계 ([#5101](https://github.com/choiceoh/Deneb/issues/5101)) ([270d013](https://github.com/choiceoh/Deneb/commit/270d013f38a6e1a4b101783eb60fb0c58394a2ed))
+* **engine:** 로컬 엔진 통계·조건별 성능·응답 분포 강화 ([#5107](https://github.com/choiceoh/Deneb/issues/5107)) ([35554e2](https://github.com/choiceoh/Deneb/commit/35554e2538116540a2558954797e5b110046cd4b))
+* **engine:** 서빙 모델을 엔진 화면에서 고른다 — 선택은 플릿이 쥐고, 로컬 역할은 프로덕션을 따라간다 ([#5118](https://github.com/choiceoh/Deneb/issues/5118)) ([5202d0d](https://github.com/choiceoh/Deneb/commit/5202d0df392843103483b337d0bfc819000fddac))
+* **engine:** 엔진 통계를 모델별로 — 한 엔드포인트가 GLM-5.3·Qwen3.8을 오가도 하루가 섞이지 않는다 ([#5117](https://github.com/choiceoh/Deneb/issues/5117)) ([e2a41eb](https://github.com/choiceoh/Deneb/commit/e2a41ebf87ea88da1eb73b8b81a1d1c566e913f0))
+
+
+### 🐛 Bug Fixes
+
+* **engine:** 프롬프트 토큰 재사용률과 요청 적중률 분리 ([#5106](https://github.com/choiceoh/Deneb/issues/5106)) ([59d41ec](https://github.com/choiceoh/Deneb/commit/59d41ec41af4088a02e52a01077b8942c555d250))
+
 ## [0.0.126](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.125...andromeda-v0.0.126) (2026-09-15)
 
 
