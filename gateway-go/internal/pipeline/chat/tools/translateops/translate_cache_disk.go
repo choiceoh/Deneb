@@ -1,12 +1,15 @@
 package translateops
 
 import (
+	"cmp"
 	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
@@ -64,6 +67,17 @@ type translateDiskFile struct {
 
 var translateDisk = &translateDiskCache{}
 
+// translateDiskCache is the durable layer. Every page translation's lookups and
+// inserts go through mu, so nothing slow may run under it: a flush copies the
+// file under mu (snapshotLocked, ~25ms at the 50k cap) and marshals and writes
+// the copy after releasing it (write). Until 2026-09-19 the whole flush ran
+// under mu — at the cap its trim alone took 0.9s (an insertion sort over the
+// real 50k-entry file), every paid batch and every 50th insert flushed, and
+// every lookup queued behind them: one page's RPC spent 1.95s on our side even
+// with an instant provider, 0.06s after (BenchmarkTranslateAPageAtTheCap).
+//
+// Lock hierarchy: mu and writeMu are never held together. mu guards the
+// in-memory file; writeMu orders the disk writes of snapshots.
 type translateDiskCache struct {
 	mu        sync.Mutex
 	loaded    bool
@@ -72,6 +86,20 @@ type translateDiskCache struct {
 	lastFlush time.Time
 	// pathOverride lets tests keep their writes out of the state dir.
 	pathOverride string
+
+	writeMu sync.Mutex
+	// snapSeq numbers snapshots as they are taken; wroteSeq (under writeMu) is
+	// the newest one on disk. A writer whose snapshot is older than the newest
+	// taken skips — the newer one's taker writes it — so a burst of flushes
+	// costs one write, and the newest state always lands.
+	snapSeq  atomic.Uint64
+	wroteSeq uint64
+}
+
+// translateDiskSnapshot is a copy of the file taken under mu, written after.
+type translateDiskSnapshot struct {
+	seq  uint64
+	file translateDiskFile
 }
 
 func (c *translateDiskCache) path() string {
@@ -122,15 +150,17 @@ func (c *translateDiskCache) get(key [32]byte) (string, bool) {
 
 func (c *translateDiskCache) put(key [32]byte, text string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.loadLocked()
 	id := hex.EncodeToString(key[:])
 	if _, exists := c.file.Entries[id]; exists {
+		c.mu.Unlock()
 		return
 	}
 	c.file.Entries[id] = translateDiskEntry{Text: text, Seen: time.Now().Unix()}
 	c.dirty++
-	c.maybeFlushLocked()
+	snap := c.maybeSnapshotLocked()
+	c.mu.Unlock()
+	c.write(snap)
 }
 
 // recordUsage tallies what was actually sent to the provider — cache hits cost
@@ -140,7 +170,6 @@ func (c *translateDiskCache) recordUsage(chars, requests int) {
 		return
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.loadLocked()
 	day := time.Now().Format("2006-01-02")
 	u := c.file.Usage[day]
@@ -149,7 +178,9 @@ func (c *translateDiskCache) recordUsage(chars, requests int) {
 	c.file.Usage[day] = u
 	c.dirty++
 	c.reportPreviousDayLocked(day)
-	c.maybeFlushLocked()
+	snap := c.maybeSnapshotLocked()
+	c.mu.Unlock()
+	c.write(snap)
 }
 
 // reportPreviousDayLocked logs yesterday's total once, the first time a new day
@@ -167,23 +198,50 @@ func (c *translateDiskCache) reportPreviousDayLocked(today string) {
 	c.dirty++
 }
 
-func (c *translateDiskCache) maybeFlushLocked() {
+// maybeSnapshotLocked is the write threshold: a snapshot to write once enough
+// is new or it has waited long enough, nil otherwise.
+func (c *translateDiskCache) maybeSnapshotLocked() *translateDiskSnapshot {
 	if c.dirty == 0 {
-		return
+		return nil
 	}
 	if c.dirty >= translateDiskFlushEvery || time.Since(c.lastFlush) >= translateDiskFlushAfter {
-		c.flushLocked()
+		return c.snapshotLocked()
 	}
+	return nil
 }
 
-// flushLocked rewrites the file, trimmed to the newest entries and the last two
-// months of usage. Written to a temp file and renamed so a crash mid-write
-// cannot leave a half-parsed cache behind.
-func (c *translateDiskCache) flushLocked() {
+// snapshotLocked trims the file to the newest entries and the last two months
+// of usage and copies it for write, which runs after mu is released.
+func (c *translateDiskCache) snapshotLocked() *translateDiskSnapshot {
 	c.dirty = 0
 	c.lastFlush = time.Now()
 	c.trimLocked()
-	raw, err := json.Marshal(c.file)
+	entries := make(map[string]translateDiskEntry, len(c.file.Entries))
+	for id, e := range c.file.Entries {
+		entries[id] = e
+	}
+	usage := make(map[string]translateDayUsage, len(c.file.Usage))
+	for day, u := range c.file.Usage {
+		usage[day] = u
+	}
+	return &translateDiskSnapshot{
+		seq:  c.snapSeq.Add(1),
+		file: translateDiskFile{Entries: entries, Usage: usage, LoggedDay: c.file.LoggedDay},
+	}
+}
+
+// write lands a snapshot on disk, never under mu. Written to a temp file and
+// renamed so a crash mid-write cannot leave a half-parsed cache behind.
+func (c *translateDiskCache) write(snap *translateDiskSnapshot) {
+	if snap == nil {
+		return
+	}
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	if snap.seq < c.snapSeq.Load() || snap.seq <= c.wroteSeq {
+		return // a newer snapshot exists; its taker writes it
+	}
+	raw, err := json.Marshal(snap.file)
 	if err != nil {
 		return
 	}
@@ -197,13 +255,16 @@ func (c *translateDiskCache) flushLocked() {
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
+		return
 	}
+	c.wroteSeq = snap.seq
 }
 
 func (c *translateDiskCache) trimLocked() {
 	if over := len(c.file.Entries) - translateDiskMaxEntries; over > 0 {
-		// Drop the oldest by last-seen. A linear pass is fine at this size and
-		// runs once per flush, not per lookup.
+		// Drop the oldest by last-seen. This runs on every flush once the file
+		// is full, so it must stay O(n log n): an insertion sort here cost 0.9s
+		// per flush at 50k entries (map order is random — its worst case).
 		type aged struct {
 			id   string
 			seen int64
@@ -212,13 +273,14 @@ func (c *translateDiskCache) trimLocked() {
 		for id, e := range c.file.Entries {
 			all = append(all, aged{id, e.Seen})
 		}
-		for i := 1; i < len(all); i++ {
-			for j := i; j > 0 && all[j].seen < all[j-1].seen; j-- {
-				all[j], all[j-1] = all[j-1], all[j]
+		slices.SortFunc(all, func(a, b aged) int {
+			if c := cmp.Compare(a.seen, b.seen); c != 0 {
+				return c
 			}
-		}
-		for i := 0; i < over && i < len(all); i++ {
-			delete(c.file.Entries, all[i].id)
+			return cmp.Compare(a.id, b.id)
+		})
+		for _, a := range all[:over] {
+			delete(c.file.Entries, a.id)
 		}
 	}
 	cutoff := time.Now().AddDate(0, 0, -60).Format("2006-01-02")
@@ -229,13 +291,16 @@ func (c *translateDiskCache) trimLocked() {
 	}
 }
 
-// flush writes pending state out. Tests call it; production reaches it through
-// the write threshold.
+// flush writes what is new now instead of at the next threshold: the provider
+// path calls it after every paid batch (translateBatchDeepL). Nothing new since
+// the last snapshot means nothing to write — that snapshot's taker writes it.
 func (c *translateDiskCache) flush() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if !c.loaded {
+	if !c.loaded || c.dirty == 0 {
+		c.mu.Unlock()
 		return
 	}
-	c.flushLocked()
+	snap := c.snapshotLocked()
+	c.mu.Unlock()
+	c.write(snap)
 }
