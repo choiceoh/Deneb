@@ -9,9 +9,11 @@ snapshots. Parent `runtimeops` no longer imports these leaf deps.
 - `observe.go` — `ToolObserve` (actions: turn, logs, behavior, effort,
   proactive, provenance, speed, health)
 - `engine_speed_format.go` — renders `enginespeed.Store` days. Keep the "not
-  measured" row distinct from a rate, and keep the three caveats attached: the
+  measured" row distinct from a rate, and keep the caveats attached: the
   prefill figure has the engine's queue removed, the concurrency figure excludes
-  idle time, and the peak is only a floor at the poll cadence.
+  idle time, the peak is only a floor at the poll cadence, and prompt cache is
+  prompt TOKENS reused — never ST's request-count prefix hits. This is the
+  agent's only view of its own cache reuse (`behavior` carries none).
 
 ## Dependency direction and invariants
 

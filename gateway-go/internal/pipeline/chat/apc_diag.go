@@ -1,22 +1,24 @@
-// apc_diag.go — prefix-stability diagnostics for the local-vLLM main path.
+// apc_diag.go — prefix-stability diagnostics for the local-engine path.
 //
-// Why this exists:
-//   - The main model is served by vLLM with automatic prefix caching (APC).
-//     Unlike Anthropic's checkpoint-based cache, APC is a pure longest-prefix
-//     match: the first changed byte invalidates everything after it, and the
-//     invalidated span must re-prefill (~1.7-2K tok/s on GB10 — tens of
-//     seconds for a long history).
-//   - The Aiden vLLM build does not fill per-request usage
-//     prompt_tokens_details.cached_tokens, so the gateway is blind to per-run
-//     cache behavior (engine /metrics totals are the only signal).
+// Why this exists: a self-hosted engine's prefix cache (vLLM APC, ST's prefix
+// reuse) is a pure longest-prefix match — the first changed byte invalidates
+// everything after it, and the invalidated span must re-prefill (~1.7-2K tok/s
+// on GB10, tens of seconds for a long history).
 //
-// This file closes both gaps without touching the wire: at run start it
-// compares the assembled (system prompt, messages) against the previous run
-// of the same session and classifies the divergence; around the run it
-// scrapes the engine's prefix-cache counters and attributes the delta. One
-// "apc diag" log line per run is the output — the measurement substrate for
-// prefix-stability work (e.g. recall injection position, pruning gates) and
-// its regression guard.
+// At run start this compares the assembled (system prompt, messages) against
+// the previous run of the same session and classifies the divergence, without
+// touching the wire. One "apc diag" log line per run is the output — the
+// measurement substrate for prefix-stability work (e.g. recall injection
+// position, pruning gates) and its regression guard.
+//
+// What the ENGINE did with that prefix is the run's run.cache agentlog event
+// (engine_cache_sample.go), sampled at the engine that served the run and in
+// prompt tokens. The line carries runId so the two join exactly. This file
+// used to bracket the engine counters itself, off the model registry's
+// vllm-provider base URLs; every role has gone through the router since the
+// wormhole cutover (2026-06-14), so that list was empty and the bracket never
+// ran: none of the 734 lines the journal held on 2026-09-19 (back to 09-13)
+// carried an engine field.
 //
 // The comparison runs on the post-compaction, pre-BeforeAPICall message list
 // (the deterministic per-session shape; steer notes and trailing cache
@@ -24,14 +26,11 @@
 package chat
 
 import (
-	"context"
 	"hash/fnv"
 	"log/slog"
 	"sync"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 )
 
@@ -69,11 +68,12 @@ var apcSnapshotStore = struct {
 	store map[string]apcSnapshot
 }{store: make(map[string]apcSnapshot)}
 
-// apcDiagRun carries one run's divergence result plus the engine counter
-// baseline from run start. Used by a single goroutine — no locking needed.
+// apcDiagRun carries one run's divergence result until the deferred finish
+// logs it. Used by a single goroutine — no locking needed.
 type apcDiagRun struct {
 	logger *slog.Logger
 
+	runID         string
 	sessionKey    string
 	class         string
 	divergedAt    int // message index of first differing bytes (-1 when none)
@@ -84,20 +84,16 @@ type apcDiagRun struct {
 	appendTokens  int // est. tokens of the genuinely new tail
 	recallChanged bool
 
-	scrapeBases  []string
-	model        string
-	startQueries int64
-	startHits    int64
-	scraped      bool
-	done         bool
+	model string
+	done  bool
 }
 
 // beginAPCDiag classifies how this run's assembled prompt diverges from the
-// session's previous run and snapshots the engine prefix-cache counters.
-// systemPrompt is the finalized system-block JSON (the wire form).
-// Always returns a usable value; callers pair it with a deferred finish().
-func beginAPCDiag(ctx context.Context, deps runDeps, sessionKey, apiMode, providerID, model string, systemPrompt []byte, recallMemory string, messages []llm.Message, logger *slog.Logger) *apcDiagRun {
-	d := &apcDiagRun{logger: logger, sessionKey: sessionKey, model: model, divergedAt: -1, sysDivergedAt: -1}
+// session's previous run. systemPrompt is the finalized system-block JSON (the
+// wire form). Always returns a usable value; callers pair it with a deferred
+// finish().
+func beginAPCDiag(runID, sessionKey, model string, systemPrompt []byte, recallMemory string, messages []llm.Message, logger *slog.Logger) *apcDiagRun {
+	d := &apcDiagRun{logger: logger, runID: runID, sessionKey: sessionKey, model: model, divergedAt: -1, sysDivergedAt: -1}
 
 	cur := apcSnapshot{
 		systemHash:   apcHashBytes(systemPrompt),
@@ -141,24 +137,11 @@ func beginAPCDiag(ctx context.Context, deps runDeps, sessionKey, apiMode, provid
 		}
 	}
 
-	// Engine counter baseline — only meaningful when this run actually talks
-	// to a vLLM engine (OpenAI mode). The scrape is local and bounded; a down
-	// or non-vLLM endpoint contributes nothing and the diag line simply omits
-	// the engine fields.
-	if deps.registry != nil && apiMode == llm.APIModeOpenAI {
-		if bases := deps.registry.VllmBaseURLs(); len(bases) > 0 {
-			d.scrapeBases = bases
-			if q, h, ok := scrapeAPCCounters(ctx, bases, model); ok {
-				d.startQueries, d.startHits = q, h
-				d.scraped = true
-			}
-		}
-	}
 	return d
 }
 
-// finish scrapes the engine counters again and emits the single "apc diag"
-// line. Safe to call exactly once via defer; nil-safe for belt and braces.
+// finish emits the single "apc diag" line. Safe to call exactly once via
+// defer; nil-safe for belt and braces.
 func (d *apcDiagRun) finish() {
 	if d == nil || d.done || d.logger == nil {
 		return
@@ -166,6 +149,7 @@ func (d *apcDiagRun) finish() {
 	d.done = true
 
 	attrs := []any{
+		"runId", d.runID,
 		"session", d.sessionKey,
 		"model", d.model,
 		"class", d.class,
@@ -177,29 +161,7 @@ func (d *apcDiagRun) finish() {
 		"appendedTokensEst", d.appendTokens,
 		"recallChanged", d.recallChanged,
 	}
-	if d.scraped {
-		// Decoupled from the request ctx on purpose: finish runs on the error
-		// path too (deferred), where the request ctx may already be canceled.
-		// Bounded by the scrape's own short timeout.
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		if q, h, ok := scrapeAPCCounters(ctx, d.scrapeBases, d.model); ok {
-			dq, dh := q-d.startQueries, h-d.startHits
-			attrs = append(attrs, "engineQueriesDelta", dq, "engineHitsDelta", dh)
-			if dq > 0 {
-				attrs = append(attrs, "engineHitPct", float64(dh)/float64(dq)*100)
-			}
-		}
-	}
 	d.logger.Info("apc diag", attrs...)
-}
-
-// scrapeAPCCounters sums the engine prefix-cache counters across the given
-// vLLM bases, preferring rows whose served-model name matches the run's model
-// (so e.g. a sidecar OCR engine on another port cannot pollute the delta).
-// Falls back to the sum of all rows when no row matches.
-func scrapeAPCCounters(ctx context.Context, bases []string, model string) (queries, hits int64, ok bool) {
-	return toolwire.SumVllmPrefixCacheCounters(ctx, bases, model)
 }
 
 func apcHashBytes(b []byte) uint64 {

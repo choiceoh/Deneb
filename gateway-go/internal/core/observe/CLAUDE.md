@@ -1,13 +1,17 @@
 # Observe / log capture map
 
-Owns in-process log ring capture, turn views, and vLLM prefix-cache probes
-for operator diagnostics. Leaf relative to RPC handlers.
+Owns in-process log ring capture, turn views, and the serving-engine /metrics
+scrapers for operator diagnostics. Leaf relative to RPC handlers.
 
 ## Entry points
 
 - `capture.go` — `NewRing`, `NewCapture`, `LogCapture`, `ParseLevel`, `QueryOpts`
 - `turn.go` — `BuildTurnView`, `TurnView`
-- `vllm_cache.go` — `FetchVllmPrefixCaches`, `VllmPrefixCache`
+- `prom_text.go` — `parseVllmCounter`, `promLabel`: the one Prometheus
+  text-format line parser the engine scrapers share. Prompt-cache reuse is read
+  through `FetchEngineCounters` (tokens); there is deliberately no second
+  prefix-cache scraper — the old one read ST's request counters as tokens and
+  was addressed off vllm-provider roles that no longer exist.
 - `router_usage.go` — `FetchRouterUsage`, `RouterUsage.LocalShare`: the wormhole
   router's own per-model meter. It is the ONLY place the local/cloud split
   exists — the local engine and its cloud twin answer under the same model name,

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
 	runtimehealth "github.com/choiceoh/deneb/gateway-go/internal/runtime/health"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
@@ -25,7 +26,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	// Prefix-cache and GPU telemetry are independent, optional probes. Collect
 	// them concurrently so their individual two-second backstops do not add up
 	// and make a healthy gateway miss the three-second self-poll deadline.
-	optional := s.healthProbes.Collect(r.Context(), s.vllmBaseURLs())
+	optional := s.healthProbes.Collect(r.Context(), s.engineHealthDays)
 	if optional.CachePresent {
 		health["cache"] = optional.Cache
 	}
@@ -43,14 +44,15 @@ func attachPropus(health map[string]any, section *runtimehealth.PropusSection) {
 	health["self_evolution"] = section
 }
 
-// vllmBaseURLs returns the configured vLLM ".../v1" base URLs, or nil when the
-// model registry isn't wired yet (early startup, tests) — nil-safe so the
-// health probe never panics before the session phase populates the registry.
-func (s *Server) vllmBaseURLs() []string {
-	if s.modelRegistry == nil {
+// engineHealthDays returns the newest day of the local engines' measured
+// history for /health's prompt-cache section, or nil when no engine is
+// configured or the maintenance suite is not built yet (early startup, tests).
+func (s *Server) engineHealthDays() []enginespeed.DayStat {
+	store := s.modelMaintenance.EngineSpeed()
+	if store == nil {
 		return nil
 	}
-	return s.modelRegistry.VllmBaseURLs()
+	return store.Days(1)
 }
 
 // handleHealthGPU serves GET /health/gpu — the GPU telemetry section as a

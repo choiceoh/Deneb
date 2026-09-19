@@ -37,11 +37,6 @@ const proactiveStaleWindowMs = 48 * 60 * 60 * 1000
 //   - speed:    the local serving engines' own per-day throughput and
 //     occupancy, read from their /metrics rather than timed by the gateway
 //
-// vllmBases lazily lists the OpenAI-mode vLLM role base URLs to scrape for
-// engine-level prefix-cache counters (nil or empty → the line is omitted).
-// Some vLLM builds never fill per-request cached_tokens, so this scrape is
-// the only reliable cache signal there.
-//
 // This is the self-observation adapter: Propus or the operator
 // in chat ("방금 그 턴 왜 느렸어?") can read it without leaving the agent.
 // RouterMeter resolves what the routing readout needs: the router's base URL,
@@ -49,7 +44,7 @@ const proactiveStaleWindowMs = 48 * 60 * 60 * 1000
 // empty base URL turns the readout into a one-line "unavailable".
 type RouterMeter func() (baseURL, token string, localModels map[string]bool)
 
-func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Store, vllmBases func() []string, engineSpeed func() *enginespeed.Store, routerMeter RouterMeter) toolport.ToolFunc {
+func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Store, engineSpeed func() *enginespeed.Store, routerMeter RouterMeter) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action   string           `json:"action"`
@@ -99,11 +94,7 @@ func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Sto
 			if days := p.Days.Int(); days > 0 {
 				since = time.Now().Add(-time.Duration(days) * 24 * time.Hour).UnixMilli()
 			}
-			out := formatObserveBehavior(alog.Aggregate(since), p.Days.Int())
-			if vllmBases != nil {
-				out += formatVllmPrefixCaches(observe.FetchVllmPrefixCaches(ctx, vllmBases()))
-			}
-			return out, nil
+			return formatObserveBehavior(alog.Aggregate(since), p.Days.Int()), nil
 
 		case "effort":
 			if alog == nil {
@@ -497,23 +488,6 @@ func formatObserveProactive(s workfeed.EngagementStat) string {
 			parts[i] = fmt.Sprintf("%s=%d", src, s.BySource[src])
 		}
 		b.WriteString("  ignored by source: " + strings.Join(parts, " ") + "\n")
-	}
-	return b.String()
-}
-
-// formatVllmPrefixCaches renders the engine-level prefix-cache hit rate, one
-// line per served model. The counters are cumulative since vLLM boot — not
-// scoped to the behavior window above. Empty input (no vLLM role, server
-// down) renders nothing: the line simply does not appear.
-func formatVllmPrefixCaches(stats []observe.VllmPrefixCache) string {
-	var b strings.Builder
-	for _, s := range stats {
-		model := s.Model
-		if model == "" {
-			model = "vllm"
-		}
-		fmt.Fprintf(&b, "  prefix cache (%s, since engine boot): %d/%d (%.1f%%)\n",
-			model, s.Hits, s.Queries, s.HitRatePct)
 	}
 	return b.String()
 }

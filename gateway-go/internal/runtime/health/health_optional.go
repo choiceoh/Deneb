@@ -1,6 +1,10 @@
 package health
 
-import "context"
+import (
+	"context"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
+)
 
 // optionalHealthSections contains the independently collected /health sections
 // that gracefully disappear when their backing runtime is unavailable.
@@ -20,10 +24,10 @@ type OptionalSections struct {
 	GPUPresent   bool
 }
 
-// Probes owns the rolling cache and GPU telemetry state.
+// Probes owns the GPU telemetry state. The cache section keeps none of its
+// own: it reads the engine-speed history it is handed.
 type Probes struct {
-	cache cacheHealth
-	gpu   gpuHealth
+	gpu gpuHealth
 }
 
 type (
@@ -31,12 +35,17 @@ type (
 	gpuHealthProbe   func(context.Context) ([]GPUStat, bool)
 )
 
-// Collect runs the optional cache and GPU probes concurrently.
-func (p *Probes) Collect(ctx context.Context, bases []string) OptionalSections {
+// Collect runs the optional cache and GPU probes concurrently. engineDays
+// returns the newest day of the engine-speed history (nil when no engine is
+// configured).
+func (p *Probes) Collect(ctx context.Context, engineDays func() []enginespeed.DayStat) OptionalSections {
 	sections := collectOptionalHealthProbes(
 		ctx,
-		func(probeCtx context.Context) (CacheSection, bool) {
-			return p.cache.observe(probeCtx, bases)
+		func(context.Context) (CacheSection, bool) {
+			if engineDays == nil {
+				return CacheSection{}, false
+			}
+			return CacheFromEngineDays(engineDays())
 		},
 		func(probeCtx context.Context) ([]GPUStat, bool) {
 			return p.gpu.observe(probeCtx, nil)

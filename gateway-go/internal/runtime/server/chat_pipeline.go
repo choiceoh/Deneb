@@ -245,7 +245,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		// model in parallel (research_panel tool). nil-safe — the tool checks it.
 		ConsultPanel: modelpanel.New(s.modelRegistry, s.logger).Consult,
 		ObserveTool: tooldeps.ObserveToolFunc(toolbind.ToolObserve(
-			s.logCapture, agentLogWriter, s.workFeedStore, reg.VllmBaseURLs,
+			s.logCapture, agentLogWriter, s.workFeedStore,
 			// Late-bound: the maintenance suite that owns the engine-speed
 			// history is built after this pipeline, so the tool resolves it per
 			// call instead of capturing a nil.

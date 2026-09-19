@@ -296,20 +296,18 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 	}
 
 	// Observation-plane deps, shared verbatim by the in-process observe.* and
-	// the remote miniapp.observe.* registrations below. AgentLog and VllmBases
-	// are getters because the agentlog writer and the model registry are both
-	// constructed later (session phase); resolving lazily avoids capturing nil.
+	// the remote miniapp.observe.* registrations below. AgentLog and
+	// EngineSpeed are getters because the agentlog writer and the maintenance
+	// suite are both constructed later; resolving lazily avoids capturing nil.
 	observeDeps := handlerobserve.Deps{
 		Capture:  s.logCapture,
 		AgentLog: func() *agentlog.Writer { return s.agentLogWriter },
 		StateDir: func() string { return denebDir },
-		VllmBases: func() []string {
-			if s.modelRegistry == nil {
-				return nil
-			}
-			return s.modelRegistry.VllmBaseURLs()
-		},
-		Logger: hub.Logger(),
+		// The engines' prompt-token reuse on the newest measured day, from the
+		// engine-speed history the maintenance suite owns (built later, so
+		// resolved per call).
+		EngineSpeed: func() *enginespeed.Store { return s.modelMaintenance.EngineSpeed() },
+		Logger:      hub.Logger(),
 	}
 
 	// Improvement-loop liveness digest, in-process observatory.* only (the

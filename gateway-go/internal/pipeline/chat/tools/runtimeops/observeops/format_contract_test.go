@@ -189,20 +189,8 @@ func TestFormatObserveProactiveThresholdsAndSorting(t *testing.T) {
 	}
 }
 
-func TestFormatVllmPrefixCachesContract(t *testing.T) {
-	if got := formatVllmPrefixCaches(nil); got != "" {
-		t.Fatalf("nil = %q", got)
-	}
-	got := formatVllmPrefixCaches([]observe.VllmPrefixCache{{Model: "model", Hits: 82, Queries: 100, HitRatePct: 82}, {Hits: 0, Queries: 0}})
-	for _, want := range []string{"prefix cache (model, since engine boot): 82/100 (82.0%)", "prefix cache (vllm, since engine boot): 0/0 (0.0%)"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("missing %q: %s", want, got)
-		}
-	}
-}
-
 func TestToolObserveNilDependencyResponsesAndInvalidJSON(t *testing.T) {
-	tool := ToolObserve(nil, nil, nil, nil, nil, nil)
+	tool := ToolObserve(nil, nil, nil, nil, nil)
 	if _, err := tool(context.Background(), json.RawMessage(`{`)); err == nil {
 		t.Fatal("invalid JSON accepted")
 	}

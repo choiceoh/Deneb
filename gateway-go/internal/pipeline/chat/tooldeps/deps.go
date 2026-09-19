@@ -310,11 +310,6 @@ type CoreToolDeps struct {
 	// uses). nil just skips the bias; the tool still works.
 	AsrHotwords func() string
 
-	// VllmBaseURLs lazily lists the deduped base URLs of OpenAI-mode vLLM
-	// roles; the observe tool scrapes each endpoint's /metrics for the
-	// engine-level prefix-cache hit rate. Nil disables the scrape.
-	VllmBaseURLs func() []string
-
 	// SessionMemoryFn returns session memory content for a given session key.
 	// Nil means no session memory is available.
 	SessionMemoryFn func(sessionKey string) string

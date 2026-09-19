@@ -41,6 +41,16 @@ func formatEngineSpeed(days []enginespeed.DayStat) string {
 			concurrencyOrDash(row.ConcurrencyWhileBusy), d.PeakConcurrency)
 		fmt.Fprintf(&b, "      %d requests · %d prompt tok · %d generated tok\n",
 			row.Requests, row.PromptTokens, row.GeneratedTokens)
+		if row.PromptCacheMeasured {
+			fmt.Fprintf(&b, "      prompt cache: %.1f%% of prompt tokens reused (%d of %d)\n",
+				row.PromptCacheHitRatio*100, row.CachedPromptTokens, row.CachePromptTokens)
+		} else {
+			b.WriteString("      prompt cache: not measured (no interval carried the engine's token-reuse counter at both ends)\n")
+		}
+		if row.SpecDraftTokens > 0 {
+			fmt.Fprintf(&b, "      speculative decoding: %.1f%% of %d drafted tokens accepted\n",
+				row.SpecAcceptRatio*100, row.SpecDraftTokens)
+		}
 		if d.Restarts > 0 {
 			fmt.Fprintf(&b, "      %d engine restart(s): those intervals are not in the totals\n", d.Restarts)
 		}
@@ -49,6 +59,8 @@ func formatEngineSpeed(days []enginespeed.DayStat) string {
 	b.WriteString("  note: prefill has the engine's queue wait subtracted; decode is the reciprocal of its\n")
 	b.WriteString("        mean per-output-token time. Concurrency-while-busy is request-seconds over the\n")
 	b.WriteString("        engine's stepping seconds, so idle time is excluded rather than averaged in.\n")
+	b.WriteString("        Prompt cache counts prompt TOKENS the engine already had resident, not requests\n")
+	b.WriteString("        that hit: ST's own request counter reads far lower and is not the cost that matters.\n")
 	if pollSec > 0 {
 		fmt.Fprintf(&b, "        Peak is the highest a %ds poll SAW — a shorter spike is invisible to it, so it is a floor.\n", pollSec)
 	}

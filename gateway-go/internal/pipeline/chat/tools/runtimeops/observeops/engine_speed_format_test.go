@@ -77,3 +77,38 @@ func TestFormatEngineSpeed_EmptyHistorySaysSo(t *testing.T) {
 		t.Errorf("empty = %q", out)
 	}
 }
+
+// The day's prompt-cache reuse is the number that decides whether a 40K-token
+// head costs twenty seconds or nothing, so the agent reads it here in TOKENS —
+// the figure the engine screen shows. ST's request counter (8 of 130 hits in
+// the capture below) must not stand in for it.
+func TestFormatEngineSpeed_ShowsPromptTokenReuseAndDraftAcceptance(t *testing.T) {
+	out := formatEngineSpeed([]enginespeed.DayStat{day("2026-09-19", observe.EngineDelta{
+		TPOTSeconds: 10, TPOTCount: 500, E2ESeconds: 20, BusySeconds: 10, Requests: 130,
+		PromptTokens: 423_319, CachePromptTokens: 423_319, CachedPromptTokens: 249_600,
+		PrefixCacheQueries: 130, PrefixCacheHits: 8,
+		SpecDraftTokens: 354_098, SpecAcceptedTokens: 116_501,
+	}, 3, 200)})
+	for _, want := range []string{
+		"prompt cache: 59.0% of prompt tokens reused (249600 of 423319)",
+		"speculative decoding: 32.9% of 354098 drafted tokens accepted",
+		"not requests",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "6.2%") {
+		t.Errorf("the request hit ratio leaked in as the cache figure:\n%s", out)
+	}
+}
+
+// A day without the token-reuse counter says so instead of printing 0%.
+func TestFormatEngineSpeed_UnmeasuredPromptCacheIsNamed(t *testing.T) {
+	out := formatEngineSpeed([]enginespeed.DayStat{day("2026-09-19", observe.EngineDelta{
+		TPOTSeconds: 10, TPOTCount: 500, E2ESeconds: 20, BusySeconds: 10, Requests: 4, PromptTokens: 900,
+	}, 1, 20)})
+	if !strings.Contains(out, "prompt cache: not measured") || strings.Contains(out, "speculative decoding") {
+		t.Errorf("unmeasured cache must be named, and no draft line without drafts:\n%s", out)
+	}
+}

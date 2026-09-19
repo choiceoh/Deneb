@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/enginespeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	observecore "github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpctest"
@@ -277,12 +276,12 @@ func TestHealthHandlerReturnsRingAndAgentLogMetrics(t *testing.T) {
 		agentlog.BackgroundJobData{Name: "cron", Outcome: "error"})
 	appendAgentLog(t, w, now.UnixMilli(), "client:main", agentlog.TypeRunEnd,
 		agentlog.RunEndData{InputTokens: 10, OutputTokens: 2, Proactive: true, Compacted: true})
-	var vllmCalls atomic.Int32
+	var speedCalls atomic.Int32
 	deps := Deps{
 		Capture:  capture,
 		AgentLog: func() *agentlog.Writer { return w },
-		VllmBases: func() []string {
-			vllmCalls.Add(1)
+		EngineSpeed: func() *enginespeed.Store {
+			speedCalls.Add(1)
 			return nil
 		},
 	}
@@ -303,43 +302,46 @@ func TestHealthHandlerReturnsRingAndAgentLogMetrics(t *testing.T) {
 			t.Errorf("health[%s] = %#v, want %#v; all=%#v", key, got[key], value, got)
 		}
 	}
-	if _, ok := got["vllmPrefixCache"]; ok || vllmCalls.Load() != 1 {
-		t.Fatalf("empty vLLM stats = %#v calls=%d", got["vllmPrefixCache"], vllmCalls.Load())
+	if _, ok := got["vllmPrefixCache"]; ok || speedCalls.Load() != 1 {
+		t.Fatalf("no engine configured yet cache rows = %#v calls=%d", got["vllmPrefixCache"], speedCalls.Load())
 	}
 }
 
-func TestHealthHandlerVllmMetricsAndCancellationFallback(t *testing.T) {
-	metrics := `
-vllm:prefix_cache_queries_total{model_name="model-a",engine="0"} 10
-vllm:prefix_cache_hits_total{model_name="model-a",engine="0"} 4
-`
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/metrics" {
-			t.Errorf("metrics path = %q", r.URL.Path)
-		}
-		_, _ = io.WriteString(w, metrics)
-	}))
-	defer server.Close()
-	deps := Deps{VllmBases: func() []string { return []string{server.URL + "/v1"} }}
+// The rows come from the engine-speed history in prompt TOKENS. The fixture is
+// the production capture #5106 was measured on: ST's request counters say 8 of
+// 130 lookups hit (6.2%) while the engine reused 249,600 of 423,319 prompt
+// tokens (59.0%) — the tab must show the second, never the first.
+func TestHealthHandlerReportsTheEnginesPromptTokenReuse(t *testing.T) {
+	const endpoint = "http://100.125.220.117:8000/metrics"
+	store := enginespeed.NewStore(filepath.Join(t.TempDir(), "engine-speed.json"))
+	at := time.Now()
+	store.Observe(endpoint, at, 15*time.Second, observecore.EngineCounters{
+		Model: "glm-5.3-flash", PromptTokens: 1_000, CacheTokensKnown: true, PrefixCacheQueries: 1,
+	})
+	store.Observe(endpoint, at.Add(15*time.Second), 15*time.Second, observecore.EngineCounters{
+		Model: "glm-5.3-flash", PromptTokens: 424_319, CachedPromptTokens: 249_600, CacheTokensKnown: true,
+		PrefixCacheQueries: 131, PrefixCacheHits: 8,
+	})
+	deps := Deps{EngineSpeed: func() *enginespeed.Store { return store }}
 	got := decodeObservePayload[map[string]json.RawMessage](t, rpctest.Call(Methods(deps), "observe.health", nil))
-	var stats []observecore.VllmPrefixCache
-	if err := json.Unmarshal(got["vllmPrefixCache"], &stats); err != nil {
-		t.Fatalf("decode vLLM stats: %v raw=%s", err, got["vllmPrefixCache"])
+	var rows []promptCacheRow
+	if err := json.Unmarshal(got["vllmPrefixCache"], &rows); err != nil {
+		t.Fatalf("decode cache rows: %v raw=%s", err, got["vllmPrefixCache"])
 	}
-	if len(stats) != 1 || stats[0].Model != "model-a" || stats[0].Queries != 10 || stats[0].Hits != 4 || stats[0].HitRatePct != 40 {
-		t.Fatalf("vLLM stats = %#v", stats)
+	want := []promptCacheRow{{Model: "glm-5.3-flash", Queries: 423_319, Hits: 249_600, HitRatePct: 59}}
+	if !reflect.DeepEqual(rows, want) {
+		t.Fatalf("cache rows = %#v, want %#v", rows, want)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	rawReq := &protocol.RequestFrame{ID: "cancel", Method: "observe.health"}
-	resp := Methods(deps)["observe.health"](ctx, rawReq)
-	cancelled := decodeObservePayload[map[string]any](t, resp)
-	if cancelled["captureEnabled"] != false || cancelled["agentLogEnabled"] != false {
-		t.Fatalf("cancelled health fallback = %#v", cancelled)
-	}
-	if _, ok := cancelled["vllmPrefixCache"]; ok {
-		t.Fatalf("cancelled health retained vLLM stats: %#v", cancelled)
+	// An engine that publishes no token-reuse counter has no row: its request
+	// counters must not stand in.
+	unmeasured := enginespeed.NewStore(filepath.Join(t.TempDir(), "engine-speed.json"))
+	unmeasured.Observe(endpoint, at, 15*time.Second, observecore.EngineCounters{Model: "m", PromptTokens: 10, PrefixCacheQueries: 1})
+	unmeasured.Observe(endpoint, at.Add(15*time.Second), 15*time.Second, observecore.EngineCounters{Model: "m", PromptTokens: 500, PrefixCacheQueries: 9, PrefixCacheHits: 4})
+	deps = Deps{EngineSpeed: func() *enginespeed.Store { return unmeasured }}
+	got = decodeObservePayload[map[string]json.RawMessage](t, rpctest.Call(Methods(deps), "observe.health", nil))
+	if raw, ok := got["vllmPrefixCache"]; ok {
+		t.Fatalf("request counters leaked into cache rows: %s", raw)
 	}
 }
 
