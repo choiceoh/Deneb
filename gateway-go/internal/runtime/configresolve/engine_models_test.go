@@ -58,6 +58,40 @@ func TestEngineModelsIsNilWithoutAUsableConfig(t *testing.T) {
 	}
 }
 
+// The router keys its table by name and the last entry of a name wins, so a
+// name is the engine's only when its last entry points there: a cloud twin
+// listed after the local entry takes the name's traffic, and a local entry
+// listed after a cloud one takes it back — with the last entry's variant.
+func TestEngineEntriesJudgeADuplicatedNameByItsLastEntry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	body := `{
+	  "models": [
+	    {"name": "glm-5.3-flash", "url": "http://100.125.220.117:8000/v1"},
+	    {"name": "glm-5.3-flash", "url": "https://api.z.ai/api/coding/paas/v4"},
+	    {"name": "qwen3.8-flash-next", "url": "https://api.z.ai/api/coding/paas/v4"},
+	    {"name": "qwen3.8-flash-next", "url": "http://100.125.220.117:8000/v1", "thinkingMode": "off"},
+	    {"name": "qwen3.8-flash-next-low", "url": "http://100.125.220.117:8000/v1", "thinkingMode": "on"},
+	    {"name": "qwen3.8-flash-next-low", "url": "http://100.125.220.117:8000/v1", "thinkingMode": "off"}
+	  ]
+	}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	t.Setenv(routerConfigEnv, path)
+
+	got := EngineEntries("http://100.125.220.117:8000/metrics")
+	var names []string
+	for _, e := range got {
+		names = append(names, e.Name)
+		if e.ThinkingMode != "off" {
+			t.Errorf("%s: thinkingMode = %q, want the last entry's %q", e.Name, e.ThinkingMode, "off")
+		}
+	}
+	if strings.Join(names, ",") != "qwen3.8-flash-next,qwen3.8-flash-next-low" {
+		t.Fatalf("EngineEntries = %q, want the names whose last entry is at the engine (not glm-5.3-flash, now the cloud's)", names)
+	}
+}
+
 // Routing follows the engine's model by pairing entries of the same variant:
 // what each asks the engine for, whether it thinks, and whether it takes images.
 func TestEngineEntriesCarryTheVariantEachEntryIs(t *testing.T) {
