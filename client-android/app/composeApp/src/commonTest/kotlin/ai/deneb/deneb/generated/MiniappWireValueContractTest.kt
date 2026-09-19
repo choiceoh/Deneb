@@ -975,6 +975,39 @@ class MiniappWireValueContractTest {
             invalidValue = JsonObject(emptyMap()),
         ),
         wireContract(
+            name = "EngineModelRow",
+            serializer = EngineModelRow.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "model",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "current",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "days",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "requests",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "lastDay",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "model",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
             name = "EngineOutage",
             serializer = EngineOutage.serializer(),
             fields = listOf(
@@ -1153,6 +1186,16 @@ class MiniappWireValueContractTest {
                     name = "internals",
                     value = JsonObject(emptyMap()),
                     expectation = Expectation.Object,
+                ),
+                fieldValue(
+                    name = "models",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "selectedModel",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
                 ),
                 fieldValue(
                     name = "days",

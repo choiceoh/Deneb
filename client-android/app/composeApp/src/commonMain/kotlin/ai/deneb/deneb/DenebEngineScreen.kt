@@ -77,6 +77,8 @@ fun DenebEngineScreen(
     // null = load in flight, true = ok, false = fetch failed (mirrors DenebUsageScreen).
     var loadOk by remember { mutableStateOf<Boolean?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+    // Whose statistics to show; null follows the model the engine serves.
+    var selectedModel by remember { mutableStateOf<String?>(null) }
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
     val loadMutex = remember { Mutex() }
@@ -84,10 +86,14 @@ fun DenebEngineScreen(
 
     suspend fun load() {
         loadMutex.withLock {
-            val fetched = client.fetchEngineStatus()
+            val asked = selectedModel
+            val fetched = client.fetchEngineStatus(asked)
             if (fetched == null) {
                 loadOk = false
             } else {
+                // The window no longer holds the model asked for (it aged out):
+                // follow the current model again instead of asking for it forever.
+                if (asked != null && fetched.selectedModel != asked && selectedModel == asked) selectedModel = null
                 status = fetched
                 loadOk = true
             }
@@ -150,7 +156,15 @@ fun DenebEngineScreen(
                                 modifier = Modifier.padding(16.dp),
                             )
                         }
-                        EngineStatusContent(s)
+                        EngineStatusContent(
+                            s,
+                            onSelectModel = { model ->
+                                // Back to the current model means "follow it": a later
+                                // switch then moves the page with the engine.
+                                selectedModel = model.takeUnless { m -> s.models.firstOrNull { it.current }?.model == m }
+                                scope.launch { load() }
+                            },
+                        )
                     }
                 }
                 Spacer(Modifier.height(24.dp))
@@ -169,9 +183,14 @@ fun DenebEngineScreen(
  * it so the golden is the same on every machine.
  */
 @Composable
-internal fun EngineStatusContent(status: EngineStatusResult, zone: TimeZone = TimeZone.currentSystemDefault()) {
+internal fun EngineStatusContent(
+    status: EngineStatusResult,
+    zone: TimeZone = TimeZone.currentSystemDefault(),
+    onSelectModel: (String) -> Unit = {},
+) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         EngineStateLine(status)
+        EngineModelTabs(status, onSelectModel)
         Spacer(Modifier.height(14.dp))
         EngineDiagnosticsSection(status, zone)
         Spacer(Modifier.height(14.dp))
@@ -184,7 +203,8 @@ internal fun EngineStatusContent(status: EngineStatusResult, zone: TimeZone = Ti
         }
         Spacer(Modifier.height(18.dp))
         EngineDaysSection(status.days)
-        if (status.reachable && (status.internals.published || status.internals.fleetKnown)) {
+        // The live process's gauges describe the model it serves, not a past one.
+        if (status.reachable && status.viewingCurrentModel() && (status.internals.published || status.internals.fleetKnown)) {
             Spacer(Modifier.height(18.dp))
             EngineInternalsSection(status)
         }

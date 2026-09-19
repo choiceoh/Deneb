@@ -247,6 +247,13 @@ type EngineStatusResult struct {
 
 	Internals EngineInternals `json:"internals"`
 
+	// Models the engine served in the window, current first. Days, Total and
+	// Diagnostics are SelectedModel's alone: the requested model when the
+	// window has it, else the current one. Liveness, outages, internals and the
+	// router's split stay the engine's, whichever model is selected.
+	Models        []EngineModelRow `json:"models"`
+	SelectedModel string           `json:"selectedModel,omitempty"`
+
 	Days  []EngineDay  `json:"days"`
 	Total EngineTotals `json:"total"`
 
@@ -361,10 +368,24 @@ func EngineMethods(deps EngineDeps) map[string]rpcutil.HandlerFunc {
 // retain 30; a phone screen reads a week.
 const engineHistoryDays = 7
 
+// engineStatusParams: Model picks whose statistics come back; empty (or a
+// model the window does not have) means the engine's current model.
+type engineStatusParams struct {
+	Model string `json:"model"`
+}
+
 func engineStatus(deps EngineDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if minibind.Identity(ctx) == nil {
 			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.engine.status requires client identity context").Response(req.ID)
+		}
+		var params engineStatusParams
+		if len(req.Params) > 0 { // params are optional: no model means the current one
+			p, errResp := rpcutil.DecodeParams[engineStatusParams](req)
+			if errResp != nil {
+				return errResp
+			}
+			params = p
 		}
 		now := deps.now()
 		out := EngineStatusResult{
@@ -414,12 +435,29 @@ func engineStatus(deps EngineDeps) rpcutil.HandlerFunc {
 		}
 
 		var speedRows []enginespeed.DayStat
+		var diagnostics []enginespeed.DiagnosticInterval
+		current := out.Model
+		haveSpeed := false
 		if deps.Speed != nil {
 			if store := deps.Speed(); store != nil {
+				haveSpeed = true
 				speedRows = store.Days(engineHistoryDays)
-				out.Diagnostics = engineDiagnostics(store.Diagnostics(endpoint), now, currentRuntime)
+				diagnostics = store.Diagnostics(endpoint)
+				if current == "" {
+					current = store.CurrentModel(endpoint)
+				}
 			}
 		}
+		out.Models = engineModelRows(speedRows, current)
+		out.SelectedModel = pickEngineModel(params.Model, out.Models)
+		if haveSpeed {
+			runtime := currentRuntime // the live runtime is only this view's when it serves the selected model
+			if out.SelectedModel != out.Model {
+				runtime = ""
+			}
+			out.Diagnostics = engineDiagnostics(diagnosticsOfModel(diagnostics, out.SelectedModel), now, runtime)
+		}
+		modelRows, otherModelDays := rowsOfModel(speedRows, out.SelectedModel)
 		var local, known map[string]bool
 		var baseURL, token string
 		if deps.RouterMeter != nil {
@@ -434,7 +472,15 @@ func engineStatus(deps EngineDeps) rpcutil.HandlerFunc {
 				shareRows = store.Days(engineHistoryDays)
 			}
 		}
-		out.Days, out.Total = assembleEngineDays(now, speedRows, downtime, trackedSince, shareRows, local, known)
+		// The engine's downtime and the router's split belong to the engine, not
+		// to a model: they ride the current model's day rows as before, and a
+		// past model's view lists only the days it was measured on — without
+		// the liveness flag too, or a day it lost hours on would read "no outage".
+		dayDowntime, dayShare, dayTracked := downtime, shareRows, trackedSince
+		if current != "" && out.SelectedModel != current {
+			dayDowntime, dayShare, dayTracked, otherModelDays = nil, nil, 0, nil
+		}
+		out.Days, out.Total = assembleEngineDays(now, modelRows, dayDowntime, dayTracked, dayShare, local, known, otherModelDays)
 		fillRouterToday(&out, now, shareRows, local, known)
 
 		if baseURL != "" {
@@ -485,13 +531,17 @@ func engineGlance(deps EngineDeps) rpcutil.HandlerFunc {
 		}
 		if deps.Speed != nil {
 			if store := deps.Speed(); store != nil {
+				// Today can hold one row per model; the tile speaks for the model
+				// the engine served at its last scrape, not whichever sorts first.
+				out.Model = store.CurrentModel(endpoint)
 				for _, d := range store.Days(1) {
 					if d.Day != today {
 						break
 					}
-					r := d.Rates()
-					out.Model = d.Model
-					if r.Measured() {
+					if out.Model != "" && d.Model != out.Model {
+						continue
+					}
+					if r := d.Rates(); r.Measured() {
 						out.DecodeTokensPerSec = r.DecodeTokensPerSec
 					}
 					break

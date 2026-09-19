@@ -38,13 +38,19 @@ const retainDays = 30
 // erase the day so far, not to record every scrape.
 const flushInterval = 5 * time.Minute
 
-// DayStat is one engine's measured day.
+// DayStat is one engine's measured day for one model.
 type DayStat struct {
 	Day      string `json:"day"` // YYYY-MM-DD, local
 	Endpoint string `json:"endpoint"`
-	// Model is what the engine reported serving. Endpoint-scoped: this engine
-	// labels its series by engine, not by model, and serves one model.
+	// Model is what the engine reported serving. The engine labels its series
+	// by engine, not by model, but one endpoint serves different models over a
+	// day — a switch, a campaign's window — so the model is part of the row's
+	// key. Before it was, 2026-09-19 read as one "qwen3.8-flash-next" day: the
+	// label of the last scrape over GLM-5.3's counters for most of it.
 	Model string `json:"model,omitempty"`
+	// LastSeenMs is the newest scrape folded into the row: which of a day's
+	// rows is the engine's current model, without asking the engine.
+	LastSeenMs int64 `json:"lastSeenMs,omitempty"`
 
 	// Delta is the day's accumulated growth, from which every rate is derived.
 	Delta observe.EngineDelta `json:"delta"`
@@ -101,42 +107,54 @@ func NewStore(path string) *Store {
 	}
 	for i := range p.Days {
 		d := p.Days[i]
-		s.days[dayKey(d.Day, d.Endpoint)] = &d
+		s.days[dayKey(d.Day, d.Endpoint, d.Model)] = &d
 	}
 	s.diagnostics = p.Diagnostics
 	return s
 }
 
-func dayKey(day, endpoint string) string { return day + "\x00" + endpoint }
+func dayKey(day, endpoint, model string) string { return day + "\x00" + endpoint + "\x00" + model }
 
-// Observe folds one scrape into its day.
+// Observe folds one scrape into its day and model.
 //
 // The first scrape of an endpoint only establishes a baseline — there is no
 // interval yet to attribute. Later scrapes add their interval's growth, except
-// where the counters went backwards (the engine restarted): that interval is
-// counted as a restart and dropped, and the new reading becomes the baseline.
+// where the counters went backwards (the engine restarted) or the model
+// changed: that interval is counted as a restart and dropped, and the new
+// reading becomes the baseline. A model change is a different process, so its
+// counters started over — but a young old process can leave counters the new
+// one has not yet passed, and the delta would then be one model's work filed
+// under the other; the name says what the counters cannot.
 func (s *Store) Observe(endpoint string, at time.Time, pollInterval time.Duration, c observe.EngineCounters) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	prev, hasPrev := s.previous[endpoint]
+	if c.Model == "" && hasPrev {
+		// A door that could not name its model on this scrape (a handover
+		// answers /v1/models with an empty catalog) is still the process that
+		// answered the last one: its counters continue that model's series,
+		// and its diagnostics are not a runtime change.
+		c.Model = prev.Model
+	}
 	s.observeDiagnosticsLocked(endpoint, at, pollInterval, c)
 
 	day := at.Format("2006-01-02")
-	key := dayKey(day, endpoint)
+	key := dayKey(day, endpoint, c.Model)
 	stat := s.days[key]
 	if stat == nil {
-		stat = &DayStat{Day: day, Endpoint: endpoint, PollIntervalSec: int(pollInterval.Seconds())}
+		stat = &DayStat{Day: day, Endpoint: endpoint, Model: c.Model, PollIntervalSec: int(pollInterval.Seconds())}
 		s.days[key] = stat
 	}
-	if c.Model != "" {
-		stat.Model = c.Model
-	}
 	stat.Polls++
+	stat.LastSeenMs = at.UnixMilli()
 	if n := c.Concurrency(); n > stat.PeakConcurrency {
 		stat.PeakConcurrency = n
 	}
 
-	if prev, ok := s.previous[endpoint]; ok {
-		if delta, ok := observe.EngineDeltaBetween(prev, c); ok {
+	if hasPrev {
+		switched := prev.Model != "" && c.Model != "" && prev.Model != c.Model
+		if delta, ok := observe.EngineDeltaBetween(prev, c); ok && !switched {
 			stat.Delta = stat.Delta.Add(delta)
 		} else {
 			stat.Restarts++
@@ -144,6 +162,32 @@ func (s *Store) Observe(endpoint string, at time.Time, pollInterval time.Duratio
 	}
 	s.previous[endpoint] = c
 	s.dirty = true
+}
+
+// CurrentModel is the model an endpoint served at its newest scrape: the live
+// sampler's last reading, or — before the first scrape since a gateway start —
+// the persisted row seen last. Empty when the endpoint never named a model.
+func (s *Store) CurrentModel(endpoint string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if prev, ok := s.previous[endpoint]; ok && prev.Model != "" {
+		return prev.Model
+	}
+	var newest *DayStat
+	for _, d := range s.days {
+		if d.Endpoint != endpoint || d.Model == "" {
+			continue
+		}
+		// Rows written before LastSeenMs existed carry 0; the later day wins.
+		if newest == nil || d.LastSeenMs > newest.LastSeenMs ||
+			(d.LastSeenMs == newest.LastSeenMs && d.Day > newest.Day) {
+			newest = d
+		}
+	}
+	if newest == nil {
+		return ""
+	}
+	return newest.Model
 }
 
 // Days returns the most recent n days, newest first. n <= 0 returns all.
@@ -155,16 +199,23 @@ func (s *Store) Days(n int) []DayStat {
 	for _, d := range s.days {
 		out = append(out, *d)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Day != out[j].Day {
-			return out[i].Day > out[j].Day
-		}
-		return out[i].Endpoint < out[j].Endpoint
-	})
+	sort.Slice(out, func(i, j int) bool { return rowBefore(out[i], out[j], true) })
 	if n > 0 {
 		out = limitToDays(out, n)
 	}
 	return out
+}
+
+// rowBefore orders rows by day (newest first when newestFirst), then endpoint,
+// then model, so a day's rows keep one order in the file and in every reader.
+func rowBefore(a, b DayStat, newestFirst bool) bool {
+	if a.Day != b.Day {
+		return (a.Day > b.Day) == newestFirst
+	}
+	if a.Endpoint != b.Endpoint {
+		return a.Endpoint < b.Endpoint
+	}
+	return a.Model < b.Model
 }
 
 // limitToDays keeps every row belonging to the newest n distinct days, so two
@@ -212,12 +263,7 @@ func (s *Store) Flush(now time.Time) error {
 	if path == "" {
 		return nil
 	}
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].Day != rows[j].Day {
-			return rows[i].Day < rows[j].Day
-		}
-		return rows[i].Endpoint < rows[j].Endpoint
-	})
+	sort.Slice(rows, func(i, j int) bool { return rowBefore(rows[i], rows[j], false) })
 	raw, err := json.MarshalIndent(persisted{Days: rows, Diagnostics: diagnostics}, "", "  ")
 	if err != nil {
 		return err

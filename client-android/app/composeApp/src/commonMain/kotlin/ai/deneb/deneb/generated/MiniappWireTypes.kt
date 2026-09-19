@@ -249,6 +249,16 @@ data class EngineMeasure(
 
 @Immutable
 @Serializable
+data class EngineModelRow(
+    val model: String = "",
+    val current: Boolean = false,
+    val days: Int = 0,
+    val requests: Long = 0L,
+    val lastDay: String = "",
+)
+
+@Immutable
+@Serializable
 data class EngineOutage(
     val sinceMs: Long = 0L,
     val untilMs: Long = 0L,
@@ -292,6 +302,8 @@ data class EngineStatusResult(
     val trackedSinceMs: Long = 0L,
     val outages: List<EngineOutage> = emptyList(),
     val internals: EngineInternals = EngineInternals(),
+    val models: List<EngineModelRow> = emptyList(),
+    val selectedModel: String = "",
     val days: List<EngineDay> = emptyList(),
     val total: EngineTotals = EngineTotals(),
     val routerAvailable: Boolean = false,

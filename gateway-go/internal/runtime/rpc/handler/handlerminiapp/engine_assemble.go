@@ -17,7 +17,9 @@ import (
 // must not be missing from the list; the ledger puts it there.
 //
 // Downtime and router numbers attach to the day's first engine row (there is
-// one local engine in practice); a day without a scrape gets a row of its own.
+// one local engine in practice); a day without a scrape gets a row of its own,
+// unless otherModelDays says another model was measured on it — that day is in
+// the other model's view, not an unmeasured day of this one.
 func assembleEngineDays(
 	now time.Time,
 	speedRows []enginespeed.DayStat,
@@ -25,6 +27,7 @@ func assembleEngineDays(
 	trackedSinceMs int64,
 	shareRows []routershare.DayEntry,
 	local, known map[string]bool,
+	otherModelDays map[string]bool,
 ) ([]EngineDay, EngineTotals) {
 	rows := make([]EngineDay, 0, len(speedRows))
 	firstOfDay := make(map[string]int)
@@ -34,9 +37,14 @@ func assembleEngineDays(
 		}
 		rows = append(rows, engineDayFrom(d))
 	}
+	// rowFor returns nil for a day that belongs to another model's view. The
+	// pointer is only used before the next rowFor call appends to rows.
 	rowFor := func(day string) *EngineDay {
 		if i, ok := firstOfDay[day]; ok {
 			return &rows[i]
+		}
+		if otherModelDays[day] {
+			return nil
 		}
 		firstOfDay[day] = len(rows)
 		rows = append(rows, EngineDay{Day: day})
@@ -49,10 +57,16 @@ func assembleEngineDays(
 	}
 	for day, d := range downtime {
 		row := rowFor(day)
+		if row == nil {
+			continue
+		}
 		row.DownSeconds, row.Outages = d.Seconds, d.Episodes
 	}
 	for _, e := range shareRows {
 		row := rowFor(e.Day)
+		if row == nil {
+			continue
+		}
 		row.RouterMetered = true
 		switch {
 		case local[e.Model]:
