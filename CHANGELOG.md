@@ -1,5 +1,31 @@
 # Changelog
 
+## [5.15.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.14.0...deneb-v5.15.0) (2026-09-19)
+
+
+### ✨ Features
+
+* **chat:** mid-run 앵커 적용 여부를 모델 능력으로 — midRunAnchor 오버라이드 ([#5116](https://github.com/choiceoh/Deneb/issues/5116)) ([9088be4](https://github.com/choiceoh/Deneb/commit/9088be471b0890dd5f29c1e985e484aaebbbad8f))
+* **chat:** 응답 오염 가드 + 도구 단계 꼬리 앵커 ([#5114](https://github.com/choiceoh/Deneb/issues/5114)) ([76a2180](https://github.com/choiceoh/Deneb/commit/76a2180b53e6df15e19ddc594cc25b6063b544f5))
+* **client-android:** 엔진 화면 — 게이트웨이 라우팅 판정·24시간 가용성·오늘 점유율·상세 통계 ([#5101](https://github.com/choiceoh/Deneb/issues/5101)) ([270d013](https://github.com/choiceoh/Deneb/commit/270d013f38a6e1a4b101783eb60fb0c58394a2ed))
+* **engine:** 로컬 엔진 통계·조건별 성능·응답 분포 강화 ([#5107](https://github.com/choiceoh/Deneb/issues/5107)) ([35554e2](https://github.com/choiceoh/Deneb/commit/35554e2538116540a2558954797e5b110046cd4b))
+* **engine:** 서빙 모델을 엔진 화면에서 고른다 — 선택은 플릿이 쥐고, 로컬 역할은 프로덕션을 따라간다 ([#5118](https://github.com/choiceoh/Deneb/issues/5118)) ([5202d0d](https://github.com/choiceoh/Deneb/commit/5202d0df392843103483b337d0bfc819000fddac))
+* **engine:** 엔진 통계를 모델별로 — 한 엔드포인트가 GLM-5.3·Qwen3.8을 오가도 하루가 섞이지 않는다 ([#5117](https://github.com/choiceoh/Deneb/issues/5117)) ([e2a41eb](https://github.com/choiceoh/Deneb/commit/e2a41ebf87ea88da1eb73b8b81a1d1c566e913f0))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** polaris 인덱스의 자기 추론 되먹임 차단 + 게이트웨이 노트의 사용자 말풍선 노출 제거 ([#5112](https://github.com/choiceoh/Deneb/issues/5112)) ([dfe2c52](https://github.com/choiceoh/Deneb/commit/dfe2c526844d24e376d0d650e1c2c22e313b6437))
+* **chat:** 텔레마코스 응답 오염 — 꼬리 언어·모드 앵커 + 과거 대화 발췌 데이터 격리 ([#5111](https://github.com/choiceoh/Deneb/issues/5111)) ([7092008](https://github.com/choiceoh/Deneb/commit/7092008e9c27b646e49a1a8237d28a7da85e3b71))
+* **engine:** 프롬프트 토큰 재사용률과 요청 적중률 분리 ([#5106](https://github.com/choiceoh/Deneb/issues/5106)) ([59d41ec](https://github.com/choiceoh/Deneb/commit/59d41ec41af4088a02e52a01077b8942c555d250))
+* **genesis:** 의도된 경고에 advisory 마커 · 런타임 상시취약 레인 수동 전용 ([#5115](https://github.com/choiceoh/Deneb/issues/5115)) ([1e61549](https://github.com/choiceoh/Deneb/commit/1e615496c1585f17e0363c68d9634c50fc80b0b8))
+* **mailanalysis:** recover stage-2 fallback when main hangs ([#5104](https://github.com/choiceoh/Deneb/issues/5104)) ([b5eabf7](https://github.com/choiceoh/Deneb/commit/b5eabf70e8fd09948bad4312c9c3d9fd811081c9))
+
+
+### ⚡ Performance
+
+* **chat:** bound read skill fallback roots ([#5105](https://github.com/choiceoh/Deneb/issues/5105)) ([5ac041b](https://github.com/choiceoh/Deneb/commit/5ac041b4038a835e6dc66cb8daefc928100a7548))
+
 ## [5.14.0](https://github.com/choiceoh/Deneb/compare/deneb-v5.13.0...deneb-v5.14.0) (2026-09-15)
 
 
