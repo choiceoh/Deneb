@@ -29,7 +29,7 @@ type Writer struct {
 }
 
 // NewWriter creates a Writer that stores logs under baseDir.
-// baseDir is typically ~/.deneb/agent-logs/.
+// baseDir is <state dir>/agent-logs/ (production: ~/.deneb/agent-logs/).
 func NewWriter(baseDir string) *Writer {
 	return &Writer{baseDir: baseDir}
 }

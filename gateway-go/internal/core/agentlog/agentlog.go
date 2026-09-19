@@ -1,7 +1,8 @@
 // Package agentlog provides detailed JSONL logging for AI agent runs.
 //
 // Each agent run records structured events (start, prep, turn, tool, end, error)
-// to a per-session JSONL file under ~/.deneb/agent-logs/{sessionKey}.jsonl.
+// to a per-session JSONL file under <state dir>/agent-logs/{sessionKey}.jsonl
+// (production: ~/.deneb/agent-logs; the server resolves it from DENEB_STATE_DIR).
 // The AI agent can query its own past run logs via the agent_logs tool
 // to diagnose issues and understand prior execution context.
 package agentlog
