@@ -8,7 +8,8 @@ Go HTTP + SSE gateway server — the primary Deneb runtime.
 |---------|-------------|
 | `make go` | Build |
 | `make go-dev` | Dev mode with auto-restart on SIGUSR1 |
-| `make go-test` | Run tests (`make go-race` for the race build) |
+| `make go-test` | Run tests (no `-race` — built with `CGO_ENABLED=0`) |
+| `cd gateway-go && CGO_ENABLED=1 go test -race -count=1 <pkgs>` | Race build — no make target; pass the packages you touched. CI races only the concurrency core (`.github/workflows/ci.yml` step "Race test (concurrency core)") |
 | `make go-vet` | Run `go vet` |
 | `make go-fmt` | Check formatting |
 | `scripts/audit/deadcode-audit.sh` | Advisory dead-code diff vs checked-in baseline (run from repo root; `--update` needs operator approval) |
